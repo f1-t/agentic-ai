@@ -1,0 +1,7 @@
+# Upper bounds pin the major versions so the committed offline cache and the
+# Messages API calls keep working as new releases land.
+anthropic>=0.40,<2
+fastf1>=3.4,<4
+pandas>=2.0
+numpy>=1.24
+python-dotenv>=1.0

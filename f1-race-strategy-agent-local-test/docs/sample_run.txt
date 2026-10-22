@@ -1,0 +1,51 @@
+$ python tests/test_case.py
+$ # (model: claude-opus-5; race data served from committed offline cache)
+
+================================================================
+TEST CASE: 2021 Spanish GP — Hamilton strategy
+================================================================
+INPUT (question to agent):
+  Hamilton starts the 2021 Spanish Grand Prix on the SOFT tyre. Should he run a one-stop or a two-stop strategy, and how should the stints be split, to minimise total race time? Justify it with simulated times.
+
+EXPECTED:
+  a valid strategy within 1.0% of the optimum (5510.1s).
+
+AGENT TRAJECTORY:
+  [think] I'll start by getting the race information and Hamilton's actual stints.
+  [tool] get_race_info({}) -> {"race": "Spanish Grand Prix", "season": 2021, "total_laps": 66, "compounds_available": ["MEDIUM", "SOFT"], "pit_loss_seconds": 22.0, "min_stint_laps": 10}
+  [tool] get_driver_stints({"driver": "HAM"}) -> {"driver": "HAM", "starting_compound": "SOFT", "num_stops": 2, "stints": [{"stint": 1, "compound": "SOFT", "laps": 28, "start_lap": 1, "end_lap": 28, "avg_laptime_s": 87.564}, {"stint": 2, "compound":
+  [tool] estimate_tyre_degradation({"compound": "SOFT"}) -> {"compound": "SOFT", "base_laptime_s": 81.93, "deg_per_lap_s": 0.0512, "n_samples": 209}
+  [tool] estimate_tyre_degradation({"compound": "MEDIUM"}) -> {"compound": "MEDIUM", "base_laptime_s": 83.564, "deg_per_lap_s": 0.0152, "n_samples": 539}
+  [think] Key insight: SOFT is ~1.63s/lap faster at zero age with deg 0.051/lap vs MEDIUM 0.015/lap — crossover only at ~45 laps of age. So SOFT is the better tyre for almost any realistic stint; MEDIUM should be used for the minimum 10 laps only. Let me test candidates.
+  [tool] simulate_strategy({"stints": [["SOFT", 56], ["MEDIUM", 10]]}) -> {"strategy": [["SOFT", 56], ["MEDIUM", 10]], "num_stops": 1, "first_pit_lap": 56, "per_stint_seconds": [4669.8, 836.5], "pit_loss_total_s": 22.0, "total_time_s": 5528.3}
+  [tool] simulate_strategy({"stints": [["SOFT", 33], ["MEDIUM", 33]]}) -> {"strategy": [["SOFT", 33], ["MEDIUM", 33]], "num_stops": 1, "first_pit_lap": 33, "per_stint_seconds": [2732.4, 2766.1], "pit_loss_total_s": 22.0, "total_time_s": 5520.5}
+  [tool] simulate_strategy({"stints": [["SOFT", 28], ["MEDIUM", 38]]}) -> {"strategy": [["SOFT", 28], ["MEDIUM", 38]], "num_stops": 1, "first_pit_lap": 28, "per_stint_seconds": [2314.8, 3186.7], "pit_loss_total_s": 22.0, "total_time_s": 5523.5}
+  [tool] simulate_strategy({"stints": [["SOFT", 28], ["SOFT", 28], ["MEDIUM", 10]]}) -> {"strategy": [["SOFT", 28], ["SOFT", 28], ["MEDIUM", 10]], "num_stops": 2, "first_pit_lap": 28, "per_stint_seconds": [2314.8, 2314.8, 836.5], "pit_loss_total_s": 44.0, "total_time_s": 5510.1}
+  [tool] simulate_strategy({"stints": [["SOFT", 23], ["SOFT", 23], ["MEDIUM", 20]]}) -> {"strategy": [["SOFT", 23], ["SOFT", 23], ["MEDIUM", 20]], "num_stops": 2, "first_pit_lap": 23, "per_stint_seconds": [1898.5, 1898.5, 1674.5], "pit_loss_total_s": 44.0, "total_time_s": 5515.5}
+  [tool] simulate_strategy({"stints": [["SOFT", 28], ["MEDIUM", 14], ["MEDIUM", 24]]}) -> {"strategy": [["SOFT", 28], ["MEDIUM", 14], ["MEDIUM", 24]], "num_stops": 2, "first_pit_lap": 28, "per_stint_seconds": [2314.8, 1171.5, 2010.1], "pit_loss_total_s": 44.0, "total_time_s": 5540.4}
+  [tool] simulate_strategy({"stints": [["SOFT", 28], ["MEDIUM", 10], ["SOFT", 28]]}) -> {"strategy": [["SOFT", 28], ["MEDIUM", 10], ["SOFT", 28]], "num_stops": 2, "first_pit_lap": 28, "per_stint_seconds": [2314.8, 836.5, 2314.8], "pit_loss_total_s": 44.0, "total_time_s": 5510.1}
+  [tool] simulate_strategy({"stints": [["SOFT", 33], ["SOFT", 23], ["MEDIUM", 10]]}) -> {"strategy": [["SOFT", 33], ["SOFT", 23], ["MEDIUM", 10]], "num_stops": 2, "first_pit_lap": 33, "per_stint_seconds": [2732.4, 1898.5, 836.5], "pit_loss_total_s": 44.0, "total_time_s": 5511.4}
+  [think] ## Recommendation: Two-stop, first stop on lap 28
+
+**Degradation model (from this race's green-flag laps):**
+
+| Compound | Base lap | Deg/lap |
+|---|---|---|
+| SOFT | 81.93 s | 0.0512 s |
+| MEDIUM | 83.564 s | 0.0152 s |
+
+The SOFT starts 1.63 s/lap quicker and only degrades 0.036 s/lap faster — the 
+  [submit] {"num_stops": 2, "first_pit_lap": 28, "stint_plan": [["SOFT", 28], ["SOFT", 28], ["MEDIUM", 10]], "total_time_s": 5510.1, "rationale": "SOFT is 1.63 s/lap quicker with a deg crossover only at ~45 laps of age, so the optimum is to maximise SOFT running and use MEDIUM for just the 10-lap minimum; two equal 28-lap SOFT stints simulate at 5510.1 s, 10.4 s faster than the best one-stop (SOFT 33/MED 33, 5520.5 s) and 30.3 s faster than Hamilton's actual SOFT 28/MED 14/MED 24 (5540.4 s)."}
+
+ACTUAL (agent recommendation):
+  num_stops     = 2
+  first_pit_lap = 28
+  stint_plan    = [['SOFT', 28], ['SOFT', 28], ['MEDIUM', 10]]
+  rationale     = SOFT is 1.63 s/lap quicker with a deg crossover only at ~45 laps of age, so the optimum is to maximise SOFT running and use MEDIUM for just the 10-lap minimum; two equal 28-lap SOFT stints simulate at 5510.1 s, 10.4 s faster than the best one-stop (SOFT 33/MED 33, 5520.5 s) and 30.3 s faster than Hamilton's actual SOFT 28/MED 14/MED 24 (5540.4 s).
+
+GRADE:
+  agent sim time = 5510.1s   optimum = 5510.1s
+  gap            = 0.0%   (tolerance 1.0%)
+  (2-stop, first pit lap 28, 12 tool calls)
+
+RESULT: PASS
