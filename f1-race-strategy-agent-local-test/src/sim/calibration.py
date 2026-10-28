@@ -10,6 +10,9 @@ Two error views are reported per driver:
 - offset adjusted: the same after removing a per driver pace offset taken from clean
   laps. This isolates the strategy dependent part (tyres, pit loss, neutralised laps),
   which is what matters when comparing plans for one driver.
+- green: the offset adjusted error summed over green non pit laps only, leaving out
+  lap 1, neutralised laps and in and out laps. Safety car and pit loss errors do not
+  reach it, so it is the number that judges a lap filter.
 """
 import numpy as np
 import pandas as pd
@@ -20,6 +23,7 @@ from .engine import Simulator
 from .events import Scenario
 
 REPLAY_RULES = ["lap_sum", "known_compounds"]
+NOT_GREEN = ["lap1", "sc", "vsc", "in_lap", "out_lap"]
 
 
 def _scenario(g):
@@ -62,15 +66,18 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
         clean = g["clean"].to_numpy()
         offset = float(np.median(g["lap_time_s"].to_numpy()[clean] - pred[clean]))
         err = res.race_time_s - real
+        actual = g["lap_time_s"].to_numpy().copy()
+        actual[0] = g["end_s"].iloc[0] - g["start_s"].iloc[0]  # lap 1 has no LapTime
+        kind = _lap_kind(g)
+        green = ~np.isin(kind, NOT_GREEN)
         rows.append({
             "driver": d, "laps": n, "stops": res.num_stops, "real_s": real, "pred_s": res.race_time_s,
             "err_s": err, "err_pct": 100 * err / real, "pace_offset_s": offset,
             "err_offset_s": err + offset * n,
+            "err_green_s": float(np.nansum(pred[green] - actual[green] + offset)),
         })
-        actual = g["lap_time_s"].to_numpy().copy()
-        actual[0] = g["end_s"].iloc[0] - g["start_s"].iloc[0]  # lap 1 has no LapTime
         laps.append(g[["driver", "lap", "track_status", "pit_in", "clean"]].assign(
-            kind=_lap_kind(g), resid_s=actual - pred))
+            kind=kind, resid_s=actual - pred))
     table = pd.DataFrame(rows).set_index("driver")
     return table, _summary(table), _by_lap_type(pd.concat(laps), len(table))
 
@@ -96,5 +103,7 @@ def _summary(t):
         "mae_pct": round(float(t["err_pct"].abs().mean()), 3),
         "mae_offset_adjusted_s": round(float(t["err_offset_s"].abs().mean()), 2),
         "bias_offset_adjusted_s": round(float(t["err_offset_s"].mean()), 2),
+        "mae_green_s": round(float(t["err_green_s"].abs().mean()), 2),
+        "bias_green_s": round(float(t["err_green_s"].mean()), 2),
         "spearman_raw": round(float(t["pred_s"].rank().corr(t["real_s"].rank())), 3),
     }

@@ -26,8 +26,14 @@ def test_baseline_fit_and_ground_truth_are_reproduced(frame):
     gt = json.load(open(os.path.join(os.path.dirname(__file__), "..", "data", "ground_truth.json")))
     res = tools.simulate_strategy(gt["optimal_strategy"])
     assert res["total_time_s"] == pytest.approx(gt["optimal_total_time_s"], abs=0.05)
-    soft = Simulator(frame).degradation.coefs["SOFT"]
-    assert soft == pytest.approx((84.1554, -0.00576), abs=1e-3)
+    assert tools._get_simulator().degradation.coefs["SOFT"] == pytest.approx((81.93, 0.0512), abs=1e-3)
+
+
+def test_default_model_fit_on_filtered_laps(frame):
+    model = Simulator(frame).degradation  # linear_fuel on the model relative filter
+    assert model.coefs["SOFT"] == pytest.approx((85.3059, 0.0301), abs=1e-3)
+    assert model.coefs["MEDIUM"] == pytest.approx((85.0343, 0.0615), abs=1e-3)
+    assert model.fuel_slope == pytest.approx(-0.0576, abs=1e-3)
 
 
 def test_tool_errors_keep_the_original_contract():

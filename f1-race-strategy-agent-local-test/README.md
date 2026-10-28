@@ -52,7 +52,7 @@ simulator (no key, no network, no cost):
 
 ```bash
 python -c "from src import tools; print(tools.optimal_strategy('SOFT'))"
-# -> {'num_stops': 1, 'first_pit_lap': 10, ..., 'total_time_s': 5542.1}
+# -> {'num_stops': 2, 'first_pit_lap': 28, ..., 'total_time_s': 5510.1}
 ```
 
 A full captured agent run (real `python tests/test_case.py` output ending in
@@ -84,11 +84,11 @@ python -m src.run "Hamilton starts on SOFT. One-stop or two-stop, and when shoul
 
 ## Expected result
 
-The deterministic optimum (in `data/ground_truth.json`) is ≈ **5542s**. The test
+The deterministic optimum (in `data/ground_truth.json`) is ≈ **5510s**. The test
 **passes when the agent's recommended strategy is valid and its simulated race time
 is within 1% of that optimum** — i.e. the agent used the tools to reach a
-near-optimal plan. (The simple model now ranks a one-stop fastest; see
-`docs/sample_run.txt` for an earlier captured run against the previous optimum.)
+near-optimal plan. (The simple model ranks a two-stop fastest, echoing Hamilton's
+real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
 
 ## Reproducibility notes
 

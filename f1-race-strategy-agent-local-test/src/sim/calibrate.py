@@ -1,7 +1,7 @@
 """CLI for the calibration check.
 
     python -m src.sim.calibrate --season 2021 --gp Spain --pit-loss 22
-    python -m src.sim.calibrate --degradation linear_fuel
+    python -m src.sim.calibrate --degradation linear
 """
 import argparse
 import json
@@ -19,7 +19,7 @@ def main():
     ap.add_argument("--gp", default="Spain")
     ap.add_argument("--pit-loss", type=float, default=22.0)
     ap.add_argument("--min-stint", type=int, default=10)
-    ap.add_argument("--degradation", default="linear")
+    ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--out", help="write per driver csv here")
     args = ap.parse_args()
