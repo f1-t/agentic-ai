@@ -1,4 +1,5 @@
 """Strategy simulator: a snapshot and plans in, lap time summaries out."""
+import copy
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -97,10 +98,12 @@ FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
 class Simulator:
     """Fitted on one race's lap frame. Cheap to call repeatedly.
 
-    `practice` is a frame of practice long-run laps (FP1-FP3 concatenated, with a
-    "session" column), needed by the pre_race and early to_snapshot fit windows.
-    The instance itself is fitted on every race lap; `fitted_for(snapshot)` gives the
-    instance fitted on the window that `config.fit_window` picks for that snapshot.
+    `practice` is a frame of practice long-run laps (data.practice_frame: FP1-FP3
+    concatenated, with a "session" column), needed by the pre_race and early
+    to_snapshot fit windows. The instance itself carries the configured window's fit
+    at lap 0: every race lap for "full", and the practice fit for "pre_race" and
+    "to_snapshot" (every race lap when there is no practice). `fitted_for(snapshot)`
+    gives the instance fitted on the window `config.fit_window` picks for that snapshot.
     """
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
@@ -109,17 +112,32 @@ class Simulator:
         self.laps, self.practice = laps, practice
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
         self._fits = {}
-        spec = self.config.degradation
-        self.degradation = DEGRADATION.get(spec.name).fit(
-            laps, min_samples=self.config.min_samples,
-            fuel_prior=self.config.pre_race_fuel_slope_s_per_lap, **spec.params)
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
-        self.ref_lap_s = float(laps.loc[laps["clean"], "lap_time_s"].median())
+        if self.config.fit_window != "full" and self._has_practice:
+            self._fit(self.practice.assign(lap=np.nan))
+        else:
+            self._fit(laps)
 
     @property
     def modelled(self):
         return self.degradation.compounds
+
+    @property
+    def _has_practice(self):
+        return self.practice is not None and not self.practice.empty
+
+    def _model(self, frame, **extra):
+        spec, cfg = self.config.degradation, self.config
+        return DEGRADATION.get(spec.name).fit(
+            frame, min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
+            **spec.params, **extra)
+
+    def _fit(self, frame, ref=None, **extra):
+        """Fit the degradation model on `frame`; ref_lap_s is the median clean lap of `ref`."""
+        ref = frame if ref is None else ref
+        self.degradation = self._model(frame, **extra)
+        self.ref_lap_s = float(ref.loc[ref["clean"].astype(bool), "lap_time_s"].median())
 
     def fitted_for(self, snapshot: Snapshot) -> "Simulator":
         """The instance fitted on this snapshot's fit window. Built once per key, then cached."""
@@ -131,26 +149,38 @@ class Simulator:
         if key not in self._fits:
             if len(self._fits) >= FIT_CACHE_SIZE:
                 del self._fits[next(iter(self._fits))]
-            fit = Simulator(self._window_frame(snapshot), cfg)
-            fit.window = key
+            fit = copy.copy(self)
+            fit.window, fit._fits = key, {}
+            fit._fit_window(snapshot)
             self._fits[key] = fit
         return self._fits[key]
 
-    def _window_frame(self, snapshot: Snapshot) -> pd.DataFrame:
-        """Race laps the window allows (every car's, they are public), plus practice."""
-        window = self.config.fit_window
-        frame = self.laps
-        if window != "full":
-            upto = snapshot.laps_completed if window == "to_snapshot" else 0
-            frame = frame[frame["lap"] <= upto]
-            have_practice = self.practice is not None and not self.practice.empty
-            if not have_practice and frame.empty:
-                raise ValueError("fit window needs practice laps")
-            if have_practice:
-                frame = pd.concat([frame, self.practice.assign(lap=np.nan)], ignore_index=True)
-        if self.config.exclude_snapshot_driver and "driver" in frame:
-            frame = frame[frame["driver"] != snapshot.driver]
-        return frame
+    def _fit_window(self, snapshot: Snapshot):
+        """Refit this instance on the snapshot's window.
+
+        full: every race lap. pre_race: practice only. to_snapshot: every car's race laps
+        up to laps_completed (they are public), shrunk toward the pre_race fit, which is
+        the only way practice enters; ref_lap_s is the median of both. Exclusion drops
+        the snapshot driver from whichever frames apply.
+        """
+        cfg = self.config
+        drop = snapshot.driver if cfg.exclude_snapshot_driver else None
+
+        def keep(f):
+            return f[f["driver"] != drop] if drop is not None and "driver" in f else f
+
+        race = keep(self.laps)
+        if cfg.fit_window == "full":
+            return self._fit(race)
+        race = race[race["lap"] <= (snapshot.laps_completed if cfg.fit_window == "to_snapshot" else 0)]
+        practice = keep(self.practice.assign(lap=np.nan)) if self._has_practice else None
+        if practice is None and race.empty:
+            raise ValueError("fit window needs practice laps")
+        if cfg.fit_window == "pre_race":
+            return self._fit(practice)
+        prior = self._model(practice) if practice is not None else None
+        ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
+        self._fit(race, ref=ref, prior=prior, shrinkage=cfg.shrinkage)
 
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules

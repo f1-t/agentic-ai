@@ -35,12 +35,17 @@ class SimConfig(_Cfg):
     n_samples: int = 1
     # Which laps the degradation model is fitted on, per snapshot (Simulator.fitted_for):
     #   full         every race lap (hindsight, the world)
-    #   to_snapshot  practice long runs plus race laps up to snapshot.laps_completed
+    #   to_snapshot  race laps up to snapshot.laps_completed, shrunk toward the pre_race fit
     #   pre_race     practice long runs only
     fit_window: Literal["full", "to_snapshot", "pre_race"] = "full"
     exclude_snapshot_driver: bool = False   # leave the snapshot driver's laps out of the fit
-    # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit it
+    # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit
+    # it, and shrinks toward it under to_snapshot
     pre_race_fuel_slope_s_per_lap: float = -0.045
+    # to_snapshot prior standard deviations around the pre_race fit (see degradation.py)
+    shrinkage: dict[str, float] = Field(default_factory=lambda: {
+        "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.015,
+    })
 
     @classmethod
     def from_file(cls, path):

@@ -534,16 +534,33 @@ def at_lap(n, driver="X"):
     return Snapshot(race=RACE, driver=driver, laps_completed=n, compound="SOFT", tyre_age=n)
 
 
-@pytest.mark.parametrize("name,fuel", [("linear", 0.0), ("linear_fuel", FUEL)])
-def test_world_equals_full_when_window_is_whole_race(name, fuel):
-    frame = synthetic_frame(fuel=fuel)
+def coefs_close(a, b, abs=1e-6):
+    return set(a) == set(b) and all(a[c] == pytest.approx(b[c], abs=abs) for c in a)
+
+
+@pytest.mark.parametrize("name", ["linear", "linear_fuel"])
+def test_world_equals_full_when_window_is_whole_race(name):
+    # practice on the true coefficients and race fuel at the prior: the prior agrees with
+    # the race, so the penalty vanishes at the full fit
+    frame = synthetic_frame(fuel=PRIOR if name == "linear_fuel" else 0.0)
     full = Simulator(frame, SimConfig(degradation={"name": name}))
     last = RACE.total_laps - 1
-    late = Simulator(frame, window("to_snapshot", degradation={"name": name})).fitted_for(at_lap(last))
+    s = Simulator(frame, window("to_snapshot", degradation={"name": name}), synthetic_practice())
+    late = s.fitted_for(at_lap(last))
     assert late.window == ("to_snapshot", last, None)
-    for comp in TRUE:
-        assert late.degradation.coefs[comp] == pytest.approx(full.degradation.coefs[comp], abs=1e-9)
+    assert coefs_close(late.degradation.coefs, full.degradation.coefs)
     assert getattr(late.degradation, "fuel_slope", 0.0) == pytest.approx(getattr(full.degradation, "fuel_slope", 0.0))
+
+
+@pytest.mark.parametrize("name", ["linear", "linear_fuel"])
+def test_whole_race_window_without_practice_is_close_to_full(name):
+    # no practice: base and wear unpenalised, only the fuel slope is pulled toward the prior
+    frame = synthetic_frame(fuel=FUEL)
+    full = Simulator(frame, SimConfig(degradation={"name": name}))
+    late = Simulator(frame, window("to_snapshot", degradation={"name": name})).fitted_for(at_lap(RACE.total_laps - 1))
+    assert coefs_close(late.degradation.coefs, full.degradation.coefs, abs=1e-9 if name == "linear" else 0.02)
+    if name == "linear_fuel":
+        assert FUEL > late.degradation.fuel_slope > FUEL - 1e-3  # pulled a little toward the -0.045 prior
     assert late.ref_lap_s == full.ref_lap_s
 
 
@@ -560,14 +577,24 @@ def test_pre_race_recovers_practice_coefficients():
     assert s.fitted_for(at_lap(30)) is fit  # pre_race does not depend on the lap
 
 
-def test_to_snapshot_grows_with_the_race():
+@pytest.mark.parametrize("name", ["linear", "linear_fuel"])
+def test_to_snapshot_grows_with_the_race(name):
     practice = synthetic_practice(coefs={"SOFT": (80.0, 0.10), "MEDIUM": (82.0, 0.10)})
-    s = Simulator(synthetic_frame(), window("to_snapshot"), practice)
+    s = Simulator(synthetic_frame(), window("to_snapshot", degradation={"name": name}), practice)
     early, late = (s.fitted_for(at_lap(n)).degradation.coefs["MEDIUM"][1] for n in (5, 40))
     race_wear, practice_wear = TRUE["MEDIUM"][1], 0.10
-    assert late < early
+    assert race_wear < late < early < practice_wear
     assert abs(early - practice_wear) < abs(early - race_wear)
     assert abs(late - race_wear) < abs(late - practice_wear)
+
+
+@pytest.mark.parametrize("name", ["linear", "linear_fuel"])
+@pytest.mark.parametrize("practice", [None, synthetic_practice(),
+                                      synthetic_practice(coefs={"SOFT": (80.0, 0.10), "MEDIUM": (82.0, 0.10)})])
+def test_to_snapshot_wear_is_positive_by_lap_30(name, practice):
+    fit = Simulator(synthetic_frame(), window("to_snapshot", degradation={"name": name}), practice)
+    coefs = fit.fitted_for(at_lap(30)).degradation.coefs
+    assert set(coefs) == set(TRUE) and all(wear > 0 for _, wear in coefs.values())
 
 
 def test_to_snapshot_at_lap_zero_is_pre_race():
@@ -575,8 +602,60 @@ def test_to_snapshot_at_lap_zero_is_pre_race():
     cfg = dict(degradation={"name": "linear_fuel"})
     zero = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", **cfg), practice).fitted_for(start())
     pre = Simulator(synthetic_frame(fuel=FUEL), window("pre_race", **cfg), practice).fitted_for(start())
-    assert zero.degradation.coefs == pre.degradation.coefs
-    assert zero.degradation.fuel_slope == pre.degradation.fuel_slope == PRIOR
+    assert coefs_close(zero.degradation.coefs, pre.degradation.coefs, abs=1e-9)
+    assert zero.degradation.fuel_slope == pytest.approx(PRIOR) and pre.degradation.fuel_slope == PRIOR
+    assert zero.degradation.fit_report["fuel_slope_source"] == "prior"
+    assert zero.ref_lap_s == pre.ref_lap_s
+
+
+def test_shrinkage_weight_is_the_data_share_of_precision():
+    tau = SimConfig().shrinkage
+    practice = synthetic_practice(coefs={"SOFT": TRUE["SOFT"]})  # MEDIUM is not in practice
+    s = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", degradation={"name": "linear_fuel"}), practice)
+    rep = s.fitted_for(at_lap(30)).degradation.fit_report
+    w, n = rep["shrinkage_weight"], rep["n_race_rows_per_compound"]
+    race = synthetic_frame()[lambda d: d["lap"] <= 30]
+    assert n == race["compound"].value_counts().to_dict() and rep["n_race_rows"] == len(race)
+    assert w["base_s"]["SOFT"] == pytest.approx(n["SOFT"] / (n["SOFT"] + tau["base_s"] ** -2))
+    assert w["base_s"]["MEDIUM"] == pytest.approx(n["MEDIUM"] / (n["MEDIUM"] + (2 * tau["base_s"]) ** -2))
+    sq = float((race.loc[race["compound"] == "MEDIUM", "tyre_age"] ** 2).sum())
+    assert w["wear_s_per_lap"]["MEDIUM"] == pytest.approx(sq / (sq + (2 * tau["wear_s_per_lap"]) ** -2))
+    lsq = float((race["lap"] ** 2).sum())
+    assert w["fuel_s_per_lap"] == pytest.approx(lsq / (lsq + tau["fuel_s_per_lap"] ** -2))
+    zero = s.fitted_for(start()).degradation.fit_report["shrinkage_weight"]
+    assert zero["fuel_s_per_lap"] == 0.0 and set(zero["base_s"].values()) == {0.0}
+    full = Simulator(synthetic_frame(fuel=FUEL)).degradation.fit_report["shrinkage_weight"]
+    assert full["fuel_s_per_lap"] == 1.0 and set(full["wear_s_per_lap"].values()) == {1.0}
+
+
+def test_compound_absent_from_practice_shrinks_to_the_pooled_practice_mean():
+    from src.sim.degradation import LinearDegradation
+    practice = synthetic_practice(coefs={"SOFT": (80.0, 0.10), "HARD": (84.0, 0.02)})
+    prior = LinearDegradation.fit(practice)
+    race = synthetic_frame()[lambda d: d["lap"] <= 10]
+    tight = LinearDegradation.fit(race, prior=prior, shrinkage={"base_s": 1e-6, "wear_s_per_lap": 1e-6})
+    assert tight.coefs["MEDIUM"] == pytest.approx((82.0, 0.06), abs=1e-4)
+    assert tight.coefs["HARD"] == pytest.approx((84.0, 0.02), abs=1e-6)  # no race rows: the prior
+    assert tight.fit_report["n_rows"]["HARD"] == 30 and tight.fit_report["max_tyre_age"]["HARD"] == 10
+
+
+def test_to_snapshot_without_practice_penalises_only_the_fuel_slope():
+    s = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", degradation={"name": "linear_fuel"}))
+    w = s.fitted_for(at_lap(30)).degradation.fit_report["shrinkage_weight"]
+    assert set(w["base_s"].values()) == set(w["wear_s_per_lap"].values()) == {1.0}
+    assert 0.0 < w["fuel_s_per_lap"] < 1.0
+
+
+def test_base_instance_carries_the_lap_zero_window():
+    practice = synthetic_practice(coefs={"SOFT": (80.0, 0.10), "MEDIUM": (82.0, 0.10)})
+    full = Simulator(synthetic_frame())
+    for fit_window in ("pre_race", "to_snapshot"):
+        s = Simulator(synthetic_frame(), window(fit_window), practice)
+        assert coefs_close(s.degradation.coefs, {"SOFT": (80.0, 0.10), "MEDIUM": (82.0, 0.10)})
+        assert s.ref_lap_s == practice["lap_time_s"].median()
+        assert coefs_close(s.fitted_for(start()).degradation.coefs, s.degradation.coefs, abs=1e-9)
+        bare = Simulator(synthetic_frame(), window(fit_window))  # no practice: the full fit
+        assert bare.degradation.coefs == full.degradation.coefs
 
 
 @pytest.mark.parametrize("fit_window", ["pre_race", "to_snapshot"])
@@ -635,19 +714,30 @@ def test_fitted_for_is_cached():
 def test_fit_report_fields_present(name):
     s = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", degradation={"name": name}),
                   synthetic_practice())
+    keys = {"n_rows", "n_race_rows", "n_race_rows_per_compound", "max_tyre_age", "fuel_slope_source",
+            "condition_number", "shrinkage_weight"}
     for snap in (start(), at_lap(30)):
         rep = s.fitted_for(snap).degradation.fit_report
-        assert set(rep) == {"n_rows", "n_race_rows", "fuel_slope_source", "condition_number"}
-        assert set(rep["n_rows"]) == set(TRUE)
-        assert np.isfinite(rep["condition_number"]) and rep["condition_number"] >= 1.0
+        assert set(rep) == keys
+        assert set(rep["n_rows"]) == set(rep["n_race_rows_per_compound"]) == set(rep["max_tyre_age"]) == set(TRUE)
+        assert sum(rep["n_race_rows_per_compound"].values()) == rep["n_race_rows"]
+        assert set(rep["shrinkage_weight"]["base_s"]) == set(rep["shrinkage_weight"]["wear_s_per_lap"]) == set(TRUE)
+    assert np.isfinite(rep["condition_number"]) and rep["condition_number"] >= 1.0
     full = Simulator(synthetic_frame(fuel=FUEL), SimConfig(degradation={"name": name})).degradation.fit_report
+    assert set(full) == keys and np.isfinite(full["condition_number"])
     assert full["n_rows"] == {"SOFT": 200, "MEDIUM": 200} and full["n_race_rows"] == 400
+    assert full["n_race_rows_per_compound"] == {"SOFT": 200, "MEDIUM": 200}
+    assert full["max_tyre_age"] == {"SOFT": 20, "MEDIUM": 20}
     assert full["fuel_slope_source"] == ("fitted" if name == "linear_fuel" else None)
+    zero = s.fitted_for(start()).degradation.fit_report
+    assert zero["n_race_rows"] == 0 and zero["max_tyre_age"] == {"SOFT": 10, "MEDIUM": 10}
     late = s.fitted_for(at_lap(30)).degradation.fit_report
     assert late["n_race_rows"] > 0 and sum(late["n_rows"].values()) == late["n_race_rows"] + 60
+    assert late["max_tyre_age"] == {"SOFT": 20, "MEDIUM": 20}
     if name == "linear_fuel":
-        assert late["fuel_slope_source"] == "fitted"
-        assert s.fitted_for(start()).degradation.fit_report["fuel_slope_source"] == "prior"
+        assert late["fuel_slope_source"] == "shrunk" and zero["fuel_slope_source"] == "prior"
+    else:
+        assert late["fuel_slope_source"] is None and late["shrinkage_weight"]["fuel_s_per_lap"] is None
 
 
 @pytest.mark.parametrize("name", ["linear", "linear_fuel"])
