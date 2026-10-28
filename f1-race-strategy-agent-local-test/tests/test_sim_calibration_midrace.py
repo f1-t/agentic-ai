@@ -19,7 +19,9 @@ def frame():
 
 
 def cfg(**kw):
-    """The synthetic races have no standing start penalty on lap 1, so the lap 1 term is off."""
+    """The synthetic races have no standing start penalty on lap 1, and synthetic practice runs
+    at race level, so the lap 1 term and the practice-to-race base delta prior are off."""
+    kw.setdefault("pre_race_base_delta_s", 0.0)
     return SimConfig(effects=EventEffects(lap1_extra_s=0.0), **kw)
 
 
