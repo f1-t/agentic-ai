@@ -2,7 +2,7 @@
 
 The simulator itself never imports FastF1. Only `load_session` does, lazily.
 Frame columns: driver, lap, stint, compound, tyre_age, lap_time_s, track_status,
-pit_in, pit_out, start_s, end_s, clean.
+pit_in, pit_out, start_s, end_s, team, position, clean.
 """
 import os
 
@@ -12,14 +12,51 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 OUTLIER_FACTOR = 1.07  # drop laps slower than 107% of the compound's fastest clean lap
 
 
-def load_session(season, gp, kind="R", cache_dir=CACHE_DIR):
+WEATHER_COLUMNS = ["time_s", "air_temp_c", "track_temp_c", "humidity_pct", "pressure_hpa",
+                   "rainfall", "wind_speed_ms", "wind_dir_deg"]
+
+
+def load_session(season, gp, kind="R", cache_dir=CACHE_DIR, weather=False, messages=False):
     import fastf1
     fastf1.set_log_level("ERROR")
-    fastf1.Cache.enable_cache(cache_dir)
+    fastf1.Cache.configure(cache_dir=cache_dir)
     fastf1.Cache.offline_mode(True)
     session = fastf1.get_session(season, gp, kind)
-    session.load(telemetry=False, weather=False, messages=False)
+    session.load(telemetry=False, weather=weather, messages=messages)
     return session
+
+
+def session_weather(session):
+    """Weather samples (about one per minute) in simulator units, empty if not loaded."""
+    from fastf1.exceptions import DataNotLoadedError
+    try:
+        w = session.weather_data
+    except DataNotLoadedError:  # weather=False, or absent from the cache
+        w = None
+    if w is None or len(w) == 0:
+        return pd.DataFrame(columns=WEATHER_COLUMNS)
+    return pd.DataFrame({
+        "time_s": w["Time"].dt.total_seconds().to_numpy(),
+        "air_temp_c": w["AirTemp"].to_numpy(),
+        "track_temp_c": w["TrackTemp"].to_numpy(),
+        "humidity_pct": w["Humidity"].to_numpy(),
+        "pressure_hpa": w["Pressure"].to_numpy(),  # FastF1 reports mbar, same as hPa
+        "rainfall": w["Rainfall"].fillna(False).astype(bool).to_numpy(),
+        "wind_speed_ms": w["WindSpeed"].to_numpy(),
+        "wind_dir_deg": w["WindDirection"].to_numpy(),
+    })
+
+
+def session_results(session):
+    """Grid and classified positions by driver code, empty if the results did not load."""
+    r = session.results
+    if r is None or len(r) == 0:
+        return pd.DataFrame(columns=["grid", "classified"])
+    # ClassifiedPosition is text, with letters for retirements and disqualifications
+    return pd.DataFrame({
+        "grid": pd.to_numeric(r["GridPosition"], errors="coerce").to_numpy(),
+        "classified": pd.to_numeric(r["ClassifiedPosition"], errors="coerce").to_numpy(),
+    }, index=pd.Index(r["Abbreviation"].to_numpy(), name="driver"))
 
 
 def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
@@ -36,6 +73,8 @@ def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
         "pit_out": laps["PitOutTime"].notna().to_numpy(),
         "start_s": laps["LapStartTime"].dt.total_seconds().to_numpy(),
         "end_s": laps["Time"].dt.total_seconds().to_numpy(),
+        "team": laps["Team"].to_numpy(),
+        "position": laps["Position"].to_numpy(),
     })
     base = (
         (df["track_status"] == "1") & ~df["pit_in"] & ~df["pit_out"]

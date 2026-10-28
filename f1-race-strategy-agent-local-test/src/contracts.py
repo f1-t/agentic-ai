@@ -11,6 +11,10 @@ Conventions
 - A `Plan` covers exactly the remaining laps. Its first stint continues the
   current set, later stints each start with a pit stop at the end of the
   previous one.
+- `sets_available` lists the sets in the garage, not the fitted one. `[]`
+  means nothing is in the garage, so every pit is rejected; `None` means
+  unconstrained. A plan stint may name a set with `set_id`; its
+  `start_age` is then the set's `laps_run`.
 """
 from __future__ import annotations
 
@@ -49,6 +53,24 @@ class StintRecord(_Contract):
     laps: int = Field(ge=1)
     start_lap: int = Field(ge=1)
     start_age: int = Field(default=0, ge=0)
+
+
+class TyreSet(_Contract):
+    """One set in the driver's allocation that is not currently fitted."""
+
+    compound: Compound
+    laps_run: int = Field(default=0, ge=0)
+    source: Literal["observed", "inferred", "assumed"] = "observed"
+    set_id: str | None = None
+    is_new: bool | None = None   # derived from laps_run when omitted
+
+    @model_validator(mode="after")
+    def _derive_is_new(self) -> "TyreSet":
+        if self.is_new is None:
+            self.is_new = self.laps_run == 0
+        elif self.is_new != (self.laps_run == 0):
+            raise ValueError("is_new conflicts with laps_run")
+        return self
 
 
 class Weather(_Contract):
@@ -90,7 +112,7 @@ class Snapshot(_Contract):
     gap_ahead_s: float | None = None
     gap_behind_s: float | None = None
     car_ahead: str | None = None
-    sets_available: dict[Compound, int] | None = None  # fresh sets left; None = unconstrained
+    sets_available: list[TyreSet] | None = None   # garage sets; None = unconstrained
     weather: Weather = Field(default_factory=Weather)
     field: FieldState = Field(default_factory=FieldState)
     red_flag_laps: list[int] = Field(default_factory=list)   # history
@@ -111,7 +133,13 @@ class Snapshot(_Contract):
             late = [lap for lap in laps if lap > self.laps_completed]
             if late:
                 raise ValueError(f"{name} laps {late} are after the snapshot")
+        ids = [t.set_id for t in self.sets_available or [] if t.set_id is not None]
+        if len(ids) != len(set(ids)):
+            raise ValueError("set_id values in sets_available must be unique")
         return self
+
+    def find_set(self, set_id: str) -> "TyreSet | None":
+        return next((t for t in self.sets_available or [] if t.set_id == set_id), None)
 
     @property
     def remaining_laps(self) -> int:
@@ -135,6 +163,7 @@ class PlanStint(_Contract):
     compound: Compound
     laps: int = Field(ge=1)
     start_age: int = Field(default=0, ge=0)  # used sets; ignored for the first stint
+    set_id: str | None = None                 # a set in Snapshot.sets_available
 
     @model_validator(mode="before")
     @classmethod
@@ -214,3 +243,24 @@ class SimResult(_Contract):
         if not self.valid:
             return None
         return self.remaining.mean_s + (self.elapsed_s or 0.0)
+
+
+class CompareResult(_Contract):
+    """Candidates scored against each other under shared draws.
+
+    Lists follow the candidate order. Matrices are indexed [i][j]; any entry that
+    involves an invalid candidate is None. Times are remaining-race seconds.
+    """
+
+    candidates: list[Plan | None]       # full plans, actions expanded
+    valid: list[bool]
+    errors: list[list[str]]
+    summaries: list[TimeSummary | None]
+    p_best: list[float | None]          # share of samples where i is strictly fastest, ties split
+    p_beats: list[list[float | None]]   # share with t_i < t_j, ties 0.5; diagonal None
+    gap_mean_s: list[list[float | None]]  # t_i - t_j over samples
+    gap_std_s: list[list[float | None]]
+    best: int | None                    # lowest mean among valid
+    dominated: list[bool]               # some valid j is no worse on mean and cvar_90, better on one
+    n_samples: int
+    seed: int
