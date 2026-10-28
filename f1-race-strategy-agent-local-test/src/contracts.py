@@ -11,15 +11,16 @@ Conventions
 - A `Plan` covers exactly the remaining laps. Its first stint continues the
   current set, later stints each start with a pit stop at the end of the
   previous one.
-- `sets_available` lists the sets in the garage, not the fitted one. `None`
-  means unconstrained. A plan stint may name a set with `set_id`; its
+- `sets_available` lists the sets in the garage, not the fitted one. `[]`
+  means nothing is in the garage, so every pit is rejected; `None` means
+  unconstrained. A plan stint may name a set with `set_id`; its
   `start_age` is then the set's `laps_run`.
 """
 from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 
 def _norm_compound(value: str) -> str:
@@ -61,11 +62,15 @@ class TyreSet(_Contract):
     laps_run: int = Field(default=0, ge=0)
     source: Literal["observed", "inferred", "assumed"] = "observed"
     set_id: str | None = None
+    is_new: bool | None = None   # derived from laps_run when omitted
 
-    @computed_field
-    @property
-    def is_new(self) -> bool:
-        return self.laps_run == 0
+    @model_validator(mode="after")
+    def _derive_is_new(self) -> "TyreSet":
+        if self.is_new is None:
+            self.is_new = self.laps_run == 0
+        elif self.is_new != (self.laps_run == 0):
+            raise ValueError("is_new conflicts with laps_run")
+        return self
 
 
 class Weather(_Contract):
