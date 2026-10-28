@@ -49,10 +49,7 @@ def test_weather_is_empty_by_default_and_loads_offline(session):
     assert list(session_weather(session).columns) == WEATHER_COLUMNS
     assert session_weather(session).empty
     assert "team" in lap_frame(session.laps).columns
-    try:
-        full = load_session(2021, "Spain", weather=True, messages=True)
-    except Exception as e:  # cache built without weather: offline mode cannot fetch it
-        pytest.skip(f"cache lacks weather/messages: {type(e).__name__}")
+    full = load_session(2021, "Spain", weather=True, messages=True)
     w = session_weather(full)
     if w.empty:
         pytest.skip("cache lacks weather")
