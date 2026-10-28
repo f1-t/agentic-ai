@@ -340,3 +340,22 @@ def test_split_fitted_takes_the_start_set_out():
     assert [s["set_id"] for s in garage] == ["SOFT-2", "MEDIUM-1"]
     assert len(sets) == 3  # input untouched
     assert split_fitted(sets, "HARD", 0) == (None, sets)
+
+
+def test_weekend_sets_validate_as_tyre_set_contracts():
+    from src.contracts import TyreSet  # the module itself stays free of contracts imports
+    sessions, _ = _team_weekend()
+    sessions.update(_q3_weekend())
+    race = pd.concat([laps([("SOFT", False, 5, 25), ("MEDIUM", True, 1, 41)]),
+                      laps([("SOFT", True, 1, 66)], driver="BBB", number="2")])
+    args = (sessions, "AAA", ALLOC, {"FP1": 1, "Q": {"SOFT": 1}})
+    results = [weekend_sets(*args, q2_start_rule=True),
+               weekend_sets(*args, race_laps=race, q2_start_rule=True),
+               weekend_sets(*args, race_laps=race, upto_lap=30, q2_start_rule=True)]
+    assert {s["source"] for s in results[0]} == {"observed", "inferred", "assumed"}
+    for sets in results:
+        for s in sets:
+            ts = TyreSet.model_validate(s)
+            assert ts.is_new == (s["laps_run"] == 0)
+            assert ts.model_dump(exclude={"is_new"}) == s
+            assert TyreSet.model_validate(ts.model_dump()) == ts
