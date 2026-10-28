@@ -1,4 +1,4 @@
-"""Outlier filter checks for lap_frame. Synthetic laps unless marked, no network."""
+"""Outlier filter checks for lap_frame and practice_frame. Synthetic laps unless marked, no network."""
 import os
 
 import numpy as np
@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from src.sim import SimConfig, Simulator
-from src.sim.data import CACHE_DIR, HINGE_KNOT, LEGACY_OUTLIER_FACTOR, lap_frame, load_session
+from src.sim.data import CACHE_DIR, HINGE_KNOT, LEGACY_OUTLIER_FACTOR, lap_frame, load_session, practice_frame
 
 N_LAPS = 66
 OFFSETS = {"A": 0.0, "B": 0.2, "C": -0.3, "D": 0.1, "E": 0.4, "F": 0.8}  # F is the slow car
@@ -144,3 +144,56 @@ def test_legacy_path_reproduces_baseline_fit():
     frame = lap_frame(load_session(2021, "Spain").laps, LEGACY_OUTLIER_FACTOR)
     sim = Simulator(frame, SimConfig(degradation={"name": "linear"}))
     assert sim.degradation.coefs["SOFT"] == pytest.approx((81.93, 0.0512), abs=1e-3)
+
+
+# --- practice_frame ----------------------------------------------------------
+def practice_laps(stints, bumps=None, wear=0.1, seed=0):
+    """FastF1-shaped practice Laps. `stints` is [(compound, timed laps)] per driver, each
+    run framed by an out lap and an in lap; `bumps` maps (driver, LapNumber) to seconds."""
+    bumps = bumps or {}
+    rng = np.random.default_rng(seed)
+    rows = []
+    for d, off in OFFSETS.items():
+        lap = 0
+        for k, (comp, n) in enumerate(stints):
+            for age in range(n + 2):  # out lap, n timed laps, in lap
+                lap += 1
+                noise = float(np.clip(rng.normal(0, NOISE_S), -2 * NOISE_S, 2 * NOISE_S))
+                t = BASE[comp] + wear * age + off + noise + bumps.get((d, lap), 0.0) + (8.0 if age in (0, n + 1) else 0.0)
+                rows.append({
+                    "Driver": d, "LapNumber": float(lap), "Stint": float(k + 1), "Compound": comp,
+                    "TyreLife": float(age + 1), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
+                    "PitInTime": pd.Timedelta(seconds=1) if age == n + 1 else pd.NaT,
+                    "PitOutTime": pd.Timedelta(seconds=1) if age == 0 else pd.NaT,
+                    "LapStartTime": pd.Timedelta(seconds=0), "Time": pd.Timedelta(seconds=t),
+                    "Team": "T", "Position": np.nan,
+                })
+    return pd.DataFrame(rows)
+
+
+def test_practice_frame_columns_and_long_runs():
+    sessions = {"FP1": practice_laps([("SOFT", 3), ("MEDIUM", 8)]), "FP2": practice_laps([("SOFT", 10)], seed=1)}
+    f = practice_frame(sessions)
+    assert list(f.columns) == list(lap_frame(sessions["FP1"]).columns) + ["session", "stint_len", "lap_in_stint"]
+    assert f["lap"].isna().all()
+    assert len(f) == len(OFFSETS) * (5 + 10 + 12)
+    run = f[(f["session"] == "FP1") & (f["driver"] == "A") & (f["stint"] == 2)]
+    assert run["stint_len"].eq(8).all() and list(run["lap_in_stint"]) == list(range(1, 11))
+    short = f[(f["session"] == "FP1") & (f["stint"] == 1)]
+    assert short["stint_len"].eq(3).all() and not short["clean"].any() and short["pace_resid_s"].isna().all()
+    timed = f[~f["pit_in"] & ~f["pit_out"] & (f["stint_len"] >= 5)]
+    assert timed["clean"].all() and timed["pace_resid_s"].notna().all()
+    assert not f.loc[f["pit_in"] | f["pit_out"], "clean"].any()
+
+
+def test_practice_frame_cuts_slow_laps_with_the_race_filter():
+    laps = practice_laps([("SOFT", 10), ("MEDIUM", 10)], bumps={("B", 5): 3.0, ("C", 6): -3.0})
+    f = practice_frame({"FP2": laps})
+    lap5 = f[(f["driver"] == "B") & (f["lap_in_stint"] == 5) & (f["stint"] == 1)].iloc[0]
+    assert not lap5["clean"] and lap5["pace_resid_s"] == pytest.approx(3.0, abs=0.5)
+    assert f[(f["driver"] == "C") & (f["lap_in_stint"] == 6) & (f["stint"] == 1)]["clean"].all()  # fast stays
+    assert int((~f["clean"] & f["pace_resid_s"].notna()).sum()) == 1
+    slow = f.loc[f["driver"] == "F", "driver_offset_s"].iloc[0]
+    assert slow == pytest.approx(OFFSETS["F"] - np.mean(list(OFFSETS.values())), abs=0.05)
+    fit = Simulator(lap_frame(synthetic_laps()), SimConfig(fit_window="pre_race"), f).degradation
+    assert fit.coefs["SOFT"] == pytest.approx((BASE["SOFT"] - 0.1 + np.mean(list(OFFSETS.values())), 0.1), abs=0.1)
