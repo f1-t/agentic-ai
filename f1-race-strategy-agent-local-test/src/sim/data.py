@@ -2,7 +2,7 @@
 
 The simulator itself never imports FastF1. Only `load_session` does, lazily.
 Frame columns: driver, lap, stint, compound, tyre_age, lap_time_s, track_status,
-pit_in, pit_out, start_s, end_s, team, clean.
+pit_in, pit_out, start_s, end_s, team, position, clean.
 """
 import os
 
@@ -47,6 +47,18 @@ def session_weather(session):
     })
 
 
+def session_results(session):
+    """Grid and classified positions by driver code, empty if the results did not load."""
+    r = session.results
+    if r is None or len(r) == 0:
+        return pd.DataFrame(columns=["grid", "classified"])
+    # ClassifiedPosition is text, with letters for retirements and disqualifications
+    return pd.DataFrame({
+        "grid": pd.to_numeric(r["GridPosition"], errors="coerce").to_numpy(),
+        "classified": pd.to_numeric(r["ClassifiedPosition"], errors="coerce").to_numpy(),
+    }, index=pd.Index(r["Abbreviation"].to_numpy(), name="driver"))
+
+
 def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
     """Convert a FastF1 Laps table into the simulator frame."""
     df = pd.DataFrame({
@@ -62,6 +74,7 @@ def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
         "start_s": laps["LapStartTime"].dt.total_seconds().to_numpy(),
         "end_s": laps["Time"].dt.total_seconds().to_numpy(),
         "team": laps["Team"].to_numpy(),
+        "position": laps["Position"].to_numpy(),
     })
     base = (
         (df["track_status"] == "1") & ~df["pit_in"] & ~df["pit_out"]
