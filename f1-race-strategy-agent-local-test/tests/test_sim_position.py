@@ -70,22 +70,48 @@ def three_driver_frame():
                       ("CCC", "T3", C_PLAN, 0.0, (3, 3)))
 
 
-def test_positions_from_lap_proxies(sim):
-    table, summary = calibration.positions(sim, three_driver_frame(), RACE)
+def test_positions_from_lap_proxies_vs_real(sim):
+    table, summary = calibration.positions(sim, three_driver_frame(), RACE, mode="vs_real")
     assert table["pred_pos"].tolist() == [2, 2, 3]  # C is a lap down, so both others are ahead
     assert table["real_pos"].tolist() == [2, 1, 3] and table["start_pos"].tolist() == [1, 2, 3]
     assert table["abs_err"].tolist() == [0, 1, 0]
-    assert summary == {"n_drivers": 3, "within_2_rate": 1.0, "mae_pos": 0.33, "exact_rate": 0.667,
-                       "baseline_within_2_rate": 1.0, "baseline_mae": 0.67, "source": "lap_proxies"}
+    assert summary["mode"] == "vs_real"
+    assert summary["by_mode"]["vs_real"] == {"within_2_rate": 1.0, "mae_pos": 0.33, "exact_rate": 0.667}
+    assert summary["baseline_within_2_rate"] == 1.0 and summary["baseline_mae"] == 0.67
+    assert summary["source"] == "lap_proxies"
+
+
+def test_positions_simulated_order_ranks_predictions_among_themselves(sim):
+    table, summary = calibration.positions(sim, three_driver_frame(), RACE)
+    assert summary["mode"] == "simulated_order"           # the default
+    assert table["pred_pos"].tolist() == [1, 2, 3]       # A is quicker than B on paper, C a lap down
+    assert table["abs_err"].tolist() == [1, 1, 0]
+    assert summary["within_2_rate"] == 1.0 and summary["mae_pos"] == 0.67 and summary["exact_rate"] == 0.333
+    assert summary["by_mode"]["vs_real"]["exact_rate"] == 0.667
+
+
+def test_simulated_order_ignores_a_bias_common_to_every_driver(sim):
+    # every driver really runs 3 s a lap slower than the model: vs_real is shifted, simulated_order is not
+    slow = race_frame(("AAA", "T1", A_PLAN, 3.0, (1, 1)), ("BBB", "T2", B_PLAN, 3.0, (2, 2)))
+    fair = race_frame(("AAA", "T1", A_PLAN, 0.0, (1, 1)), ("BBB", "T2", B_PLAN, 0.0, (2, 2)))
+    sim_order = calibration.positions(sim, slow, RACE)[0]
+    assert sim_order["pred_pos"].tolist() == calibration.positions(sim, fair, RACE)[0]["pred_pos"].tolist() == [1, 2]
+    vs_real = calibration.positions(sim, slow, RACE, mode="vs_real")[0]
+    assert vs_real["pred_pos"].tolist() == [1, 1]          # both predictions beat the other's slow real time
+
+
+def test_positions_rejects_unknown_mode(sim):
+    with pytest.raises(ValueError):
+        calibration.positions(sim, three_driver_frame(), RACE, mode="nope")
 
 
 def test_positions_prefer_results_when_they_cover_every_finisher(sim):
     results = pd.DataFrame({"grid": [3.0, 1.0, 2.0], "classified": [3.0, 1.0, 2.0]},
                            index=pd.Index(["AAA", "BBB", "CCC"], name="driver"))
-    table, summary = calibration.positions(sim, three_driver_frame(), RACE, results)
+    table, summary = calibration.positions(sim, three_driver_frame(), RACE, results, mode="vs_real")
     assert table["real_pos"].tolist() == [3, 1, 2] and table["start_pos"].tolist() == [3, 1, 2]
     assert summary["source"] == "grid_classified"
-    assert summary["mae_pos"] == 1.0 and summary["baseline_mae"] == 0.0
+    assert summary["by_mode"]["vs_real"]["mae_pos"] == 1.0 and summary["baseline_mae"] == 0.0
 
     partial = results.drop("CCC")
     assert calibration.positions(sim, three_driver_frame(), RACE, partial)[1]["source"] == "lap_proxies"
@@ -104,3 +130,10 @@ def test_observed_sc_factor_is_mean_with_median_alongside(sim):
     assert pd.isna(summary["observed_vsc_factor"])
     assert "observed_pit_loss_s" in summary
     assert "observed_lap1_extra_s" in summary
+
+
+def test_sc_pit_laps_are_classified_as_pit_laps_not_sc():
+    g = pd.DataFrame({"lap": [1, 2, 3, 4, 5], "track_status": ["1", "4", "4", "4", "1"],
+                      "pit_in": [False, False, True, False, False], "pit_out": [False, False, False, True, False],
+                      "clean": [True, False, False, False, True]})
+    assert calibration._lap_kind(g).tolist() == ["lap1", "sc", "in_lap", "out_lap", "clean"]
