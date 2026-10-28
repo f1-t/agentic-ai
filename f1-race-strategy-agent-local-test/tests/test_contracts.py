@@ -95,3 +95,25 @@ def test_tyre_set_is_new_is_derived_and_ids_unique():
     snap = Snapshot(race=RACE, driver="X", compound="SOFT",
                     sets_available=[{"compound": "MEDIUM", "laps_run": 4, "set_id": "m1"}])
     assert snap.find_set("m1").laps_run == 4 and snap.find_set("zz") is None
+
+
+def test_tyre_set_round_trips_through_model_dump():
+    from src.contracts import TyreSet
+    ts = TyreSet(compound="SOFT", laps_run=3)
+    assert ts.is_new is False
+    again = TyreSet.model_validate(ts.model_dump())
+    assert again == ts and again.is_new is False
+
+
+def test_snapshot_with_sets_available_round_trips():
+    snap = Snapshot(race=RACE, driver="X", compound="SOFT",
+                    sets_available=[{"compound": "MEDIUM", "laps_run": 4, "set_id": "m1"},
+                                    {"compound": "HARD"}])
+    assert Snapshot.model_validate(snap.model_dump()) == snap
+    assert Snapshot.model_validate_json(snap.model_dump_json()) == snap
+
+
+def test_tyre_set_rejects_conflicting_is_new():
+    from src.contracts import TyreSet
+    with pytest.raises(ValidationError):
+        TyreSet(compound="SOFT", laps_run=3, is_new=True)
