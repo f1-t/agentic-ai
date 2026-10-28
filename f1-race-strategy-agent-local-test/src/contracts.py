@@ -235,7 +235,7 @@ class SimResult(_Contract):
     pit_loss_total_s: float | None = None                     # mean over samples
     lap_times_s: list[float] | None = None                    # sample 0, pit loss excluded
     p_dnf: float = Field(default=0.0, ge=0, le=1)             # share of samples ending the race
-    p_big_loss: float = Field(default=0.0, ge=0, le=1)        # share with at least one hazard event
+    p_big_loss: float = Field(default=0.0, ge=0, le=1)        # share with a hazard event the car survived
     support_warnings: list[str] = Field(default_factory=list)  # e.g. stint longer than observed tyre age
 
     @property
