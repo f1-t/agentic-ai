@@ -238,3 +238,24 @@ class SimResult(_Contract):
         if not self.valid:
             return None
         return self.remaining.mean_s + (self.elapsed_s or 0.0)
+
+
+class CompareResult(_Contract):
+    """Candidates scored against each other under shared draws.
+
+    Lists follow the candidate order. Matrices are indexed [i][j]; any entry that
+    involves an invalid candidate is None. Times are remaining-race seconds.
+    """
+
+    candidates: list[Plan | None]       # full plans, actions expanded
+    valid: list[bool]
+    errors: list[list[str]]
+    summaries: list[TimeSummary | None]
+    p_best: list[float | None]          # share of samples where i is strictly fastest, ties split
+    p_beats: list[list[float | None]]   # share with t_i < t_j, ties 0.5; diagonal None
+    gap_mean_s: list[list[float | None]]  # t_i - t_j over samples
+    gap_std_s: list[list[float | None]]
+    best: int | None                    # lowest mean among valid
+    dominated: list[bool]               # some valid j is no worse on mean and cvar_90, better on one
+    n_samples: int
+    seed: int
