@@ -1,7 +1,7 @@
 """CLI for the calibration check.
 
     python -m src.sim.calibrate --season 2021 --gp Spain --pit-loss 22      # a number, or observed (default)
-    python -m src.sim.calibrate --degradation linear_fuel
+    python -m src.sim.calibrate --degradation linear
 
 Also prints the team-mate and finishing position checks and writes them to
 reports/calibration/<race_id>_pairs.csv and <race_id>_positions.csv.
@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--pit-loss", default="observed",
                     help='seconds, or "observed" to measure it from a first pass at 22.0 and rerun with it')
     ap.add_argument("--min-stint", type=int, default=10)
-    ap.add_argument("--degradation", default="linear")
+    ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--out", help="write per driver csv here")
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the pairs and positions csvs go")

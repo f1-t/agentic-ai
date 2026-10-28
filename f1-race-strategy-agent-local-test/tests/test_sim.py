@@ -31,7 +31,7 @@ def synthetic_frame(fuel=0.0):
 
 @pytest.fixture(scope="module")
 def sim():
-    return Simulator(synthetic_frame())
+    return Simulator(synthetic_frame(), SimConfig(degradation={"name": "linear"}))
 
 
 def start(compound="SOFT", age=0):

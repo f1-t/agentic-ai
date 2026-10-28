@@ -24,7 +24,7 @@ class EventEffects(_Cfg):
 
 
 class SimConfig(_Cfg):
-    degradation: ComponentSpec = ComponentSpec(name="linear")
+    degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
     effects: EventEffects = Field(default_factory=EventEffects)
     rules: list[str] = Field(default_factory=lambda: [

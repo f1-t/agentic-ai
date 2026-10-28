@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from .contracts import Plan, RaceParams, Snapshot
 from .sim import SimConfig, Simulator
 from .sim.config import EventEffects
-from .sim.data import lap_frame
+from .sim.data import LEGACY_OUTLIER_FACTOR, lap_frame
 
 warnings.filterwarnings("ignore")
 
@@ -35,7 +35,7 @@ SESSION = "R"
 
 PIT_LOSS_S = 22.0      # approx pit-lane time loss at Barcelona (seconds)
 MIN_STINT_LAPS = 10    # a realistic minimum stint length
-OUTLIER_FACTOR = 1.07  # drop laps slower than 107% of the compound's fastest (traffic/SC)
+OUTLIER_FACTOR = LEGACY_OUTLIER_FACTOR  # drop laps slower than 107% of the compound's fastest (traffic/SC)
 
 _CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "cache")
 _session = None  # lazily loaded, then reused
@@ -144,8 +144,11 @@ def _race_params():
 def _get_simulator():
     global _simulator
     if _simulator is None:
-        _simulator = Simulator(lap_frame(_load_session().laps, OUTLIER_FACTOR),
-                              SimConfig(effects=EventEffects(lap1_extra_s=0.0)))  # keep the oracle baseline
+        # baseline filter and model, so ground truth and the graded test keep their numbers;
+        # lap1_extra_s is pinned to 0 for the same reason
+        frame = lap_frame(_load_session().laps, OUTLIER_FACTOR)
+        _simulator = Simulator(frame, SimConfig(degradation={"name": "linear"},
+                                                effects=EventEffects(lap1_extra_s=0.0)))
     return _simulator
 
 
