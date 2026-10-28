@@ -3,8 +3,8 @@
 The simulator itself never imports FastF1. Only `load_session` does, lazily.
 Frame columns: driver, lap, stint, compound, tyre_age, lap_time_s, track_status,
 pit_in, pit_out, start_s, end_s, team, position, pace_resid_s, driver_offset_s, clean.
-practice_frame adds session, stint_len, lap_in_stint, session_time_min and run_class,
-with lap NaN.
+practice_frame adds session, stint_len, lap_in_stint, session_time_min, stint_start_min
+and run_class, with lap NaN.
 """
 import os
 
@@ -17,6 +17,7 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 LEGACY_OUTLIER_FACTOR = 1.07  # baseline rule: drop laps slower than 107% of the compound's fastest
 HINGE_KNOT = 25               # tyre age where the filter's reference model may bend upwards
 MIN_SCALE_S = 0.05            # floor on the robust residual scale, so noise free data cuts nothing
+EVOLUTION_TAU_S_PER_MIN = 0.02  # ridge toward 0 on the practice session evolution slopes
 
 
 WEATHER_COLUMNS = ["time_s", "air_temp_c", "track_temp_c", "humidity_pct", "pressure_hpa",
@@ -93,14 +94,27 @@ def _green(df):
 
 
 def evolution_columns(d):
-    """Per session track evolution columns: session_time_min on that session's rows, 0
-    elsewhere. Returns (sessions, columns); empty without session and session_time_min."""
-    if "session" not in d or "session_time_min" not in d:
+    """Per session track evolution columns: the stint's start time (stint_start_min) on
+    that session's rows, 0 elsewhere. Constant within a stint, so not collinear with tyre
+    age; the slopes are identified across stints only, and fitted with a ridge toward 0
+    (EVOLUTION_TAU_S_PER_MIN). Returns (sessions, columns); empty without session and
+    stint_start_min."""
+    if "session" not in d or "stint_start_min" not in d:
         return [], []
-    t = d["session_time_min"].to_numpy(dtype=float)
+    t = d["stint_start_min"].to_numpy(dtype=float)
     has = ~np.isnan(t)
     sessions = sorted(d.loc[has, "session"].dropna().unique())
     return sessions, [((d["session"] == s).to_numpy() & has) * np.nan_to_num(t) for s in sessions]
+
+
+def ridge_lstsq(X, y, prec=None):
+    """argmin ||y - X b||^2 + sum_j prec_j b_j^2: least squares with a ridge toward 0 on
+    the columns where prec > 0, plain least squares when there are none."""
+    if prec is None or not np.any(prec):
+        return np.linalg.lstsq(X, y, rcond=None)[0]
+    pen = np.asarray(prec, dtype=float) > 0
+    rows = np.diag(np.sqrt(np.asarray(prec, dtype=float)))[pen]
+    return np.linalg.lstsq(np.vstack([X, rows]), np.concatenate([y, np.zeros(pen.sum())]), rcond=None)[0]
 
 
 def pace_design(d, comps, knot=HINGE_KNOT, min_samples=5, lap_term=True, session_term=False):
@@ -108,9 +122,10 @@ def pace_design(d, comps, knot=HINGE_KNOT, min_samples=5, lap_term=True, session
 
     Per compound intercept, tyre age slope and, when at least `min_samples` of its rows
     are past the knot, a hinge `max(0, tyre_age - knot)`; then the race lap (when
-    `lap_term`); then a per session slope in session time (when `session_term`, see
-    evolution_columns); then one offset per driver after the first. Returns (X, drivers)
-    with the driver columns last.
+    `lap_term`); then a per session slope in stint start time (when `session_term`, see
+    evolution_columns); then one offset per driver after the first. Returns (X, drivers,
+    prec): the driver columns last, and per column ridge precisions, 1/tau^2 on the
+    evolution columns and 0 elsewhere.
     """
     drivers = sorted(d["driver"].unique())
     cols = []
@@ -122,17 +137,20 @@ def pace_design(d, comps, knot=HINGE_KNOT, min_samples=5, lap_term=True, session
             cols.append(m * np.maximum(0.0, age - knot))
     if lap_term:
         cols.append(d["lap"].to_numpy(dtype=float))
-    if session_term:
-        cols += evolution_columns(d)[1]
+    evo = evolution_columns(d)[1] if session_term else []
+    prec = np.zeros(len(cols) + len(evo) + len(drivers) - 1)
+    prec[len(cols):len(cols) + len(evo)] = EVOLUTION_TAU_S_PER_MIN ** -2
+    cols += evo
     cols += [(d["driver"] == drv).to_numpy(dtype=float) for drv in drivers[1:]]
-    return np.column_stack(cols), drivers
+    return np.column_stack(cols), drivers, prec
 
 
 def robust_filter(df, base, design, k_resid=2.5, n_iter=2, min_samples=5):
     """Mark `base` laps clean unless unusually slow against a reference pace model.
 
-    `design(rows, compounds)` builds the model's design matrix and returns (X, drivers),
-    with one column per driver after the first at the end (see pace_design). A lap is
+    `design(rows, compounds)` builds the model's design matrix and returns (X, drivers,
+    prec), with one column per driver after the first at the end and per column ridge
+    precisions (see pace_design), fitted by ridge_lstsq. A lap is
     cut when its residual is at least `k_resid` robust standard deviations (scaled MAD,
     floored at MIN_SCALE_S) above the fit; fast laps are never cut. The model is
     refitted on the clean laps and the cut redone `n_iter` times. Compounds with fewer
@@ -147,11 +165,11 @@ def robust_filter(df, base, design, k_resid=2.5, n_iter=2, min_samples=5):
     clean = base.copy()
     if fit.any():
         d = df[fit]
-        X, drivers = design(d, comps)
+        X, drivers, prec = design(d, comps)
         y = d["lap_time_s"].to_numpy()
         keep = np.ones(len(d), dtype=bool)
         for _ in range(n_iter + 1):
-            beta, *_ = np.linalg.lstsq(X[keep], y[keep], rcond=None)
+            beta = ridge_lstsq(X[keep], y[keep], prec)
             resid = y - X @ beta
             scale = max(1.4826 * np.median(np.abs(resid - np.median(resid))), MIN_SCALE_S)
             keep = resid < k_resid * scale
@@ -203,14 +221,14 @@ def _weighted_median(values, weights):
 
 def _run_class(df, timed, sid, rule):
     """Long-run test per stint: "short", "inconsistent", "off_pace" (first failed) or "long_run"."""
-    t = df[timed].assign(sid=sid[timed]).sort_values(["sid", "lap"])
+    t = df[timed].assign(sid=sid[timed])
     g = t.groupby("sid")["lap_time_s"]
     st = pd.DataFrame({
         "session": t.groupby("sid")["session"].first(), "n": g.size(), "median": g.median(),
-        "step": g.agg(lambda x: np.median(np.abs(np.diff(x.to_numpy()))) if len(x) > 1 else np.inf),
+        "share": g.agg(lambda x: float((np.abs(x - x.median()) <= rule.consistent_band_s).mean())),
     })
     st["cls"] = np.where(st["n"] < rule.min_timed_laps, "short",
-                         np.where(st["step"] < rule.max_median_step_s, "", "inconsistent"))
+                         np.where(st["share"] >= rule.consistent_share, "", "inconsistent"))
     for _, ses in st.groupby("session"):
         ok = ses[ses["cls"] == ""]
         if len(ok):
@@ -229,17 +247,19 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
     stint. A stint is a long run unless, with the thresholds in `long_run`
     (SimConfig.long_run), it fails one of these tests, checked in order:
       short         fewer than min_timed_laps timed laps
-      inconsistent  the median absolute lap-to-lap step of its timed laps is not under
-                    max_median_step_s (push and cool laps alternating)
+      inconsistent  under consistent_share of its timed laps are within consistent_band_s
+                    of the stint median (push and cool laps alternating)
       off_pace      its median timed lap is more than max_pace_gap_s from the session's
                     long-run reference: the median of the medians of the stints that pass
                     the first two tests, weighted by their timed laps.
     `run_class` holds the result. Only long-run timed laps are base laps. They are cleaned
     by robust_filter across all sessions together, with the race frame's reference model
-    less the race lap term and plus a per session slope in `session_time_min` (minutes
-    since the session's first lap started): per compound intercept, tyre age and hinge,
-    session evolution, and per driver offsets. `lap_in_stint` is the lap's place in its
-    stint, out lap included. `lap` is NaN, as practice has no race lap (fuel) term.
+    less the race lap term and plus a per session slope in `stint_start_min` (see
+    evolution_columns): per compound intercept, tyre age and hinge, session evolution
+    between stints, and per driver offsets. `session_time_min` is minutes since the
+    session's first lap started, `stint_start_min` the same for the stint's first lap.
+    `lap_in_stint` is the lap's place in its stint, out lap included. `lap` is NaN, as
+    practice has no race lap; the degradation fit uses lap_in_stint for the in-stint fuel.
     """
     rule = long_run or LongRun()
     keys = ["session", "driver", "stint"]
@@ -251,6 +271,7 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
     sid = df.groupby(keys, dropna=False).ngroup()
     df["stint_len"] = timed.groupby(sid).transform("sum").astype(int)
     df["lap_in_stint"] = df.groupby(sid)["lap"].rank(method="first").astype(int)
+    df["stint_start_min"] = df["session_time_min"].groupby(sid).transform("min")
     df["run_class"] = _run_class(df, timed, sid, rule)
     base = timed & (df["run_class"] == "long_run")
 
@@ -259,7 +280,7 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
 
     df = robust_filter(df, base, design, k_resid=k_resid, n_iter=n_iter, min_samples=min_samples)
     df["lap"] = np.nan
-    extra = ["session", "stint_len", "lap_in_stint", "session_time_min", "run_class"]
+    extra = ["session", "stint_len", "lap_in_stint", "session_time_min", "stint_start_min", "run_class"]
     return df[[c for c in df.columns if c not in extra] + extra]
 
 

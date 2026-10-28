@@ -29,7 +29,10 @@ class LongRun(_Cfg):
     non pit laps with a lap time, tyre age and compound, so the out and in laps never count."""
 
     min_timed_laps: int = 6           # qualifying runs are short
-    max_median_step_s: float = 1.0    # median |lap-to-lap step| of the timed laps; rejects push/cool alternation
+    # consistent: at least consistent_share of the timed laps within consistent_band_s of the
+    # stint median; tolerates a traffic lap or two, rejects push/cool alternation
+    consistent_share: float = 0.7
+    consistent_band_s: float = 2.0
     max_pace_gap_s: float = 2.5       # stint median within this of the session's long-run reference
 
 
@@ -52,9 +55,16 @@ class SimConfig(_Cfg):
     # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit
     # it, and shrinks toward it under to_snapshot
     pre_race_fuel_slope_s_per_lap: float = -0.045
-    # to_snapshot prior standard deviations around the pre_race fit (see degradation.py)
+    # practice-to-race base level, s/lap, added to every practice-derived compound base in the
+    # pre_race prior (Spain: full-fit base 85.22 less practice 84.18, rounded). A config prior
+    # for now (fit_report base_delta_source "prior"); the first factor SPEC H's calibrator
+    # will predict per race. to_snapshot shrinks it with the base_s tau.
+    pre_race_base_delta_s: float = 1.0
+    # to_snapshot prior standard deviations around the pre_race fit (see degradation.py). Fuel
+    # is tight: burn is near a physical constant per circuit, and the wear/fuel split is not
+    # identified while every car is in its first stint.
     shrinkage: dict[str, float] = Field(default_factory=lambda: {
-        "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.015,
+        "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008,
     })
     long_run: LongRun = Field(default_factory=LongRun)   # practice long-run test, for data.practice_frame
 
