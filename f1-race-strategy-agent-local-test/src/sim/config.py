@@ -29,6 +29,7 @@ class SimConfig(_Cfg):
     rules: list[str] = Field(default_factory=lambda: [
         "first_stint_matches", "lap_sum", "known_compounds", "min_stint", "two_compounds", "inventory",
     ])
+    inventory_sources: list[str] = Field(default_factory=lambda: ["observed", "inferred", "assumed"])
     min_samples: int = 5      # clean laps needed before a compound is modelled
     n_samples: int = 1
 

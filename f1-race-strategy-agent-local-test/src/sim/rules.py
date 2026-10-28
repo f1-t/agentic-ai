@@ -12,6 +12,7 @@ class RuleContext:
     snapshot: Snapshot
     plan: Plan
     modelled: set
+    config: object = None   # SimConfig when available
 
 
 @RULES.register("first_stint_matches")
@@ -53,15 +54,17 @@ def two_compounds(ctx):
     return []
 
 
-def assign_sets(snapshot, plan):
+def assign_sets(snapshot, plan, sources=None):
     """Match each stint after the first to a distinct set in the inventory.
 
     Returns (sets, errors). `sets[i]` is the TyreSet for stint i, None for the
-    fitted first stint or when the snapshot is unconstrained.
+    fitted first stint or when the snapshot is unconstrained. `sources` limits
+    which provenance tags count as available.
     """
     if snapshot.sets_available is None:
         return [None] * len(plan.stints), []
-    pool, out, errors = list(snapshot.sets_available), [None], []
+    pool = [t for t in snapshot.sets_available if sources is None or t.source in sources]
+    out, errors = [None], []
     for i, st in enumerate(plan.stints[1:], start=2):
         if st.set_id is not None:
             found = [t for t in pool if t.set_id == st.set_id]
@@ -88,14 +91,18 @@ def assign_sets(snapshot, plan):
     return out, errors
 
 
+def _sources(config):
+    return getattr(config, "inventory_sources", None)
+
+
 @RULES.register("inventory")
 def inventory(ctx):
-    return assign_sets(ctx.snapshot, ctx.plan)[1]
+    return assign_sets(ctx.snapshot, ctx.plan, _sources(ctx.config))[1]
 
 
-def apply_inventory(snapshot, plan):
+def apply_inventory(snapshot, plan, config=None):
     """Return the plan with start_age taken from each named set."""
-    sets, errors = assign_sets(snapshot, plan)
+    sets, errors = assign_sets(snapshot, plan, _sources(config))
     if errors or all(t is None for t in sets):
         return plan
     stints = [s if t is None else s.model_copy(update={"start_age": t.laps_run})

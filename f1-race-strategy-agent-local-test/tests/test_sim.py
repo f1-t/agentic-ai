@@ -255,3 +255,12 @@ def test_named_set_errors(sim, stint, fragment):
     snap = inv_snapshot([{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"}])
     res = sim.simulate(snap, [["SOFT", 20], stint])
     assert not res.valid and any(fragment in e for e in res.errors)
+
+
+def test_assumed_sets_can_be_excluded_by_config():
+    sets = [{"compound": "MEDIUM", "source": "assumed"}, {"compound": "MEDIUM", "laps_run": 4, "source": "inferred"}]
+    snap = inv_snapshot(sets)
+    strict = Simulator(synthetic_frame(), SimConfig(inventory_sources=["observed", "inferred"]))
+    assert not strict.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]]).valid
+    assert strict.simulate(snap, [["SOFT", 20], ["MEDIUM", 30, 4]]).valid
+    assert Simulator(synthetic_frame()).simulate(snap, [["SOFT", 20], ["MEDIUM", 30]]).valid
