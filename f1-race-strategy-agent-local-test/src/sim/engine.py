@@ -7,7 +7,7 @@ from ..contracts import Plan, SimResult, Snapshot, TimeSummary
 from .config import SimConfig
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
-from .rules import RuleContext, check
+from .rules import RuleContext, apply_inventory, check
 
 
 class Simulator:
@@ -28,7 +28,7 @@ class Simulator:
 
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
-        return check(names, RuleContext(snapshot, plan, self.modelled))
+        return check(names, RuleContext(snapshot, plan, self.modelled, self.config))
 
     # --- public API ----------------------------------------------------------
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
@@ -40,6 +40,7 @@ class Simulator:
         errors = self.validate(snapshot, plan, rules)
         if errors:
             return SimResult(valid=False, errors=errors, plan=plan)
+        plan = apply_inventory(snapshot, plan, self.config)
 
         n = n_samples or self.config.n_samples
         runs = [self._run(snapshot, plan, np.random.default_rng([seed, i]), scenario) for i in range(n)]
