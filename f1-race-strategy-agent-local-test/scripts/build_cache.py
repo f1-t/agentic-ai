@@ -20,7 +20,7 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "cache")
 
 def main():
     os.makedirs(CACHE_DIR, exist_ok=True)
-    fastf1.Cache.enable_cache(CACHE_DIR)
+    fastf1.Cache.configure(cache_dir=CACHE_DIR)
 
     print(f"Loading {SEASON} {GP_NAME} GP ({SESSION}) ...")
     session = fastf1.get_session(SEASON, GP_NAME, SESSION)
