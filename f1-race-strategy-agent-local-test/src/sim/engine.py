@@ -91,14 +91,28 @@ class BatchResult:
         )
 
 
-class Simulator:
-    """Fitted on one race's lap frame. Cheap to call repeatedly."""
+FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
 
-    def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None):
+
+class Simulator:
+    """Fitted on one race's lap frame. Cheap to call repeatedly.
+
+    `practice` is a frame of practice long-run laps (FP1-FP3 concatenated, with a
+    "session" column), needed by the pre_race and early to_snapshot fit windows.
+    The instance itself is fitted on every race lap; `fitted_for(snapshot)` gives the
+    instance fitted on the window that `config.fit_window` picks for that snapshot.
+    """
+
+    def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
+                 practice: pd.DataFrame | None = None):
         self.config = config or SimConfig()
+        self.laps, self.practice = laps, practice
+        self.window = None   # fitted_for cache key on a windowed instance, None on the root
+        self._fits = {}
         spec = self.config.degradation
         self.degradation = DEGRADATION.get(spec.name).fit(
-            laps, min_samples=self.config.min_samples, **spec.params)
+            laps, min_samples=self.config.min_samples,
+            fuel_prior=self.config.pre_race_fuel_slope_s_per_lap, **spec.params)
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
         self.ref_lap_s = float(laps.loc[laps["clean"], "lap_time_s"].median())
@@ -107,18 +121,54 @@ class Simulator:
     def modelled(self):
         return self.degradation.compounds
 
+    def fitted_for(self, snapshot: Snapshot) -> "Simulator":
+        """The instance fitted on this snapshot's fit window. Built once per key, then cached."""
+        cfg = self.config
+        if self.window is not None or (cfg.fit_window == "full" and not cfg.exclude_snapshot_driver):
+            return self
+        key = (cfg.fit_window, snapshot.laps_completed if cfg.fit_window == "to_snapshot" else None,
+               snapshot.driver if cfg.exclude_snapshot_driver else None)
+        if key not in self._fits:
+            if len(self._fits) >= FIT_CACHE_SIZE:
+                del self._fits[next(iter(self._fits))]
+            fit = Simulator(self._window_frame(snapshot), cfg)
+            fit.window = key
+            self._fits[key] = fit
+        return self._fits[key]
+
+    def _window_frame(self, snapshot: Snapshot) -> pd.DataFrame:
+        """Race laps the window allows (every car's, they are public), plus practice."""
+        window = self.config.fit_window
+        frame = self.laps
+        if window != "full":
+            upto = snapshot.laps_completed if window == "to_snapshot" else 0
+            frame = frame[frame["lap"] <= upto]
+            have_practice = self.practice is not None and not self.practice.empty
+            if not have_practice and frame.empty:
+                raise ValueError("fit window needs practice laps")
+            if have_practice:
+                frame = pd.concat([frame, self.practice.assign(lap=np.nan)], ignore_index=True)
+        if self.config.exclude_snapshot_driver and "driver" in frame:
+            frame = frame[frame["driver"] != snapshot.driver]
+        return frame
+
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
-        return check(names, RuleContext(snapshot, plan, self.modelled, self.config))
+        fit = self.fitted_for(snapshot)
+        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config))
 
     # --- public API ----------------------------------------------------------
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:
-        return self.simulate_batch(snapshot, [plan], seed=seed, n_samples=n_samples, scenario=scenario,
-                                   rules=rules, return_laps=return_laps).result(0, snapshot)
+        return self.fitted_for(snapshot).simulate_batch(
+            snapshot, [plan], seed=seed, n_samples=n_samples, scenario=scenario,
+            rules=rules, return_laps=return_laps).result(0, snapshot)
 
     def simulate_batch(self, snapshot: Snapshot, plans, *, seed=0, n_samples=None,
                        scenario: Scenario | None = None, rules=None, return_laps=False) -> BatchResult:
+        if (fit := self.fitted_for(snapshot)) is not self:
+            return fit.simulate_batch(snapshot, plans, seed=seed, n_samples=n_samples, scenario=scenario,
+                                      rules=rules, return_laps=return_laps)
         parsed, errors = [], []
         for raw in plans:
             try:
@@ -199,6 +249,9 @@ class Simulator:
 
         `continuation(snapshot_after)` returns the plan for the laps after an action.
         """
+        if (fit := self.fitted_for(snapshot)) is not self:
+            return fit.compare(snapshot, candidates, seed=seed, n_samples=n_samples, scenario=scenario,
+                               rules=rules, continuation=continuation)
         plans, errors = [], []
         for raw in candidates:
             if isinstance(raw, dict) and "action" in raw:

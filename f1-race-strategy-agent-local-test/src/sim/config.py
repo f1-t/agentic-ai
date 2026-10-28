@@ -1,5 +1,6 @@
 """Simulator configuration. Components are chosen by registry key plus params."""
 import json
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -32,6 +33,14 @@ class SimConfig(_Cfg):
     inventory_sources: list[str] = Field(default_factory=lambda: ["observed", "inferred", "assumed"])
     min_samples: int = 5      # clean laps needed before a compound is modelled
     n_samples: int = 1
+    # Which laps the degradation model is fitted on, per snapshot (Simulator.fitted_for):
+    #   full         every race lap (hindsight, the world)
+    #   to_snapshot  practice long runs plus race laps up to snapshot.laps_completed
+    #   pre_race     practice long runs only
+    fit_window: Literal["full", "to_snapshot", "pre_race"] = "full"
+    exclude_snapshot_driver: bool = False   # leave the snapshot driver's laps out of the fit
+    # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit it
+    pre_race_fuel_slope_s_per_lap: float = -0.045
 
     @classmethod
     def from_file(cls, path):
