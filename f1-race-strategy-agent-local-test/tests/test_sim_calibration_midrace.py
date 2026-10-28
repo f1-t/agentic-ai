@@ -314,13 +314,27 @@ def test_appendix_tables(frame):
     assert pairs["n_pairs"].sum() == len(one) // 2
 
 
+@pytest.mark.parametrize("arg,used", [("observed", 20.0), ("25", 25.0)])
+def test_midrace_pit_loss_is_observed_unless_given(frame, arg, used):
+    """The synthetic in laps carry exactly RACE.pit_loss_s (20 s), so that is what is observed."""
+    from types import SimpleNamespace
+
+    from src.sim import calibrate
+    args = SimpleNamespace(pit_loss=arg)
+    race = RACE.model_copy(update={"pit_loss_s": 99.0})
+    got, observed = calibrate._pit_loss(args, frame, cfg(degradation={"name": "linear"}), race)
+    assert observed == pytest.approx(20.0, abs=0.01)
+    assert got == pytest.approx(used, abs=0.01)
+
+
 def test_aggregate_cli_reads_race_csvs_and_writes_the_summary(frame, tmp_path, capsys):
     from src.sim import calibrate
     _, three = three_races(frame)
     files = []
     for race_id, r in three.groupby("race_id"):
         files.append(str(tmp_path / f"{race_id}_midrace.csv"))
-        r.to_csv(files[-1], index=False)
+        calibrate._write_csv(r, files[-1], {"pit_loss_s": 23.81, "observed_pit_loss_s": 23.81}, index=False)
+    assert open(files[0]).readline() == "# pit_loss_s: 23.81\n"
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
     got = pd.read_csv(out, index_col=["window", "horizon_bucket"])

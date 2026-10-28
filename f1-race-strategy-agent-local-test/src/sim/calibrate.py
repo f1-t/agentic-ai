@@ -12,8 +12,10 @@ Mid-race replay, per race and then over every race replayed so far:
     python -m src.sim.calibrate midrace-aggregate reports/calibration/*_midrace.csv
 
 The first writes reports/calibration/<race_id>_midrace.csv and the per driver appendix
-<race_id>_midrace_by_driver.csv (pit loss 22 s unless --pit-loss is given); the second
-prints the summary pivot and writes reports/calibration/midrace_summary.csv.
+<race_id>_midrace_by_driver.csv. Its pit loss is the observed one, measured as the plain
+command does, unless --pit-loss gives a number; both values head each csv as `# key: value`
+lines (read with comment="#"). The second prints the summary pivot and writes
+reports/calibration/midrace_summary.csv.
 """
 import argparse
 import json
@@ -38,7 +40,8 @@ PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate
 def _race_args(ap):
     ap.add_argument("--season", type=int, default=2021)
     ap.add_argument("--gp", default="Spain")
-    ap.add_argument("--pit-loss", type=float, default=DEFAULT_PIT_LOSS_S)
+    ap.add_argument("--pit-loss", default="observed",
+                    help=f'seconds, or "observed" to measure it from a first pass at {DEFAULT_PIT_LOSS_S}')
     ap.add_argument("--min-stint", type=int, default=10)
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
@@ -46,13 +49,31 @@ def _race_args(ap):
 
 
 def _race_setup(args):
+    """Session, frame, config and race. The race's pit loss is args.pit_loss, or DEFAULT_PIT_LOSS_S
+    when that is "observed"; _pit_loss then measures the observed value."""
     session = load_session(args.season, args.gp)
     frame = lap_frame(session.laps)
     cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    pit_loss = DEFAULT_PIT_LOSS_S if args.pit_loss == "observed" else float(args.pit_loss)
     race = RaceParams(
-        race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=args.pit_loss,
+        race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=pit_loss,
         min_stint_laps=args.min_stint, compounds=sorted(frame["compound"].dropna().unique()))
     return session, frame, cfg, race
+
+
+def _pit_loss(args, frame, cfg, race):
+    """(pit loss to use, observed pit loss). The observed value comes from a first full-window
+    run() at DEFAULT_PIT_LOSS_S, as the calibrate command does; a number in --pit-loss overrides it."""
+    first = race.model_copy(update={"pit_loss_s": DEFAULT_PIT_LOSS_S})
+    observed = calibration.run(Simulator(frame, cfg), frame, first)[1]["observed_pit_loss_s"]
+    return (observed if args.pit_loss == "observed" else float(args.pit_loss)), observed
+
+
+def _write_csv(df, path, header, **kw):
+    """CSV with `# key: value` lines before the table; read it back with pd.read_csv(path, comment="#")."""
+    with open(path, "w") as f:
+        f.writelines(f"# {k}: {v}\n" for k, v in header.items())
+        df.to_csv(f, **kw)
 
 
 def _practice(season, gp, long_run=None):
@@ -70,6 +91,11 @@ def midrace_main(argv):
     args = ap.parse_args(argv)
 
     session, frame, cfg, race = _race_setup(args)
+    used, observed = _pit_loss(args, frame, cfg, race)
+    race = race.model_copy(update={"pit_loss_s": used})
+    header = {"pit_loss_s": used, "observed_pit_loss_s": observed,
+              "pit_loss_source": "observed" if args.pit_loss == "observed" else "--pit-loss"}
+    print(f"pit loss used: {used} ({header['pit_loss_source']}), observed: {observed}")
     practice = _practice(args.season, args.gp, cfg.long_run) if set(args.windows) - {"full"} else None
 
     def factory(window):
@@ -79,10 +105,10 @@ def midrace_main(argv):
                                results=session_results(session))
     os.makedirs(args.report_dir, exist_ok=True)
     path = os.path.normpath(os.path.join(args.report_dir, f"{race.race_id}_midrace.csv"))
-    rows.to_csv(path, index=False)
+    _write_csv(rows, path, header, index=False)
     print(f"{len(rows)} rows, k = {sorted(rows['k'].unique().tolist())}, written to {path}")
     appendix = os.path.normpath(os.path.join(args.report_dir, f"{race.race_id}_midrace_by_driver.csv"))
-    calibration.by_driver(rows).to_csv(appendix)
+    _write_csv(calibration.by_driver(rows), appendix, header)
     print(f"per driver appendix written to {appendix}")
     _print_pivot(calibration.aggregate(rows))
 
@@ -99,7 +125,7 @@ def midrace_aggregate_main(argv):
     ap.add_argument("--out", default=os.path.join(REPORT_DIR, "midrace_summary.csv"))
     args = ap.parse_args(argv)
 
-    rows = pd.concat([pd.read_csv(f) for f in args.files], ignore_index=True)
+    rows = pd.concat([pd.read_csv(f, comment="#") for f in args.files], ignore_index=True)
     summary = calibration.aggregate(rows)
     print(f"{len(rows)} rows from {rows['race_id'].nunique()} race(s)")
     _print_pivot(summary)
