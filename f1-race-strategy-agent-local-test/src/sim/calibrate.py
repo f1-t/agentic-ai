@@ -14,10 +14,11 @@ Mid-race replay, per race and then over every race replayed so far:
 The first writes reports/calibration/<race_id>_midrace.csv and the per driver appendix
 <race_id>_midrace_by_driver.csv. Its pit loss is the observed one, measured as the plain
 command does, unless --pit-loss gives a number. Every row of both csvs carries pit_loss_s,
-pit_loss_source ("observed" or "--pit-loss") and sim_version (calibration.sim_version, a
-hash of the physics config). The second prints the summary pivot and writes
-reports/calibration/midrace_summary.csv; it refuses rows from more than one sim_version
-unless --allow-mixed is given.
+pit_loss_source ("observed" or "--pit-loss"), config_hash (calibration.config_hash, a hash
+of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a hash of the
+src/sim and src/contracts.py source). The second prints the summary pivot and writes
+reports/calibration/midrace_summary.csv; it refuses rows with more than one value of
+either version column unless --allow-mixed is given.
 """
 import argparse
 import json
@@ -35,6 +36,7 @@ from .engine import Simulator
 DEFAULT_PIT_LOSS_S = 22.0
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration")
 PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
+VERSION_COLUMNS = ("config_hash", "sim_code_version")
 PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
                  "within_2_rate_real", "mae_pos_real"]
 
@@ -72,7 +74,7 @@ def _pit_loss(args, frame, cfg, race):
 
 
 def _stamp(df, stamp):
-    """`df` with the run's pit_loss_s, pit_loss_source and sim_version as plain columns."""
+    """`df` with the run's pit_loss_s, pit_loss_source, config_hash and sim_code_version as plain columns."""
     return df.assign(**stamp)
 
 
@@ -94,9 +96,9 @@ def midrace_main(argv):
     used, observed = _pit_loss(args, frame, cfg, race)
     race = race.model_copy(update={"pit_loss_s": used})
     stamp = {"pit_loss_s": used, "pit_loss_source": "observed" if args.pit_loss == "observed" else "--pit-loss",
-             "sim_version": calibration.sim_version(cfg)}
+             "config_hash": calibration.config_hash(cfg), "sim_code_version": calibration.SIM_CODE_VERSION}
     print(f"pit loss used: {used} ({stamp['pit_loss_source']}), observed: {observed}; "
-          f"sim_version {stamp['sim_version']}")
+          f"config_hash {stamp['config_hash']}, sim_code_version {stamp['sim_code_version']}")
     practice = _practice(args.season, args.gp, cfg.long_run) if set(args.windows) - {"full"} else None
 
     def factory(window):
@@ -125,15 +127,18 @@ def midrace_aggregate_main(argv):
     ap.add_argument("files", nargs="+")
     ap.add_argument("--out", default=os.path.join(REPORT_DIR, "midrace_summary.csv"))
     ap.add_argument("--allow-mixed", action="store_true",
-                    help="aggregate rows from different sim_version values (refused by default)")
+                    help="aggregate rows from different config_hash or sim_code_version values "
+                         "(refused by default)")
     args = ap.parse_args(argv)
 
     rows = pd.concat([pd.read_csv(f) for f in args.files], ignore_index=True)
-    versions = sorted(map(str, rows["sim_version"].unique())) if "sim_version" in rows else ["missing"]
-    if len(versions) > 1 and not args.allow_mixed:
-        ap.error(f"rows come from {len(versions)} sim_version values {versions}; "
-                 "rerun them on one config or pass --allow-mixed")
-    print(f"sim_version: {', '.join(versions)}")
+    for col in VERSION_COLUMNS:
+        # a csv without the column counts as one version; its rows read as NaN when mixed with newer csvs
+        versions = sorted(map(str, rows[col].unique())) if col in rows else ["missing"]
+        if len(versions) > 1 and not args.allow_mixed:
+            ap.error(f"rows come from {len(versions)} {col} values {versions}; "
+                     "rerun them on one config and code version or pass --allow-mixed")
+        print(f"{col}: {', '.join(versions)}")
     summary = calibration.aggregate(rows)
     print(f"{len(rows)} rows from {rows['race_id'].nunique()} race(s)")
     _print_pivot(summary)

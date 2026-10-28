@@ -265,13 +265,35 @@ MIDRACE_WINDOWS = ("full", "to_snapshot", "pre_race")
 MIN_OFFSET_LAPS = 5      # green non-pit laps up to k needed for a driver pace offset
 
 
-def sim_version(config: SimConfig) -> str:
+def _code_version(src=None) -> str:
+    """sha256 over every .py file under src/sim plus src/contracts.py, first 12 hex digits.
+
+    Files are taken in sorted order of their path relative to src/, and each contributes its
+    relative path and its bytes, so the value depends on the source alone: the same on any
+    clean checkout, and independent of git state, caches and the working directory.
+    `src` defaults to this package's src/ directory.
+    """
+    import hashlib
+    from pathlib import Path
+    src = Path(__file__).resolve().parent.parent if src is None else Path(src)
+    files = sorted([*src.joinpath("sim").rglob("*.py"), src / "contracts.py"],
+                   key=lambda p: p.relative_to(src).as_posix())
+    h = hashlib.sha256()
+    for p in files:
+        h.update(p.relative_to(src).as_posix().encode() + b"\0" + p.read_bytes() + b"\0")
+    return h.hexdigest()[:12]
+
+
+SIM_CODE_VERSION = _code_version()   # report column sim_code_version, computed at import
+
+
+def config_hash(config: SimConfig) -> str:
     """Physics config hash: the first 12 hex digits of sha256 over the SimConfig as JSON with
     sorted keys, `fit_window` left out because each report row names its window.
 
     Identical configs give the same value on any machine or commit; a change to any config
     field (degradation, effects, shrinkage, long_run, ...) changes it. Code changes that keep
-    the config do not, so it identifies the physics settings, not the code version.
+    the config do not; SIM_CODE_VERSION covers those.
     """
     import hashlib
     import json

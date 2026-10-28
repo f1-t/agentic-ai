@@ -327,23 +327,47 @@ def test_midrace_pit_loss_is_observed_unless_given(frame, arg, used):
     assert got == pytest.approx(used, abs=0.01)
 
 
-def test_sim_version_is_a_stable_config_hash():
+def test_config_hash_is_stable_for_identical_configs():
     a, b = SimConfig(), SimConfig()
-    assert calibration.sim_version(a) == calibration.sim_version(b)
-    assert len(calibration.sim_version(a)) == 12
-    assert calibration.sim_version(SimConfig(fit_window="pre_race")) == calibration.sim_version(a)
-    assert calibration.sim_version(cfg()) != calibration.sim_version(a)   # lap1_extra_s differs
-    assert calibration.sim_version(SimConfig(degradation={"name": "linear"})) != calibration.sim_version(a)
+    assert calibration.config_hash(a) == calibration.config_hash(b)
+    assert len(calibration.config_hash(a)) == 12
+    assert calibration.config_hash(SimConfig(fit_window="pre_race")) == calibration.config_hash(a)
+    assert calibration.config_hash(cfg()) != calibration.config_hash(a)   # lap1_extra_s differs
+    assert calibration.config_hash(SimConfig(degradation={"name": "linear"})) != calibration.config_hash(a)
 
 
-def race_csvs(frame, tmp_path, versions):
+def test_sim_code_version_hashes_the_sim_sources(tmp_path):
+    """A copy of the sources outside the repo, with no git and stray non-source files, gives the
+    same value; one edited byte, or a new .py file, changes it."""
+    import shutil
+    from pathlib import Path
+    src = Path(calibration.__file__).resolve().parent.parent
+    assert len(calibration.SIM_CODE_VERSION) == 12
+    assert calibration._code_version() == calibration.SIM_CODE_VERSION
+    copy = tmp_path / "src"
+    shutil.copytree(src / "sim", copy / "sim", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy(src / "contracts.py", copy / "contracts.py")
+    (copy / "sim" / "__pycache__").mkdir()
+    (copy / "sim" / "__pycache__" / "x.pyc").write_bytes(b"not source")
+    (copy / "sim" / "notes.txt").write_text("not source")
+    (copy / "agent.py").write_text("# outside src/sim, not hashed")
+    assert calibration._code_version(copy) == calibration.SIM_CODE_VERSION
+    (copy / "sim" / "extra.py").write_text("")
+    assert calibration._code_version(copy) != calibration.SIM_CODE_VERSION
+    (copy / "sim" / "extra.py").unlink()
+    (copy / "contracts.py").write_text((copy / "contracts.py").read_text() + "\n")
+    assert calibration._code_version(copy) != calibration.SIM_CODE_VERSION
+
+
+def race_csvs(frame, tmp_path, config_hashes, code_versions=None):
     """One stamped midrace csv per race, as calibrate midrace writes them."""
     from src.sim import calibrate
     _, three = three_races(frame)
+    code_versions = code_versions or ["c0de"] * len(config_hashes)
     files = []
-    for (race_id, r), version in zip(three.groupby("race_id"), versions):
+    for (race_id, r), ch, cv in zip(three.groupby("race_id"), config_hashes, code_versions):
         files.append(str(tmp_path / f"{race_id}_midrace.csv"))
-        stamp = {"pit_loss_s": 23.81, "pit_loss_source": "observed", "sim_version": version}
+        stamp = {"pit_loss_s": 23.81, "pit_loss_source": "observed", "config_hash": ch, "sim_code_version": cv}
         calibrate._stamp(r, stamp).to_csv(files[-1], index=False)
     return three, files
 
@@ -352,7 +376,7 @@ def test_aggregate_cli_reads_race_csvs_and_writes_the_summary(frame, tmp_path, c
     from src.sim import calibrate
     three, files = race_csvs(frame, tmp_path, ["abc"] * 3)
     head = pd.read_csv(files[0], nrows=1)
-    assert {"pit_loss_s", "pit_loss_source", "sim_version"} <= set(head.columns)
+    assert {"pit_loss_s", "pit_loss_source", "config_hash", "sim_code_version"} <= set(head.columns)
     assert open(files[0]).readline().startswith("race_id,")   # a plain csv, no comment lines
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
@@ -361,21 +385,38 @@ def test_aggregate_cli_reads_race_csvs_and_writes_the_summary(frame, tmp_path, c
     assert "mae_offset_s (horizon bucket x window)" in capsys.readouterr().out
 
 
-def test_aggregate_cli_refuses_mixed_sim_versions(frame, tmp_path, capsys):
+@pytest.mark.parametrize("hashes,codes,col,values", [
+    (["abc", "abc", "def"], None, "config_hash", "['abc', 'def']"),
+    (["abc"] * 3, ["c0de", "beef", "c0de"], "sim_code_version", "['beef', 'c0de']"),
+])
+def test_aggregate_cli_refuses_mixed_versions(frame, tmp_path, capsys, hashes, codes, col, values):
     from src.sim import calibrate
-    _, files = race_csvs(frame, tmp_path, ["abc", "abc", "def"])
+    _, files = race_csvs(frame, tmp_path, hashes, codes)
     out = tmp_path / "midrace_summary.csv"
     with pytest.raises(SystemExit) as exc:
         calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
     assert exc.value.code == 2
-    assert "2 sim_version values ['abc', 'def']" in capsys.readouterr().err
+    assert f"2 {col} values {values}" in capsys.readouterr().err
     assert not out.exists()
 
 
-def test_aggregate_cli_allow_mixed(frame, tmp_path):
+@pytest.mark.parametrize("hashes,codes", [(["abc", "abc", "def"], None), (["abc"] * 3, ["c0de", "beef", "c0de"]),
+                                          (["abc", "def", "abc"], ["c0de", "beef", "beef"])])
+def test_aggregate_cli_allow_mixed(frame, tmp_path, hashes, codes):
     from src.sim import calibrate
-    three, files = race_csvs(frame, tmp_path, ["abc", "abc", "def"])
+    three, files = race_csvs(frame, tmp_path, hashes, codes)
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out), "--allow-mixed"])
     got = pd.read_csv(out, index_col=["window", "horizon_bucket"])
     pd.testing.assert_frame_equal(got, calibration.aggregate(three), check_dtype=False)
+
+
+@pytest.mark.parametrize("drop", [["config_hash"], ["sim_code_version"], ["config_hash", "sim_code_version"]])
+def test_aggregate_cli_old_csvs_without_a_version_column_are_one_version(frame, tmp_path, drop):
+    from src.sim import calibrate
+    _, files = race_csvs(frame, tmp_path, ["abc"] * 3)
+    for f in files:
+        pd.read_csv(f).drop(columns=drop).to_csv(f, index=False)
+    out = tmp_path / "midrace_summary.csv"
+    calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
+    assert out.exists()
