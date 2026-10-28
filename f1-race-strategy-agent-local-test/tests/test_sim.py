@@ -213,3 +213,45 @@ def test_registry_rejects_duplicates_and_unknown_keys():
         reg.register("a")(object)
     with pytest.raises(KeyError):
         reg.get("b")
+
+
+# --- tyre set inventory ------------------------------------------------------
+def inv_snapshot(sets):
+    return Snapshot(race=RACE, driver="X", compound="SOFT", sets_available=sets)
+
+
+def test_unconstrained_snapshot_ignores_inventory(sim):
+    assert sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30, 6]]).valid
+
+
+def test_plan_draws_each_stint_from_a_distinct_set(sim):
+    snap = inv_snapshot([{"compound": "MEDIUM"}, {"compound": "SOFT", "laps_run": 5}])
+    assert sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]]).valid
+    res = sim.simulate(snap, [["SOFT", 15], ["MEDIUM", 15], ["MEDIUM", 20]])
+    assert not res.valid and "no MEDIUM set" in res.errors[0]
+
+
+def test_new_set_requested_but_only_used_available(sim):
+    snap = inv_snapshot([{"compound": "MEDIUM", "laps_run": 7}])
+    res = sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]])
+    assert not res.valid and "[7] laps run" in res.errors[0]
+    assert sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30, 7]]).valid
+
+
+def test_named_set_supplies_start_age(sim):
+    snap = inv_snapshot([{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"}])
+    named = sim.simulate(snap, [["SOFT", 20], {"compound": "MEDIUM", "laps": 30, "set_id": "m2"}])
+    explicit = sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30, 6]])
+    assert named.valid and named.race_time_s == pytest.approx(explicit.race_time_s)
+    assert named.plan.stints[1].start_age == 6
+
+
+@pytest.mark.parametrize("stint, fragment", [
+    ({"compound": "MEDIUM", "laps": 30, "set_id": "nope"}, "not available"),
+    ({"compound": "SOFT", "laps": 30, "set_id": "m2"}, "is MEDIUM"),
+    ({"compound": "MEDIUM", "laps": 30, "set_id": "m2", "start_age": 2}, "conflicts"),
+])
+def test_named_set_errors(sim, stint, fragment):
+    snap = inv_snapshot([{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"}])
+    res = sim.simulate(snap, [["SOFT", 20], stint])
+    assert not res.valid and any(fragment in e for e in res.errors)

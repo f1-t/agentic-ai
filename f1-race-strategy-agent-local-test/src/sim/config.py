@@ -27,7 +27,7 @@ class SimConfig(_Cfg):
     events: ComponentSpec = ComponentSpec(name="none")
     effects: EventEffects = Field(default_factory=EventEffects)
     rules: list[str] = Field(default_factory=lambda: [
-        "first_stint_matches", "lap_sum", "known_compounds", "min_stint", "two_compounds",
+        "first_stint_matches", "lap_sum", "known_compounds", "min_stint", "two_compounds", "inventory",
     ])
     min_samples: int = 5      # clean laps needed before a compound is modelled
     n_samples: int = 1

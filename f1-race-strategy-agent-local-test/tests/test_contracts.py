@@ -61,11 +61,12 @@ def test_weather_and_field_round_trip():
                  "wetness_estimate": 0.7},
         field={"class_counts": {"INTERMEDIATE": 17, "SLICK": 3},
                "class_pace_s": {"INTERMEDIATE": 95.2, "SLICK": 101.0}},
-        sets_available={"soft": 1, "medium": 2},
+        sets_available=[{"compound": "soft"}, {"compound": "medium", "laps_run": 3, "source": "inferred"}],
         gap_ahead_s=1.4, car_ahead="VER",
     )
     assert snap.weather.wetness_estimate == 0.7
-    assert snap.sets_available == {"SOFT": 1, "MEDIUM": 2}
+    assert [t.compound for t in snap.sets_available] == ["SOFT", "MEDIUM"]
+    assert snap.sets_available[1].is_new is False
     assert snap.field.class_counts["INTERMEDIATE"] == 17
 
 
@@ -82,3 +83,15 @@ def test_history_after_snapshot_and_bad_wetness_rejected(kw):
 def test_wet_compounds_pass_the_plan_contract():
     plan = Plan.of([["intermediate", 20], ["SOFT", 30]])
     assert plan.stints[0].compound == "INTERMEDIATE"
+
+
+def test_tyre_set_is_new_is_derived_and_ids_unique():
+    from src.contracts import TyreSet
+    assert TyreSet(compound="soft").is_new and TyreSet(compound="soft").model_dump()["is_new"]
+    assert not TyreSet(compound="soft", laps_run=3, source="inferred").is_new
+    with pytest.raises(ValidationError):
+        Snapshot(race=RACE, driver="X", compound="SOFT",
+                 sets_available=[{"compound": "SOFT", "set_id": "a"}, {"compound": "HARD", "set_id": "a"}])
+    snap = Snapshot(race=RACE, driver="X", compound="SOFT",
+                    sets_available=[{"compound": "MEDIUM", "laps_run": 4, "set_id": "m1"}])
+    assert snap.find_set("m1").laps_run == 4 and snap.find_set("zz") is None
