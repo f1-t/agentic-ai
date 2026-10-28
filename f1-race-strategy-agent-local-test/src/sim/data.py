@@ -42,7 +42,7 @@ def session_weather(session):
         "track_temp_c": w["TrackTemp"].to_numpy(),
         "humidity_pct": w["Humidity"].to_numpy(),
         "pressure_hpa": w["Pressure"].to_numpy(),  # FastF1 reports mbar, same as hPa
-        "rainfall": w["Rainfall"].astype(bool).to_numpy(),
+        "rainfall": w["Rainfall"].fillna(False).astype(bool).to_numpy(),
         "wind_speed_ms": w["WindSpeed"].to_numpy(),
         "wind_dir_deg": w["WindDirection"].to_numpy(),
     })
