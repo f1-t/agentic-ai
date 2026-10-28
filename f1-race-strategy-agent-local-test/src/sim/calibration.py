@@ -328,22 +328,28 @@ def remaining_plan(frame: pd.DataFrame, driver: str, k: int) -> Plan:
 
 
 def default_laps_k(frame: pd.DataFrame, total_laps: int) -> list[int]:
-    """Every 5th lap from 0 to total_laps - 10, plus the lap before and after each SC period."""
+    """Every 5th lap from 0 to total_laps - 10, plus the lap before and after each SC and VSC period."""
     laps = set(range(0, total_laps - 10 + 1, 5))
-    sc = sorted(int(x) for x in frame.loc[frame["track_status"].astype(str).str.contains("4"), "lap"].unique())
-    for i, lap in enumerate(sc):
-        if i == 0 or sc[i - 1] != lap - 1:
-            laps.add(lap - 1)
-        if i == len(sc) - 1 or sc[i + 1] != lap + 1:
-            laps.add(lap + 1)
+    status = frame["track_status"].astype(str)
+    for pattern in ("4", "[67]"):  # SC, VSC
+        hit = sorted(int(x) for x in frame.loc[status.str.contains(pattern), "lap"].unique())
+        for i, lap in enumerate(hit):
+            if i == 0 or hit[i - 1] != lap - 1:
+                laps.add(lap - 1)
+            if i == len(hit) - 1 or hit[i + 1] != lap + 1:
+                laps.add(lap + 1)
     return sorted(x for x in laps if 0 <= x < total_laps)
 
 
 def _pace_offset(sim: Simulator, g: pd.DataFrame, k: int) -> float:
-    """Median actual minus predicted green lap time over the driver's clean laps up to k."""
-    if k == 0:
-        return float("nan")
-    c = g[g["clean"] & (g["lap"] <= k) & g["compound"].isin(sim.modelled)]
+    """Median actual minus predicted lap time over the driver's green non-pit laps up to k.
+
+    Uses only what is known at lap k: green flag, no pit in or out, after lap 1, under the
+    window's own model. Not the frame's clean flag, whose filter saw the whole race. The
+    median shrugs off the few traffic laps that this lets in. NaN below MIN_OFFSET_LAPS.
+    """
+    c = g[(g["lap"] <= k) & (g["lap"] > 1) & (g["track_status"].astype(str) == "1") & ~g["pit_in"]
+          & ~g["pit_out"] & g["lap_time_s"].notna() & g["tyre_age"].notna() & g["compound"].isin(sim.modelled)]
     if len(c) < MIN_OFFSET_LAPS:
         return float("nan")
     pred = np.empty(len(c))
@@ -354,20 +360,40 @@ def _pace_offset(sim: Simulator, g: pd.DataFrame, k: int) -> float:
     return float(np.median(c["lap_time_s"].to_numpy(dtype=float) - pred))
 
 
-MIDRACE_COLUMNS = ["race_id", "window", "driver", "team", "k", "laps", "horizon", "real_remaining_s",
-                   "pred_remaining_s", "err_s", "pace_offset_s", "err_offset_s", "pred_pos", "real_pos",
-                   "abs_pos_err"]
+MIDRACE_COLUMNS = ["race_id", "window", "driver", "team", "k", "laps", "horizon", "elapsed_s",
+                   "real_remaining_s", "pred_remaining_s", "err_s", "pace_offset_s", "err_offset_s",
+                   "pred_pos_sim", "pred_pos_real", "real_pos", "abs_pos_err_sim", "abs_pos_err_real"]
+
+
+def _real_positions(frame, finishers, results):
+    """Classified position when `results` covers every finisher, as positions() does, else last-lap Position."""
+    if (results is not None and pd.Index(finishers).isin(results.index).all()
+            and results.loc[finishers, "classified"].notna().all()):
+        return results.loc[finishers, "classified"].astype(float)
+    return _end_positions(frame, "last").reindex(finishers).astype(float)
+
+
+def _rank(laps, totals, against):
+    """1 + finishers ahead: more laps driven, or the same laps and a lower `against` total. NaN totals rank NaN."""
+    laps, totals, against = (np.asarray(x, dtype=float) for x in (laps, totals, against))
+    ahead = (laps[None, :] > laps[:, None]) | ((laps[None, :] == laps[:, None]) & (against[None, :] < totals[:, None]))
+    np.fill_diagonal(ahead, False)  # only other finishers count
+    return np.where(np.isnan(totals), np.nan, 1 + ahead.sum(axis=1))
 
 
 def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, windows=MIDRACE_WINDOWS,
-            practice=None, min_laps_frac=0.9) -> pd.DataFrame:
+            practice=None, min_laps_frac=0.9, results: pd.DataFrame | None = None) -> pd.DataFrame:
     """One row per (window, finisher, k): predicted against real remaining race time.
 
     sim_factory(window) returns the Simulator for this race with that fit window. None
     means Simulator(frame, SimConfig(fit_window=window), practice). laps_k defaults to
     default_laps_k. A plan the window cannot model (unknown compound) gets NaN predictions.
-    pred_pos ranks elapsed plus predicted remaining against the other finishers' real
-    totals, laps driven first, as positions() does; real_pos is the last-lap Position.
+
+    Positions rank laps driven first, as positions() does. pred_pos_sim ranks elapsed plus
+    predicted remaining among the other finishers' predicted totals at the same k, so a
+    bias common to every driver cancels; pred_pos_real ranks it against their real totals.
+    real_pos is the classified position from `results` (data.session_results) when it
+    covers every finisher, otherwise the last-lap Position.
     """
     if sim_factory is None:
         def sim_factory(window):
@@ -380,11 +406,12 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
         "real_s": [float(g["end_s"].iloc[-1] - g["start_s"].iloc[0]) for g in groups.values()],
         "team": [g["team"].iloc[0] for g in groups.values()],
     }, index=list(groups))
-    real_pos = _end_positions(frame, "last")
+    fin["real_pos"] = _real_positions(frame, list(groups), results)
     rows = []
     for window in windows:
         sim = sim_factory(window)
         for k in laps_k:  # k outer so a to_snapshot fit is built once per lap
+            at_k = []
             for d, g in groups.items():
                 if k >= len(g) or (k > 0 and not (g["lap"] == k).any()):
                     continue
@@ -395,18 +422,31 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
                 real_rem = fin.loc[d, "real_s"] - snap.elapsed_s
                 pred_rem = res.remaining.mean_s if res.valid else float("nan")
                 err, offset, horizon = pred_rem - real_rem, _pace_offset(s, g, k), snap.remaining_laps
-                others = fin.drop(index=d)
-                ahead = (others["laps"] > len(g)) | (
-                    (others["laps"] == len(g)) & (others["real_s"] < snap.elapsed_s + pred_rem))
-                pred_pos = 1 + int(ahead.sum()) if res.valid else np.nan
-                rp = float(real_pos.get(d, np.nan))
-                rows.append({
+                at_k.append({
                     "race_id": race.race_id, "window": window, "driver": d, "team": fin.loc[d, "team"],
-                    "k": k, "laps": len(g), "horizon": horizon, "real_remaining_s": real_rem,
-                    "pred_remaining_s": pred_rem, "err_s": err, "pace_offset_s": offset,
-                    "err_offset_s": err + offset * horizon, "pred_pos": pred_pos, "real_pos": rp,
-                    "abs_pos_err": abs(pred_pos - rp)})
-    return pd.DataFrame(rows, columns=MIDRACE_COLUMNS)
+                    "k": k, "laps": len(g), "horizon": horizon, "elapsed_s": snap.elapsed_s,
+                    "real_remaining_s": real_rem, "pred_remaining_s": pred_rem, "err_s": err,
+                    "pace_offset_s": offset, "err_offset_s": err + offset * horizon,
+                    "real_pos": fin.loc[d, "real_pos"]})
+            if not at_k:
+                continue
+            t = pd.DataFrame(at_k)
+            pred_total = (t["elapsed_s"] + t["pred_remaining_s"]).to_numpy()
+            # rows missing a lap-k row are not simulated at k, so the simulated order is among those that are
+            t["pred_pos_sim"] = _rank(t["laps"], pred_total, np.where(np.isnan(pred_total), np.inf, pred_total))
+            # against every other finisher's real total
+            pos_real = []
+            for d, laps, total in zip(t["driver"], t["laps"], pred_total):
+                others = fin.drop(index=d)
+                ahead = (others["laps"] > laps) | ((others["laps"] == laps) & (others["real_s"] < total))
+                pos_real.append(np.nan if np.isnan(total) else 1 + int(ahead.sum()))
+            t["pred_pos_real"] = pos_real
+            t["abs_pos_err_sim"] = (t["pred_pos_sim"] - t["real_pos"]).abs()
+            t["abs_pos_err_real"] = (t["pred_pos_real"] - t["real_pos"]).abs()
+            rows.append(t)
+    if not rows:
+        return pd.DataFrame(columns=MIDRACE_COLUMNS)
+    return pd.concat(rows, ignore_index=True)[MIDRACE_COLUMNS]
 
 
 def _bucketed(rows):
@@ -414,16 +454,20 @@ def _bucketed(rows):
 
 
 def _metrics(t):
-    err, pos = t["err_s"].dropna(), t["abs_pos_err"].dropna()
-    return {
+    err = t["err_s"].dropna()
+    out = {
         "n": int(len(err)),
+        "n_nan": int(t["pred_remaining_s"].isna().sum()),
         "n_races": int(t["race_id"].nunique()),
         "mae_s": float(err.abs().mean()),
         "bias_s": float(err.mean()),
         "mae_offset_s": float(t["err_offset_s"].abs().mean()),
-        "within_2_rate": float((pos <= 2).mean()),
-        "mae_pos": float(pos.mean()),
     }
+    for mode in ("sim", "real"):
+        pos = t[f"abs_pos_err_{mode}"].dropna()
+        out[f"within_2_rate_{mode}"] = float((pos <= 2).mean())
+        out[f"mae_pos_{mode}"] = float(pos.mean())
+    return out
 
 
 def _bootstrap_ci(t, n_boot=N_BOOT, seed=0):
@@ -444,8 +488,8 @@ def _bootstrap_ci(t, n_boot=N_BOOT, seed=0):
     return float(lo), float(hi)
 
 
-SUMMARY_COLUMNS = ["n", "n_races", "mae_s", "bias_s", "mae_offset_s", "mae_offset_ci_lo", "mae_offset_ci_hi",
-                   "within_2_rate", "mae_pos"]
+SUMMARY_COLUMNS = ["n", "n_nan", "n_races", "mae_s", "bias_s", "mae_offset_s", "mae_offset_ci_lo",
+                   "mae_offset_ci_hi", "within_2_rate_sim", "mae_pos_sim", "within_2_rate_real", "mae_pos_real"]
 
 
 def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
@@ -457,7 +501,7 @@ def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
         index.append(key)
     cols = SUMMARY_COLUMNS if ci else [c for c in SUMMARY_COLUMNS if not c.startswith("mae_offset_ci")]
     table = pd.DataFrame(out, columns=cols, index=pd.MultiIndex.from_tuples(index, names=keys))
-    return table.astype({"n": int, "n_races": int})
+    return table.astype({"n": int, "n_nan": int, "n_races": int})
 
 
 def aggregate(rows: pd.DataFrame, n_boot=N_BOOT, seed=0) -> pd.DataFrame:
@@ -471,6 +515,11 @@ def aggregate(rows: pd.DataFrame, n_boot=N_BOOT, seed=0) -> pd.DataFrame:
 def per_race(rows: pd.DataFrame) -> pd.DataFrame:
     """aggregate()'s metrics per (race_id, window, horizon_bucket), for the report appendix."""
     return _table(rows, ["race_id", "window", "horizon_bucket"], ci=False)
+
+
+def by_driver(rows: pd.DataFrame) -> pd.DataFrame:
+    """aggregate()'s metrics per (race_id, window, driver, horizon_bucket), for the report appendix."""
+    return _table(rows, ["race_id", "window", "driver", "horizon_bucket"], ci=False)
 
 
 def midrace_pairs(rows: pd.DataFrame) -> pd.DataFrame:

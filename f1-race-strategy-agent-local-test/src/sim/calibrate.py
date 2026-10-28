@@ -11,8 +11,9 @@ Mid-race replay, per race and then over every race replayed so far:
     python -m src.sim.calibrate midrace --season 2021 --gp Spain [--windows ...] [--laps ...]
     python -m src.sim.calibrate midrace-aggregate reports/calibration/*_midrace.csv
 
-The first writes reports/calibration/<race_id>_midrace.csv, the second prints the
-summary pivot and writes reports/calibration/midrace_summary.csv.
+The first writes reports/calibration/<race_id>_midrace.csv and the per driver appendix
+<race_id>_midrace_by_driver.csv (pit loss 22 s unless --pit-loss is given); the second
+prints the summary pivot and writes reports/calibration/midrace_summary.csv.
 """
 import argparse
 import json
@@ -30,13 +31,14 @@ from .engine import Simulator
 DEFAULT_PIT_LOSS_S = 22.0
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration")
 PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
-PIVOT_METRICS = ["n", "mae_s", "bias_s", "mae_offset_s", "within_2_rate", "mae_pos"]
+PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
+                 "within_2_rate_real", "mae_pos_real"]
 
 
 def _race_args(ap):
     ap.add_argument("--season", type=int, default=2021)
     ap.add_argument("--gp", default="Spain")
-    ap.add_argument("--pit-loss", type=float, default=22.0)
+    ap.add_argument("--pit-loss", type=float, default=DEFAULT_PIT_LOSS_S)
     ap.add_argument("--min-stint", type=int, default=10)
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
@@ -66,17 +68,21 @@ def midrace_main(argv):
     ap.add_argument("--laps", nargs="+", type=int, help="snapshot laps k, default calibration.default_laps_k")
     args = ap.parse_args(argv)
 
-    _, frame, cfg, race = _race_setup(args)
+    session, frame, cfg, race = _race_setup(args)
     practice = _practice(args.season, args.gp) if set(args.windows) - {"full"} else None
 
     def factory(window):
         return Simulator(frame, cfg.model_copy(update={"fit_window": window}), practice)
 
-    rows = calibration.midrace(factory, frame, race, laps_k=args.laps, windows=args.windows)
+    rows = calibration.midrace(factory, frame, race, laps_k=args.laps, windows=args.windows,
+                               results=session_results(session))
     os.makedirs(args.report_dir, exist_ok=True)
     path = os.path.normpath(os.path.join(args.report_dir, f"{race.race_id}_midrace.csv"))
     rows.to_csv(path, index=False)
     print(f"{len(rows)} rows, k = {sorted(rows['k'].unique().tolist())}, written to {path}")
+    appendix = os.path.normpath(os.path.join(args.report_dir, f"{race.race_id}_midrace_by_driver.csv"))
+    calibration.by_driver(rows).to_csv(appendix)
+    print(f"per driver appendix written to {appendix}")
     _print_pivot(calibration.aggregate(rows))
 
 
