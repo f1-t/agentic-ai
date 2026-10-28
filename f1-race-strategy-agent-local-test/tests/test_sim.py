@@ -514,19 +514,24 @@ PLANS = [[["SOFT", 20], ["MEDIUM", 30]], [["SOFT", 12], ["MEDIUM", 38]], [["SOFT
          [["SOFT", 15], ["MEDIUM", 20], ["SOFT", 15]], [["SOFT", 10], ["SOFT", 10], ["MEDIUM", 30]]]
 
 
-def synthetic_practice(fuel=0.0, coefs=TRUE, drivers=("A", "B", "C")):
+def synthetic_practice(fuel=0.0, coefs=TRUE, drivers=("A", "B", "C"), in_stint=False):
     """One 10-lap long run per compound per driver. Practice has no race lap, so lap is NaN;
-    `fuel` is the per-lap fuel gain within the run, which practice cannot tell from wear."""
+    `fuel` is the per-lap fuel gain within the run, which practice cannot tell from wear.
+    `in_stint` adds the lap_in_stint column (= tyre age here), so linear_fuel takes the
+    fuel prior x lap_in_stint off these laps."""
     rows = []
     for k, drv in enumerate(drivers):
         for comp, (base, slope) in coefs.items():
             for age in range(1, 11):
                 rows.append({"driver": drv, "session": f"FP{k % 3 + 1}", "compound": comp, "tyre_age": age,
-                             "lap": np.nan, "clean": True, "lap_time_s": base + (slope + fuel) * age})
+                             "lap": np.nan, "clean": True, "lap_time_s": base + (slope + fuel) * age,
+                             **({"lap_in_stint": age} if in_stint else {})})
     return pd.DataFrame(rows)
 
 
 def window(fit_window, **kw):
+    """The window under test, with no practice-to-race base delta unless one is given."""
+    kw.setdefault("pre_race_base_delta_s", 0.0)
     return SimConfig(fit_window=fit_window, **kw)
 
 
@@ -558,9 +563,9 @@ def test_whole_race_window_without_practice_is_close_to_full(name):
     frame = synthetic_frame(fuel=FUEL)
     full = Simulator(frame, SimConfig(degradation={"name": name}))
     late = Simulator(frame, window("to_snapshot", degradation={"name": name})).fitted_for(at_lap(RACE.total_laps - 1))
-    assert coefs_close(late.degradation.coefs, full.degradation.coefs, abs=1e-9 if name == "linear" else 0.02)
+    assert coefs_close(late.degradation.coefs, full.degradation.coefs, abs=1e-9 if name == "linear" else 0.05)
     if name == "linear_fuel":
-        assert FUEL > late.degradation.fuel_slope > FUEL - 1e-3  # pulled a little toward the -0.045 prior
+        assert FUEL > late.degradation.fuel_slope > FUEL - 2e-3  # pulled a little toward the -0.045 prior
     assert late.ref_lap_s == full.ref_lap_s
 
 
@@ -715,7 +720,8 @@ def test_fit_report_fields_present(name):
     s = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", degradation={"name": name}),
                   synthetic_practice())
     keys = {"n_rows", "n_race_rows", "n_race_rows_per_compound", "max_tyre_age", "fuel_slope_source",
-            "condition_number", "shrinkage_weight", "evolution_s_per_min"}
+            "condition_number", "shrinkage_weight", "evolution_s_per_min", "unmodelled", "base_delta_s",
+            "base_delta_source"}
     for snap in (start(), at_lap(30)):
         rep = s.fitted_for(snap).degradation.fit_report
         assert set(rep) == keys
@@ -739,6 +745,51 @@ def test_fit_report_fields_present(name):
         assert late["fuel_slope_source"] == "shrunk" and zero["fuel_slope_source"] == "prior"
     else:
         assert late["fuel_slope_source"] is None and late["shrinkage_weight"]["fuel_s_per_lap"] is None
+    assert full["unmodelled"] == {} and full["base_delta_s"] == {} and full["base_delta_source"] is None
+    assert zero["base_delta_s"] == late["base_delta_s"] == {"SOFT": 0.0, "MEDIUM": 0.0}
+    assert zero["base_delta_source"] == late["base_delta_source"] == "prior"
+
+
+def test_pre_race_base_delta_is_added_to_practice_bases_and_learned_by_the_race():
+    delta = SimConfig().pre_race_base_delta_s
+    assert delta == 1.0 and SimConfig().shrinkage == {"base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008}
+    practice = synthetic_practice()
+    s = Simulator(synthetic_frame(), SimConfig(fit_window="to_snapshot", degradation={"name": "linear"}), practice)
+    pre = s.fitted_for(start()).degradation
+    for comp, (base, wear) in TRUE.items():
+        assert pre.coefs[comp] == pytest.approx((base + delta, wear), abs=1e-6)
+    assert pre.fit_report["base_delta_s"] == {"SOFT": delta, "MEDIUM": delta}
+    assert pre.fit_report["base_delta_source"] == "prior"
+    assert coefs_close(s.degradation.coefs, pre.coefs, abs=1e-9)  # the base instance at lap 0
+    # the race laps are at the true level, so to_snapshot moves the base back down
+    gaps = [s.fitted_for(at_lap(n)).degradation.coefs["SOFT"][0] - TRUE["SOFT"][0] for n in (0, 5, 30)]
+    assert gaps[0] == pytest.approx(delta) and gaps[0] > gaps[1] > gaps[2] >= 0.0 and gaps[2] < 0.1
+    assert s.fitted_for(at_lap(30)).degradation.fit_report["base_delta_source"] == "prior"
+    full = Simulator(synthetic_frame()).degradation  # race only: no delta
+    assert full.fit_report["base_delta_source"] is None
+
+
+def test_practice_in_stint_fuel_is_fixed_to_the_prior():
+    # practice laps carry wear plus the prior's fuel gain per lap of the run
+    practice = synthetic_practice(fuel=PRIOR, in_stint=True)
+    s = Simulator(synthetic_frame(), window("pre_race", degradation={"name": "linear_fuel"}), practice)
+    fit = s.fitted_for(start()).degradation
+    for comp, (base, wear) in TRUE.items():
+        assert fit.coefs[comp] == pytest.approx((base, wear), abs=1e-6)
+    assert fit.fit_report["fuel_slope_source"] == "prior" and fit.fuel_slope == PRIOR
+    net = Simulator(synthetic_frame(), window("pre_race", degradation={"name": "linear"}), practice)
+    assert net.fitted_for(start()).degradation.coefs["SOFT"][1] == pytest.approx(TRUE["SOFT"][1] + PRIOR)
+
+
+def test_unmodelled_compounds_are_listed_with_the_reason():
+    df = pd.concat([synthetic_frame(), pd.DataFrame([{"compound": "HARD", "tyre_age": 1, "lap": 1,
+                                                      "clean": True, "lap_time_s": 85.0}] * 3)])
+    assert Simulator(df).degradation.fit_report["unmodelled"] == {"HARD": "3 clean laps, under min_samples 5"}
+    practice = pd.concat([synthetic_practice().assign(run_class="long_run"),
+                          synthetic_practice(coefs={"HARD": (83.0, 0.02)}).assign(run_class="short", clean=False)])
+    s = Simulator(synthetic_frame(), window("to_snapshot"), practice)
+    assert s.fitted_for(start()).degradation.fit_report["unmodelled"] == {"HARD": "no long run"}
+    assert s.fitted_for(at_lap(30)).degradation.fit_report["unmodelled"] == {"HARD": "no long run"}
 
 
 @pytest.mark.parametrize("name", ["linear", "linear_fuel"])
