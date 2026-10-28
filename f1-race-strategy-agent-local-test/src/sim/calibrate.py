@@ -5,10 +5,21 @@
 
 Also prints the team-mate and finishing position checks and writes them to
 reports/calibration/<race_id>_pairs.csv and <race_id>_positions.csv.
+
+Mid-race replay, per race and then over every race replayed so far:
+
+    python -m src.sim.calibrate midrace --season 2021 --gp Spain [--windows ...] [--laps ...]
+    python -m src.sim.calibrate midrace-aggregate reports/calibration/*_midrace.csv
+
+The first writes reports/calibration/<race_id>_midrace.csv, the second prints the
+summary pivot and writes reports/calibration/midrace_summary.csv.
 """
 import argparse
 import json
 import os
+import sys
+
+import pandas as pd
 
 from ..contracts import RaceParams
 from . import calibration
@@ -17,9 +28,88 @@ from .data import lap_frame, load_session, session_results
 from .engine import Simulator
 
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration")
+PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
+PIVOT_METRICS = ["n", "mae_s", "bias_s", "mae_offset_s", "within_2_rate", "mae_pos"]
 
 
-def main():
+def _race_args(ap):
+    ap.add_argument("--season", type=int, default=2021)
+    ap.add_argument("--gp", default="Spain")
+    ap.add_argument("--pit-loss", type=float, default=22.0)
+    ap.add_argument("--min-stint", type=int, default=10)
+    ap.add_argument("--degradation", default=SimConfig().degradation.name)
+    ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
+    ap.add_argument("--report-dir", default=REPORT_DIR, help="where the csvs go")
+
+
+def _race_setup(args):
+    session = load_session(args.season, args.gp)
+    frame = lap_frame(session.laps)
+    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    race = RaceParams(
+        race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=args.pit_loss,
+        min_stint_laps=args.min_stint, compounds=sorted(frame["compound"].dropna().unique()))
+    return session, frame, cfg, race
+
+
+def _practice(season, gp):
+    """FP1-FP3 long-run laps, for the pre_race and to_snapshot fit windows."""
+    from .data import practice_frame
+    return practice_frame([load_session(season, gp, kind) for kind in PRACTICE_SESSIONS])
+
+
+def midrace_main(argv):
+    ap = argparse.ArgumentParser(prog="calibrate midrace", description="mid-race replay calibration")
+    _race_args(ap)
+    ap.add_argument("--windows", nargs="+", default=list(calibration.MIDRACE_WINDOWS),
+                    choices=list(calibration.MIDRACE_WINDOWS))
+    ap.add_argument("--laps", nargs="+", type=int, help="snapshot laps k, default calibration.default_laps_k")
+    args = ap.parse_args(argv)
+
+    _, frame, cfg, race = _race_setup(args)
+    practice = _practice(args.season, args.gp) if set(args.windows) - {"full"} else None
+
+    def factory(window):
+        return Simulator(frame, cfg.model_copy(update={"fit_window": window}), practice)
+
+    rows = calibration.midrace(factory, frame, race, laps_k=args.laps, windows=args.windows)
+    os.makedirs(args.report_dir, exist_ok=True)
+    path = os.path.join(args.report_dir, f"{race.race_id}_midrace.csv")
+    rows.to_csv(path, index=False)
+    print(f"{len(rows)} rows, k = {sorted(rows['k'].unique().tolist())}, written to {path}")
+    _print_pivot(calibration.aggregate(rows))
+
+
+def _print_pivot(summary):
+    pivot = summary[PIVOT_METRICS].unstack("window")
+    for metric in PIVOT_METRICS:
+        print(f"\n{metric} (horizon bucket x window):\n", pivot[metric].round(3).to_string())
+
+
+def midrace_aggregate_main(argv):
+    ap = argparse.ArgumentParser(prog="calibrate midrace-aggregate", description="summary over midrace csvs")
+    ap.add_argument("files", nargs="+")
+    ap.add_argument("--out", default=os.path.join(REPORT_DIR, "midrace_summary.csv"))
+    args = ap.parse_args(argv)
+
+    rows = pd.concat([pd.read_csv(f) for f in args.files], ignore_index=True)
+    summary = calibration.aggregate(rows)
+    print(f"{len(rows)} rows from {rows['race_id'].nunique()} race(s)")
+    _print_pivot(summary)
+    print("\nmae_offset_s with race-cluster bootstrap 95% CI:\n",
+          summary[["n_races", "mae_offset_s", "mae_offset_ci_lo", "mae_offset_ci_hi"]].round(2).to_string())
+    print("\nteam-mate sign agreement on remaining time:\n", calibration.midrace_pairs(rows).round(3).to_string())
+    print("\nper race:\n", calibration.per_race(rows).round(3).to_string())
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    summary.to_csv(args.out)
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "midrace":
+        return midrace_main(argv[1:])
+    if argv and argv[0] == "midrace-aggregate":
+        return midrace_aggregate_main(argv[1:])
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2021)
     ap.add_argument("--gp", default="Spain")
@@ -29,14 +119,9 @@ def main():
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--out", help="write per driver csv here")
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the pairs and positions csvs go")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
-    session = load_session(args.season, args.gp)
-    frame = lap_frame(session.laps)
-    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
-    race = RaceParams(
-        race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=args.pit_loss,
-        min_stint_laps=args.min_stint, compounds=sorted(frame["compound"].dropna().unique()))
+    session, frame, cfg, race = _race_setup(args)
     sim = Simulator(frame, cfg)
     table, summary, by_kind = calibration.run(sim, frame, race)
 
