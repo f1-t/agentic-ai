@@ -2,14 +2,17 @@
 
 The simulator itself never imports FastF1. Only `load_session` does, lazily.
 Frame columns: driver, lap, stint, compound, tyre_age, lap_time_s, track_status,
-pit_in, pit_out, start_s, end_s, team, position, clean.
+pit_in, pit_out, start_s, end_s, team, position, pace_resid_s, driver_offset_s, clean.
 """
 import os
 
+import numpy as np
 import pandas as pd
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
-OUTLIER_FACTOR = 1.07  # drop laps slower than 107% of the compound's fastest clean lap
+LEGACY_OUTLIER_FACTOR = 1.07  # baseline rule: drop laps slower than 107% of the compound's fastest
+HINGE_KNOT = 25               # tyre age where the filter's reference model may bend upwards
+MIN_SCALE_S = 0.05            # floor on the robust residual scale, so noise free data cuts nothing
 
 
 WEATHER_COLUMNS = ["time_s", "air_temp_c", "track_temp_c", "humidity_pct", "pressure_hpa",
@@ -59,8 +62,26 @@ def session_results(session):
     }, index=pd.Index(r["Abbreviation"].to_numpy(), name="driver"))
 
 
-def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
-    """Convert a FastF1 Laps table into the simulator frame."""
+def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT):
+    """Convert a FastF1 Laps table into the simulator frame.
+
+    Base laps are green flag, non pit laps after lap 1 with a lap time, tyre age and
+    compound. A base lap is clean unless it is unusually slow against a pace model:
+    per compound intercept and tyre age slope, a per compound hinge `max(0, tyre_age -
+    knot)` so wear may steepen on old tyres, one race lap slope (fuel and track
+    evolution) and a per driver offset, fitted by least squares. A compound gets no
+    hinge when fewer than `min_samples` of its base laps are past the knot. The hinge
+    lives in this reference model only, not in the simulator's degradation model.
+    A lap is cut when its residual is at least `k_resid` robust standard deviations
+    (scaled MAD, floored at MIN_SCALE_S) above the fit; fast laps are never cut. The
+    model is refitted on the clean laps and the cut redone `n_iter` times. Compounds
+    with fewer than `min_samples` base laps cannot be modelled, so their base laps
+    stay clean.
+
+    If `outlier_factor` is given the baseline rule is applied instead: a base lap is
+    clean if it is faster than `outlier_factor` times its compound's fastest base lap.
+    It exists for the baseline tools and test case only.
+    """
     df = pd.DataFrame({
         "driver": laps["Driver"].to_numpy(),
         "lap": laps["LapNumber"].astype(int).to_numpy(),
@@ -77,11 +98,45 @@ def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
         "position": laps["Position"].to_numpy(),
     })
     base = (
-        (df["track_status"] == "1") & ~df["pit_in"] & ~df["pit_out"]
+        (df["track_status"] == "1") & ~df["pit_in"] & ~df["pit_out"] & (df["lap"] > 1)
         & df["lap_time_s"].notna() & df["tyre_age"].notna() & df["compound"].notna()
     )
-    fastest = df["lap_time_s"].where(base).groupby(df["compound"]).transform("min")
-    df["clean"] = base & (df["lap_time_s"] < fastest * outlier_factor)
+    df["pace_resid_s"] = np.nan
+    df["driver_offset_s"] = np.nan
+    if outlier_factor is not None:
+        fastest = df["lap_time_s"].where(base).groupby(df["compound"]).transform("min")
+        df["clean"] = base & (df["lap_time_s"] < fastest * outlier_factor)
+        return df
+
+    counts = df.loc[base, "compound"].value_counts()
+    comps = sorted(counts.index[counts >= min_samples])
+    fit = base & df["compound"].isin(comps)
+    clean = base.copy()
+    if fit.any():
+        d = df[fit]
+        drivers = sorted(d["driver"].unique())
+        cols = []
+        age = d["tyre_age"].to_numpy(dtype=float)
+        for c in comps:
+            m = (d["compound"] == c).to_numpy(dtype=float)
+            cols += [m, m * age]
+            if (m * (age > knot)).sum() >= min_samples:
+                cols.append(m * np.maximum(0.0, age - knot))
+        cols.append(d["lap"].to_numpy(dtype=float))
+        cols += [(d["driver"] == drv).to_numpy(dtype=float) for drv in drivers[1:]]
+        X, y = np.column_stack(cols), d["lap_time_s"].to_numpy()
+        keep = np.ones(len(d), dtype=bool)
+        for _ in range(n_iter + 1):
+            beta, *_ = np.linalg.lstsq(X[keep], y[keep], rcond=None)
+            resid = y - X @ beta
+            scale = max(1.4826 * np.median(np.abs(resid - np.median(resid))), MIN_SCALE_S)
+            keep = resid < k_resid * scale
+        clean[fit] = keep
+        df.loc[fit, "pace_resid_s"] = resid
+        effects = np.concatenate([[0.0], beta[len(beta) - len(drivers) + 1:]])
+        offsets = dict(zip(drivers, effects - effects.mean()))
+        df["driver_offset_s"] = df["driver"].map(offsets).astype(float)
+    df["clean"] = clean
     return df
 
 
