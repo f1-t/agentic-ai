@@ -8,20 +8,29 @@ from src.sim.tyre_sets import split_fitted, weekend_report, weekend_sets
 ALLOC = {"HARD": 2, "MEDIUM": 3, "SOFT": 8}
 
 
-def laps(stints, driver="AAA", first_lap=1, number="1"):
-    """Laps frame from [(compound, fresh, tyre_life_at_start, n_laps), ...]."""
+def laps(stints, driver="AAA", first_lap=1, number="1", team="T1"):
+    """Laps frame from [(compound, fresh, tyre_life_at_start, n_laps[, lap_time_s]), ...]."""
     rows, lap = [], first_lap
-    for i, (comp, fresh, life0, n) in enumerate(stints, start=1):
+    for i, (comp, fresh, life0, n, *t) in enumerate(stints, start=1):
         for k in range(n):
-            rows.append({"Driver": driver, "DriverNumber": number, "LapNumber": lap,
-                         "Stint": float(i), "Compound": comp, "TyreLife": float(life0 + k),
-                         "FreshTyre": fresh})
+            rows.append({"Driver": driver, "DriverNumber": number, "Team": team,
+                         "LapNumber": lap, "Stint": float(i), "Compound": comp,
+                         "TyreLife": float(life0 + k), "FreshTyre": fresh,
+                         "LapTime": pd.Timedelta(seconds=t[0] if t else 90.0)})
             lap += 1
     return pd.DataFrame(rows)
 
 
 def by_id(sets):
     return {s["set_id"]: s for s in sets}
+
+
+class SplitLaps(pd.DataFrame):
+    """A frame with FastF1's Laps.split_qualifying_sessions(), returning `parts`."""
+    _metadata = ["parts"]
+
+    def split_qualifying_sessions(self):
+        return self.parts
 
 
 def test_new_sets_are_detected():
@@ -192,23 +201,124 @@ def test_hindsight_keeps_back_sets_the_race_runs():
         weekend_sets(*args, hindsight=True)
 
 
-def test_reserve_driver_in_the_car_counts_as_the_nominated_driver():
-    fp1 = laps([("HARD", True, 1, 9), ("SOFT", True, 1, 3)], driver="RES", number="7")
-    fp2 = laps([("SOFT", True, 1, 4)], driver="AAA", number="7")
-    rep = weekend_report({"FP1": fp1, "FP2": fp2}, "AAA", ALLOC, {"FP1": 1})
+def _team_weekend(reserve_team="T1"):
+    """FP1 run by reserve RES (own car number) for team T1 and by AAA's teammate BBB."""
+    fp1 = pd.concat([laps([("HARD", True, 1, 9), ("SOFT", True, 1, 3)], driver="RES",
+                          number="45", team=reserve_team),
+                     laps([("SOFT", True, 1, 5)], driver="BBB", number="2")])
+    fp2 = laps([("SOFT", True, 1, 4)])
+    race = pd.concat([laps([("SOFT", True, 1, 30)]),
+                      laps([("SOFT", True, 1, 30)], driver="BBB", number="2")])
+    return {"FP1": fp1, "FP2": fp2}, race
+
+
+def test_reserve_driver_of_the_team_counts_as_the_nominated_driver():
+    sessions, race = _team_weekend()
+    rep = weekend_report(sessions, "AAA", ALLOC, {"FP1": 1}, race_laps=race)
     seen = sorted((s["compound"], s["laps_run"], s["source"]) for s in rep["sets"]
                   if s["source"] != "assumed")
     assert seen == [("SOFT", 3, "observed"), ("SOFT", 4, "observed")]  # RES's hard went back
-    assert len(rep["sets"]) == 12
-    assert any("RES" in n for n in rep["notes"])
+    assert rep["fitted"]["laps_run"] == 0 and len(rep["sets"]) == 11
+    assert "FP1: no AAA laps, took RES laps (T1)" in rep["notes"]
+    # BBB ran FP1 himself, so RES is not his
+    bbb = weekend_report(sessions, "BBB", ALLOC, {}, race_laps=race)
+    assert not any("RES" in n for n in bbb["notes"])
 
 
-def test_reserve_driver_in_another_car_is_not_attributed():
-    fp1 = laps([("HARD", True, 1, 9), ("SOFT", True, 1, 3)], driver="RES", number="88")
-    fp2 = laps([("SOFT", True, 1, 4)], driver="AAA", number="7")
-    sets = weekend_sets({"FP1": fp1, "FP2": fp2}, "AAA", ALLOC, {"FP1": 2})
-    assert sum(s["source"] == "observed" for s in sets) == 1
-    assert len(sets) == 11 and sum(s["source"] == "assumed" for s in sets) == 10
+def test_reserve_driver_needs_race_laps_or_an_explicit_mapping():
+    sessions, race = _team_weekend()
+    alone = weekend_sets(sessions, "AAA", ALLOC, {"FP1": 2})
+    assert sum(s["source"] == "observed" for s in alone) == 1  # only AAA's FP2 soft
+    rep = weekend_report(sessions, "AAA", ALLOC, {"FP1": 1}, reserves={"FP1": {"RES": "AAA"}})
+    assert "FP1: no AAA laps, took RES laps (reserves)" in rep["notes"]
+    assert sum(s["source"] == "observed" for s in rep["sets"]) == 2
+    with pytest.raises(ValueError):
+        weekend_sets(sessions, "AAA", ALLOC, {}, reserves={"FP4": {"RES": "AAA"}})
+
+
+def test_reserve_driver_of_another_team_or_ambiguous_is_not_attributed():
+    sessions, race = _team_weekend(reserve_team="T2")
+    sets = weekend_sets(sessions, "AAA", ALLOC, {"FP1": 2}, race_laps=race)
+    assert sum(s["source"] == "observed" for s in sets) == 1  # only AAA's FP2 soft
+    sessions, race = _team_weekend()
+    sessions["FP1"] = pd.concat([sessions["FP1"],
+                                 laps([("MEDIUM", True, 1, 4)], driver="ZZZ", number="46")])
+    rep = weekend_report(sessions, "AAA", ALLOC, {"FP1": 2}, race_laps=race)
+    assert not any("took" in n for n in rep["notes"])  # two non-race codes ran for T1
+
+
+def _q3_weekend():
+    """Q split: the 1-lap Q1 soft is refitted in Q2 for the fastest Q2 lap (4 laps)."""
+    q1 = laps([("SOFT", True, 1, 1, 80.0), ("SOFT", True, 1, 3, 79.0)])
+    q2 = laps([("SOFT", False, 2, 3, 77.0), ("SOFT", True, 1, 3, 78.0)])
+    q3 = laps([("SOFT", True, 1, 3, 76.0), ("SOFT", True, 1, 3, 76.5)])
+    return {"Q1": q1, "Q2": q2, "Q3": q3}
+
+
+def test_q2_start_rule_protects_the_fastest_q2_set():
+    alloc, ret = {"SOFT": 6, "MEDIUM": 1}, {"Q": {"SOFT": 1}}
+    rep = weekend_report(_q3_weekend(), "AAA", alloc, ret, q2_start_rule=True)
+    assert rep["fitted"] == {"compound": "SOFT", "laps_run": 4, "source": "observed",
+                             "set_id": "SOFT-1"}
+    assert "SOFT-1" not in by_id(rep["sets"])  # known start set, out of the garage
+    assert rep["returned"] == [("Q", "SOFT", 3)]  # not the 4-lap set, the most used
+    assert len(rep["sets"]) == 5
+
+    race = laps([("SOFT", False, 5, 25), ("MEDIUM", True, 1, 41)])
+    with_race = weekend_report(_q3_weekend(), "AAA", alloc, ret, race_laps=race,
+                               q2_start_rule=True)
+    assert with_race["fitted"] == rep["fitted"] and with_race["sets"] == rep["sets"]
+    assert with_race["fallbacks"] == 0 and not any("mismatch" in n for n in with_race["notes"])
+
+    # Without the rule the 4-lap set is handed back and the start is unknown.
+    q = laps([("SOFT", True, 1, 1), ("SOFT", True, 1, 3), ("SOFT", False, 2, 3),
+              ("SOFT", True, 1, 3), ("SOFT", True, 1, 3), ("SOFT", True, 1, 3)])
+    off = weekend_report({"Q": q}, "AAA", alloc, ret)
+    assert off["fitted"] is None and off["returned"] == [("Q", "SOFT", 4)]
+
+
+def test_q2_start_rule_mismatch_keeps_the_race_choice():
+    race = laps([("MEDIUM", True, 1, 30), ("SOFT", False, 5, 36)])
+    rep = weekend_report(_q3_weekend(), "AAA", {"SOFT": 6, "MEDIUM": 1}, {"Q": {"SOFT": 1}},
+                         race_laps=race, q2_start_rule=True)
+    assert rep["fitted"]["compound"] == "MEDIUM"
+    assert "SOFT-1" in by_id(rep["sets"])  # the protected set stays in the garage
+    assert any(n.startswith("R: Q2 start set mismatch") for n in rep["notes"])
+
+
+def test_q2_start_rule_non_q3_driver_start_set_is_unknown():
+    sessions = _q3_weekend()
+    sessions["Q3"] = laps([("SOFT", True, 1, 3)], driver="BBB", number="2")
+    rep = weekend_report(sessions, "AAA", {"SOFT": 6, "MEDIUM": 1}, {}, q2_start_rule=True)
+    assert rep["fitted"] is None and len(rep["sets"]) == 7
+
+
+def test_q2_start_rule_splits_fastf1_laps():
+    parts = list(_q3_weekend().values())
+    q = SplitLaps(pd.concat(parts))
+    q.parts = parts
+    args = ("AAA", {"SOFT": 6, "MEDIUM": 1}, {"Q": {"SOFT": 1}})
+    from_laps = weekend_report({"Q": q}, *args, q2_start_rule=True)
+    assert from_laps == weekend_report(_q3_weekend(), *args, q2_start_rule=True)
+
+
+def test_q2_start_rule_inputs():
+    sessions = _q3_weekend()
+    with pytest.raises(ValueError):  # Q1/Q2/Q3 keys only under the rule
+        weekend_sets(sessions, "AAA", ALLOC, {})
+    with pytest.raises(ValueError):
+        weekend_sets(dict(sessions, Q=sessions["Q2"]), "AAA", ALLOC, {}, q2_start_rule=True)
+    plain = weekend_report({"Q": sessions["Q2"]}, "AAA", ALLOC, {}, q2_start_rule=True)
+    assert "Q: not split into Q1/Q2/Q3, q2_start_rule not applied" in plain["notes"]
+    assert plain["fitted"] is None
+
+
+def test_allocation_overrun_is_noted():
+    fp1 = laps([("MEDIUM", True, 1, 3), ("MEDIUM", True, 1, 3), ("SOFT", True, 1, 2)])
+    rep = weekend_report({"FP1": fp1}, "AAA", {"MEDIUM": 1, "SOFT": 2}, {})
+    assert "MEDIUM: 2 sets seen, allocation 1" in rep["notes"]
+    assert not any(n.startswith("SOFT:") for n in rep["notes"])
+    assert len(rep["sets"]) == 4  # 2 MEDIUM seen + 1 SOFT seen + 1 SOFT assumed
 
 
 def test_sessions_run_in_canonical_order_whatever_the_dict_order():
