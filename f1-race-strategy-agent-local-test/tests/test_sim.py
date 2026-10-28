@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.contracts import Plan, RaceParams, Snapshot
+from src.contracts import CompareResult, Plan, RaceParams, Snapshot
 from src.sim import SimConfig, Simulator
 from src.sim.config import EventEffects
 from src.sim.degradation import DEGRADATION
@@ -108,6 +108,23 @@ def test_return_laps_sums_to_remaining_less_pit_loss(sim):
     res = sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]], return_laps=True)
     assert len(res.lap_times_s) == 50
     assert sum(res.lap_times_s) + res.pit_loss_total_s == pytest.approx(res.remaining.mean_s)
+
+
+def test_min_stint_applies_to_first_stint_at_race_start(sim):
+    res = sim.simulate(start(), [["SOFT", 5], ["MEDIUM", 45]])
+    assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
+
+
+def test_min_stint_exempts_stint_already_underway(sim):
+    snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="SOFT", tyre_age=20, stints=[])
+    assert sim.simulate(snap, [["SOFT", 5], ["MEDIUM", 25]]).valid
+
+
+def test_min_stint_applies_to_first_stint_just_after_a_stop(sim):
+    snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="MEDIUM", tyre_age=0,
+                    stints=[{"compound": "SOFT", "laps": 20, "start_lap": 1}])
+    res = sim.simulate(snap, [["MEDIUM", 7], ["SOFT", 23]])
+    assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
 
 
 # --- rules -------------------------------------------------------------------
@@ -327,3 +344,164 @@ def test_batch_is_fast_enough_for_brute_force(sim):
     print(f"simulate_batch: {len(plans)} plans x 50 samples in {elapsed:.3f} s")
     assert batch.valid.all() and batch.times.shape == (378, 50)
     assert elapsed < 5.0
+
+
+# --- compare -----------------------------------------------------------------
+def other(compound):
+    return "MEDIUM" if compound == "SOFT" else "SOFT"
+
+
+def stub(first_laps=12):
+    """Continuation that runs the fitted set for first_laps, then the other compound."""
+    def cont(adv):
+        return [[adv.compound, first_laps], [other(adv.compound), adv.remaining_laps - first_laps]]
+    return cont
+
+
+def mid_race(**kw):
+    return Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT", tyre_age=10, **kw)
+
+
+def test_compare_pairwise_probabilities_are_complementary():
+    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "test_noisy"}, n_samples=30))
+    plans = [[["SOFT", 15], ["MEDIUM", 35]], [["SOFT", 25], ["MEDIUM", 25]],
+             [["SOFT", 15], ["MEDIUM", 20], ["SOFT", 15]]]
+    res = s.compare(start(), plans, seed=4)
+    for i in range(3):
+        assert res.p_beats[i][i] is None
+        for j in range(3):
+            if i != j:
+                assert res.p_beats[i][j] + res.p_beats[j][i] == pytest.approx(1.0)
+    assert sum(res.p_best) == pytest.approx(1.0)
+    assert res.n_samples == 30 and res.seed == 4
+
+
+def test_compare_deterministic_probabilities_and_identical_plans(sim):
+    fast, slow = [["SOFT", 25], ["MEDIUM", 25]], [["SOFT", 20], ["MEDIUM", 30]]
+    res = sim.compare(start(), [fast, slow, fast])
+    assert res.p_beats[0][1] == 1.0 and res.p_beats[1][0] == 0.0
+    assert res.p_beats[0][2] == res.p_beats[2][0] == 0.5
+    assert res.p_best == [0.5, 0.0, 0.5]
+    assert res.best == 0
+    gap = sim.simulate(start(), fast).race_time_s - sim.simulate(start(), slow).race_time_s
+    assert res.gap_mean_s[0][1] == pytest.approx(gap) and res.gap_mean_s[1][0] == pytest.approx(-gap)
+
+
+def test_compare_shared_offset_cancels_in_gaps():
+    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "test_noisy"}, n_samples=100))
+    res = s.compare(start(), [[["SOFT", 15], ["MEDIUM", 35]], [["SOFT", 25], ["MEDIUM", 25]]], seed=1)
+    assert res.summaries[0].std_s > 0
+    assert res.gap_std_s[0][1] == pytest.approx(0.0, abs=1e-6)
+    assert res.p_best == [0.0, 1.0]
+
+
+def test_compare_actions_match_hand_built_plans(sim):
+    snap = mid_race()
+    res = sim.compare(snap, [{"action": "stay"}, {"action": "pit", "compound": "MEDIUM"},
+                             [["SOFT", 11], ["MEDIUM", 29]]], continuation=stub())
+    assert all(res.valid)
+    hand = [[["SOFT", 13], ["MEDIUM", 27]], [["SOFT", 1], ["MEDIUM", 12], ["SOFT", 27]]]
+    for i, plan in enumerate(hand):
+        assert res.candidates[i].as_pairs() == plan
+        assert res.summaries[i].mean_s == pytest.approx(sim.simulate(snap, plan).remaining.mean_s)
+
+
+def test_compare_stay_merges_into_first_stint(sim):
+    seen = []
+
+    def cont(adv):
+        seen.append(adv)
+        return stub(7)(adv)
+
+    res = sim.compare(mid_race(), [{"action": "stay"}], continuation=cont)
+    adv = seen[0]
+    assert (adv.laps_completed, adv.compound, adv.tyre_age, adv.elapsed_s, adv.stints) == (11, "SOFT", 11, None, [])
+    assert res.valid == [True] and res.candidates[0].stints[0].laps == 1 + 7
+
+
+def test_compare_stay_rejects_continuation_on_another_compound(sim):
+    res = sim.compare(mid_race(), [{"action": "stay"}],
+                      continuation=lambda adv: [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20]])
+    assert res.valid == [False] and res.errors[0] == ["continuation must continue the current set"]
+
+
+def test_compare_pit_consumes_the_chosen_set(sim):
+    snap = mid_race(sets_available=[{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"},
+                                    {"compound": "SOFT", "laps_run": 3}])
+    seen = []
+
+    def cont(adv):
+        seen.append(adv)
+        return [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20, 3]]
+
+    res = sim.compare(snap, [{"action": "pit", "compound": "MEDIUM", "set_id": "m2"}], continuation=cont)
+    adv = seen[0]
+    assert (adv.laps_completed, adv.compound, adv.tyre_age) == (11, "MEDIUM", 6)
+    assert [t.compound for t in adv.sets_available] == ["SOFT"]
+    assert adv.stints[0].model_dump() == {"compound": "SOFT", "laps": 11, "start_lap": 1, "start_age": 0}
+    assert res.valid == [True]
+    second = res.candidates[0].stints[1]
+    assert (second.set_id, second.start_age) == ("m2", 6)
+
+    # a later stop back onto the set fitted at this stop is invalid
+    again = sim.compare(snap, [{"action": "pit", "compound": "MEDIUM", "set_id": "m2"}],
+                        continuation=lambda adv: [["MEDIUM", 15], {"compound": "MEDIUM", "laps": 24, "set_id": "m2"}])
+    assert again.valid == [False] and any("'m2' is not available" in e for e in again.errors[0])
+
+
+def test_compare_actions_without_continuation_are_error_entries(sim):
+    res = sim.compare(mid_race(), [{"action": "stay"}, [["SOFT", 11], ["MEDIUM", 29]],
+                                   {"action": "pit", "compound": "MEDIUM"}])
+    assert res.valid == [False, True, False]
+    assert res.errors[0] == res.errors[2] == ["continuation required for action candidates"]
+    assert res.candidates[0] is None and res.best == 1
+
+
+@DEGRADATION.register("test_soft_risk")
+class SoftRiskModel(NoisyModel):
+    """Per-draw offset on SOFT laps only, so plans with more SOFT laps have a fatter tail."""
+
+    @classmethod
+    def fit(cls, data, **kw):
+        return cls(DEGRADATION.get("linear").fit(data, **kw))
+
+    def draw(self, rng):
+        return SoftRiskModel(self.inner, rng.normal(0, 0.5))
+
+    def lap_times(self, compound, ages, laps):
+        return self.inner.lap_times(compound, ages, laps) + (self.offset if compound == "SOFT" else 0.0)
+
+
+def test_compare_dominated_needs_mean_and_tail():
+    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "test_soft_risk"}, n_samples=200))
+    plans = [[["MEDIUM", 20], ["SOFT", 30]],   # fastest on mean, widest tail
+             [["MEDIUM", 35], ["SOFT", 15]],   # slower, tighter tail
+             [["MEDIUM", 40], ["SOFT", 10]]]   # slower again and a worse tail than the second
+    res = s.compare(start("MEDIUM"), plans, seed=0)
+    m = [r.mean_s for r in res.summaries]
+    c = [r.cvar_90_s for r in res.summaries]
+    assert m[0] < m[1] < m[2] and c[1] < c[0] and c[1] < c[2]
+    assert res.dominated == [False, False, True] and res.best == 0
+
+
+def test_compare_invalid_candidate_is_excluded(sim):
+    res = sim.compare(start(), [[["SOFT", 50]], [["SOFT", 20], ["MEDIUM", 30]], [["SOFT", "x"]]])
+    assert res.valid == [False, True, False] and res.best == 1
+    assert res.candidates[2] is None and res.errors[2]
+    for bad in (0, 2):
+        assert res.summaries[bad] is None and res.p_best[bad] is None and not res.dominated[bad]
+        assert res.p_beats[bad] == res.gap_mean_s[bad] == res.gap_std_s[bad] == [None] * 3
+        assert all(row[bad] is None for row in res.p_beats + res.gap_mean_s + res.gap_std_s)
+    assert res.p_best[1] == 1.0
+    assert CompareResult.model_validate_json(res.model_dump_json()) == res
+
+
+def test_compare_pit_rejects_start_age_conflicting_with_named_set(sim):
+    snap = mid_race(sets_available=[{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"},
+                                    {"compound": "SOFT"}])
+    act = {"action": "pit", "compound": "MEDIUM", "set_id": "m2", "start_age": 2}
+    res = sim.compare(snap, [act], continuation=lambda adv: [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20]])
+    assert res.valid == [False]
+    assert res.errors[0] == ["start_age 2 conflicts with set 'm2' (6 laps run)"]
+    ok = dict(act, start_age=6)
+    assert sim.compare(snap, [ok], continuation=lambda adv: [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20]]).valid == [True]

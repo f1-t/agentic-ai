@@ -1,11 +1,13 @@
 """Strategy simulator: a snapshot and plans in, lap time summaries out."""
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 import pandas as pd
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ..contracts import Plan, SimResult, Snapshot, TimeSummary
+from ..contracts import (Compound, CompareResult, Plan, PlanStint, SimResult, Snapshot, StintRecord,
+                         TimeSummary)
 from .config import SimConfig
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
@@ -21,6 +23,38 @@ def summarise(totals) -> TimeSummary:
         p95_s=float(np.percentile(totals, 95)), n_samples=n,
         cvar_90_s=float(np.sort(totals)[-max(1, int(np.ceil(0.1 * n))):].mean()),
     )
+
+
+def _messages(exc: ValidationError) -> list[str]:
+    return [e["msg"] for e in exc.errors()]
+
+
+class _Action(BaseModel):
+    """A decision at the start of lap laps_completed + 1: stay out, or pit at its end."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["stay", "pit"]
+    compound: Compound | None = None
+    set_id: str | None = None
+    start_age: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.action == "pit" and self.compound is None:
+            raise ValueError("pit action needs a compound")
+        return self
+
+
+def _advance(snapshot: Snapshot, **update) -> Snapshot:
+    """The snapshot one lap on. Nested models are passed through, not re-dumped."""
+    data = {name: getattr(snapshot, name) for name in Snapshot.model_fields}
+    data.update(laps_completed=snapshot.laps_completed + 1, elapsed_s=None, **update)
+    return Snapshot.model_validate(data)
+
+
+def _matrix(values, mask):
+    return [[float(v) if m else None for v, m in zip(row, ok)] for row, ok in zip(values, mask)]
 
 
 @dataclass
@@ -91,7 +125,7 @@ class Simulator:
                 plan = Plan.of(raw)
             except ValidationError as exc:
                 parsed.append(None)
-                errors.append([e["msg"] for e in exc.errors()])
+                errors.append(_messages(exc))
                 continue
             errs = self.validate(snapshot, plan, rules)
             parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
@@ -158,3 +192,100 @@ class Simulator:
         for r, i in enumerate(idx):
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
+
+    def compare(self, snapshot: Snapshot, candidates, *, seed=0, n_samples=None,
+                scenario: Scenario | None = None, rules=None, continuation=None) -> CompareResult:
+        """Score plans and stay/pit actions against each other under one set of draws.
+
+        `continuation(snapshot_after)` returns the plan for the laps after an action.
+        """
+        plans, errors = [], []
+        for raw in candidates:
+            if isinstance(raw, dict) and "action" in raw:
+                plan, errs = self._expand(snapshot, raw, continuation)
+            else:
+                plan, errs = raw, []
+            plans.append(plan)
+            errors.append(errs)
+        todo = [i for i, e in enumerate(errors) if not e]
+        batch = self.simulate_batch(snapshot, [plans[i] for i in todo], seed=seed, n_samples=n_samples,
+                                    scenario=scenario, rules=rules)
+        n_cand, n = len(plans), batch.times.shape[1]
+        times = np.full((n_cand, n), np.nan)
+        times[todo] = batch.times
+        valid = np.zeros(n_cand, dtype=bool)
+        valid[todo] = batch.valid
+        for r, i in enumerate(todo):
+            plans[i], errors[i] = batch.plans[r], batch.errors[r]
+
+        idx = np.flatnonzero(valid)
+        summaries = [summarise(times[i]) if valid[i] else None for i in range(n_cand)]
+        p_best = [None] * n_cand
+        if len(idx):
+            t = times[idx]
+            win = t == t.min(axis=0)
+            for i, share in zip(idx, (win / win.sum(axis=0)).mean(axis=1)):
+                p_best[i] = float(share)
+        ti, tj = times[:, None, :], times[None, :, :]
+        beats = (ti < tj).mean(axis=2) + 0.5 * (ti == tj).mean(axis=2)
+        gap = ti - tj
+        pair = valid[:, None] & valid[None, :]
+        mean = {i: summaries[i].mean_s for i in idx}
+        cvar = {i: summaries[i].cvar_90_s for i in idx}
+        dominated = [bool(valid[i]) and any(
+            mean[j] <= mean[i] and cvar[j] <= cvar[i] and (mean[j] < mean[i] or cvar[j] < cvar[i])
+            for j in idx if j != i) for i in range(n_cand)]
+        return CompareResult(
+            candidates=plans, valid=valid.tolist(), errors=errors, summaries=summaries, p_best=p_best,
+            p_beats=_matrix(beats, pair & ~np.eye(n_cand, dtype=bool)),
+            gap_mean_s=_matrix(gap.mean(axis=2), pair), gap_std_s=_matrix(gap.std(axis=2), pair),
+            best=int(idx[np.argmin([mean[i] for i in idx])]) if len(idx) else None,
+            dominated=dominated, n_samples=n, seed=seed,
+        )
+
+    def _expand(self, snapshot: Snapshot, raw, continuation):
+        """Turn a stay or pit action into a full plan from this snapshot. Returns (plan, errors)."""
+        try:
+            act = _Action.model_validate(raw)
+        except ValidationError as exc:
+            return None, _messages(exc)
+        if continuation is None:
+            return None, ["continuation required for action candidates"]
+        chosen = None
+        try:
+            if act.action == "stay":
+                advanced = _advance(snapshot, tyre_age=snapshot.tyre_age + 1)
+            else:
+                pool = [t for t in snapshot.sets_available or [] if t.source in self.config.inventory_sources]
+                age = act.start_age or 0
+                chosen = next((t for t in pool if (t.set_id == act.set_id if act.set_id is not None
+                               else t.compound == act.compound and t.laps_run == age)), None)
+                if chosen is not None and act.set_id is not None and age not in (0, chosen.laps_run):
+                    return None, [f"start_age {act.start_age} conflicts with set '{chosen.set_id}' "
+                                  f"({chosen.laps_run} laps run)"]
+                # laps on the fitted set in this race, from the stint history when it adds up
+                in_race = min(snapshot.tyre_age, snapshot.laps_completed - sum(s.laps for s in snapshot.stints))
+                done = StintRecord(compound=snapshot.compound, laps=in_race + 1,
+                                   start_lap=snapshot.laps_completed - in_race + 1,
+                                   start_age=snapshot.tyre_age - in_race)
+                update = {"compound": act.compound, "tyre_age": chosen.laps_run if chosen else age,
+                          "stints": [*snapshot.stints, done]}
+                if chosen is not None:
+                    update["sets_available"] = [t for t in snapshot.sets_available if t is not chosen]
+                advanced = _advance(snapshot, **update)
+        except ValidationError as exc:
+            return None, _messages(exc)
+        try:
+            cont = Plan.of(continuation(advanced))
+        except ValidationError as exc:
+            return None, _messages(exc)
+        first = cont.stints[0]
+        if first.compound != advanced.compound or (act.action == "stay" and first.start_age != 0):
+            return None, ["continuation must continue the current set"]
+        if act.action == "stay":
+            stints = [PlanStint(compound=snapshot.compound, laps=1 + first.laps), *cont.stints[1:]]
+        else:
+            carried = first.model_copy(update={"set_id": chosen.set_id if chosen else act.set_id,
+                                               "start_age": advanced.tyre_age})
+            stints = [PlanStint(compound=snapshot.compound, laps=1), carried, *cont.stints[1:]]
+        return Plan(stints=stints), []
