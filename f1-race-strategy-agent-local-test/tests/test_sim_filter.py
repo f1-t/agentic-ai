@@ -214,6 +214,7 @@ def test_long_run_test_drops_short_alternating_and_off_pace_stints():
     assert run_class(f, "FP2", "A", 2) == "inconsistent"
     assert run_class(f, "FP2", "B", 3) == "off_pace"
     assert run_class(f, "FP2", "C", 4) == "short"
+    assert SimConfig().long_run.consistent_share == 0.8  # frozen: at most one lap in five off-pace
     assert run_class(f, "FP2", "C", 2) == "long_run"  # 8 of 10 laps within 2 s of the median
     assert run_class(f, "FP2", "A", 1) == run_class(f, "FP2", "B", 2) == "long_run"
     dropped = f[f["run_class"] != "long_run"]
