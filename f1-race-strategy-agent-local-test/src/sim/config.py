@@ -30,8 +30,11 @@ class LongRun(_Cfg):
 
     min_timed_laps: int = 6           # qualifying runs are short
     # consistent: at least consistent_share of the timed laps within consistent_band_s of the
-    # stint median; tolerates a traffic lap or two, rejects push/cool alternation
-    consistent_share: float = 0.7
+    # stint median. A push/cool programme has about half its timed laps off-pace; a long run
+    # with a traffic lap or two has at most one in five; 0.8 encodes "at most one lap in five
+    # off-pace". Frozen on a priori grounds, Spain only; selected across races by
+    # leave-one-race-out later.
+    consistent_share: float = 0.8
     consistent_band_s: float = 2.0
     max_pace_gap_s: float = 2.5       # stint median within this of the session's long-run reference
 
