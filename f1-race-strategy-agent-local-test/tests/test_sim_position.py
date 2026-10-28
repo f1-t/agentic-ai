@@ -91,16 +91,16 @@ def test_positions_prefer_results_when_they_cover_every_finisher(sim):
     assert calibration.positions(sim, three_driver_frame(), RACE, partial)[1]["source"] == "lap_proxies"
 
 
-def test_observed_sc_factor_is_median_ratio_to_reference_lap(sim):
+def test_observed_sc_factor_is_mean_with_median_alongside(sim):
     frame = race_frame(("AAA", "T", A_PLAN))
-    sc = frame["lap"].isin([30, 31])
-    frame.loc[sc, "track_status"] = "4"
-    frame.loc[sc, "clean"] = False
-    frame.loc[sc, "lap_time_s"] = 1.4 * sim.ref_lap_s
+    for lap, f in [(30, 1.2), (31, 1.2), (32, 1.8)]:
+        m = frame["lap"] == lap
+        frame.loc[m, ["track_status", "clean", "lap_time_s"]] = ["4", False, f * sim.ref_lap_s]
     frame["end_s"] = frame["lap_time_s"].cumsum()
     frame["start_s"] = frame["end_s"] - frame["lap_time_s"]
     _, summary, _ = calibration.run(sim, frame, RACE)
     assert summary["observed_sc_factor"] == pytest.approx(1.4, abs=1e-3)
+    assert summary["observed_sc_factor_median"] == pytest.approx(1.2, abs=1e-3)
     assert pd.isna(summary["observed_vsc_factor"])
     assert "observed_pit_loss_s" in summary
     assert "observed_lap1_extra_s" in summary

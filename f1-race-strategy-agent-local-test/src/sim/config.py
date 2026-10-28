@@ -16,7 +16,7 @@ class ComponentSpec(_Cfg):
 class EventEffects(_Cfg):
     """How neutralised laps change lap time and pit loss. Provisional defaults."""
 
-    sc_lap_factor: float = 1.4        # provisional, 2021 Spain observed (1.406); fitted per race in sprint 2
+    sc_lap_factor: float = 1.36       # provisional, 2021 Spain observed mean (1.361, v2 filter); fitted per race in sprint 2
     vsc_lap_factor: float = 1.3       # VSC lap time as a multiple of the green lap
     sc_pit_loss_factor: float = 0.5   # share of the normal pit loss paid under SC
     vsc_pit_loss_factor: float = 0.6

@@ -87,7 +87,9 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
     laps = pd.concat(laps)
     by_kind = _by_lap_type(laps, len(table))
     summary = _summary(table)
-    summary["observed_sc_factor"] = _observed_factor(laps, "sc", sim.ref_lap_s)
+    # the engine applies one factor to every SC lap, so the mean is the value that nets the SC total to zero
+    summary["observed_sc_factor"] = _observed_factor(laps, "sc", sim.ref_lap_s, "mean")
+    summary["observed_sc_factor_median"] = _observed_factor(laps, "sc", sim.ref_lap_s)
     summary["observed_vsc_factor"] = _observed_factor(laps, "vsc", sim.ref_lap_s)
     # lap 1 residual is net of the lap1_extra_s term in the replay, add it back for the absolute value
     lap1 = laps.loc[laps["kind"] == "lap1", "resid_s"]
@@ -97,10 +99,10 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
     return table, summary, by_kind
 
 
-def _observed_factor(laps, kind, ref_lap_s):
-    """Median actual lap time over laps of this kind as a multiple of the reference lap, NaN if none."""
+def _observed_factor(laps, kind, ref_lap_s, how="median"):
+    """Median (or mean) actual lap time over laps of this kind as a multiple of the reference lap, NaN if none."""
     actual = laps.loc[laps["kind"] == kind, "actual_s"].dropna()
-    return round(float(actual.median() / ref_lap_s), 3) if len(actual) else float("nan")
+    return round(float(getattr(actual, how)() / ref_lap_s), 3) if len(actual) else float("nan")
 
 
 def _by_lap_type(df, n_drivers):
