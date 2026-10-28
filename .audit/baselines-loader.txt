@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "<stdin>", line 7, in <module>
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/tools.py", line 137, in simulate_strategy
+    total = race_laps()
+            ^^^^^^^^^^^
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/tools.py", line 50, in race_laps
+    return int(_load_session().total_laps)
+               ^^^^^^^^^^^^^^^
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/tools.py", line 43, in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/f1-baselines-venv/lib/python3.12/site-packages/fastf1/events.py", line 310, in get_session
+    event = get_event(year, gp, force_ergast=force_ergast, backend=backend)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/f1-baselines-venv/lib/python3.12/site-packages/fastf1/events.py", line 405, in get_event
+    schedule = get_event_schedule(year=year, include_testing=False,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/f1-baselines-venv/lib/python3.12/site-packages/fastf1/events.py", line 522, in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+ValueError: Failed to load any schedule data.
