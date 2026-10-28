@@ -11,6 +11,8 @@ import pandas as pd
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 LEGACY_OUTLIER_FACTOR = 1.07  # baseline rule: drop laps slower than 107% of the compound's fastest
+HINGE_KNOT = 25               # tyre age where the filter's reference model may bend upwards
+MIN_SCALE_S = 0.05            # floor on the robust residual scale, so noise free data cuts nothing
 
 
 WEATHER_COLUMNS = ["time_s", "air_temp_c", "track_temp_c", "humidity_pct", "pressure_hpa",
@@ -60,17 +62,21 @@ def session_results(session):
     }, index=pd.Index(r["Abbreviation"].to_numpy(), name="driver"))
 
 
-def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5):
+def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT):
     """Convert a FastF1 Laps table into the simulator frame.
 
     Base laps are green flag, non pit laps after lap 1 with a lap time, tyre age and
     compound. A base lap is clean unless it is unusually slow against a pace model:
-    per compound intercept and tyre age slope, one race lap slope (fuel and track
-    evolution) and a per driver offset, fitted by least squares. A lap is cut when its
-    residual is at least `k_resid` robust standard deviations (scaled MAD) above the
-    fit; fast laps are never cut. The model is refitted on the clean laps and the cut
-    redone `n_iter` times. Compounds with fewer than `min_samples` base laps cannot be
-    modelled, so their base laps stay clean.
+    per compound intercept and tyre age slope, a per compound hinge `max(0, tyre_age -
+    knot)` so wear may steepen on old tyres, one race lap slope (fuel and track
+    evolution) and a per driver offset, fitted by least squares. A compound gets no
+    hinge when fewer than `min_samples` of its base laps are past the knot. The hinge
+    lives in this reference model only, not in the simulator's degradation model.
+    A lap is cut when its residual is at least `k_resid` robust standard deviations
+    (scaled MAD, floored at MIN_SCALE_S) above the fit; fast laps are never cut. The
+    model is refitted on the clean laps and the cut redone `n_iter` times. Compounds
+    with fewer than `min_samples` base laps cannot be modelled, so their base laps
+    stay clean.
 
     If `outlier_factor` is given the baseline rule is applied instead: a base lap is
     clean if it is faster than `outlier_factor` times its compound's fastest base lap.
@@ -110,9 +116,12 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5):
         d = df[fit]
         drivers = sorted(d["driver"].unique())
         cols = []
+        age = d["tyre_age"].to_numpy(dtype=float)
         for c in comps:
             m = (d["compound"] == c).to_numpy(dtype=float)
-            cols += [m, m * d["tyre_age"].to_numpy(dtype=float)]
+            cols += [m, m * age]
+            if (m * (age > knot)).sum() >= min_samples:
+                cols.append(m * np.maximum(0.0, age - knot))
         cols.append(d["lap"].to_numpy(dtype=float))
         cols += [(d["driver"] == drv).to_numpy(dtype=float) for drv in drivers[1:]]
         X, y = np.column_stack(cols), d["lap_time_s"].to_numpy()
@@ -120,7 +129,7 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5):
         for _ in range(n_iter + 1):
             beta, *_ = np.linalg.lstsq(X[keep], y[keep], rcond=None)
             resid = y - X @ beta
-            scale = 1.4826 * np.median(np.abs(resid - np.median(resid)))
+            scale = max(1.4826 * np.median(np.abs(resid - np.median(resid))), MIN_SCALE_S)
             keep = resid < k_resid * scale
         clean[fit] = keep
         df.loc[fit, "pace_resid_s"] = resid

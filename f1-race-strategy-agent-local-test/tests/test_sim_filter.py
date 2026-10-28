@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from src.sim import SimConfig, Simulator
-from src.sim.data import CACHE_DIR, LEGACY_OUTLIER_FACTOR, lap_frame, load_session
+from src.sim.data import CACHE_DIR, HINGE_KNOT, LEGACY_OUTLIER_FACTOR, lap_frame, load_session
 
 N_LAPS = 66
 OFFSETS = {"A": 0.0, "B": 0.2, "C": -0.3, "D": 0.1, "E": 0.4, "F": 0.8}  # F is the slow car
@@ -18,10 +18,11 @@ FUEL_S = 0.06    # per lap of fuel still on board: lap 2 is about 4 s slower tha
 NOISE_S = 0.2    # clipped at two sigma, so with k_resid = 2.5 noise alone never cuts a lap
 
 
-def synthetic_laps(wear=0.1, bumps=None, seed=0):
+def synthetic_laps(wear=0.1, bumps=None, seed=0, noise_s=NOISE_S, cliff=None):
     """FastF1-shaped Laps table, stints in STINTS order split at PIT_LAPS.
-    `bumps` maps (driver, lap) to seconds added to that lap."""
-    bumps = bumps or {}
+    `bumps` maps (driver, lap) to seconds added to that lap, `cliff` maps compound to
+    extra wear per lap of tyre age past HINGE_KNOT."""
+    bumps, cliff = bumps or {}, cliff or {}
     rng = np.random.default_rng(seed)
     rows = []
     for d, off in OFFSETS.items():
@@ -29,8 +30,9 @@ def synthetic_laps(wear=0.1, bumps=None, seed=0):
         for lap in range(1, N_LAPS + 1):
             stint = sum(lap > p for p in pits)
             comp, age = STINTS[stint], lap - ([0] + pits)[stint]
-            noise = float(np.clip(rng.normal(0, NOISE_S), -2 * NOISE_S, 2 * NOISE_S))
-            t = BASE[comp] + wear * age + FUEL_S * (N_LAPS - lap) + off + noise + bumps.get((d, lap), 0.0)
+            noise = float(np.clip(rng.normal(0, noise_s), -2 * noise_s, 2 * noise_s))
+            t = (BASE[comp] + wear * age + cliff.get(comp, 0.0) * max(0, age - HINGE_KNOT) + FUEL_S * (N_LAPS - lap)
+                 + off + noise + bumps.get((d, lap), 0.0))
             rows.append({
                 "Driver": d, "LapNumber": float(lap), "Stint": float(stint + 1), "Compound": comp,
                 "TyreLife": float(age), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
@@ -90,6 +92,32 @@ def test_cut_share_does_not_depend_on_tyre_age():
     assert 0 < fresh.mean() and abs(old.mean() - fresh.mean()) <= 0.05
     bumped = [(d, lap) in bumps for d, lap in zip(f["driver"], f["lap"])]
     assert (cut.to_numpy() == np.array(bumped)).all()
+
+
+def test_wear_cliff_past_the_knot_is_modelled_not_cut():
+    # MEDIUM runs well past the knot, so it gets a hinge; without one the old laps read as slow
+    bumps = {(d, lap): 3.0 for i, d in enumerate(OFFSETS) for lap in range(2 + i, N_LAPS + 1, 6)}
+    laps = synthetic_laps(bumps=bumps, cliff={"MEDIUM": 0.15})
+    f = base_laps(lap_frame(laps))
+    bumped = np.array([(d, lap) in bumps for d, lap in zip(f["driver"], f["lap"])])
+    assert ((~f["clean"]).to_numpy() == bumped).all()
+    straight = base_laps(lap_frame(laps, knot=1000))
+    old = (straight["tyre_age"] > 30).to_numpy()
+    assert (~straight["clean"].to_numpy() & ~bumped & old).sum() > 0
+
+
+def test_no_hinge_for_a_compound_with_few_laps_past_the_knot():
+    # SOFT has four base laps past the knot (D, ages 26 to 29): too few for a hinge, so a
+    # SOFT cliff there stays in the residual instead of being fitted away
+    f = lap_frame(synthetic_laps(cliff={"SOFT": 0.3}), min_samples=5)
+    past = f[(f["compound"] == "SOFT") & (f["tyre_age"] > HINGE_KNOT) & f["pace_resid_s"].notna()]
+    assert len(past) == 4
+    assert row(f, "D", 29)["pace_resid_s"] > 1.0
+
+
+def test_noise_free_laps_are_all_clean():
+    f = base_laps(lap_frame(synthetic_laps(noise_s=0.0)))
+    assert f["clean"].all()
 
 
 def test_rare_compound_laps_stay_clean():
