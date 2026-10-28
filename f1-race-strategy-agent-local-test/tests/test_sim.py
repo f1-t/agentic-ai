@@ -80,7 +80,7 @@ def test_fuel_model_recovers_fuel_slope():
 def test_matches_hand_computation(sim, plan):
     res = sim.simulate(start(), [list(p) for p in plan])
     assert res.valid
-    assert res.race_time_s == pytest.approx(hand_time(plan))
+    assert res.race_time_s == pytest.approx(hand_time(plan) + EventEffects().lap1_extra_s)
     assert res.num_stops == len(plan) - 1
     assert res.remaining.std_s == 0.0 and res.remaining.n_samples == 1
 
@@ -101,7 +101,7 @@ def test_mid_race_snapshot_continues_tyre_age(sim):
 def test_used_set_start_age_is_applied(sim):
     res = sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30, 6]])
     assert res.race_time_s == pytest.approx(hand_time([("SOFT", 20), ("MEDIUM", 30)]) + sum(
-        TRUE["MEDIUM"][1] * 6 for _ in range(30)))
+        TRUE["MEDIUM"][1] * 6 for _ in range(30)) + EventEffects().lap1_extra_s)
 
 
 def test_return_laps_sums_to_remaining_less_pit_loss(sim):
@@ -505,3 +505,33 @@ def test_compare_pit_rejects_start_age_conflicting_with_named_set(sim):
     assert res.errors[0] == ["start_age 2 conflicts with set 'm2' (6 laps run)"]
     ok = dict(act, start_age=6)
     assert sim.compare(snap, [ok], continuation=lambda adv: [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20]]).valid == [True]
+
+
+# --- lap 1 term ----------------------------------------------------------------
+LAP1_PLANS = [[["SOFT", 20], ["MEDIUM", 30]], [["SOFT", 10], ["MEDIUM", 40]]]
+
+
+def sim_with_lap1(extra):
+    return Simulator(synthetic_frame(), SimConfig(effects=EventEffects(lap1_extra_s=extra)))
+
+
+def test_start_snapshot_pays_lap1_extra_exactly():
+    on, off = sim_with_lap1(9.0), sim_with_lap1(0.0)
+    for plan in LAP1_PLANS:
+        assert on.simulate(start(), plan).race_time_s == pytest.approx(off.simulate(start(), plan).race_time_s + 9.0)
+
+
+def test_mid_race_snapshot_has_no_lap1_extra():
+    snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="SOFT", tyre_age=20,
+                    elapsed_s=1650.0, stints=[])
+    plan = [["SOFT", 5], ["MEDIUM", 25]]
+    assert sim_with_lap1(9.0).simulate(snap, plan).race_time_s == pytest.approx(
+        sim_with_lap1(0.0).simulate(snap, plan).race_time_s)
+
+
+def test_lap1_extra_does_not_change_plan_ranking():
+    on, off = sim_with_lap1(9.0), sim_with_lap1(0.0)
+    t_on = [on.simulate(start(), p).race_time_s for p in LAP1_PLANS]
+    t_off = [off.simulate(start(), p).race_time_s for p in LAP1_PLANS]
+    assert np.argsort(t_on).tolist() == np.argsort(t_off).tolist()
+    assert t_on[0] - t_on[1] == pytest.approx(t_off[0] - t_off[1])

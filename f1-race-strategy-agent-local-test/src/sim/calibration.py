@@ -49,9 +49,9 @@ def replay_driver(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver:
 def _lap_kind(g):
     ts = g["track_status"]
     return np.select(
-        [g["lap"] == 1, ts.str.contains("4"), ts.str.contains("[67]"), g["pit_in"], g["pit_out"],
+        [g["lap"] == 1, g["pit_in"], g["pit_out"], ts.str.contains("4"), ts.str.contains("[67]"),
          g["clean"], ts.str.contains("2")],
-        ["lap1", "sc", "vsc", "in_lap", "out_lap", "clean", "yellow"], default="slow_green")
+        ["lap1", "in_lap", "out_lap", "sc", "vsc", "clean", "yellow"], default="slow_green")
 
 
 def _finisher_ids(frame, min_laps_frac):
@@ -82,9 +82,40 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
             "err_green_s": float(np.nansum(pred[green] - actual[green] + offset)),
         })
         laps.append(g[["driver", "lap", "track_status", "pit_in", "clean"]].assign(
-            kind=kind, resid_s=actual - pred))
+            kind=kind, resid_s=actual - pred, actual_s=actual))
     table = pd.DataFrame(rows).set_index("driver")
-    return table, _summary(table), _by_lap_type(pd.concat(laps), len(table))
+    laps = pd.concat(laps)
+    by_kind = _by_lap_type(laps, len(table))
+    summary = _summary(table)
+    # the engine applies one factor to every SC lap, so the mean is the value that nets the SC total to zero
+    summary["observed_sc_factor"] = _observed_factor(laps, "sc", sim.ref_lap_s, "mean")
+    summary["observed_sc_factor_median"] = _observed_factor(laps, "sc", sim.ref_lap_s)
+    summary["observed_vsc_factor"] = _observed_factor(laps, "vsc", sim.ref_lap_s)
+    # lap 1 residual is net of the lap1_extra_s term in the replay, add it back for the absolute value
+    lap1 = laps.loc[laps["kind"] == "lap1", "resid_s"]
+    summary["observed_lap1_extra_s"] = (
+        round(float(lap1.median()) + sim.config.effects.lap1_extra_s, 2) if len(lap1) else float("nan"))
+    summary["observed_pit_loss_s"] = round(by_kind.attrs["observed_pit_loss_s"], 2)
+    summary["observed_sc_pit_loss_factor"], summary["n_sc_stops"] = _sc_pit_factor(
+        laps, by_kind.attrs["observed_pit_loss_s"])
+    return table, summary, by_kind
+
+
+def _sc_pit_factor(laps, green_pit_loss_s):
+    """In plus out lap residual on stops whose in lap is under SC, over the green observed pit loss."""
+    ins = laps[(laps["kind"] == "in_lap") & laps["track_status"].str.contains("4")]
+    outs = laps[laps["kind"] == "out_lap"].set_index(["driver", "lap"])["resid_s"]
+    cost = [r.resid_s + outs.get((r.driver, r.lap + 1), np.nan) for r in ins.itertuples()]
+    cost = pd.Series(cost, dtype=float).dropna()
+    if cost.empty or not green_pit_loss_s:
+        return float("nan"), 0
+    return round(float(cost.mean() / green_pit_loss_s), 3), int(len(cost))
+
+
+def _observed_factor(laps, kind, ref_lap_s, how="median"):
+    """Median (or mean) actual lap time over laps of this kind as a multiple of the reference lap, NaN if none."""
+    actual = laps.loc[laps["kind"] == kind, "actual_s"].dropna()
+    return round(float(getattr(actual, how)() / ref_lap_s), 3) if len(actual) else float("nan")
 
 
 def _by_lap_type(df, n_drivers):
@@ -173,18 +204,28 @@ def _end_positions(frame, which):
     return frame.loc[idx].set_index("driver")["position"]
 
 
-def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd.DataFrame | None = None):
+def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd.DataFrame | None = None,
+              mode: str = "simulated_order"):
     """Finishing order check. Returns (table, summary dict).
 
-    pred_pos ranks each driver by laps driven, then by their replayed time against the
-    others' real times. results is `data.session_results`, used when it covers every
-    finisher, otherwise grid and finish come from the lap-1 and last-lap Position.
+    Both orders rank by laps driven first. "simulated_order" (default) then ranks replayed
+    times among themselves, so a bias common to every driver cancels. "vs_real" ranks each
+    driver's replayed time against the others' real times, an absolute check that any common
+    bias shifts. `mode` picks which one fills pred_pos, abs_err and the top level summary
+    keys; the summary's `by_mode` holds both. results is `data.session_results`, used when it
+    covers every finisher, otherwise grid and finish come from the lap-1 and last-lap Position.
     """
+    if mode not in ("simulated_order", "vs_real"):
+        raise ValueError(f"unknown positions mode {mode!r}")
     fin = _finishers(sim, frame, race)
     laps, real_s, pred_s = fin["laps"].to_numpy(), fin["real_s"].to_numpy(), fin["pred_s"].to_numpy()
-    ahead = (laps[None, :] > laps[:, None]) | ((laps[None, :] == laps[:, None]) & (real_s[None, :] < pred_s[:, None]))
-    np.fill_diagonal(ahead, False)  # only other finishers count
-    fin["pred_pos"] = 1 + ahead.sum(axis=1)
+    more = laps[None, :] > laps[:, None]
+    same = laps[None, :] == laps[:, None]
+    for name, ahead in (("vs_real", more | (same & (real_s[None, :] < pred_s[:, None]))),
+                        ("simulated_order", more | (same & (pred_s[None, :] < pred_s[:, None])))):
+        np.fill_diagonal(ahead, False)  # only other finishers count
+        fin["pred_pos_" + name] = 1 + ahead.sum(axis=1)
+    fin["pred_pos"] = fin["pred_pos_" + mode]
 
     have = (results is not None and fin.index.isin(results.index).all()
             and results.loc[fin.index, ["grid", "classified"]].notna().all().all())
@@ -194,14 +235,21 @@ def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd
         fin["start_pos"], fin["real_pos"] = _end_positions(frame, "first"), _end_positions(frame, "last")
     fin["abs_err"] = (fin["pred_pos"] - fin["real_pos"]).abs()
     base = (fin["start_pos"] - fin["real_pos"]).abs().dropna()
-    err = fin["abs_err"].dropna()
+
+    def stats(col):
+        err = (fin[col] - fin["real_pos"]).abs().dropna()
+        return {"within_2_rate": round(float((err <= 2).mean()), 3), "mae_pos": round(float(err.mean()), 2),
+                "exact_rate": round(float((err == 0).mean()), 3)}
+
+    by_mode = {m: stats("pred_pos_" + m) for m in ("simulated_order", "vs_real")}
     summary = {
         "n_drivers": int(len(fin)),
-        "within_2_rate": round(float((err <= 2).mean()), 3),
-        "mae_pos": round(float(err.mean()), 2),
-        "exact_rate": round(float((err == 0).mean()), 3),
+        "mode": mode,
+        **by_mode[mode],
         "baseline_within_2_rate": round(float((base <= 2).mean()), 3),
         "baseline_mae": round(float(base.mean()), 2),
         "source": "grid_classified" if have else "lap_proxies",
+        "by_mode": by_mode,
     }
-    return fin[["team", "laps", "real_s", "pred_s", "start_pos", "real_pos", "pred_pos", "abs_err"]], summary
+    return fin[["team", "laps", "real_s", "pred_s", "start_pos", "real_pos", "pred_pos",
+                "pred_pos_vs_real", "pred_pos_simulated_order", "abs_err"]], summary
