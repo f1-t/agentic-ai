@@ -103,3 +103,4 @@ def test_observed_sc_factor_is_median_ratio_to_reference_lap(sim):
     assert summary["observed_sc_factor"] == pytest.approx(1.4, abs=1e-3)
     assert pd.isna(summary["observed_vsc_factor"])
     assert "observed_pit_loss_s" in summary
+    assert "observed_lap1_extra_s" in summary

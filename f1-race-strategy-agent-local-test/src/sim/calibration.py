@@ -82,6 +82,10 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
     summary = _summary(table)
     summary["observed_sc_factor"] = _observed_factor(laps, "sc", sim.ref_lap_s)
     summary["observed_vsc_factor"] = _observed_factor(laps, "vsc", sim.ref_lap_s)
+    # lap 1 residual is net of the lap1_extra_s term in the replay, add it back for the absolute value
+    lap1 = laps.loc[laps["kind"] == "lap1", "resid_s"]
+    summary["observed_lap1_extra_s"] = (
+        round(float(lap1.median()) + sim.config.effects.lap1_extra_s, 2) if len(lap1) else float("nan"))
     summary["observed_pit_loss_s"] = round(by_kind.attrs["observed_pit_loss_s"], 2)
     return table, summary, by_kind
 

@@ -14,7 +14,8 @@ import numpy as np
 from pydantic import ValidationError
 
 from .contracts import Plan, RaceParams, Snapshot
-from .sim import Simulator
+from .sim import SimConfig, Simulator
+from .sim.config import EventEffects
 from .sim.data import lap_frame
 
 warnings.filterwarnings("ignore")
@@ -143,7 +144,8 @@ def _race_params():
 def _get_simulator():
     global _simulator
     if _simulator is None:
-        _simulator = Simulator(lap_frame(_load_session().laps, OUTLIER_FACTOR))
+        _simulator = Simulator(lap_frame(_load_session().laps, OUTLIER_FACTOR),
+                              SimConfig(effects=EventEffects(lap1_extra_s=0.0)))  # keep the oracle baseline
     return _simulator
 
 
