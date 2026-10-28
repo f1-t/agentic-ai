@@ -41,6 +41,11 @@ def known_compounds(ctx):
 
 @RULES.register("min_stint")
 def min_stint(ctx):
+    """Enforce the minimum stint length.
+
+    The minimum is a planning constraint rather than a legality rule; a waiver
+    for tyre-class changes (e.g. intermediates to slicks) comes with the wet hooks.
+    """
     snap = ctx.snapshot
     floor = snap.race.min_stint_laps
     # the first stint is the remainder of a stint already underway, so it is exempt
