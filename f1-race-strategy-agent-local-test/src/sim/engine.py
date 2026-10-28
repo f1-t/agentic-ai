@@ -248,6 +248,7 @@ class Simulator:
 
         fx = self.config.effects
         pit_loss_s = snapshot.race.pit_loss_s
+        lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         for k in range(n):
             rng = np.random.default_rng([seed, k])
@@ -259,6 +260,8 @@ class Simulator:
             sc = np.isin(laps, scen.sc_laps)
             vsc = np.isin(laps, scen.vsc_laps)
             lap_s = np.where(sc, fx.sc_lap_factor * self.ref_lap_s, np.where(vsc, fx.vsc_lap_factor * green, green))
+            if lap1_extra:
+                lap_s[:, 0] += fx.lap1_extra_s
             scale = np.where(sc, fx.sc_pit_loss_factor, np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
             pit_s = pit_loss_s * (stops * scale).sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s

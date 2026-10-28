@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from .contracts import Plan, RaceParams, Snapshot
 from .sim import SimConfig, Simulator
+from .sim.config import EventEffects
 from .sim.data import LEGACY_OUTLIER_FACTOR, lap_frame
 
 warnings.filterwarnings("ignore")
@@ -143,9 +144,11 @@ def _race_params():
 def _get_simulator():
     global _simulator
     if _simulator is None:
-        # baseline filter and model, so ground truth and the graded test keep their numbers
+        # baseline filter and model, so ground truth and the graded test keep their numbers;
+        # lap1_extra_s is pinned to 0 for the same reason
         frame = lap_frame(_load_session().laps, OUTLIER_FACTOR)
-        _simulator = Simulator(frame, SimConfig(degradation={"name": "linear"}))
+        _simulator = Simulator(frame, SimConfig(degradation={"name": "linear"},
+                                                effects=EventEffects(lap1_extra_s=0.0)))
     return _simulator
 
 
