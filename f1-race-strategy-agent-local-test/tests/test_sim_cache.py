@@ -27,7 +27,7 @@ def test_baseline_fit_and_ground_truth_are_reproduced(frame):
     res = tools.simulate_strategy(gt["optimal_strategy"])
     assert res["total_time_s"] == pytest.approx(gt["optimal_total_time_s"], abs=0.05)
     soft = Simulator(frame).degradation.coefs["SOFT"]
-    assert soft == pytest.approx((81.93, 0.0512), abs=1e-3)
+    assert soft == pytest.approx((84.1554, -0.00576), abs=1e-3)
 
 
 def test_tool_errors_keep_the_original_contract():

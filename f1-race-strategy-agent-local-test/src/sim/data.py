@@ -2,14 +2,15 @@
 
 The simulator itself never imports FastF1. Only `load_session` does, lazily.
 Frame columns: driver, lap, stint, compound, tyre_age, lap_time_s, track_status,
-pit_in, pit_out, start_s, end_s, team, clean.
+pit_in, pit_out, start_s, end_s, team, field_ref_s, pace_resid_s, clean.
 """
 import os
 
 import pandas as pd
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
-OUTLIER_FACTOR = 1.07  # drop laps slower than 107% of the compound's fastest clean lap
+K_SLOW_S = 1.0         # a lap is an outlier if it is this much slower than the driver's usual deficit
+MIN_FIELD_LAPS = 5     # laps needed on a lap number before the field reference is trusted
 
 
 WEATHER_COLUMNS = ["time_s", "air_temp_c", "track_temp_c", "humidity_pct", "pressure_hpa",
@@ -47,8 +48,14 @@ def session_weather(session):
     })
 
 
-def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
-    """Convert a FastF1 Laps table into the simulator frame."""
+def lap_frame(laps, outlier_factor=None, k_slow_s=K_SLOW_S):
+    """Convert a FastF1 Laps table into the simulator frame.
+
+    A lap is clean if it is a green flag, non pit lap after lap 1 and is not unusually slow
+    for its driver. Slowness is measured against the median lap time of the field on that
+    lap number, less the driver's median deficit to it, so slow cars and heavy fuel laps
+    stay clean. Only slow laps are outliers. `outlier_factor` is deprecated and ignored.
+    """
     df = pd.DataFrame({
         "driver": laps["Driver"].to_numpy(),
         "lap": laps["LapNumber"].astype(int).to_numpy(),
@@ -67,8 +74,14 @@ def lap_frame(laps, outlier_factor=OUTLIER_FACTOR):
         (df["track_status"] == "1") & ~df["pit_in"] & ~df["pit_out"]
         & df["lap_time_s"].notna() & df["tyre_age"].notna() & df["compound"].notna()
     )
-    fastest = df["lap_time_s"].where(base).groupby(df["compound"]).transform("min")
-    df["clean"] = base & (df["lap_time_s"] < fastest * outlier_factor)
+    base = base & (df["lap"] > 1)
+    base_time = df["lap_time_s"].where(base)
+    by_lap = base_time.groupby(df["lap"])
+    df["field_ref_s"] = by_lap.transform("median").where(by_lap.transform("count") >= MIN_FIELD_LAPS)
+    deficit = base_time - df["field_ref_s"]
+    driver_offset = deficit.groupby(df["driver"]).transform("median")
+    df["pace_resid_s"] = df["lap_time_s"] - df["field_ref_s"] - driver_offset
+    df["clean"] = base & (df["pace_resid_s"] < k_slow_s)
     return df
 
 

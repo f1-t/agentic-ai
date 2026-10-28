@@ -3,24 +3,20 @@
   "driver": "HAM",
   "start_compound": "SOFT",
   "question": "One-stop or two-stop, and how to split the stints, to minimise race time?",
-  "optimal_total_time_s": 5510.1,
+  "optimal_total_time_s": 5542.1,
   "optimal_strategy": [
     [
       "SOFT",
-      28
-    ],
-    [
-      "SOFT",
-      28
+      10
     ],
     [
       "MEDIUM",
-      10
+      56
     ]
   ],
-  "optimal_num_stops": 2,
-  "optimal_first_pit_lap": 28,
+  "optimal_num_stops": 1,
+  "optimal_first_pit_lap": 10,
   "tolerance_pct": 1.0,
   "success_criterion": "Agent PASSES if its recommended strategy is valid and its simulated race time is within tolerance_pct of optimal_total_time_s.",
-  "notes": "Optimum = argmin of the deterministic simulator over SOFT-starting 1- and 2-stop strategies (min stint 10 laps). The simple model favours running the faster SOFT compound; the tolerance criterion rewards any near-optimal plan the agent reaches via the tools."
+  "notes": "Optimum = argmin of the deterministic simulator over SOFT-starting 1- and 2-stop strategies (min stint 10 laps). With the field-relative outlier filter the fitted tyre slopes are near zero, so the model prefers a short SOFT stint then MEDIUM; the tolerance criterion rewards any near-optimal plan the agent reaches via the tools."
 }
