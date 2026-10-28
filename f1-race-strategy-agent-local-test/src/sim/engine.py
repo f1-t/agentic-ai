@@ -260,6 +260,9 @@ class Simulator:
                 age = act.start_age or 0
                 chosen = next((t for t in pool if (t.set_id == act.set_id if act.set_id is not None
                                else t.compound == act.compound and t.laps_run == age)), None)
+                if chosen is not None and act.set_id is not None and age not in (0, chosen.laps_run):
+                    return None, [f"start_age {act.start_age} conflicts with set '{chosen.set_id}' "
+                                  f"({chosen.laps_run} laps run)"]
                 # laps on the fitted set in this race, from the stint history when it adds up
                 in_race = min(snapshot.tyre_age, snapshot.laps_completed - sum(s.laps for s in snapshot.stints))
                 done = StintRecord(compound=snapshot.compound, laps=in_race + 1,

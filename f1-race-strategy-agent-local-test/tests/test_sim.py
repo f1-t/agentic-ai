@@ -110,6 +110,23 @@ def test_return_laps_sums_to_remaining_less_pit_loss(sim):
     assert sum(res.lap_times_s) + res.pit_loss_total_s == pytest.approx(res.remaining.mean_s)
 
 
+def test_min_stint_applies_to_first_stint_at_race_start(sim):
+    res = sim.simulate(start(), [["SOFT", 5], ["MEDIUM", 45]])
+    assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
+
+
+def test_min_stint_exempts_stint_already_underway(sim):
+    snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="SOFT", tyre_age=20, stints=[])
+    assert sim.simulate(snap, [["SOFT", 5], ["MEDIUM", 25]]).valid
+
+
+def test_min_stint_applies_to_first_stint_just_after_a_stop(sim):
+    snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="MEDIUM", tyre_age=0,
+                    stints=[{"compound": "SOFT", "laps": 20, "start_lap": 1}])
+    res = sim.simulate(snap, [["MEDIUM", 7], ["SOFT", 23]])
+    assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
+
+
 # --- rules -------------------------------------------------------------------
 @pytest.mark.parametrize("plan, fragment", [
     ([["SOFT", 20], ["MEDIUM", 29]], "sum to 49"),
@@ -477,3 +494,14 @@ def test_compare_invalid_candidate_is_excluded(sim):
         assert all(row[bad] is None for row in res.p_beats + res.gap_mean_s + res.gap_std_s)
     assert res.p_best[1] == 1.0
     assert CompareResult.model_validate_json(res.model_dump_json()) == res
+
+
+def test_compare_pit_rejects_start_age_conflicting_with_named_set(sim):
+    snap = mid_race(sets_available=[{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"},
+                                    {"compound": "SOFT"}])
+    act = {"action": "pit", "compound": "MEDIUM", "set_id": "m2", "start_age": 2}
+    res = sim.compare(snap, [act], continuation=lambda adv: [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20]])
+    assert res.valid == [False]
+    assert res.errors[0] == ["start_age 2 conflicts with set 'm2' (6 laps run)"]
+    ok = dict(act, start_age=6)
+    assert sim.compare(snap, [ok], continuation=lambda adv: [["MEDIUM", 20], ["SOFT", adv.remaining_laps - 20]]).valid == [True]
