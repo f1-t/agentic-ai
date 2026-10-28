@@ -24,7 +24,7 @@ import pandas as pd
 from ..contracts import RaceParams
 from . import calibration
 from .config import SimConfig
-from .data import lap_frame, load_session, session_results
+from .data import lap_frame, load_session, practice_frame, session_results
 from .engine import Simulator
 
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration")
@@ -54,8 +54,7 @@ def _race_setup(args):
 
 def _practice(season, gp):
     """FP1-FP3 long-run laps, for the pre_race and to_snapshot fit windows."""
-    from .data import practice_frame
-    return practice_frame([load_session(season, gp, kind) for kind in PRACTICE_SESSIONS])
+    return practice_frame({kind: load_session(season, gp, kind).laps for kind in PRACTICE_SESSIONS})
 
 
 def midrace_main(argv):
@@ -74,7 +73,7 @@ def midrace_main(argv):
 
     rows = calibration.midrace(factory, frame, race, laps_k=args.laps, windows=args.windows)
     os.makedirs(args.report_dir, exist_ok=True)
-    path = os.path.join(args.report_dir, f"{race.race_id}_midrace.csv")
+    path = os.path.normpath(os.path.join(args.report_dir, f"{race.race_id}_midrace.csv"))
     rows.to_csv(path, index=False)
     print(f"{len(rows)} rows, k = {sorted(rows['k'].unique().tolist())}, written to {path}")
     _print_pivot(calibration.aggregate(rows))

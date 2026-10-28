@@ -120,12 +120,27 @@ def test_pred_remaining_exact_on_noise_free_data_at_every_k(frame):
 
 
 def test_to_snapshot_at_last_lap_equals_full(frame):
-    make = factory(frame, "linear_fuel")
-    rows = calibration.midrace(make, frame, RACE, laps_k=[RACE.total_laps - 1],
+    rows = calibration.midrace(factory(frame), frame, RACE, laps_k=[RACE.total_laps - 1],
                                windows=["full", "to_snapshot"]).set_index(["window", "driver"])
     for d in ("AAA", "BBB"):
         assert rows.loc[("to_snapshot", d), "pred_remaining_s"] == pytest.approx(
             rows.loc[("full", d), "pred_remaining_s"], abs=1e-6)
+
+
+def test_to_snapshot_moves_from_pre_race_to_full_when_practice_disagrees(frame):
+    """to_snapshot is shrunk toward the pre_race fit, so with practice off the race model it
+    starts at pre_race and ends next to full."""
+    practice = synthetic_practice(coefs={"SOFT": (80.6, 0.13), "MEDIUM": (82.5, 0.06)})
+
+    def make(window):
+        return Simulator(frame, SimConfig(degradation={"name": "linear"}, fit_window=window), practice)
+    rows = calibration.midrace(make, frame, RACE, laps_k=[0, 10, 49]).set_index(["window", "driver", "k"])
+    for d in ("AAA", "BBB"):
+        err = {(w, k): abs(rows.loc[(w, d, k), "err_s"]) for w in WINDOWS for k in (0, 10, 49)}
+        assert err[("full", 0)] < 1e-6 and err[("full", 49)] < 1e-6
+        assert err[("to_snapshot", 0)] == pytest.approx(err[("pre_race", 0)])
+        assert err[("to_snapshot", 10)] < err[("pre_race", 10)]
+        assert err[("to_snapshot", 49)] < 0.25 * err[("pre_race", 49)]
 
 
 def test_pace_offset_removes_a_driver_offset():
