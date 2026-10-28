@@ -11,6 +11,11 @@ import warnings
 
 import fastf1
 import numpy as np
+from pydantic import ValidationError
+
+from .contracts import Plan, RaceParams, Snapshot
+from .sim import Simulator
+from .sim.data import lap_frame
 
 warnings.filterwarnings("ignore")
 
@@ -118,54 +123,48 @@ def estimate_tyre_degradation(compound):
 
 
 # --- Tool 4: deterministic strategy simulator --------------------------------
-def _stint_seconds(compound, n_laps, deg):
-    base, slope = deg[compound]
-    return sum(base + slope * k for k in range(1, n_laps + 1))
+# The simulator lives in src/sim. These wrappers keep the original tool contract.
+_simulator = None
+_params = None
 
 
-def _deg_table():
-    table = {}
-    for comp in ("SOFT", "MEDIUM", "HARD"):
-        r = estimate_tyre_degradation(comp)
-        if "error" not in r:
-            table[comp] = (r["base_laptime_s"], r["deg_per_lap_s"])
-    return table
+def _race_params():
+    global _params
+    if _params is None:
+        laps = _load_session().laps
+        _params = RaceParams(
+            race_id=f"{SEASON}_{GP_NAME}", total_laps=race_laps(), pit_loss_s=PIT_LOSS_S,
+            min_stint_laps=MIN_STINT_LAPS,
+            compounds=sorted(laps["Compound"].dropna().unique().tolist()),
+        )
+    return _params
+
+
+def _get_simulator():
+    global _simulator
+    if _simulator is None:
+        _simulator = Simulator(lap_frame(_load_session().laps, OUTLIER_FACTOR))
+    return _simulator
 
 
 def simulate_strategy(stints):
     """stints: list of [compound, n_laps]. Returns modelled total race time."""
-    total = race_laps()
-    deg = _deg_table()
-    # normalise input
-    plan = []
-    for item in stints:
-        try:
-            comp = str(item[0]).upper()
-            n = int(item[1])
-        except Exception:
-            return {"error": f"Each stint must be [compound, n_laps]; got {item!r}"}
-        if comp not in deg:
-            return {"error": f"Unknown compound '{comp}'. Modelled compounds: {sorted(deg)}"}
-        if n < MIN_STINT_LAPS:
-            return {"error": f"Stint of {n} laps is below the {MIN_STINT_LAPS}-lap minimum."}
-        plan.append((comp, n))
-    if sum(n for _, n in plan) != total:
-        return {"error": f"Stint laps sum to {sum(n for _, n in plan)}, must equal race length {total}."}
-    if len({c for c, _ in plan}) < 2:
-        return {"error": "A valid dry strategy must use at least two different compounds."}
-
-    num_stops = len(plan) - 1
-    stint_secs = [round(_stint_seconds(c, n, deg), 1) for c, n in plan]
-    total_time = round(sum(stint_secs) + PIT_LOSS_S * num_stops, 1)
-    # first pit lap = laps completed in the first stint
-    first_pit_lap = plan[0][1] if num_stops >= 1 else None
+    try:
+        plan = Plan.of([list(item)[:2] for item in stints])
+    except (ValidationError, TypeError) as exc:
+        return {"error": f"Each stint must be [compound, n_laps]; got {stints!r} ({exc})"}
+    sim = _get_simulator()
+    snap = Snapshot.at_start(_race_params(), driver="", compound=plan.stints[0].compound)
+    res = sim.simulate(snap, plan)
+    if not res.valid:
+        return {"error": res.errors[0]}
     return {
-        "strategy": [[c, n] for c, n in plan],
-        "num_stops": num_stops,
-        "first_pit_lap": first_pit_lap,
-        "per_stint_seconds": stint_secs,
-        "pit_loss_total_s": round(PIT_LOSS_S * num_stops, 1),
-        "total_time_s": total_time,
+        "strategy": plan.as_pairs(),
+        "num_stops": res.num_stops,
+        "first_pit_lap": res.pit_laps[0] if res.pit_laps else None,
+        "per_stint_seconds": [round(x, 1) for x in res.stint_seconds],
+        "pit_loss_total_s": round(res.pit_loss_total_s, 1),
+        "total_time_s": round(res.race_time_s, 1),
     }
 
 
@@ -173,8 +172,7 @@ def simulate_strategy(stints):
 def optimal_strategy(start_compound="SOFT", max_stops=2):
     """Brute-force optimum among strategies that START on `start_compound`."""
     total = race_laps()
-    deg = _deg_table()
-    comps = list(deg.keys())
+    comps = [c for c in ("SOFT", "MEDIUM", "HARD") if c in _get_simulator().modelled]
     best = None
 
     def consider(plan):
