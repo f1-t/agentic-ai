@@ -715,7 +715,7 @@ def test_fit_report_fields_present(name):
     s = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", degradation={"name": name}),
                   synthetic_practice())
     keys = {"n_rows", "n_race_rows", "n_race_rows_per_compound", "max_tyre_age", "fuel_slope_source",
-            "condition_number", "shrinkage_weight"}
+            "condition_number", "shrinkage_weight", "evolution_s_per_min"}
     for snap in (start(), at_lap(30)):
         rep = s.fitted_for(snap).degradation.fit_report
         assert set(rep) == keys
@@ -728,6 +728,7 @@ def test_fit_report_fields_present(name):
     assert full["n_rows"] == {"SOFT": 200, "MEDIUM": 200} and full["n_race_rows"] == 400
     assert full["n_race_rows_per_compound"] == {"SOFT": 200, "MEDIUM": 200}
     assert full["max_tyre_age"] == {"SOFT": 20, "MEDIUM": 20}
+    assert full["evolution_s_per_min"] == {}  # no session time column
     assert full["fuel_slope_source"] == ("fitted" if name == "linear_fuel" else None)
     zero = s.fitted_for(start()).degradation.fit_report
     assert zero["n_race_rows"] == 0 and zero["max_tyre_age"] == {"SOFT": 10, "MEDIUM": 10}

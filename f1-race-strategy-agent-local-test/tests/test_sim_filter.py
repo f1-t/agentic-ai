@@ -147,51 +147,96 @@ def test_legacy_path_reproduces_baseline_fit():
 
 
 # --- practice_frame ----------------------------------------------------------
-def practice_laps(stints, bumps=None, wear=0.1, seed=0):
+def practice_laps(stints, bumps=None, wear=0.1, seed=0, evo=0.0, noise_s=NOISE_S):
     """FastF1-shaped practice Laps. `stints` is [(compound, timed laps)] per driver, each
-    run framed by an out lap and an in lap; `bumps` maps (driver, LapNumber) to seconds."""
+    run framed by an out lap and an in lap; `bumps` maps (driver, LapNumber) to seconds;
+    `evo` is track evolution in seconds per minute of session time. Every driver starts
+    at session time 0 and runs without breaks."""
     bumps = bumps or {}
     rng = np.random.default_rng(seed)
     rows = []
     for d, off in OFFSETS.items():
-        lap = 0
+        lap, clock = 0, 0.0
         for k, (comp, n) in enumerate(stints):
             for age in range(n + 2):  # out lap, n timed laps, in lap
                 lap += 1
-                noise = float(np.clip(rng.normal(0, NOISE_S), -2 * NOISE_S, 2 * NOISE_S))
-                t = BASE[comp] + wear * age + off + noise + bumps.get((d, lap), 0.0) + (8.0 if age in (0, n + 1) else 0.0)
+                noise = float(np.clip(rng.normal(0, noise_s), -2 * noise_s, 2 * noise_s))
+                t = (BASE[comp] + wear * age + off + noise + evo * clock / 60.0 + bumps.get((d, lap), 0.0)
+                     + (8.0 if age in (0, n + 1) else 0.0))
                 rows.append({
                     "Driver": d, "LapNumber": float(lap), "Stint": float(k + 1), "Compound": comp,
                     "TyreLife": float(age + 1), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
                     "PitInTime": pd.Timedelta(seconds=1) if age == n + 1 else pd.NaT,
                     "PitOutTime": pd.Timedelta(seconds=1) if age == 0 else pd.NaT,
-                    "LapStartTime": pd.Timedelta(seconds=0), "Time": pd.Timedelta(seconds=t),
+                    "LapStartTime": pd.Timedelta(seconds=clock), "Time": pd.Timedelta(seconds=clock + t),
                     "Team": "T", "Position": np.nan,
                 })
+                clock += t
     return pd.DataFrame(rows)
+
+
+def run_class(f, session, driver, stint):
+    return f.loc[(f["session"] == session) & (f["driver"] == driver) & (f["stint"] == stint), "run_class"].iloc[0]
 
 
 def test_practice_frame_columns_and_long_runs():
     sessions = {"FP1": practice_laps([("SOFT", 3), ("MEDIUM", 8)]), "FP2": practice_laps([("SOFT", 10)], seed=1)}
     f = practice_frame(sessions)
-    assert list(f.columns) == list(lap_frame(sessions["FP1"]).columns) + ["session", "stint_len", "lap_in_stint"]
+    assert list(f.columns) == list(lap_frame(sessions["FP1"]).columns) + [
+        "session", "stint_len", "lap_in_stint", "session_time_min", "run_class"]
     assert f["lap"].isna().all()
     assert len(f) == len(OFFSETS) * (5 + 10 + 12)
     run = f[(f["session"] == "FP1") & (f["driver"] == "A") & (f["stint"] == 2)]
     assert run["stint_len"].eq(8).all() and list(run["lap_in_stint"]) == list(range(1, 11))
+    assert run["run_class"].eq("long_run").all()
     short = f[(f["session"] == "FP1") & (f["stint"] == 1)]
-    assert short["stint_len"].eq(3).all() and not short["clean"].any() and short["pace_resid_s"].isna().all()
-    timed = f[~f["pit_in"] & ~f["pit_out"] & (f["stint_len"] >= 5)]
+    assert short["stint_len"].eq(3).all() and short["run_class"].eq("short").all()
+    assert not short["clean"].any() and short["pace_resid_s"].isna().all()
+    timed = f[~f["pit_in"] & ~f["pit_out"] & (f["run_class"] == "long_run")]
     assert timed["clean"].all() and timed["pace_resid_s"].notna().all()
     assert not f.loc[f["pit_in"] | f["pit_out"], "clean"].any()
+    for _, g in f.groupby("session"):
+        assert g["session_time_min"].min() == 0.0
+    a = f[(f["session"] == "FP2") & (f["driver"] == "A")]
+    assert a["session_time_min"].is_monotonic_increasing
+    assert a["session_time_min"].iloc[1] == pytest.approx(a["lap_time_s"].iloc[0] / 60.0)
+
+
+def test_long_run_test_drops_short_alternating_and_off_pace_stints():
+    alternating = {("A", lap): 6.0 for lap in range(14, 24, 2)}   # A, stint 2: push / cool
+    low_fuel = {("B", lap): -4.0 for lap in range(26, 36)}        # B, stint 3: consistent, 4 s quick
+    laps = practice_laps([("SOFT", 10), ("SOFT", 10), ("MEDIUM", 10), ("MEDIUM", 5)],
+                         bumps={**alternating, **low_fuel})
+    f = practice_frame({"FP2": laps})
+    assert run_class(f, "FP2", "A", 2) == "inconsistent"
+    assert run_class(f, "FP2", "B", 3) == "off_pace"
+    assert run_class(f, "FP2", "C", 4) == "short"
+    assert run_class(f, "FP2", "A", 1) == run_class(f, "FP2", "B", 2) == "long_run"
+    dropped = f[f["run_class"] != "long_run"]
+    assert dropped["pace_resid_s"].isna().all() and not dropped["clean"].any()
+    stints = f.groupby(["driver", "stint"])["run_class"].first().value_counts().to_dict()
+    assert stints == {"long_run": 3 * len(OFFSETS) - 2, "short": len(OFFSETS), "inconsistent": 1, "off_pace": 1}
+    strict = practice_frame({"FP2": laps}, SimConfig(long_run={"min_timed_laps": 11}).long_run)
+    assert set(strict["run_class"]) == {"short"}
+
+
+def test_session_evolution_is_not_read_as_wear():
+    # two SOFT runs back to back: the tyre age resets, the session clock does not
+    laps = practice_laps([("SOFT", 10), ("SOFT", 10), ("MEDIUM", 10)], evo=-0.02, noise_s=0.05)
+    f = practice_frame({"FP2": laps})
+    fit = Simulator(lap_frame(synthetic_laps()), SimConfig(fit_window="pre_race"), f).degradation
+    assert fit.coefs["SOFT"][1] == pytest.approx(0.1, abs=0.01)
+    assert fit.fit_report["evolution_s_per_min"]["FP2"] == pytest.approx(-0.02, abs=0.003)
+    blind = Simulator(lap_frame(synthetic_laps()), SimConfig(fit_window="pre_race"),
+                      f.drop(columns=["session_time_min"])).degradation
+    assert blind.coefs["SOFT"][1] < 0.09 and blind.fit_report["evolution_s_per_min"] == {}
 
 
 def test_practice_frame_cuts_slow_laps_with_the_race_filter():
-    laps = practice_laps([("SOFT", 10), ("MEDIUM", 10)], bumps={("B", 5): 3.0, ("C", 6): -3.0})
+    laps = practice_laps([("SOFT", 10), ("SOFT", 10), ("MEDIUM", 10)], bumps={("B", 5): 3.0})
     f = practice_frame({"FP2": laps})
     lap5 = f[(f["driver"] == "B") & (f["lap_in_stint"] == 5) & (f["stint"] == 1)].iloc[0]
     assert not lap5["clean"] and lap5["pace_resid_s"] == pytest.approx(3.0, abs=0.5)
-    assert f[(f["driver"] == "C") & (f["lap_in_stint"] == 6) & (f["stint"] == 1)]["clean"].all()  # fast stays
     assert int((~f["clean"] & f["pace_resid_s"].notna()).sum()) == 1
     slow = f.loc[f["driver"] == "F", "driver_offset_s"].iloc[0]
     assert slow == pytest.approx(OFFSETS["F"] - np.mean(list(OFFSETS.values())), abs=0.05)

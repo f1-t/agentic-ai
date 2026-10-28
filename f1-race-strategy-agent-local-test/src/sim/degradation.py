@@ -28,9 +28,17 @@ practice) only the fuel slope is penalised; base and wear are plain least square
                               (X'X)_jj / ((X'X)_jj + D_jj): {"base_s": {compound: w},
                               "wear_s_per_lap": {compound: w}, "fuel_s_per_lap": w}.
                               1 for an unpenalised fitted parameter, 0 for a fixed prior.
+  evolution_s_per_min         per session track evolution slope, {session: s/min}, when the
+                              rows carry session and session_time_min (practice_frame);
+                              {} otherwise. The simulator does not use it.
+
+Practice rows with session and session_time_min get one slope per session in session
+time, fitted with base and wear in the ordinary fits, so track evolution within a
+session is not read as tyre wear.
 """
 import numpy as np
 
+from .data import evolution_columns
 from .registry import Registry
 
 DEGRADATION = Registry("degradation model")
@@ -60,15 +68,16 @@ def _cond(X):
     return float(np.linalg.cond(X)) if X.size else float("nan")
 
 
-def _report(d, comps, X, fuel_slope_source, weight, has_fuel, support=None):
-    """`weight` is per design column: base and wear per compound, then fuel when has_fuel.
+def _report(d, comps, X, fuel_slope_source, weight, has_fuel, support=None, evolution=None):
+    """`weight` is per parameter: base and wear per compound, then fuel when has_fuel.
     `support` is the prior's fit_report, whose rows count toward n_rows and max_tyre_age."""
     race = ~np.isnan(_race_lap(d))
     support = support or {"n_rows": {}, "max_tyre_age": {}}
     rep = {"n_rows": {}, "n_race_rows": int(race.sum()), "n_race_rows_per_compound": {},
            "max_tyre_age": {}, "fuel_slope_source": fuel_slope_source, "condition_number": _cond(X),
            "shrinkage_weight": {"base_s": {}, "wear_s_per_lap": {},
-                                "fuel_s_per_lap": float(weight[-1]) if has_fuel else None}}
+                                "fuel_s_per_lap": float(weight[-1]) if has_fuel else None},
+           "evolution_s_per_min": dict(evolution or {})}
     for i, c in enumerate(comps):
         m = (d["compound"] == c).to_numpy()
         ages = [float(d.loc[m, "tyre_age"].max())] if m.any() else []
@@ -147,8 +156,14 @@ class LinearDegradation:
                 coefs[comp] = (float(base), float(slope))
         comps = sorted(coefs)
         d = data[data["compound"].isin(comps) & data["clean"]]
-        X = np.column_stack(_compound_columns(d, comps)) if comps else np.empty((0, 0))
-        return cls(coefs, _report(d, comps, X, None, np.ones(2 * len(comps)), False))
+        sessions, evo = evolution_columns(d)
+        X = np.column_stack(_compound_columns(d, comps) + evo) if comps else np.empty((0, 0))
+        evolution = {}
+        if comps and evo:  # practice: fit base and wear jointly with the session slopes
+            beta, *_ = np.linalg.lstsq(X, d["lap_time_s"].to_numpy(dtype=float), rcond=None)
+            coefs = _coefs(comps, beta)
+            evolution = {s: float(b) for s, b in zip(sessions, beta[2 * len(comps):])}
+        return cls(coefs, _report(d, comps, X, None, np.ones(2 * len(comps)), False, evolution=evolution))
 
     @property
     def compounds(self):
@@ -194,16 +209,19 @@ class LinearFuelDegradation:
         y = d["lap_time_s"].to_numpy(dtype=float)
         n_race = [int(((d["compound"] == c).to_numpy() & race).sum()) for c in comps]
         cols = _compound_columns(d, comps)
+        sessions, evo = evolution_columns(d)
+        k = 2 * len(comps)
         if any(n >= min_samples for n in n_race):
-            X = np.column_stack(cols + [lap])
+            X = np.column_stack(cols + [lap] + evo)
             beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-            fuel, source = float(beta[-1]), "fitted"
+            fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1:]
         else:
-            X = np.column_stack(cols)
+            X = np.column_stack(cols + evo)
             beta, *_ = np.linalg.lstsq(X, y - fuel_prior * lap, rcond=None)
-            fuel, source = float(fuel_prior), "prior"
-        weight = np.append(np.ones(2 * len(comps)), 1.0 if source == "fitted" else 0.0)
-        return cls(_coefs(comps, beta), fuel, _report(d, comps, X, source, weight, True))
+            fuel, source, slopes = float(fuel_prior), "prior", beta[k:]
+        weight = np.append(np.ones(k), 1.0 if source == "fitted" else 0.0)
+        evolution = {s: float(b) for s, b in zip(sessions, slopes)}
+        return cls(_coefs(comps, beta), fuel, _report(d, comps, X, source, weight, True, evolution=evolution))
 
     @property
     def compounds(self):

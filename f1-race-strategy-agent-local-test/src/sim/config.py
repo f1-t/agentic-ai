@@ -24,6 +24,15 @@ class EventEffects(_Cfg):
     lap1_extra_s: float = 9.0         # provisional: standing start extra on lap 1, 2021 Spain median +8.7 to +10 s
 
 
+class LongRun(_Cfg):
+    """When a practice stint is a long run (data.practice_frame). Timed laps are green,
+    non pit laps with a lap time, tyre age and compound, so the out and in laps never count."""
+
+    min_timed_laps: int = 6           # qualifying runs are short
+    max_median_step_s: float = 1.0    # median |lap-to-lap step| of the timed laps; rejects push/cool alternation
+    max_pace_gap_s: float = 2.5       # stint median within this of the session's long-run reference
+
+
 class SimConfig(_Cfg):
     degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
@@ -47,6 +56,7 @@ class SimConfig(_Cfg):
     shrinkage: dict[str, float] = Field(default_factory=lambda: {
         "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.015,
     })
+    long_run: LongRun = Field(default_factory=LongRun)   # practice long-run test, for data.practice_frame
 
     @classmethod
     def from_file(cls, path):
