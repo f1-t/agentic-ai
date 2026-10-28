@@ -55,9 +55,10 @@ def _race_setup(args):
     return session, frame, cfg, race
 
 
-def _practice(season, gp):
+def _practice(season, gp, long_run=None):
     """FP1-FP3 long-run laps, for the pre_race and to_snapshot fit windows."""
-    return practice_frame({kind: load_session(season, gp, kind).laps for kind in PRACTICE_SESSIONS})
+    return practice_frame({kind: load_session(season, gp, kind).laps for kind in PRACTICE_SESSIONS},
+                          long_run=long_run)
 
 
 def midrace_main(argv):
@@ -69,7 +70,7 @@ def midrace_main(argv):
     args = ap.parse_args(argv)
 
     session, frame, cfg, race = _race_setup(args)
-    practice = _practice(args.season, args.gp) if set(args.windows) - {"full"} else None
+    practice = _practice(args.season, args.gp, cfg.long_run) if set(args.windows) - {"full"} else None
 
     def factory(window):
         return Simulator(frame, cfg.model_copy(update={"fit_window": window}), practice)
