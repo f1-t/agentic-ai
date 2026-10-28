@@ -1,4 +1,7 @@
 """Offline simulator tests. Synthetic data only, no model and no network."""
+import time
+
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -264,3 +267,63 @@ def test_assumed_sets_can_be_excluded_by_config():
     assert not strict.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]]).valid
     assert strict.simulate(snap, [["SOFT", 20], ["MEDIUM", 30, 4]]).valid
     assert Simulator(synthetic_frame()).simulate(snap, [["SOFT", 20], ["MEDIUM", 30]]).valid
+
+
+# --- batch -------------------------------------------------------------------
+def test_batch_matches_single_simulation(sim):
+    plans = [[["SOFT", 20], ["MEDIUM", 30]], [["SOFT", 15], ["MEDIUM", 20], ["SOFT", 15]],
+             [["SOFT", 50]], [["SOFT", 20], ["MEDIUM", 30, 6]]]
+    batch = sim.simulate_batch(start(), plans, return_laps=True)
+    assert batch.valid.tolist() == [True, True, False, True]
+    assert np.isnan(batch.times[2]).all()
+    for i, plan in enumerate(plans):
+        got, want = batch.result(i, start()), sim.simulate(start(), plan, return_laps=True)
+        assert got.valid == want.valid
+        if want.valid:
+            assert got.race_time_s == pytest.approx(want.race_time_s)
+            assert got.stint_seconds == pytest.approx(want.stint_seconds)
+            assert got.lap_times_s == pytest.approx(want.lap_times_s)
+        else:
+            assert got.errors == want.errors
+
+
+def test_batch_shares_draws_across_plans():
+    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "test_noisy"}, n_samples=40))
+    det = Simulator(synthetic_frame())
+    p1, p2 = [["SOFT", 15], ["MEDIUM", 35]], [["SOFT", 25], ["MEDIUM", 25]]
+    batch = s.simulate_batch(start(), [p1, p2], seed=2)
+    assert batch.times.shape == (2, 40)
+    gap = det.simulate(start(), p1).race_time_s - det.simulate(start(), p2).race_time_s
+    assert batch.times[0] - batch.times[1] == pytest.approx(np.full(40, gap))
+
+
+def test_batch_with_scenario_and_mid_race_snapshot(sim):
+    snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="SOFT", tyre_age=20,
+                    elapsed_s=1650.0, stints=[])
+    plans = [[["SOFT", 5], ["MEDIUM", 25]], [["SOFT", 10], ["MEDIUM", 20]]]
+    scen = Scenario(sc_laps=[25, 26])
+    batch = sim.simulate_batch(snap, plans, scenario=scen)
+    for i, plan in enumerate(plans):
+        assert batch.race_times[i, 0] == pytest.approx(sim.simulate(snap, plan, scenario=scen).race_time_s)
+    assert batch.pit_loss[0, 0] == pytest.approx(RACE.pit_loss_s * EventEffects().sc_pit_loss_factor)
+    assert batch.pit_loss[1, 0] == pytest.approx(RACE.pit_loss_s)
+
+
+def test_batch_all_invalid_returns_nan_without_error(sim):
+    batch = sim.simulate_batch(start(), [[["SOFT", 50]], [["SOFT", "x"], ["MEDIUM", 30]]])
+    assert not batch.valid.any()
+    assert batch.times.shape == (2, 1) and np.isnan(batch.times).all()
+    assert batch.lap_times is None
+    assert batch.plans[1] is None and batch.errors[1]
+
+
+def test_batch_is_fast_enough_for_brute_force(sim):
+    plans = [[["SOFT", a], ["MEDIUM", b], ["SOFT", 50 - a - b]]
+             for a in range(8, 35) for b in range(8, 43 - a)]
+    assert len(plans) == 378
+    t0 = time.perf_counter()
+    batch = sim.simulate_batch(start(), plans, n_samples=50)
+    elapsed = time.perf_counter() - t0
+    print(f"simulate_batch: {len(plans)} plans x 50 samples in {elapsed:.3f} s")
+    assert batch.valid.all() and batch.times.shape == (378, 50)
+    assert elapsed < 5.0

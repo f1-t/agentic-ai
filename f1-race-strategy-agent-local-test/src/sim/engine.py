@@ -1,4 +1,6 @@
-"""Strategy simulator: a snapshot and a plan in, a lap time summary out."""
+"""Strategy simulator: a snapshot and plans in, lap time summaries out."""
+from dataclasses import dataclass, field
+
 import numpy as np
 import pandas as pd
 from pydantic import ValidationError
@@ -8,6 +10,51 @@ from .config import SimConfig
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
 from .rules import RuleContext, apply_inventory, check
+
+
+def summarise(totals) -> TimeSummary:
+    totals = np.asarray(totals, dtype=float)
+    n = len(totals)
+    return TimeSummary(
+        mean_s=float(totals.mean()), std_s=float(totals.std()),
+        p05_s=float(np.percentile(totals, 5)), p50_s=float(np.percentile(totals, 50)),
+        p95_s=float(np.percentile(totals, 95)), n_samples=n,
+        cvar_90_s=float(np.sort(totals)[-max(1, int(np.ceil(0.1 * n))):].mean()),
+    )
+
+
+@dataclass
+class BatchResult:
+    """Many plans scored under the same draws. Rows follow the input plan order."""
+
+    plans: list            # Plan, or None when the input did not parse
+    errors: list           # list[str] per plan, empty when valid
+    valid: np.ndarray = field(init=False)
+    times: np.ndarray = None          # (n_plans, n_samples) remaining seconds incl. pit loss, NaN if invalid
+    pit_loss: np.ndarray = None       # (n_plans, n_samples)
+    stint_seconds: list = None        # per plan (n_stints, n_samples), pit loss excluded, None if invalid
+    lap_times: np.ndarray | None = None  # (n_plans, n_laps) sample 0 lap times when requested
+    elapsed_s: float | None = None
+    seed: int = 0
+
+    def __post_init__(self):
+        self.valid = np.array([p is not None and not e for p, e in zip(self.plans, self.errors)], dtype=bool)
+
+    @property
+    def race_times(self):
+        return self.times + (self.elapsed_s or 0.0)
+
+    def result(self, i, snapshot: Snapshot) -> SimResult:
+        plan = self.plans[i]
+        if not self.valid[i]:
+            return SimResult(valid=False, errors=self.errors[i], plan=plan)
+        return SimResult(
+            valid=True, plan=plan, num_stops=plan.num_stops, pit_laps=plan.pit_laps(snapshot),
+            remaining=summarise(self.times[i]), elapsed_s=snapshot.elapsed_s,
+            stint_seconds=self.stint_seconds[i].mean(axis=1).tolist(),
+            pit_loss_total_s=float(self.pit_loss[i].mean()),
+            lap_times_s=self.lap_times[i].tolist() if self.lap_times is not None else None,
+        )
 
 
 class Simulator:
@@ -33,60 +80,81 @@ class Simulator:
     # --- public API ----------------------------------------------------------
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:
-        try:
-            plan = Plan.of(plan)
-        except ValidationError as exc:
-            return SimResult(valid=False, errors=[e["msg"] for e in exc.errors()])
-        errors = self.validate(snapshot, plan, rules)
-        if errors:
-            return SimResult(valid=False, errors=errors, plan=plan)
-        plan = apply_inventory(snapshot, plan, self.config)
+        return self.simulate_batch(snapshot, [plan], seed=seed, n_samples=n_samples, scenario=scenario,
+                                   rules=rules, return_laps=return_laps).result(0, snapshot)
+
+    def simulate_batch(self, snapshot: Snapshot, plans, *, seed=0, n_samples=None,
+                       scenario: Scenario | None = None, rules=None, return_laps=False) -> BatchResult:
+        parsed, errors = [], []
+        for raw in plans:
+            try:
+                plan = Plan.of(raw)
+            except ValidationError as exc:
+                parsed.append(None)
+                errors.append([e["msg"] for e in exc.errors()])
+                continue
+            errs = self.validate(snapshot, plan, rules)
+            parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
+            errors.append(errs)
+        out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
 
         n = n_samples or self.config.n_samples
-        runs = [self._run(snapshot, plan, np.random.default_rng([seed, i]), scenario) for i in range(n)]
-        totals = np.array([r["total"] for r in runs])
-        summary = TimeSummary(
-            mean_s=float(totals.mean()), std_s=float(totals.std()),
-            p05_s=float(np.percentile(totals, 5)), p50_s=float(np.percentile(totals, 50)),
-            p95_s=float(np.percentile(totals, 95)), n_samples=n,
-            cvar_90_s=float(np.sort(totals)[-max(1, int(np.ceil(0.1 * n))):].mean()),
-        )
-        return SimResult(
-            valid=True, plan=plan, num_stops=plan.num_stops, pit_laps=plan.pit_laps(snapshot),
-            remaining=summary, elapsed_s=snapshot.elapsed_s,
-            stint_seconds=np.mean([r["stints"] for r in runs], axis=0).tolist(),
-            pit_loss_total_s=float(np.mean([r["pit"] for r in runs])),
-            lap_times_s=runs[0]["laps"].tolist() if return_laps else None,
-        )
+        laps = np.arange(snapshot.laps_completed + 1, snapshot.race.total_laps + 1)
+        n_plans, n_laps = len(parsed), len(laps)
+        out.times = np.full((n_plans, n), np.nan)
+        out.pit_loss = np.full((n_plans, n), np.nan)
+        out.stint_seconds = [None] * n_plans
+        out.lap_times = np.full((n_plans, n_laps), np.nan) if return_laps else None
+        idx = np.flatnonzero(out.valid)
+        if len(idx) == 0:
+            return out
 
-    # --- internals -----------------------------------------------------------
-    def _run(self, snapshot, plan, rng, scenario):
+        # layout: plan-dependent, sample-independent, built once
+        valid = [parsed[i] for i in idx]
+        code_of = {c: k for k, c in enumerate(sorted(self.modelled))}
+        codes = np.empty((len(valid), n_laps), dtype=int)
+        ages = np.empty((len(valid), n_laps))
+        stops = np.zeros((len(valid), n_laps))
+        n_stints = np.array([len(p.stints) for p in valid])
+        bounds = np.full((len(valid), n_stints.max() + 1), n_laps, dtype=int)
+        for r, p in enumerate(valid):
+            pos = 0
+            for j, s in enumerate(p.stints):
+                age0 = snapshot.tyre_age if j == 0 else s.start_age
+                bounds[r, j] = pos
+                codes[r, pos:pos + s.laps] = code_of[s.compound]
+                ages[r, pos:pos + s.laps] = age0 + np.arange(1, s.laps + 1)
+                pos += s.laps
+                if j < len(p.stints) - 1:
+                    stops[r, pos - 1] = 1.0
+        lapnums = np.broadcast_to(laps, codes.shape)
+        groups = [(name, m, ages[m], lapnums[m]) for name, code in code_of.items()
+                  if (m := codes == code).any()]
+        padded = np.arange(bounds.shape[1] - 1) >= n_stints[:, None]
+
         fx = self.config.effects
-        scen = scenario or self.events.draw(snapshot, rng)
-        model = self.degradation.draw(rng)
-        race = snapshot.race
+        pit_loss_s = snapshot.race.pit_loss_s
+        seg = np.empty((len(valid), bounds.shape[1] - 1, n))
+        for k in range(n):
+            rng = np.random.default_rng([seed, k])
+            scen = scenario or self.events.draw(snapshot, rng)
+            model = self.degradation.draw(rng)
+            green = np.empty(codes.shape)
+            for name, m, a, ln in groups:
+                green[m] = model.lap_times(name, a, ln)
+            sc = np.isin(laps, scen.sc_laps)
+            vsc = np.isin(laps, scen.vsc_laps)
+            lap_s = np.where(sc, fx.sc_lap_factor * self.ref_lap_s, np.where(vsc, fx.vsc_lap_factor * green, green))
+            scale = np.where(sc, fx.sc_pit_loss_factor, np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
+            pit_s = pit_loss_s * (stops * scale).sum(axis=1)
+            out.times[idx, k] = lap_s.sum(axis=1) + pit_s
+            out.pit_loss[idx, k] = pit_s
+            cs = np.concatenate([np.zeros((len(valid), 1)), lap_s.cumsum(axis=1)], axis=1)
+            sums = np.take_along_axis(cs, bounds[:, 1:], 1) - np.take_along_axis(cs, bounds[:, :-1], 1)
+            seg[:, :, k] = np.where(padded, 0.0, sums)
+            if k == 0 and return_laps:
+                out.lap_times[idx] = lap_s
 
-        laps_all = np.arange(snapshot.laps_completed + 1, race.total_laps + 1)
-        ages, comps, ends = [], [], []
-        pos = 0
-        for i, s in enumerate(plan.stints):
-            age0 = snapshot.tyre_age if i == 0 else s.start_age
-            ages.append(age0 + np.arange(1, s.laps + 1))
-            comps.append(s.compound)
-            pos += s.laps
-            ends.append(pos)
-
-        green = np.concatenate([
-            model.lap_times(c, a, laps_all[e - len(a):e]) for c, a, e in zip(comps, ages, ends)])
-        sc = np.isin(laps_all, scen.sc_laps)
-        vsc = np.isin(laps_all, scen.vsc_laps)
-        laps = np.where(sc, fx.sc_lap_factor * self.ref_lap_s, np.where(vsc, fx.vsc_lap_factor * green, green))
-
-        stop_idx = np.array(ends[:-1], dtype=int) - 1  # in-lap index of each stop
-        pit_scale = np.where(sc[stop_idx], fx.sc_pit_loss_factor,
-                             np.where(vsc[stop_idx], fx.vsc_pit_loss_factor, 1.0))
-        pit = float(race.pit_loss_s * pit_scale.sum())
-
-        bounds = [0] + ends
-        stints = [float(laps[a:b].sum()) for a, b in zip(bounds[:-1], bounds[1:])]
-        return {"laps": laps, "stints": stints, "pit": pit, "total": float(laps.sum()) + pit}
+        for r, i in enumerate(idx):
+            out.stint_seconds[i] = seg[r, :n_stints[r]]
+        return out
