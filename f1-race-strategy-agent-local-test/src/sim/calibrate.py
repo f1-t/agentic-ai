@@ -9,7 +9,8 @@ reports/calibration/<race_id>_pairs.csv and <race_id>_positions.csv.
     python -m src.sim.calibrate --pace practice      # positions with a pace term (pace.py)
     python -m src.sim.calibrate --pace-table         # the gate under every pace term, both orders
 
---pace-table also writes <race_id>_pace_gate.csv and <race_id>_pace_offsets.csv.
+--pace-table also writes <race_id>_pace_gate.csv and <race_id>_pace_offsets.csv, every row
+with config_hash and sim_code_version as below.
 
 Mid-race replay, per race and then over every race replayed so far:
 
@@ -226,14 +227,15 @@ def main(argv=None):
     pairs.to_csv(os.path.join(args.report_dir, f"{race.race_id}_pairs.csv"))
     pos.to_csv(os.path.join(args.report_dir, f"{race.race_id}_positions.csv"))
     if args.pace_table:
+        stamp = {"config_hash": calibration.config_hash(cfg), "sim_code_version": calibration.SIM_CODE_VERSION}
         gate = pace.gate_table(sim, frame, race, results, paces)
         print("\nposition gate by pace term:\n", gate.to_string(index=False))
-        gate.to_csv(os.path.join(args.report_dir, f"{race.race_id}_pace_gate.csv"), index=False)
+        _stamp(gate, stamp).to_csv(os.path.join(args.report_dir, f"{race.race_id}_pace_gate.csv"), index=False)
         if practice_table is not None:
             table, corr = pace.offsets_table(practice_table, paces["insample"])
             print("\npace offsets (s/lap):\n", table.round(3).to_string())
             print("\npractice vs in-sample:", json.dumps(corr))
-            table.to_csv(os.path.join(args.report_dir, f"{race.race_id}_pace_offsets.csv"))
+            _stamp(table, stamp).to_csv(os.path.join(args.report_dir, f"{race.race_id}_pace_offsets.csv"))
 
 
 if __name__ == "__main__":
