@@ -43,7 +43,7 @@ _session = None  # lazily loaded, then reused
 def _load_session():
     global _session
     if _session is None:
-        fastf1.Cache.enable_cache(_CACHE_DIR)
+        fastf1.Cache.configure(cache_dir=_CACHE_DIR)
         fastf1.Cache.offline_mode(True)  # no network: cache only
         s = fastf1.get_session(SEASON, GP_NAME, SESSION)
         s.load(telemetry=False, weather=False, messages=False)

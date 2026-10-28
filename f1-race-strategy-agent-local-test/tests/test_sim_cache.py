@@ -6,7 +6,7 @@ import pytest
 
 from src.contracts import RaceParams
 from src.sim import Simulator, calibration
-from src.sim.data import CACHE_DIR, lap_frame, load_session
+from src.sim.data import CACHE_DIR, WEATHER_COLUMNS, lap_frame, load_session, session_weather
 
 pytestmark = pytest.mark.skipif(not os.path.isdir(os.path.join(CACHE_DIR, "2021")), reason="no cache")
 
@@ -43,3 +43,19 @@ def test_replay_of_actual_strategy(session, frame):
     assert table.loc["HAM", "stops"] == 2
     assert table.loc["HAM", "real_s"] == pytest.approx(5587.8, abs=0.1)
     assert {"lap1", "sc", "in_lap", "out_lap", "clean"} <= set(by_kind.index)
+
+
+def test_weather_is_empty_by_default_and_loads_offline(session):
+    assert list(session_weather(session).columns) == WEATHER_COLUMNS
+    assert session_weather(session).empty
+    assert "team" in lap_frame(session.laps).columns
+    try:
+        full = load_session(2021, "Spain", weather=True, messages=True)
+    except Exception as e:  # cache built without weather: offline mode cannot fetch it
+        pytest.skip(f"cache lacks weather/messages: {type(e).__name__}")
+    w = session_weather(full)
+    if w.empty:
+        pytest.skip("cache lacks weather")
+    assert list(w.columns) == WEATHER_COLUMNS
+    assert w["rainfall"].dtype == bool
+    assert w["time_s"].is_monotonic_increasing
