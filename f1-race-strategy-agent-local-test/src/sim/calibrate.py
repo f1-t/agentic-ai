@@ -43,7 +43,8 @@ def main():
     print(table.round(1).to_string())
     print("\nsummary:", json.dumps(summary, indent=2))
     print("\nresidual (actual - predicted) by lap type:\n", by_kind.to_string())
-    print("observed pit loss (s):", round(by_kind.attrs["observed_pit_loss_s"], 2))
+    print("observed pit loss (s):", summary["observed_pit_loss_s"])
+    print("observed sc factor:", summary["observed_sc_factor"], " vsc factor:", summary["observed_vsc_factor"])
     if args.out:
         table.to_csv(args.out)
 

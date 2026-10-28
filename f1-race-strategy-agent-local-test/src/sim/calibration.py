@@ -75,9 +75,21 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
         actual = g["lap_time_s"].to_numpy().copy()
         actual[0] = g["end_s"].iloc[0] - g["start_s"].iloc[0]  # lap 1 has no LapTime
         laps.append(g[["driver", "lap", "track_status", "pit_in", "clean"]].assign(
-            kind=_lap_kind(g), resid_s=actual - pred))
+            kind=_lap_kind(g), resid_s=actual - pred, actual_s=actual))
     table = pd.DataFrame(rows).set_index("driver")
-    return table, _summary(table), _by_lap_type(pd.concat(laps), len(table))
+    laps = pd.concat(laps)
+    by_kind = _by_lap_type(laps, len(table))
+    summary = _summary(table)
+    summary["observed_sc_factor"] = _observed_factor(laps, "sc", sim.ref_lap_s)
+    summary["observed_vsc_factor"] = _observed_factor(laps, "vsc", sim.ref_lap_s)
+    summary["observed_pit_loss_s"] = round(by_kind.attrs["observed_pit_loss_s"], 2)
+    return table, summary, by_kind
+
+
+def _observed_factor(laps, kind, ref_lap_s):
+    """Median actual lap time over laps of this kind as a multiple of the reference lap, NaN if none."""
+    actual = laps.loc[laps["kind"] == kind, "actual_s"].dropna()
+    return round(float(actual.median() / ref_lap_s), 3) if len(actual) else float("nan")
 
 
 def _by_lap_type(df, n_drivers):
