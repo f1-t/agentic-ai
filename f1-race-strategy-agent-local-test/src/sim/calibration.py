@@ -262,7 +262,21 @@ def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd
 # error measures the physics as a function of horizon and fit window. run() is the
 # k = 0, full window corner.
 MIDRACE_WINDOWS = ("full", "to_snapshot", "pre_race")
-MIN_OFFSET_LAPS = 5      # clean laps up to k needed for a driver pace offset
+MIN_OFFSET_LAPS = 5      # green non-pit laps up to k needed for a driver pace offset
+
+
+def sim_version(config: SimConfig) -> str:
+    """Physics config hash: the first 12 hex digits of sha256 over the SimConfig as JSON with
+    sorted keys, `fit_window` left out because each report row names its window.
+
+    Identical configs give the same value on any machine or commit; a change to any config
+    field (degradation, effects, shrinkage, long_run, ...) changes it. Code changes that keep
+    the config do not, so it identifies the physics settings, not the code version.
+    """
+    import hashlib
+    import json
+    data = config.model_dump(mode="json", exclude={"fit_window"})
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
 N_BOOT = 500             # race-cluster bootstrap draws
 

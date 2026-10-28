@@ -327,16 +327,55 @@ def test_midrace_pit_loss_is_observed_unless_given(frame, arg, used):
     assert got == pytest.approx(used, abs=0.01)
 
 
-def test_aggregate_cli_reads_race_csvs_and_writes_the_summary(frame, tmp_path, capsys):
+def test_sim_version_is_a_stable_config_hash():
+    a, b = SimConfig(), SimConfig()
+    assert calibration.sim_version(a) == calibration.sim_version(b)
+    assert len(calibration.sim_version(a)) == 12
+    assert calibration.sim_version(SimConfig(fit_window="pre_race")) == calibration.sim_version(a)
+    assert calibration.sim_version(cfg()) != calibration.sim_version(a)   # lap1_extra_s differs
+    assert calibration.sim_version(SimConfig(degradation={"name": "linear"})) != calibration.sim_version(a)
+
+
+def race_csvs(frame, tmp_path, versions):
+    """One stamped midrace csv per race, as calibrate midrace writes them."""
     from src.sim import calibrate
     _, three = three_races(frame)
     files = []
-    for race_id, r in three.groupby("race_id"):
+    for (race_id, r), version in zip(three.groupby("race_id"), versions):
         files.append(str(tmp_path / f"{race_id}_midrace.csv"))
-        calibrate._write_csv(r, files[-1], {"pit_loss_s": 23.81, "observed_pit_loss_s": 23.81}, index=False)
-    assert open(files[0]).readline() == "# pit_loss_s: 23.81\n"
+        stamp = {"pit_loss_s": 23.81, "pit_loss_source": "observed", "sim_version": version}
+        calibrate._stamp(r, stamp).to_csv(files[-1], index=False)
+    return three, files
+
+
+def test_aggregate_cli_reads_race_csvs_and_writes_the_summary(frame, tmp_path, capsys):
+    from src.sim import calibrate
+    three, files = race_csvs(frame, tmp_path, ["abc"] * 3)
+    head = pd.read_csv(files[0], nrows=1)
+    assert {"pit_loss_s", "pit_loss_source", "sim_version"} <= set(head.columns)
+    assert open(files[0]).readline().startswith("race_id,")   # a plain csv, no comment lines
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
     got = pd.read_csv(out, index_col=["window", "horizon_bucket"])
     pd.testing.assert_frame_equal(got, calibration.aggregate(three), check_dtype=False)
     assert "mae_offset_s (horizon bucket x window)" in capsys.readouterr().out
+
+
+def test_aggregate_cli_refuses_mixed_sim_versions(frame, tmp_path, capsys):
+    from src.sim import calibrate
+    _, files = race_csvs(frame, tmp_path, ["abc", "abc", "def"])
+    out = tmp_path / "midrace_summary.csv"
+    with pytest.raises(SystemExit) as exc:
+        calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
+    assert exc.value.code == 2
+    assert "2 sim_version values ['abc', 'def']" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_aggregate_cli_allow_mixed(frame, tmp_path):
+    from src.sim import calibrate
+    three, files = race_csvs(frame, tmp_path, ["abc", "abc", "def"])
+    out = tmp_path / "midrace_summary.csv"
+    calibrate.main(["midrace-aggregate", *files, "--out", str(out), "--allow-mixed"])
+    got = pd.read_csv(out, index_col=["window", "horizon_bucket"])
+    pd.testing.assert_frame_equal(got, calibration.aggregate(three), check_dtype=False)
