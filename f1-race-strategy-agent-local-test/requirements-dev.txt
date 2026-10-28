@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest>=7
+pyyaml>=6   # optional, only for yaml SimConfig files
