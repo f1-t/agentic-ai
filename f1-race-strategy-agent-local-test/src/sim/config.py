@@ -1,5 +1,6 @@
 """Simulator configuration. Components are chosen by registry key plus params."""
 import json
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +24,21 @@ class EventEffects(_Cfg):
     lap1_extra_s: float = 9.0         # provisional: standing start extra on lap 1, 2021 Spain median +8.7 to +10 s
 
 
+class LongRun(_Cfg):
+    """When a practice stint is a long run (data.practice_frame). Timed laps are green,
+    non pit laps with a lap time, tyre age and compound, so the out and in laps never count."""
+
+    min_timed_laps: int = 6           # qualifying runs are short
+    # consistent: at least consistent_share of the timed laps within consistent_band_s of the
+    # stint median. A push/cool programme has about half its timed laps off-pace; a long run
+    # with a traffic lap or two has at most one in five; 0.8 encodes "at most one lap in five
+    # off-pace". Frozen on a priori grounds, Spain only; selected across races by
+    # leave-one-race-out later.
+    consistent_share: float = 0.8
+    consistent_band_s: float = 2.0
+    max_pace_gap_s: float = 2.5       # stint median within this of the session's long-run reference
+
+
 class SimConfig(_Cfg):
     degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
@@ -33,6 +49,27 @@ class SimConfig(_Cfg):
     inventory_sources: list[str] = Field(default_factory=lambda: ["observed", "inferred", "assumed"])
     min_samples: int = 5      # clean laps needed before a compound is modelled
     n_samples: int = 1
+    # Which laps the degradation model is fitted on, per snapshot (Simulator.fitted_for):
+    #   full         every race lap (hindsight, the world)
+    #   to_snapshot  race laps up to snapshot.laps_completed, shrunk toward the pre_race fit
+    #   pre_race     practice long runs only
+    fit_window: Literal["full", "to_snapshot", "pre_race"] = "full"
+    exclude_snapshot_driver: bool = False   # leave the snapshot driver's laps out of the fit
+    # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit
+    # it, and shrinks toward it under to_snapshot
+    pre_race_fuel_slope_s_per_lap: float = -0.045
+    # practice-to-race base level, s/lap, added to every practice-derived compound base in the
+    # pre_race prior (Spain: full-fit base 85.22 less practice 84.18, rounded). A config prior
+    # for now (fit_report base_delta_source "prior"); the first factor SPEC H's calibrator
+    # will predict per race. to_snapshot shrinks it with the base_s tau.
+    pre_race_base_delta_s: float = 1.0
+    # to_snapshot prior standard deviations around the pre_race fit (see degradation.py). Fuel
+    # is tight: burn is near a physical constant per circuit, and the wear/fuel split is not
+    # identified while every car is in its first stint.
+    shrinkage: dict[str, float] = Field(default_factory=lambda: {
+        "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008,
+    })
+    long_run: LongRun = Field(default_factory=LongRun)   # practice long-run test, for data.practice_frame
 
     @classmethod
     def from_file(cls, path):
