@@ -206,8 +206,11 @@ def _end_positions(frame, which):
 
 
 def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd.DataFrame | None = None,
-              mode: str = "simulated_order"):
+              mode: str = "simulated_order", pace: pd.Series | None = None):
     """Finishing order check. Returns (table, summary dict).
+
+    `pace` (driver -> offset_s, see pace.py) adds offset_s per lap driven to each replayed
+    time before ranking; drivers it does not list get 0.
 
     Both orders rank by laps driven first. "simulated_order" (default) then ranks replayed
     times among themselves, so a bias common to every driver cancels. "vs_real" ranks each
@@ -219,6 +222,8 @@ def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd
     if mode not in ("simulated_order", "vs_real"):
         raise ValueError(f"unknown positions mode {mode!r}")
     fin = _finishers(sim, frame, race)
+    if pace is not None:
+        fin["pred_s"] += pace.reindex(fin.index).fillna(0.0).astype(float) * fin["laps"]
     laps, real_s, pred_s = fin["laps"].to_numpy(), fin["real_s"].to_numpy(), fin["pred_s"].to_numpy()
     more = laps[None, :] > laps[:, None]
     same = laps[None, :] == laps[:, None]
