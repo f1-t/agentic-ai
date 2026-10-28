@@ -14,6 +14,8 @@ Two error views are reported per driver:
   lap 1, neutralised laps and in and out laps. Safety car and pit loss errors do not
   reach it, so it is the number that judges a lap filter.
 """
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -52,13 +54,16 @@ def _lap_kind(g):
         ["lap1", "sc", "vsc", "in_lap", "out_lap", "clean", "yellow"], default="slow_green")
 
 
+def _finisher_ids(frame, min_laps_frac):
+    """Drivers who completed enough laps to compare, retirements are not comparable."""
+    last = frame.groupby("driver")["lap"].max()
+    return sorted(last.index[last >= min_laps_frac * last.max()])
+
+
 def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9):
     """Returns (per driver table, summary dict, residuals by lap type)."""
-    full = frame.groupby("driver")["lap"].max().max()
     rows, laps = [], []
-    for d in sorted(frame["driver"].unique()):
-        if frame.loc[frame["driver"] == d, "lap"].max() < min_laps_frac * full:
-            continue  # retirements are not comparable
+    for d in _finisher_ids(frame, min_laps_frac):
         g, res = replay_driver(sim, frame, race, d)
         pred = np.array(res.lap_times_s)
         n = len(g)
@@ -107,3 +112,96 @@ def _summary(t):
         "bias_green_s": round(float(t["err_green_s"].mean()), 2),
         "spearman_raw": round(float(t["pred_s"].rank().corr(t["real_s"].rank())), 3),
     }
+
+
+# --- team-mate and finishing position checks ------------------------------------
+TIE_S = 1.0  # team-mate gaps under this are too close to call a sign
+
+
+def _finishers(sim, frame, race, min_laps_frac=0.9):
+    """Per finisher laps driven, real race time and replayed time (pooled model, no pace offset)."""
+    rows = []
+    for d in _finisher_ids(frame, min_laps_frac):
+        g, res = replay_driver(sim, frame, race, d)
+        rows.append({"driver": d, "team": g["team"].iloc[0], "laps": len(g),
+                     "real_s": float(g["end_s"].iloc[-1] - g["start_s"].iloc[0]), "pred_s": res.race_time_s})
+    return pd.DataFrame(rows).set_index("driver")
+
+
+def pairwise(sim: Simulator, frame: pd.DataFrame, race: RaceParams):
+    """Team-mate gap check. Returns (pairs table, summary dict).
+
+    Team-mates share a car, so the pooled model's gap between them is mostly strategy.
+    The gap is the first driver alphabetically minus the second.
+    """
+    fin = _finishers(sim, frame, race)
+    rows, skipped = [], 0
+    for team, t in fin.groupby("team"):
+        if len(t) > 2:
+            warnings.warn(f"{team}: {len(t)} finishers in one team, skipped")
+            continue
+        if len(t) < 2:
+            continue  # a team-mate retired
+        a, b = sorted(t.index)
+        if t.loc[a, "laps"] != t.loc[b, "laps"]:
+            skipped += 1
+            continue
+        real = t.loc[a, "real_s"] - t.loc[b, "real_s"]
+        pred = t.loc[a, "pred_s"] - t.loc[b, "pred_s"]
+        tie = abs(real) < TIE_S
+        rows.append({"team": team, "driver_a": a, "driver_b": b, "laps": int(t.loc[a, "laps"]),
+                     "real_gap_s": real, "pred_gap_s": pred, "tie": tie,
+                     "sign_agree": pd.NA if tie else bool(np.sign(real) == np.sign(pred)),
+                     "abs_err_s": abs(pred - real)})
+    pairs = pd.DataFrame(rows, columns=[
+        "team", "driver_a", "driver_b", "laps", "real_gap_s", "pred_gap_s", "tie", "sign_agree", "abs_err_s"])
+    pairs["sign_agree"] = pairs["sign_agree"].astype("boolean")
+    gap_err = pairs["pred_gap_s"] - pairs["real_gap_s"]
+    summary = {
+        "n_pairs": int(len(pairs)),
+        "n_skipped_unequal_laps": skipped,
+        "sign_agree_rate": round(float(pairs["sign_agree"].dropna().astype(float).mean()), 3),
+        "mae_gap_s": round(float(pairs["abs_err_s"].mean()), 2),
+        "bias_gap_s": round(float(gap_err.mean()), 2),
+    }
+    return pairs.set_index("team"), summary
+
+
+def _end_positions(frame, which):
+    """Lap-position of each driver on their first or last lap."""
+    idx = frame.groupby("driver")["lap"].agg("idxmin" if which == "first" else "idxmax")
+    return frame.loc[idx].set_index("driver")["position"]
+
+
+def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd.DataFrame | None = None):
+    """Finishing order check. Returns (table, summary dict).
+
+    pred_pos ranks each driver by laps driven, then by their replayed time against the
+    others' real times. results is `data.session_results`, used when it covers every
+    finisher, otherwise grid and finish come from the lap-1 and last-lap Position.
+    """
+    fin = _finishers(sim, frame, race)
+    laps, real_s, pred_s = fin["laps"].to_numpy(), fin["real_s"].to_numpy(), fin["pred_s"].to_numpy()
+    ahead = (laps[None, :] > laps[:, None]) | ((laps[None, :] == laps[:, None]) & (real_s[None, :] < pred_s[:, None]))
+    np.fill_diagonal(ahead, False)  # only other finishers count
+    fin["pred_pos"] = 1 + ahead.sum(axis=1)
+
+    have = (results is not None and fin.index.isin(results.index).all()
+            and results.loc[fin.index, ["grid", "classified"]].notna().all().all())
+    if have:
+        fin["start_pos"], fin["real_pos"] = results.loc[fin.index, "grid"], results.loc[fin.index, "classified"]
+    else:
+        fin["start_pos"], fin["real_pos"] = _end_positions(frame, "first"), _end_positions(frame, "last")
+    fin["abs_err"] = (fin["pred_pos"] - fin["real_pos"]).abs()
+    base = (fin["start_pos"] - fin["real_pos"]).abs().dropna()
+    err = fin["abs_err"].dropna()
+    summary = {
+        "n_drivers": int(len(fin)),
+        "within_2_rate": round(float((err <= 2).mean()), 3),
+        "mae_pos": round(float(err.mean()), 2),
+        "exact_rate": round(float((err == 0).mean()), 3),
+        "baseline_within_2_rate": round(float((base <= 2).mean()), 3),
+        "baseline_mae": round(float(base.mean()), 2),
+        "source": "grid_classified" if have else "lap_proxies",
+    }
+    return fin[["team", "laps", "real_s", "pred_s", "start_pos", "real_pos", "pred_pos", "abs_err"]], summary

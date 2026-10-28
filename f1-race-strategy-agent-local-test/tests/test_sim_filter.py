@@ -37,7 +37,7 @@ def synthetic_laps(wear=0.1, bumps=None, seed=0):
                 "PitInTime": pd.Timedelta(seconds=1) if lap in pits else pd.NaT,
                 "PitOutTime": pd.Timedelta(seconds=1) if lap - 1 in pits else pd.NaT,
                 "LapStartTime": pd.Timedelta(seconds=0), "Time": pd.Timedelta(seconds=t),
-                "Team": "T",
+                "Team": "T", "Position": float(list(OFFSETS).index(d) + 1),
             })
     return pd.DataFrame(rows)
 
