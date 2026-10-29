@@ -125,7 +125,7 @@ def _stamp(df: pd.DataFrame, data: RaceData, cfg: SimConfig, profile: ComputePro
 
 
 def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None, laps_k=None) -> pd.DataFrame:
-    """SPEC G rows for one race, one copy per cadence N: the snapshots at multiples of N
+    """SPEC G rows for one race, one copy per N in profile.g.cadences, tagged k_subsample: the snapshots at multiples of N
     (None: lap 0 only) out of the profile's lap set. Rows do not depend on N, so the
     midrace replay runs once and the copies are tagged."""
     laps_k = laps_k_for(data.frame, data.race.total_laps, profile) if laps_k is None else laps_k
@@ -138,7 +138,7 @@ def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None
     parts = []
     for n in profile.g.cadences:
         keep = rows["k"] == 0 if n is None else rows["k"] % n == 0
-        parts.append(rows[keep].assign(cadence=cadence_label(n)))
+        parts.append(rows[keep].assign(k_subsample=cadence_label(n)))
     return _stamp(pd.concat(parts, ignore_index=True), data, cfg, profile)
 
 
@@ -180,8 +180,8 @@ class GRace(Job):
     def summarize(self, tables, profile, out, args=None):
         rows = pd.concat(tables.values(), ignore_index=True)
         summaries = []
-        for cadence, part in rows.groupby("cadence", sort=False):
-            summaries.append(calibration.aggregate(part, n_boot=profile.g.n_boot).assign(cadence=cadence))
+        for sub, part in rows.groupby("k_subsample", sort=False):
+            summaries.append(calibration.aggregate(part, n_boot=profile.g.n_boot).assign(k_subsample=sub))
         summary = pd.concat(summaries)
         path = Path(out) / "g" / "summary.csv"
         summary.to_csv(path)
@@ -191,7 +191,7 @@ class GRace(Job):
 
 
 def _g_figure(summary: pd.DataFrame, path: Path):
-    """mae_s by horizon bucket and window for the densest cadence, or None without matplotlib."""
+    """mae_s by horizon bucket and window for the densest k subsample, or None without matplotlib."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -199,7 +199,7 @@ def _g_figure(summary: pd.DataFrame, path: Path):
     except ImportError:
         return None
     s = summary.reset_index()
-    s = s[s["cadence"] == s["cadence"].iloc[0]]
+    s = s[s["k_subsample"] == s["k_subsample"].iloc[0]]
     bucket = next((c for c in s.columns if "bucket" in c or c == "horizon"), None)
     if bucket is None or "window" not in s:
         return None
@@ -213,6 +213,24 @@ def _g_figure(summary: pd.DataFrame, path: Path):
     fig.savefig(path, dpi=120)
     plt.close(fig)
     return path
+
+
+def fold_assignment(unit: str, res, profile: ComputeProfile, calibrator: str) -> dict:
+    """Which races a fold held out and trained on, and the seed behind the fold subsample."""
+    folds = res.folds.iloc[0]
+    return {"fold": unit, "calibrator": calibrator, "protocol": res.protocol,
+            "held_out": folds["held_out"].split(), "train": folds["train"].split(),
+            "seed": profile.h.seed, "loro_folds": profile.h.loro_folds}
+
+
+def _wandb_config(update: dict):
+    """Add to the active wandb run's config (main opens it under --wandb); a no-op without one."""
+    try:
+        import wandb
+    except ImportError:
+        return
+    if getattr(wandb, "run", None) is not None:
+        wandb.run.config.update(update, allow_val_change=True)
 
 
 class HFold(Job):
@@ -248,17 +266,19 @@ class HFold(Job):
             sse = float((t["err"] ** 2).sum())
             targets[f"{window}/{factor}/N={ce}"] = {"rmse": math.sqrt(sse / len(t)), "sse": sse, "n": len(t),
                                                     "n_covered": int(t["covered"].sum())}
+        assignment = fold_assignment(unit, res, profile, args.calibrator)
         path = self.output(out, unit, args).with_suffix(".rmse.json")
-        path.write_text(json.dumps({"fold": unit, "held_out": res.folds["held_out"].iloc[0].split(),
-                                    "targets": targets}, indent=1))
-        return res.rows.assign(cadence=res.rows["calibration_every"])
+        path.write_text(json.dumps({**assignment, "targets": targets}, indent=1))
+        if getattr(args, "wandb", False):
+            _wandb_config({"fold_assignment": assignment})
+        return res.rows
 
     def summarize(self, tables, profile, out, args=None):
         rows = pd.concat(tables.values(), ignore_index=True)
         paths = []
         base = Path(out) / "h" / (args.calibrator if args else "all")
-        summary = pd.concat([calibration.aggregate(part, n_boot=profile.g.n_boot).assign(cadence=cadence)
-                             for cadence, part in rows.groupby("cadence", sort=False)])
+        summary = pd.concat([calibration.aggregate(part.drop(columns=["calibration_every"]), n_boot=profile.g.n_boot)
+                             .assign(calibration_every=n) for n, part in rows.groupby("calibration_every", sort=False)])
         paths.append(base / "summary.csv")
         summary.to_csv(paths[-1])
         acc = {}

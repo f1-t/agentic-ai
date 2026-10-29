@@ -46,7 +46,9 @@ class GCompute(_Cfg):
     sc_adjacent: bool = True                          # plus the lap before and after each SC / VSC period
     windows: list[Literal["full", "to_snapshot", "pre_race"]]
     n_boot: int = Field(gt=0)                         # bootstrap draws in the aggregate
-    cadences: list[int | None]                        # N sweep: snapshots at multiples of N, None = lap 0 only
+    # N sweep. g_race: k_subsample, the snapshots at multiples of N (None = lap 0 only);
+    # h_fold: SimConfig.calibration_every, the cadence (None = pre-race only)
+    cadences: list[int | None]
 
 
 class MlpCompute(_Cfg):

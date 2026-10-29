@@ -110,9 +110,10 @@ def test_laps_k_density_and_cadences(synthetic, fake_load):
     assert jobs.laps_k_for(synthetic.frame, 50, p) == list(range(0, 41, 5))
     assert jobs.laps_k_for(synthetic.frame, 50, compute.load_profile("sol")) == list(range(0, 41, 2))
     rows = jobs.g_rows(synthetic, synthetic.config, small(p), laps_k=[0, 5, 10])
-    by = {c: sorted(g["k"].unique()) for c, g in rows.groupby("cadence")}
+    by = {c: sorted(g["k"].unique()) for c, g in rows.groupby("k_subsample")}
     assert by == {"1": [0, 5, 10], "5": [0, 5, 10], "none": [0]}
     assert {"profile", "config_hash", "sim_code_version", "pit_loss_s"} <= set(rows.columns)
+    assert "cadence" not in rows   # reserved for SimConfig.calibration_every
 
 
 def test_job_twice_gives_one_output_and_skips(tmp_path, fake_load):
@@ -142,7 +143,8 @@ def test_aggregate_over_a_partial_set(tmp_path, fake_load):
     jobs.run_task(job, "syn", p, tmp_path)
     status = jobs.aggregate(job, ["syn", "other"], p, tmp_path)
     assert (status["expected"], status["done"], status["missing"]) == (2, 1, ["other"])
-    assert (tmp_path / "g" / "summary.csv").is_file()
+    summary = pd.read_csv(tmp_path / "g" / "summary.csv")
+    assert "k_subsample" in summary and "cadence" not in summary
     assert json.loads((tmp_path / "g" / "status.json").read_text())["missing"] == ["other"]
     assert jobs.aggregate(job, ["syn", "other"], p, tmp_path)["done"] == 1   # safe to re-run
 
@@ -206,16 +208,37 @@ def test_h_fold_runs_one_loro_fold(tmp_path, fake_load, monkeypatch):
     rows = pd.read_parquet(tmp_path / "h" / "shrinkage" / f"{R0}.parquet")
     assert set(rows["window"]) == {"pre_race", "to_snapshot"} and set(rows["calibrator"]) == {"shrinkage"}
     assert set(rows["race_id"]) == {R0} and set(rows["fold"]) == {R0}
-    assert set(rows["cadence"]) == set(rows["calibration_every"]) == {"1", "5", "none"}
+    assert set(rows["calibration_every"]) == {"1", "5", "none"} and "cadence" not in rows
     rmse = json.loads((tmp_path / "h" / "shrinkage" / f"{R0}.rmse.json").read_text())
-    assert rmse["held_out"] == [R0]
+    assert (rmse["held_out"], rmse["train"], rmse["seed"], rmse["protocol"]) == ([R0], [R1], p.h.seed, "race")
     fuel = rmse["targets"]["to_snapshot/fuel_s_per_lap/N=1"]
     assert fuel["n"] > 0 and fuel["rmse"] == pytest.approx(math.sqrt(fuel["sse"] / fuel["n"]))
     status = jobs.aggregate(job, [R0, R1], p, tmp_path, args)
     assert status["missing"] == [R1]
     total = json.loads((tmp_path / "h" / "shrinkage" / "rmse.json").read_text())
+    h_summary = pd.read_csv(tmp_path / "h" / "shrinkage" / "summary.csv")
+    assert set(h_summary["calibration_every"].astype(str)) == {"1", "5", "none"} and "cadence" not in h_summary
     assert total["to_snapshot/fuel_s_per_lap/N=1"]["rmse"] == pytest.approx(fuel["rmse"])
     assert 0.0 <= total["to_snapshot/fuel_s_per_lap/N=1"]["coverage_68"] <= 1.0
+
+
+def test_h_fold_logs_the_fold_assignment_to_wandb(tmp_path, fake_load, monkeypatch):
+    logged = []
+
+    class Config:
+        def update(self, d, allow_val_change=False):
+            logged.append(d)
+
+    monkeypatch.setitem(sys.modules, "wandb", type(sys)("wandb"))
+    sys.modules["wandb"].run = type("Run", (), {"config": Config()})()
+    args = h_args(tmp_path, "none", R0, R1)
+    args.wandb = True
+    jobs.run_task(jobs.JOBS["h_fold"], "season:2021", small(compute.load_profile("local")), tmp_path, args)
+    a = logged[0]["fold_assignment"]
+    assert (a["fold"], a["protocol"], a["held_out"], a["train"], a["calibrator"]) == (
+        "season:2021", "season", [R0, R1], [], "none")
+    on_disk = json.loads((tmp_path / "h" / "none" / "season_2021.rmse.json").read_text())
+    assert {k: on_disk[k] for k in a} == a
 
 
 def test_h_fold_with_a_learned_stub_says_it_needs_data(tmp_path, fake_load):
@@ -284,6 +307,7 @@ def test_local_profile_runs_g_on_spain_in_under_a_minute(tmp_path):
     print(f"local profile, G on Spain: {elapsed:.1f} s")
     assert elapsed < 60
     rows = pd.read_parquet(tmp_path / "g" / "2021_04_spain.parquet")
-    assert set(rows["window"]) == set(p.g.windows) and set(rows["cadence"]) == {"1", "5", "none"}
+    assert set(rows["window"]) == set(p.g.windows) and set(rows["k_subsample"]) == {"1", "5", "none"}
+    assert "cadence" not in rows
     assert set(rows["race_id"]) == {"2021_04_spain"}
     assert jobs.run_task(jobs.JOBS["g_race"], "2021_04_spain", p, tmp_path) == "skipped"
