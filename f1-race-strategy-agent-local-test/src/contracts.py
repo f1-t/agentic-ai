@@ -330,3 +330,76 @@ class ModelReport(_Contract):
     @property
     def modelled(self) -> list[str]:
         return sorted(c for c, r in self.compounds.items() if r.modelled)
+
+
+# --- Calibration ---------------------------------------------------------------
+# Factor names a calibrator may output. Per compound factors are written name[COMPOUND],
+# e.g. base_delta_s[SOFT]. A factor the output leaves out takes the config or race
+# registry value.
+COMPOUND_FACTORS = ("base_delta_s", "wear_s_per_lap", "hinge_s_per_lap")
+RACE_FACTORS = ("fuel_s_per_lap", "pit_loss_s", "sc_lap_factor", "vsc_lap_factor", "sc_pit_loss_factor",
+                "lap1_extra_s", "sc_rate_per_lap")
+
+
+def factor_name(name: str, compound: str | None = None) -> str:
+    return name if compound is None else f"{name}[{_norm_compound(compound)}]"
+
+
+def split_factor(key: str) -> tuple[str, str | None]:
+    """'base_delta_s[SOFT]' -> ('base_delta_s', 'SOFT'); 'pit_loss_s' -> ('pit_loss_s', None)."""
+    if key.endswith("]") and "[" in key:
+        name, _, comp = key[:-1].partition("[")
+        return name, comp
+    return key, None
+
+
+class CorrectionTable(_Contract):
+    """Additive green lap time correction by (compound, tyre age 0..max_age, race lap 1..total).
+
+    mean and sd are nested lists of shape (len(compounds), max_age + 1, total_laps). The
+    simulator adds mean + sd * z, with one standard normal z per sample shared by every plan.
+    """
+
+    compounds: list[Compound]
+    mean: list[list[list[float]]]
+    sd: list[list[list[float]]]
+
+    @model_validator(mode="after")
+    def _check(self):
+        def shape(a):
+            return (len(a), len(a[0]) if a else 0, len(a[0][0]) if a and a[0] else 0)
+        s = shape(self.mean)
+        if s[0] != len(self.compounds) or 0 in s:
+            raise ValueError(f"mean shape {s} does not match {len(self.compounds)} compounds")
+        if shape(self.sd) != s or any(len(r) != s[1] or any(len(c) != s[2] for c in r)
+                                      for r in self.mean + self.sd):
+            raise ValueError("mean and sd must be full arrays of one shape")
+        if any(v < 0 for r in self.sd for c in r for v in c):
+            raise ValueError("sd must be non-negative")
+        return self
+
+
+class CalibrationOutput(_Contract):
+    """What a calibrator says at one calibration point (see src/sim/calibrators.py).
+
+    factors maps a factor name (COMPOUND_FACTORS per compound, RACE_FACTORS) to (mean, sd).
+    An sd of 0 holds the factor at its mean. valid_until_lap is the last lap this output
+    is reused for under the calibration cadence.
+    """
+
+    factors: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    correction: CorrectionTable | None = None
+    valid_until_lap: int = Field(ge=0)
+    source: str
+    diagnostics: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check(self):
+        for key, (_, sd) in self.factors.items():
+            name, comp = split_factor(key)
+            known = name in COMPOUND_FACTORS if comp is not None else name in RACE_FACTORS
+            if not known:
+                raise ValueError(f"unknown factor {key!r}")
+            if not sd >= 0:
+                raise ValueError(f"factor {key!r}: sd must be >= 0, got {sd}")
+        return self

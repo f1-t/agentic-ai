@@ -1,6 +1,6 @@
 """Resumable batch jobs. One task is one unit of work, written to files, skipped when already done.
 
-    python -m src.sim.jobs manifest g_race --races 2021_Spain 2022_Bahrain --out manifest.json
+    python -m src.sim.jobs manifest g_race --races 2021_04_spain 2022_01_bahrain --out manifest.json
     python -m src.sim.jobs g_race --profile sol --manifest manifest.json --task-id 0 --out $SCRATCH/sim
     python -m src.sim.jobs run-all g_race --manifest manifest.json --out out   # in-process, n_jobs workers
     python -m src.sim.jobs aggregate g_race --manifest manifest.json --out out
@@ -11,8 +11,11 @@ skipped only when the output and its meta exist and both values match, so a code
 change reruns it and an interrupted run leaves nothing that looks finished.
 
 Jobs: g_race (SPEC G rows for one race), h_fold (one held-out race or season for a
-calibrator), eval_chunk (one chunk of scenario items through a pluggable runner),
-build_weekend (not here: owned by the data pipeline).
+calibrator, run by calibrators.loro), eval_chunk (one chunk of scenario items through a
+pluggable runner), build_weekend (not here: owned by the data pipeline).
+
+Race ids are <season>_<round:02d>_<gp_slug> (race_ids.py); the aliases there (2021_Spain)
+are accepted anywhere and mapped to the canonical id, which names the output files.
 """
 import argparse
 import contextlib
@@ -24,23 +27,24 @@ import random
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Protocol
+from typing import Callable
 
 import pandas as pd
 
 from ..contracts import RaceParams
-from . import calibrate, calibration
+from . import calibrate, calibration, calibrators
 from .compute import ComputeProfile, load_profile, wandb_run
 from .config import SimConfig
 from .data import session_results
 from .engine import Simulator
+from .race_ids import canonical_race_id, parse_race_id, race_season
 
 log = logging.getLogger(__name__)
 
-DEFAULT_RACES = ["2021_Spain"]
+DEFAULT_RACES = ["2021_04_spain"]
 SKIPPED, DONE = "skipped", "done"
 
 
@@ -56,59 +60,28 @@ class RaceData:
     config: SimConfig = field(default_factory=SimConfig)
 
 
-def split_race_id(race_id: str) -> tuple[int, str]:
-    season, _, gp = race_id.partition("_")
-    return int(season), gp
+def split_race_id(race_id: str) -> tuple[int, int | str]:
+    """(season, round) of a canonical id or alias; (season, rest) for any other <season>_ id."""
+    try:
+        season, rnd, _ = parse_race_id(race_id)
+        return season, rnd
+    except ValueError:
+        return race_season(race_id), race_id.partition("_")[2]
 
 
 def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
-    """Frame, race constants (observed pit loss, as `calibrate midrace` does), practice and results."""
-    season, gp = split_race_id(race_id)
-    args = SimpleNamespace(season=season, gp=gp, pit_loss="observed", degradation=SimConfig().degradation.name,
+    """Frame, race constants (observed pit loss, as `calibrate midrace` does), practice and results.
+
+    `race_id` is canonical or an alias; the session is looked up by season and round."""
+    race_id = canonical_race_id(race_id)
+    season, rnd, _ = parse_race_id(race_id)
+    args = SimpleNamespace(season=season, gp=rnd, pit_loss="observed", degradation=SimConfig().degradation.name,
                            config=None, min_stint=profile.sim.min_stint or RaceParams.model_fields["min_stint_laps"].default)
     session, frame, cfg, race = calibrate._race_setup(args)
     pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
-    race = race.model_copy(update={"pit_loss_s": pit_loss})
-    return RaceData(race_id, frame, race, calibrate._practice(season, gp, cfg.long_run),
+    race = race.model_copy(update={"pit_loss_s": pit_loss, "race_id": race_id})
+    return RaceData(race_id, frame, race, calibrate._practice(season, rnd, cfg.long_run),
                     session_results(session), cfg)
-
-
-# --- calibrators (SPEC H plugs in here) ---------------------------------------------
-@dataclass
-class Prediction:
-    """What a calibrator says about one race: SimConfig field updates, and per target the
-    predicted and the actual value (for the per-target rmse)."""
-    config_update: dict = field(default_factory=dict)
-    predicted: dict[str, float] = field(default_factory=dict)
-    actual: dict[str, float] = field(default_factory=dict)
-
-
-class Calibrator(Protocol):
-    def fit(self, train: dict[str, RaceData], profile: ComputeProfile) -> None: ...
-    def predict(self, race: RaceData) -> Prediction: ...
-
-
-CALIBRATORS: dict[str, Callable[[ComputeProfile], Calibrator]] = {}
-
-
-def register_calibrator(name: str):
-    """Decorator: register a factory(profile) -> Calibrator under `name`."""
-    def deco(factory):
-        CALIBRATORS[name] = factory
-        return factory
-    return deco
-
-
-def get_calibrator(name: str, profile: ComputeProfile) -> Calibrator:
-    if name not in CALIBRATORS:
-        try:   # SPEC H's module registers its calibrators on import, once it exists
-            import importlib
-            importlib.import_module("src.sim.calibrators")
-        except ModuleNotFoundError:
-            pass
-    if name not in CALIBRATORS:
-        raise KeyError(f"unknown calibrator {name!r}, registered: {sorted(CALIBRATORS)}")
-    return CALIBRATORS[name](profile)
 
 
 # --- eval runner (the eval harness plugs in here) --------------------------------------
@@ -138,8 +111,12 @@ def laps_k_for(frame: pd.DataFrame, total_laps: int, profile: ComputeProfile) ->
     return sorted(x for x in laps if 0 <= x < total_laps)
 
 
-def cadence_label(n) -> str:
-    return "none" if n is None else str(n)
+cadence_label = calibrators.cadence_label
+
+
+def _race_ids(races) -> list[str]:
+    """Canonical race ids, DEFAULT_RACES when none are given. Ids that are not race ids pass through."""
+    return [canonical_race_id(r) for r in (races or DEFAULT_RACES)]
 
 
 def _stamp(df: pd.DataFrame, data: RaceData, cfg: SimConfig, profile: ComputeProfile) -> pd.DataFrame:
@@ -148,7 +125,7 @@ def _stamp(df: pd.DataFrame, data: RaceData, cfg: SimConfig, profile: ComputePro
 
 
 def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None, laps_k=None) -> pd.DataFrame:
-    """SPEC G rows for one race, one copy per cadence N: the snapshots at multiples of N
+    """SPEC G rows for one race, one copy per N in profile.g.cadences, tagged k_subsample: the snapshots at multiples of N
     (None: lap 0 only) out of the profile's lap set. Rows do not depend on N, so the
     midrace replay runs once and the copies are tagged."""
     laps_k = laps_k_for(data.frame, data.race.total_laps, profile) if laps_k is None else laps_k
@@ -161,7 +138,7 @@ def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None
     parts = []
     for n in profile.g.cadences:
         keep = rows["k"] == 0 if n is None else rows["k"] % n == 0
-        parts.append(rows[keep].assign(cadence=cadence_label(n)))
+        parts.append(rows[keep].assign(k_subsample=cadence_label(n)))
     return _stamp(pd.concat(parts, ignore_index=True), data, cfg, profile)
 
 
@@ -175,7 +152,8 @@ class Job:
         raise NotImplementedError
 
     def stem(self, unit: str, args=None) -> str:
-        return unit.replace(":", "_").replace("/", "_")
+        """File stem of a unit; a race id alias names the canonical id's file."""
+        return canonical_race_id(unit).replace(":", "_").replace("/", "_")
 
     def output(self, out, unit: str, args=None) -> Path:
         return Path(out) / self.subdir / f"{self.stem(unit, args)}{self.suffix}"
@@ -193,7 +171,7 @@ class GRace(Job):
     name, subdir = "g_race", "g"
 
     def units(self, args):
-        return list(args.races or DEFAULT_RACES)
+        return _race_ids(args.races)
 
     def run(self, unit, profile, out, args=None):
         data = load_race(unit, profile)
@@ -202,8 +180,8 @@ class GRace(Job):
     def summarize(self, tables, profile, out, args=None):
         rows = pd.concat(tables.values(), ignore_index=True)
         summaries = []
-        for cadence, part in rows.groupby("cadence", sort=False):
-            summaries.append(calibration.aggregate(part, n_boot=profile.g.n_boot).assign(cadence=cadence))
+        for sub, part in rows.groupby("k_subsample", sort=False):
+            summaries.append(calibration.aggregate(part, n_boot=profile.g.n_boot).assign(k_subsample=sub))
         summary = pd.concat(summaries)
         path = Path(out) / "g" / "summary.csv"
         summary.to_csv(path)
@@ -213,7 +191,7 @@ class GRace(Job):
 
 
 def _g_figure(summary: pd.DataFrame, path: Path):
-    """mae_s by horizon bucket and window for the densest cadence, or None without matplotlib."""
+    """mae_s by horizon bucket and window for the densest k subsample, or None without matplotlib."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -221,7 +199,7 @@ def _g_figure(summary: pd.DataFrame, path: Path):
     except ImportError:
         return None
     s = summary.reset_index()
-    s = s[s["cadence"] == s["cadence"].iloc[0]]
+    s = s[s["k_subsample"] == s["k_subsample"].iloc[0]]
     bucket = next((c for c in s.columns if "bucket" in c or c == "horizon"), None)
     if bucket is None or "window" not in s:
         return None
@@ -237,6 +215,24 @@ def _g_figure(summary: pd.DataFrame, path: Path):
     return path
 
 
+def fold_assignment(unit: str, res, profile: ComputeProfile, calibrator: str) -> dict:
+    """Which races a fold held out and trained on, and the seed behind the fold subsample."""
+    folds = res.folds.iloc[0]
+    return {"fold": unit, "calibrator": calibrator, "protocol": res.protocol,
+            "held_out": folds["held_out"].split(), "train": folds["train"].split(),
+            "seed": profile.h.seed, "loro_folds": profile.h.loro_folds}
+
+
+def _wandb_config(update: dict):
+    """Add to the active wandb run's config (main opens it under --wandb); a no-op without one."""
+    try:
+        import wandb
+    except ImportError:
+        return
+    if getattr(wandb, "run", None) is not None:
+        wandb.run.config.update(update, allow_val_change=True)
+
+
 class HFold(Job):
     name, subdir = "h_fold", "h"
 
@@ -246,7 +242,7 @@ class HFold(Job):
     def units(self, args):
         """Held-out races (a seeded subsample of loro_folds when set) and, when loso is on, season:YYYY folds."""
         profile = load_profile(args.profile)
-        pool = list(args.races or DEFAULT_RACES)
+        pool = _race_ids(args.races)
         folds = pool
         if profile.h.loro_folds is not None and profile.h.loro_folds < len(pool):
             folds = sorted(random.Random(profile.h.seed).sample(pool, profile.h.loro_folds))
@@ -255,40 +251,44 @@ class HFold(Job):
         return folds
 
     def run(self, unit, profile, out, args=None):
-        pool = list(args.pool or args.races or DEFAULT_RACES)
-        held = [r for r in pool if r.startswith(unit.split(":", 1)[1] + "_")] if unit.startswith("season:") else [unit]
-        data = {r: load_race(r, profile) for r in pool}
-        train = {r: d for r, d in data.items() if r not in held}
-        cal = get_calibrator(args.calibrator, profile)
-        cal.fit(train, profile)
-        tables, sse, counts = [], {}, {}
-        for r in held:
-            pred = cal.predict(data[r])
-            cfg = data[r].config.model_copy(update={"n_samples": profile.sim.n_samples, **pred.config_update})
-            rows = g_rows(data[r], cfg, profile, windows=[w for w in ("pre_race", "to_snapshot") if w in profile.g.windows])
-            tables.append(rows.assign(calibrator=args.calibrator, fold=unit))
-            for t, p in pred.predicted.items():
-                if t in pred.actual:
-                    sse[t] = sse.get(t, 0.0) + (p - pred.actual[t]) ** 2
-                    counts[t] = counts.get(t, 0) + 1
-        rmse = {t: {"rmse": math.sqrt(sse[t] / counts[t]), "sse": sse[t], "n": counts[t]} for t in sse}
+        """One fold through calibrators.loro, which owns the protocol: fit on the pool outside
+        the fold, replay the held-out races on G's pre_race and to_snapshot windows at the
+        profile's cadences (SimConfig.calibration_every). Writes <unit>.rmse.json beside the rows."""
+        pool = _race_ids(args.pool or args.races)
+        data = [replace(load_race(r, profile), race_id=r) for r in pool]
+        dataset = calibrators.build_dataset(data, laps_k=lambda d: laps_k_for(d.frame, d.race.total_laps, profile))
+        res = calibrators.loro(dataset, args.calibrator, unit, cadences=profile.g.cadences,
+                               windows=[w for w in ("pre_race", "to_snapshot") if w in profile.g.windows],
+                               n_samples=profile.sim.n_samples)   # --wandb wraps the whole task (main)
+        e = res.factor_errors
+        targets = {}
+        for (ce, window, factor), t in e.groupby(["calibration_every", "window", "factor"]):
+            sse = float((t["err"] ** 2).sum())
+            targets[f"{window}/{factor}/N={ce}"] = {"rmse": math.sqrt(sse / len(t)), "sse": sse, "n": len(t),
+                                                    "n_covered": int(t["covered"].sum())}
+        assignment = fold_assignment(unit, res, profile, args.calibrator)
         path = self.output(out, unit, args).with_suffix(".rmse.json")
-        path.write_text(json.dumps({"fold": unit, "held_out": held, "targets": rmse}, indent=1))
-        return pd.concat(tables, ignore_index=True)
+        path.write_text(json.dumps({**assignment, "targets": targets}, indent=1))
+        if getattr(args, "wandb", False):
+            _wandb_config({"fold_assignment": assignment})
+        return res.rows
 
     def summarize(self, tables, profile, out, args=None):
         rows = pd.concat(tables.values(), ignore_index=True)
         paths = []
         base = Path(out) / "h" / (args.calibrator if args else "all")
-        summary = calibration.aggregate(rows[rows["cadence"] == rows["cadence"].iloc[0]], n_boot=profile.g.n_boot)
+        summary = pd.concat([calibration.aggregate(part.drop(columns=["calibration_every"]), n_boot=profile.g.n_boot)
+                             .assign(calibration_every=n) for n, part in rows.groupby("calibration_every", sort=False)])
         paths.append(base / "summary.csv")
         summary.to_csv(paths[-1])
-        sse, counts = {}, {}
+        acc = {}
         for f in sorted(base.glob("*.rmse.json")):
             for t, v in json.loads(f.read_text())["targets"].items():
-                sse[t], counts[t] = sse.get(t, 0.0) + v["sse"], counts.get(t, 0) + v["n"]
+                a = acc.setdefault(t, {"sse": 0.0, "n": 0, "n_covered": 0})
+                a["sse"], a["n"], a["n_covered"] = a["sse"] + v["sse"], a["n"] + v["n"], a["n_covered"] + v["n_covered"]
         paths.append(base / "rmse.json")
-        paths[-1].write_text(json.dumps({t: {"rmse": math.sqrt(sse[t] / counts[t]), "n": counts[t]} for t in sse}, indent=1))
+        paths[-1].write_text(json.dumps({t: {"rmse": math.sqrt(a["sse"] / a["n"]), "n": a["n"],
+                                             "coverage_68": a["n_covered"] / a["n"]} for t, a in acc.items()}, indent=1))
         return paths
 
 
@@ -406,9 +406,9 @@ def build_parser():
         p.add_argument("--profile", help="compute profile name, else $SIM_PROFILE, else local")
         p.add_argument("--manifest", help="text or json list of units")
         p.add_argument("--out", required=True, help="output directory (scratch on Sol)")
-        p.add_argument("--races", nargs="+", help="race ids such as 2021_Spain (manifest, h_fold pool, aggregate)")
+        p.add_argument("--races", nargs="+", help="race ids such as 2021_04_spain, aliases accepted (manifest, h_fold pool, aggregate)")
         p.add_argument("--pool", nargs="+", help="h_fold: training pool, default --races")
-        p.add_argument("--calibrator", default="default", help="h_fold: registered calibrator name")
+        p.add_argument("--calibrator", default="shrinkage", help="h_fold: a calibrators.CALIBRATORS name")
         p.add_argument("--n-items", type=int, default=0, help="eval_chunk manifest: number of scenario items")
         p.add_argument("--wandb", action="store_true", help="log to wandb as the profile's wandb section says")
         if task:
