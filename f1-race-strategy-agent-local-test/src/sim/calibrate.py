@@ -2,6 +2,7 @@
 
     python -m src.sim.calibrate --season 2021 --gp Spain --pit-loss 22      # a number, or observed (default)
     python -m src.sim.calibrate --degradation linear
+    python -m src.sim.calibrate --free-air       # SimConfig.fit_free_air_only, on every command
 
 Also prints the team-mate and finishing position checks and writes them to
 reports/calibration/<race_id>_pairs.csv and <race_id>_positions.csv.
@@ -32,7 +33,8 @@ Ghost-car traffic (traffic.py), off against on, with the pace term in the engine
     python -m src.sim.calibrate traffic --season 2021 --gp Spain --pace practice
 
 writes reports/calibration/<race_id>_traffic.csv, one csv with a `table` column (by_kind,
-drivers, pairs, gate, rejoin, placement) and a `traffic` column (none, ghost), stamped
+drivers, pairs, gate, rejoin, placement) and a `traffic` column (none, ghost, and ghost_dirty: information only, ghost with
+dirty_air_s at the ghost arm's clean_pack mean residual), stamped
 like the midrace csvs plus `pace`; config_hash is the arm's own.
 
 Calibrators side by side (calibrators.py), per cadence N:
@@ -62,6 +64,7 @@ REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "cal
 PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
 VERSION_COLUMNS = ("config_hash", "sim_code_version")
 PROVENANCE_COLUMNS = ("pit_loss_s", "pit_loss_source", *VERSION_COLUMNS)
+FREE_AIR_HELP = "fit on free-air rows only (SimConfig.fit_free_air_only)"
 PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
                  "within_2_rate_real", "mae_pos_real"]
 
@@ -74,6 +77,7 @@ def _race_args(ap):
     ap.add_argument("--min-stint", type=int, default=10)
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
+    ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the csvs go")
 
 
@@ -82,12 +86,18 @@ def _race_setup(args):
     when that is "observed"; _pit_loss then measures the observed value."""
     session = load_session(args.season, args.gp)
     frame = lap_frame(session.laps)
-    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    cfg = _config(args)
     pit_loss = DEFAULT_PIT_LOSS_S if args.pit_loss == "observed" else float(args.pit_loss)
     race = RaceParams(
         race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=pit_loss,
         min_stint_laps=args.min_stint, compounds=sorted(frame["compound"].dropna().unique()))
     return session, frame, cfg, race
+
+
+def _config(args):
+    """SimConfig from --config, else --degradation; --free-air sets fit_free_air_only."""
+    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    return cfg.model_copy(update={"fit_free_air_only": True}) if getattr(args, "free_air", False) else cfg
 
 
 def _pit_loss(args, frame, cfg, race):
@@ -278,19 +288,29 @@ def traffic_by_driver(on, off, frame, race):
     return pd.DataFrame.from_dict(rows, orient="index")
 
 
-def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEMENT_LAP):
+def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEMENT_LAP, dirty_air=True):
     """The SPEC 0012 tables for traffic off and on, the pace in the engine in both arms.
 
     Returns (one frame with `table` and `traffic` columns plus each table's own columns,
     {arm: summary dict}). Tables: by_kind and drivers (calibration.run), pairs
     (calibration.pairwise), gate (calibration.positions, both orders), rejoin and placement
-    at `placement_lap` (calibration.rejoin, .placement). The traffic arm's drivers rows add
-    traffic_s, passes and conjured_s (traffic_by_driver), its summary their per-driver means.
+    at `placement_lap` (calibration.rejoin, .placement). The traffic arms' drivers rows add
+    traffic_s, passes and conjured_s (traffic_by_driver), their summaries the per-driver means.
+
+    With `dirty_air` a third arm, `ghost_dirty`, information only: the traffic arm with
+    dirty_air_s set to the traffic arm's clean_pack mean residual (by_kind), the dirty air
+    the clamp leaves unexplained. Its traffic column is "ghost_dirty"; the default params
+    are unchanged.
     """
     parts, summaries = [], {}
     sims = {}
-    for arm_cfg in traffic_arms(cfg):
-        arm = arm_cfg.traffic.name
+    off_cfg, on_cfg = traffic_arms(cfg)
+    arms = [("none", off_cfg), ("ghost", on_cfg)] + ([("ghost_dirty", None)] if dirty_air else [])
+    for arm, arm_cfg in arms:
+        if arm_cfg is None:   # the dirty-air ablation, from the traffic arm's clean_pack residual
+            dirty = round(float(summaries["ghost"]["by_kind_clean_pack_mean_s"]), 3)
+            arm_cfg = on_cfg.model_copy(update={"traffic": on_cfg.traffic.model_copy(
+                update={"params": {**on_cfg.traffic.params, "dirty_air_s": dirty if dirty > 0 else 0.0}})})
         sim = sims[arm] = Simulator(frame, arm_cfg).with_pace(pace_series)
         table, summary, by_kind = calibration.run(sim, frame, race)
         if arm != "none":
@@ -304,6 +324,9 @@ def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEME
         gate = pd.DataFrame([{"mode": m, **pos_summary["by_mode"][m]} for m in ("simulated_order", "vs_real")])
         early = rejoin["in_lap"] < placement_lap
         summaries[arm] = {
+            "dirty_air_s": sim.traffic.params.dirty_air_s if arm != "none" else None,
+            "by_kind_clean_pack_mean_s": (float(by_kind.loc["clean_pack", "mean"])
+                                          if "clean_pack" in by_kind.index else float("nan")),
             "run": summary, "pairs": pair_summary, "gate": pos_summary["by_mode"],
             "rejoin": calibration.rejoin_summary(rejoin),
             f"rejoin_before_{placement_lap}": calibration.rejoin_summary(rejoin[early]),
@@ -314,8 +337,9 @@ def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEME
         for name, t in (("by_kind", by_kind.reset_index()), ("drivers", table.reset_index()),
                         ("pairs", pairs.reset_index()), ("gate", gate), ("rejoin", rejoin), ("placement", place)):
             # all-NaN columns (traffic_s with traffic off) are dropped; the concat restores them as NaN
-            parts.append(t.dropna(axis=1, how="all").assign(
-                table=name, traffic=arm, config_hash=calibration.config_hash(arm_cfg)))
+            if not t.empty:
+                parts.append(t.dropna(axis=1, how="all").assign(
+                    table=name, traffic=arm, config_hash=calibration.config_hash(arm_cfg)))
     out = pd.concat(parts, ignore_index=True)
     first = ["table", "traffic"]
     return out[first + [c for c in out.columns if c not in first]], summaries
@@ -379,6 +403,7 @@ def main(argv=None):
     ap.add_argument("--min-stint", type=int, default=10)
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
+    ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
     ap.add_argument("--out", help="write per driver csv here")
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the pairs and positions csvs go")
     ap.add_argument("--pace", choices=pace.PACE_KINDS, default="none", help="pace term in the position check")
@@ -389,7 +414,7 @@ def main(argv=None):
 
     session = load_session(args.season, args.gp)
     frame = lap_frame(session.laps)
-    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    cfg = _config(args)
 
     def make_race(pit_loss_s):
         return RaceParams(

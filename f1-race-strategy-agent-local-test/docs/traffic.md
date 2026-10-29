@@ -31,8 +31,8 @@ The `traffic` command writes `reports/calibration/<race_id>_traffic.csv`: one cs
 stamped with `pace`, `pit_loss_s`, `pit_loss_source`, `config_hash` (the arm's own) and
 `sim_code_version`. The drivers rows of the traffic arm add `traffic_s` (net time
 traffic added over the race), `passes` and `conjured_s` (see below). With the default params
-the `traffic_ghost.yaml` config hash is `d366f35d04bf`. `traffic` is part of every config
-hash, so adding the field moved the default hash too (`e56663f618bd`); under the reports
+the `traffic_ghost.yaml` config hash is `a50205e6c507`. `traffic` is part of every config
+hash, so adding the field moved the default hash too (`eccb59070c14`); under the reports
 README rule that drift alone regenerates nothing.
 
 In code: `Simulator(frame, SimConfig(traffic={"name": "ghost"}))`, with a snapshot whose

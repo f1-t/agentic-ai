@@ -97,6 +97,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from .data import line_crossings
 from .registry import Registry
 
 TRAFFIC = Registry("traffic model")
@@ -156,24 +157,26 @@ class GhostTable:
 def ghost_table(frame, driver, laps) -> GhostTable:
     """Every driver in `frame` except `driver`, over the lap numbers `laps`.
 
-    The one place the end_s(L - 1) gap arithmetic lives: the anchor check in prepare and
-    calibration.rejoin / placement read gaps only through this table. data.lap_frame's gap
-    columns (SPEC 0010b) use the same arithmetic; whichever lands second dedupes onto the
-    other.
+    The session times come from data.line_crossings, the end_s(L - 1) arithmetic shared
+    with data.gap_columns: G_prev[j, L] is ghost j's crossing at the start of lap L, G its
+    crossing at the start of lap L + 1. The anchor check in prepare and calibration.rejoin
+    / placement read gaps only through this table.
     """
     laps = np.asarray(laps, dtype=int)
     ghosts = sorted(d for d in frame["driver"].unique() if d != driver)
-    n_lap = int(max(laps.max(), frame["lap"].max())) + 1 if len(laps) else 1
-    end = np.full((len(ghosts), n_lap), np.nan)
+    n_lap = int(max(laps.max(), frame["lap"].max())) + 2 if len(laps) else 2
+    start = np.full((len(ghosts), n_lap), np.nan)   # start[j, L]: crossing at the start of lap L
     pit_in = np.zeros((len(ghosts), n_lap), dtype=bool)
     pit_out = np.zeros((len(ghosts), n_lap), dtype=bool)
     rows = frame[frame["driver"].isin(ghosts)]
+    cross = line_crossings(rows)
+    jc = np.searchsorted(ghosts, cross["driver"].to_numpy())
+    start[jc, cross["lap"].to_numpy(dtype=int)] = cross["t"].to_numpy()
     j = np.searchsorted(ghosts, rows["driver"].to_numpy())
     lap = rows["lap"].to_numpy(dtype=int)
-    end[j, lap] = rows["end_s"].to_numpy(dtype=float)
     pit_in[j, lap] = rows["pit_in"].to_numpy(dtype=bool)
     pit_out[j, lap] = rows["pit_out"].to_numpy(dtype=bool)
-    G, G_prev = end[:, laps], end[:, laps - 1]   # lap 0 has no row, so NaN
+    G, G_prev = start[:, laps + 1], start[:, laps]   # no lap-0 row, so lap 1's G_prev is NaN
     return GhostTable(ghosts=ghosts, laps=laps, G=G, G_prev=G_prev, g=G - G_prev, in_lap=pit_in[:, laps],
                       out_lap=pit_out[:, laps])
 

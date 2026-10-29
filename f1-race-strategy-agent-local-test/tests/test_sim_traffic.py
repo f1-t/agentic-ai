@@ -107,9 +107,9 @@ def test_default_off_and_no_pace_hash_equal_to_main():
 
 def test_traffic_is_part_of_the_config_hash():
     # no special case for the default: adding the field moved the default hash off main's
-    # 94a5373a6a20 (76aa6a1), as any new config field does
+    # 0778d5ef02f6 (eeea1e3), as any new config field does
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "e56663f618bd" and ghost_on == "d366f35d04bf" and default != "94a5373a6a20"
+    assert default == "eccb59070c14" and ghost_on == "a50205e6c507" and default != "0778d5ef02f6"
 
 
 @pytest.fixture(scope="module")
@@ -161,6 +161,21 @@ def test_ghost_table_arrays():
     assert np.allclose(t.g, 80.5) and t.in_lap[0].tolist() == [lap == 8 for lap in range(6, N + 1)]
     assert t.out_lap[0].tolist() == [lap == 9 for lap in range(6, N + 1)]
     assert np.isnan(ghost_table(df, OUR, np.arange(1, N + 1)).G_prev[0, 0])   # no lap-0 row
+
+
+def test_ghost_table_and_gap_columns_share_the_crossings():
+    # one home for the end_s(L - 1) arithmetic (data.line_crossings): the lap frame's
+    # gap_ahead_s to AAA is our crossing less AAA's G_prev on every lap AAA is ahead
+    from src.sim.data import gap_columns
+    df = gap_columns(frame(ghost("AAA", 80.5, 3.0)))
+    laps = np.arange(2, N + 1)
+    t = ghost_table(df, OUR, laps)
+    ours = df[df["driver"] == OUR].set_index("lap")
+    ahead = ours.loc[laps, "car_ahead"].eq("AAA").to_numpy()   # the recorded XXX passes AAA on lap 7
+    assert ahead.sum() == 10
+    ours_start = ours.loc[laps - 1, "end_s"].to_numpy()
+    assert ours.loc[laps, "gap_ahead_s"].to_numpy()[ahead] == pytest.approx((ours_start - t.G_prev[0])[ahead])
+    assert np.all((ours_start - t.G_prev[0])[~ahead] <= 0)   # level or ahead of it: not the car ahead
 
 
 def test_held_behind_a_slower_car():
@@ -474,12 +489,25 @@ def test_traffic_report_has_every_table_for_both_arms():
     off, on = calibrate.traffic_arms(SimConfig(degradation=LIN))
     assert (off.traffic.name, on.traffic.name) == ("none", "ghost")
     assert calibrate.traffic_arms(SimConfig(traffic={"name": "ghost", "params": NO_DRS}))[1].traffic.params == NO_DRS
-    table, summaries = calibrate.traffic_report(df, RACE, SimConfig(degradation=LIN), {OUR: 0.0}, None)
+    table, summaries = calibrate.traffic_report(df, RACE, SimConfig(degradation=LIN), {OUR: 0.0}, None,
+                                                dirty_air=False)
     got = table.groupby(["table", "traffic"]).size()
     assert set(got.index) == {(t, a) for t in calibrate.TRAFFIC_TABLES for a in ("none", "ghost")}
     assert set(summaries) == {"none", "ghost"}
     assert table.groupby("traffic")["config_hash"].nunique().tolist() == [1, 1]
     assert summaries["ghost"]["rejoin"]["n_stops"] == 1
+
+
+def test_traffic_report_dirty_air_ablation_uses_the_clean_pack_residual():
+    from src.sim import calibrate
+    from src.sim.data import gap_columns
+    df = gap_columns(rejoin_frame().assign(team="T"))   # AAA runs close: some clean laps in the pack
+    table, summaries = calibrate.traffic_report(df, RACE, SimConfig(degradation=LIN), {OUR: 0.0}, None)
+    assert set(summaries) == {"none", "ghost", "ghost_dirty"}
+    pack = summaries["ghost"]["by_kind_clean_pack_mean_s"]
+    assert summaries["ghost_dirty"]["dirty_air_s"] == (round(pack, 3) if pack > 0 else 0.0)
+    assert summaries["ghost"]["dirty_air_s"] == 0.0
+    assert table.groupby("traffic")["config_hash"].nunique().to_dict() == {"ghost": 1, "ghost_dirty": 1, "none": 1}
 
 
 # --- information boundary --------------------------------------------------------------
