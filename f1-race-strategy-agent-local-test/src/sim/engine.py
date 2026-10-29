@@ -1,0 +1,618 @@
+"""Strategy simulator: a snapshot and plans in, lap time summaries out."""
+import copy
+from dataclasses import dataclass, field
+from typing import Literal
+
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from ..contracts import (Compound, CompareResult, ModelReport, Plan, PlanStint, SimResult, Snapshot,
+                         StintRecord, TimeSummary)
+from . import calibrators as _cal
+from . import model_report as _report
+from .config import SimConfig, class_names, compound_class
+from .degradation import DEGRADATION
+from .events import EVENTS, Scenario
+from .hazard import HAZARD
+from .rules import RuleContext, apply_inventory, check
+from .track import TRACK
+from .traffic import TRAFFIC
+
+
+def summarise(totals) -> TimeSummary:
+    totals = np.asarray(totals, dtype=float)
+    n = len(totals)
+    return TimeSummary(
+        mean_s=float(totals.mean()), std_s=float(totals.std()),
+        p05_s=float(np.percentile(totals, 5)), p50_s=float(np.percentile(totals, 50)),
+        p95_s=float(np.percentile(totals, 95)), n_samples=n,
+        cvar_90_s=float(np.sort(totals)[-max(1, int(np.ceil(0.1 * n))):].mean()),
+    )
+
+
+def _messages(exc: ValidationError) -> list[str]:
+    return [e["msg"] for e in exc.errors()]
+
+
+class _Action(BaseModel):
+    """A decision at the start of lap laps_completed + 1: stay out, or pit at its end."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["stay", "pit"]
+    compound: Compound | None = None
+    set_id: str | None = None
+    start_age: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.action == "pit" and self.compound is None:
+            raise ValueError("pit action needs a compound")
+        return self
+
+
+def _advance(snapshot: Snapshot, **update) -> Snapshot:
+    """The snapshot one lap on. Nested models are passed through, not re-dumped."""
+    data = {name: getattr(snapshot, name) for name in Snapshot.model_fields}
+    data.update(laps_completed=snapshot.laps_completed + 1, elapsed_s=None, **update)
+    return Snapshot.model_validate(data)
+
+
+def _matrix(values, mask):
+    return [[float(v) if m else None for v, m in zip(row, ok)] for row, ok in zip(values, mask)]
+
+
+@dataclass
+class BatchResult:
+    """Many plans scored under the same draws. Rows follow the input plan order.
+
+    With a hazard model on (SimConfig.hazard), `times` include the hazard penalties: a
+    DNF sample keeps the remaining laps as if the car had continued and adds
+    dnf_penalty_s once, a big loss sample pays big_loss_s on the event lap. The
+    `lap_times` of sample 0 carry the same penalties. The mean time then depends on
+    dnf_penalty_s, an arbitrary time-metric convention for pricing a retirement; p_dnf
+    and cvar_90_s are the honest views of the risk, and the eval should report them
+    beside the mean. A position metric should rank on `dnf_lap` instead (a DNF behind
+    every finisher, an earlier retirement worse), not on the penalised time.
+    `dnf` and `big_loss` are exclusive (at most one hazard event per sample), so
+    p_dnf + p_big_loss is the probability of any hazard event.
+    """
+
+    plans: list            # Plan, or None when the input did not parse
+    errors: list           # list[str] per plan, empty when valid
+    valid: np.ndarray = field(init=False)
+    times: np.ndarray = None          # (n_plans, n_samples) remaining seconds incl. pit loss, NaN if invalid
+    pit_loss: np.ndarray = None       # (n_plans, n_samples)
+    stint_seconds: list = None        # per plan (n_stints, n_samples), pit loss excluded, None if invalid
+    lap_times: np.ndarray | None = None  # (n_plans, n_laps) sample 0 lap times when requested
+    dnf: np.ndarray = None            # (n_plans, n_samples) bool, a hazard event ended the race
+    big_loss: np.ndarray = None       # (n_plans, n_samples) bool, a hazard event the car survived
+    dnf_lap: np.ndarray = None        # (n_plans, n_samples) race lap of retirement, NaN without a DNF
+    elapsed_s: float | None = None
+    seed: int = 0
+    support_warnings: list = None     # list[str] per plan, empty when invalid
+    # traffic (traffic.py): time added by the ghosts and overtakes charged, both included in
+    # times and the stint sums; zeros when traffic is off or could not be placed
+    traffic_s: np.ndarray = None      # (n_plans, n_samples) float
+    passes: np.ndarray = None         # (n_plans, n_samples) int
+    traffic_on: bool = False          # a traffic state was placed for this snapshot
+
+    def __post_init__(self):
+        self.valid = np.array([p is not None and not e for p, e in zip(self.plans, self.errors)], dtype=bool)
+
+    @property
+    def race_times(self):
+        return self.times + (self.elapsed_s or 0.0)
+
+    def result(self, i, snapshot: Snapshot) -> SimResult:
+        plan = self.plans[i]
+        if not self.valid[i]:
+            return SimResult(valid=False, errors=self.errors[i], plan=plan)
+        return SimResult(
+            valid=True, plan=plan, num_stops=plan.num_stops, pit_laps=plan.pit_laps(snapshot),
+            remaining=summarise(self.times[i]), elapsed_s=snapshot.elapsed_s,
+            stint_seconds=self.stint_seconds[i].mean(axis=1).tolist(),
+            pit_loss_total_s=float(self.pit_loss[i].mean()),
+            lap_times_s=self.lap_times[i].tolist() if self.lap_times is not None else None,
+            p_dnf=float(self.dnf[i].mean()), p_big_loss=float(self.big_loss[i].mean()),
+            support_warnings=self.support_warnings[i] if self.support_warnings else [],
+            traffic_s=float(self.traffic_s[i].mean()) if self.traffic_on else None,
+            passes_mean=float(self.passes[i].mean()) if self.traffic_on else None,
+        )
+
+
+FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
+# events draw from their own substream, default_rng([seed, k, EVENT_STREAM]), so the main
+# stream never sees an event draw: with events on, every other draw matches the run without
+EVENT_STREAM = 1
+
+
+class Simulator:
+    """Fitted on one race's lap frame. Cheap to call repeatedly.
+
+    `practice` is a frame of practice long-run laps (data.practice_frame: FP1-FP3
+    concatenated, with a "session" column), needed by the pre_race and early
+    to_snapshot fit windows. The instance itself carries the configured window's fit
+    at lap 0: every race lap for "full", and the practice fit for "pre_race" and
+    "to_snapshot" (every race lap when there is no practice). `fitted_for(snapshot)`
+    gives the instance fitted on the window `config.fit_window` picks for that snapshot.
+
+    The pre_race and to_snapshot windows go through the calibrator (calibrators.py):
+    `calibrator` is an instance (a fitted learned class, say), else the one
+    config.calibrator names. `weather` (weather.lap_weather) feeds the cadence's rain and
+    temperature refreshes and the context, `race_features` the context.
+
+    `pace` (driver -> offset_s, a dict or Series such as pace.practice_pace(...)["offset_s"])
+    adds the snapshot driver's offset to every green lap, lap 1 included, never to an SC or
+    VSC lap (the field's lap, or a delta every car drives to). Drivers it does not list,
+    and None, get 0. `with_pace` gives a copy with another pace.
+    """
+
+    def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
+                 practice: pd.DataFrame | None = None, pace=None, *, weather: pd.DataFrame | None = None,
+                 race_features: dict | None = None, calibrator=None):
+        self.config = config or SimConfig()
+        self.laps, self.practice, self.pace = laps, practice, pace
+        self.weather, self.race_features = weather, race_features
+        spec = self.config.calibrator
+        self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
+        self.calibration = None   # CalibrationState on a pre_race or to_snapshot instance
+        self.window = None   # fitted_for cache key on a windowed instance, None on the root
+        self._fits = {}
+        self._outputs, self._physics = {}, {}   # shared with the windowed copies
+        ev = self.config.events
+        self.events = EVENTS.get(ev.name)(**ev.params)
+        tr = self.config.track
+        self.track = TRACK.get(tr.name)(**tr.params)
+        tf = self.config.traffic
+        self.traffic = TRAFFIC.get(tf.name)(**tf.params)
+        if self.config.fit_window != "full" and self._has_practice:
+            self._fit(self.practice.assign(lap=np.nan))
+        else:
+            self._fit(laps)
+
+    @property
+    def modelled(self):
+        return self.degradation.compounds
+
+    def with_pace(self, pace) -> "Simulator":
+        """A shallow copy with `pace` set. The fits are shared, the windowed copies are not
+        (they carry the pace they were built with)."""
+        out = copy.copy(self)
+        out.pace, out._fits = pace, {}
+        return out
+
+    def _pace_offset(self, driver) -> float:
+        if self.pace is None:
+            return 0.0
+        offset = float(self.pace.get(driver, 0.0))
+        return 0.0 if np.isnan(offset) else offset
+
+    @property
+    def _has_practice(self):
+        return self.practice is not None and not self.practice.empty
+
+    def _model(self, frame, **extra):
+        spec, cfg = self.config.degradation, self.config
+        kw = dict(min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
+                  base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"],
+                  hinge_knots=cfg.hinge_knots, hinge_knot_default=cfg.hinge_knot_default, **spec.params)
+        kw.update(extra)
+        return DEGRADATION.get(spec.name).fit(frame, **kw)
+
+    def _free_air(self, frame):
+        """(rows the fit may use, clean rows dropped). Every row unless config.fit_free_air_only;
+        then the race rows with free_air True and every practice row (lap NaN)."""
+        if not self.config.fit_free_air_only:
+            return frame, 0
+        practice = frame["lap"].isna().to_numpy()
+        if "free_air" not in frame:
+            if not practice.all():
+                raise ValueError("fit_free_air_only needs the free_air column (data.lap_frame)")
+            return frame, 0
+        keep = practice | frame["free_air"].eq(True).to_numpy()
+        return frame[keep], int((frame["clean"].to_numpy(dtype=bool) & ~keep).sum())
+
+    def _fit(self, frame, ref=None, model=None, **extra):
+        """Fit the degradation model on `frame` (or use `model`); the hazard model and ref_lap_s
+        (the median clean lap) on `ref`, which adds practice to the race laps under to_snapshot.
+        Under fit_free_air_only both keep only their free-air rows (_free_air), and the
+        degradation fit_report gains n_pack_rows, the clean rows of `frame` dropped."""
+        frame, n_pack = self._free_air(frame)
+        ref = frame if ref is None else self._free_air(ref)[0]
+        self.degradation = model if model is not None else self._model(frame, **extra)
+        if self.config.fit_free_air_only and getattr(self.degradation, "fit_report", None) is not None:
+            self.degradation = copy.copy(self.degradation)   # `model` may be a shared prior
+            self.degradation.fit_report = {**self.degradation.fit_report, "n_pack_rows": n_pack}
+        hz = self.config.hazard
+        self.hazard = HAZARD.get(hz.name).fit(ref, min_samples=self.config.min_samples, **hz.params)
+        self.ref_lap_s = float(ref.loc[ref["clean"].astype(bool), "lap_time_s"].median())
+
+    def fitted_for(self, snapshot: Snapshot) -> "Simulator":
+        """The instance fitted on this snapshot's fit window. Built once per key, then cached.
+
+        Under to_snapshot the key's lap is the calibration point k0 (calibrators.calibration_point),
+        so with calibration_every N the fit at k0 serves every k up to the next point.
+        """
+        cfg = self.config
+        if self.window is not None or (cfg.fit_window == "full" and not cfg.exclude_snapshot_driver):
+            return self
+        k0 = (_cal.calibration_point(snapshot, cfg.calibration_every, self.weather, cfg.recalibrate_temp_delta_c)
+              if cfg.fit_window == "to_snapshot" else None)
+        key = (cfg.fit_window, k0, snapshot.driver if cfg.exclude_snapshot_driver else None)
+        if key not in self._fits:
+            if len(self._fits) >= FIT_CACHE_SIZE:
+                del self._fits[next(iter(self._fits))]
+            fit = copy.copy(self)
+            fit.window, fit._fits = key, {}
+            fit._fit_window(snapshot, k0 or 0)
+            self._fits[key] = fit
+        return self._fits[key]
+
+    def _keep(self, drop):
+        def keep(f):
+            return f[f["driver"] != drop] if drop is not None and "driver" in f else f
+        return keep
+
+    def physics_prior(self, drop=None):
+        """The practice fit with no base delta (calibrators.prior_model adds the factors), None
+        without practice. Cached per excluded driver."""
+        if drop not in self._physics:
+            practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
+            self._physics[drop] = self._model(practice, base_delta=0.0) if practice is not None else None
+        return self._physics[drop]
+
+    def _calibrate(self, snapshot: Snapshot, k0: int, drop):
+        """The calibrator's output at k0, cached per (calibrator, k0, exclusion, driver)."""
+        cfg, every = self.config, self.config.calibration_every
+        key = (self.calibrator.name, k0, drop)
+        if key in self._outputs:
+            return self._outputs[key]
+        pre = self._calibrate(snapshot, 0, drop) if k0 > 0 else None
+        earlier = [k for (n, k, d) in self._outputs if n == key[0] and d == drop and k < k0]
+        previous = self._outputs[(key[0], max(earlier), drop)] if earlier else pre
+        race = self._keep(drop)(self.laps)
+        race = race[race["lap"] <= k0]
+        practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
+        raw = self.physics_prior(drop)
+        ctx = _cal.CalibrationContext(
+            k=k0, config=cfg, race=snapshot.race, valid_until_lap=_cal.valid_until(k0, every, snapshot.race.total_laps),
+            laps_so_far=race, practice=practice, practice_model=raw,
+            residuals_so_far=_cal.residuals(_cal.prior_model(raw, {}, cfg) if raw is not None else None, race, k0),
+            weather_so_far=self.weather[self.weather.index <= k0] if self.weather is not None else None,
+            sc_history=Scenario(sc_laps=[x for x in snapshot.sc_laps if x <= k0],
+                                vsc_laps=[x for x in snapshot.vsc_laps if x <= k0]),
+            race_features=self.race_features, pre_race_output=pre, previous_output=previous)
+        out = self.calibrator.calibrate(ctx)
+        if len(self._outputs) >= FIT_CACHE_SIZE:
+            del self._outputs[next(iter(self._outputs))]
+        self._outputs[key] = out
+        return out
+
+    def _fit_window(self, snapshot: Snapshot, k0: int = 0):
+        """Refit this instance on the snapshot's window.
+
+        full: every race lap. pre_race: the calibrator's lap-0 prior, held (for "none" and
+        "shrinkage" the practice fit plus the config base delta). to_snapshot: every car's
+        race laps up to the calibration point k0 (they are public), shrunk toward the prior
+        with the calibrator's sds as taus; practice enters only through the prior, and
+        ref_lap_s is the median of both. When the sds are all 0 ("none") the prior is held
+        and the instance is the pre_race one. Exclusion drops the snapshot driver from
+        whichever frames apply.
+        """
+        cfg = self.config
+        drop = snapshot.driver if cfg.exclude_snapshot_driver else None
+        keep = self._keep(drop)
+        race = keep(self.laps)
+        if cfg.fit_window == "full":
+            return self._fit(race)
+        race = race[race["lap"] <= (k0 if cfg.fit_window == "to_snapshot" else 0)]
+        practice = keep(self.practice.assign(lap=np.nan)) if self._has_practice else None
+        if practice is None and race.empty:
+            raise ValueError("fit window needs practice laps")
+        out = self._calibrate(snapshot, k0 if cfg.fit_window == "to_snapshot" else 0, drop)
+        raw = self.physics_prior(drop)
+        prior, taus, fuel, held = _cal.degradation_prior(out, raw, cfg)
+        if cfg.fit_window == "pre_race":
+            self.calibration = _cal.CalibrationState(out, 0, True, raw)
+            return self._fit(practice, model=prior)
+        self.calibration = _cal.CalibrationState(out, k0, held, raw)
+        if held:   # nothing from the race: the pre_race fit, hazard and ref_lap_s included
+            if prior is None:
+                raise ValueError(f"calibrator {out.source!r} holds the prior, which needs practice laps")
+            return self._fit(practice, model=prior)
+        ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
+        self._fit(race, ref=ref, prior=prior, shrinkage=taus, fuel_prior=fuel)
+
+    def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
+        names = self.config.rules if rules is None else rules
+        fit = self.fitted_for(snapshot)
+        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config))
+
+    # --- public API ----------------------------------------------------------
+    def model_report(self, snapshot: Snapshot, ages=None,
+                     calibration_summary=_report.CALIBRATION_SUMMARY) -> ModelReport:
+        """The fit behind this snapshot's window, and what it cannot tell (model_report.build).
+
+        `ages` ({compound: tyre age}) adds requested ages to the extrapolation check, which
+        always covers the current set's next lap. `calibration_summary` is the midrace
+        summary csv (or frame) calibration_error_s is read from; None gives NaN.
+        """
+        fit = self.fitted_for(snapshot)
+        return _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
+                             hazard=fit.hazard, min_samples=self.config.min_samples)
+
+    def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
+                 scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:
+        return self.fitted_for(snapshot).simulate_batch(
+            snapshot, [plan], seed=seed, n_samples=n_samples, scenario=scenario,
+            rules=rules, return_laps=return_laps).result(0, snapshot)
+
+    def simulate_batch(self, snapshot: Snapshot, plans, *, seed=0, n_samples=None,
+                       scenario: Scenario | None = None, rules=None, return_laps=False) -> BatchResult:
+        if (fit := self.fitted_for(snapshot)) is not self:
+            return fit.simulate_batch(snapshot, plans, seed=seed, n_samples=n_samples, scenario=scenario,
+                                      rules=rules, return_laps=return_laps)
+        parsed, errors = [], []
+        for raw in plans:
+            try:
+                plan = Plan.of(raw)
+            except ValidationError as exc:
+                parsed.append(None)
+                errors.append(_messages(exc))
+                continue
+            errs = self.validate(snapshot, plan, rules)
+            parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
+            errors.append(errs)
+        out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
+        out.support_warnings = [_report.support_warnings(self.degradation, snapshot, p) if ok else []
+                                for p, ok in zip(parsed, out.valid)]
+
+        n = n_samples or self.config.n_samples
+        laps = np.arange(snapshot.laps_completed + 1, snapshot.race.total_laps + 1)
+        n_plans, n_laps = len(parsed), len(laps)
+        out.times = np.full((n_plans, n), np.nan)
+        out.pit_loss = np.full((n_plans, n), np.nan)
+        out.stint_seconds = [None] * n_plans
+        out.lap_times = np.full((n_plans, n_laps), np.nan) if return_laps else None
+        out.dnf = np.zeros((n_plans, n), dtype=bool)
+        out.big_loss = np.zeros((n_plans, n), dtype=bool)
+        out.dnf_lap = np.full((n_plans, n), np.nan)
+        out.traffic_s = np.zeros((n_plans, n))
+        out.passes = np.zeros((n_plans, n), dtype=int)
+        idx = np.flatnonzero(out.valid)
+        if len(idx) == 0:
+            return out
+        # traffic: placed once per call, plan- and sample-independent, draws nothing
+        tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver)
+        out.traffic_on = tstate is not None
+        tw = self.traffic.support_warnings(snapshot, tstate)
+        if tw:
+            for i in idx:
+                out.support_warnings[i] = out.support_warnings[i] + tw
+        offset = self._pace_offset(snapshot.driver)
+
+        # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
+        # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
+        valid = [parsed[i] for i in idx]
+        names = sorted(self.modelled)
+        code_of = {c: k for k, c in enumerate(names)}
+        codes = np.empty((len(valid), n_laps), dtype=int)
+        class_of = {c: k for k, c in enumerate(class_names(self.config))}
+        class_codes = np.empty((len(valid), n_laps), dtype=int)   # tyre class, see track.py
+        ages = np.empty((len(valid), n_laps))
+        age0 = np.empty((len(valid), n_laps))                  # the lap's stint starting age
+        stint_start = np.empty((len(valid), n_laps), dtype=int)  # index of the stint's first lap
+        stops = np.zeros((len(valid), n_laps))
+        n_stints = np.array([len(p.stints) for p in valid])
+        bounds = np.full((len(valid), n_stints.max() + 1), n_laps, dtype=int)
+        for r, p in enumerate(valid):
+            pos = 0
+            for j, s in enumerate(p.stints):
+                a0 = snapshot.tyre_age if j == 0 else s.start_age
+                bounds[r, j] = pos
+                codes[r, pos:pos + s.laps] = code_of[s.compound]
+                class_codes[r, pos:pos + s.laps] = class_of[compound_class(self.config, s.compound)]
+                ages[r, pos:pos + s.laps] = a0 + np.arange(1, s.laps + 1)
+                age0[r, pos:pos + s.laps] = a0
+                stint_start[r, pos:pos + s.laps] = pos
+                pos += s.laps
+                if j < len(p.stints) - 1:
+                    stops[r, pos - 1] = 1.0
+        lapnums = np.broadcast_to(laps, codes.shape)
+        groups = [(name, m, ages[m], lapnums[m]) for name, code in code_of.items()
+                  if (m := codes == code).any()]
+        padded = np.arange(bounds.shape[1] - 1) >= n_stints[:, None]
+
+        fx, hx = self.config.effects, self.config.hazard_effects
+        cal = self.calibration.output if self.calibration is not None else None
+        factors = _cal.EventDraws(cal, {
+            "pit_loss_s": snapshot.race.pit_loss_s, "sc_lap_factor": fx.sc_lap_factor,
+            "vsc_lap_factor": fx.vsc_lap_factor, "sc_pit_loss_factor": fx.sc_pit_loss_factor,
+            "lap1_extra_s": fx.lap1_extra_s})
+        corr = (_cal.CorrectionLookup(cal.correction, names, codes, laps)
+                if cal is not None and cal.correction is not None else None)
+        lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
+        seg = np.empty((len(valid), bounds.shape[1] - 1, n))
+        green_p = None   # hazard probabilities at the green-flag ages, sample-independent
+        for k in range(n):
+            # main stream draw order: calibrated factors, correction z, degradation, hazard,
+            # track: do not reorder, seeds depend on it (the hazard uniform is drawn here, ahead
+            # of the track state; its use comes later). The factor and z draws happen only when
+            # the calibrator gives a factor sd or a correction sd above 0. Events draw from
+            # their own substream (EVENT_STREAM), never from rng.
+            rng = np.random.default_rng([seed, k])
+            scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
+            v = factors.sample(rng)
+            z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
+            model = self.degradation.draw(rng)
+            u = rng.uniform(size=(2, n_laps)) if self.hazard.draws else None
+            # u is shared by every plan (common random numbers)
+            track = self.track.draw(snapshot, rng)
+            sc = np.isin(laps, scen.sc_laps)
+            vsc = np.isin(laps, scen.vsc_laps)
+            green = np.empty(codes.shape)
+            if sc.any() or vsc.any():
+                # effective age: neutralised laps age the tyre by sc/vsc_age_increment, and
+                # only within the current stint. Ages may be fractional, so a degradation
+                # model's lap_times must accept float ages (linear ones do).
+                inc = np.where(sc, fx.sc_age_increment, np.where(vsc, fx.vsc_age_increment, 1.0))
+                cum = inc.cumsum()
+                cum_before = np.concatenate([[0.0], cum[:-1]])
+                eff = age0 + cum - cum_before[stint_start]
+                for name, m, _, ln in groups:
+                    green[m] = model.lap_times(name, eff[m], ln)
+            else:
+                eff = ages
+                for name, m, a, ln in groups:
+                    green[m] = model.lap_times(name, a, ln)
+            if corr is not None:
+                green += corr.add(eff, z)
+            green *= self.track.factor(track, class_codes, lapnums)
+            lap_s = np.where(sc, v["sc_lap_factor"] * self.ref_lap_s,
+                             np.where(vsc, v["vsc_lap_factor"] * green, green))
+            if offset:   # green laps only; skipped at 0 so a run without pace is bit for bit unchanged
+                lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
+            if lap1_extra:
+                lap_s[:, 0] += v["lap1_extra_s"]
+            scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
+            if self.hazard.draws:
+                if eff is ages:
+                    if green_p is None:
+                        green_p = self.hazard.per_lap_probability(codes, ages, names)
+                    p = green_p
+                else:
+                    p = self.hazard.per_lap_probability(codes, eff, names)
+                hit = p > u[0]
+                event = hit.any(axis=1)
+                lap = hit.argmax(axis=1)            # the first event lap; one event per sample
+                dnf = event & (u[1, lap] < hx.dnf_share)
+                big = event & ~dnf
+                lap_s[big, lap[big]] += hx.big_loss_s
+                # a DNF keeps the remaining laps and stops as if the car had continued and
+                # adds dnf_penalty_s once, booked on the lap after the event (on the event
+                # lap when it is the last), so a DNF always costs dnf_penalty_s more than
+                # finishing. Dropping the laps after the event would make a DNF faster.
+                rows = np.flatnonzero(dnf)
+                lap_s[rows, np.minimum(lap[rows] + 1, n_laps - 1)] += hx.dnf_penalty_s
+                out.dnf[idx, k], out.big_loss[idx, k] = dnf, big
+                out.dnf_lap[idx, k] = np.where(dnf, laps[lap], np.nan)
+            if tstate is not None:
+                # the full pit loss is booked at the end of the in-lap, so the out-lap starts
+                # from the rejoin position; it stays out of lap_s, as below
+                lap_s, extra = self.traffic.apply(tstate, lap_s, v["pit_loss_s"] * stops * scale, sc | vsc, scen)
+                out.traffic_s[idx, k], out.passes[idx, k] = extra
+            pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
+            out.times[idx, k] = lap_s.sum(axis=1) + pit_s
+            out.pit_loss[idx, k] = pit_s
+            cs = np.concatenate([np.zeros((len(valid), 1)), lap_s.cumsum(axis=1)], axis=1)
+            sums = np.take_along_axis(cs, bounds[:, 1:], 1) - np.take_along_axis(cs, bounds[:, :-1], 1)
+            seg[:, :, k] = np.where(padded, 0.0, sums)
+            if k == 0 and return_laps:
+                out.lap_times[idx] = lap_s
+
+        for r, i in enumerate(idx):
+            out.stint_seconds[i] = seg[r, :n_stints[r]]
+        return out
+
+    def compare(self, snapshot: Snapshot, candidates, *, seed=0, n_samples=None,
+                scenario: Scenario | None = None, rules=None, continuation=None) -> CompareResult:
+        """Score plans and stay/pit actions against each other under one set of draws.
+
+        `continuation(snapshot_after)` returns the plan for the laps after an action.
+        """
+        if (fit := self.fitted_for(snapshot)) is not self:
+            return fit.compare(snapshot, candidates, seed=seed, n_samples=n_samples, scenario=scenario,
+                               rules=rules, continuation=continuation)
+        plans, errors = [], []
+        for raw in candidates:
+            if isinstance(raw, dict) and "action" in raw:
+                plan, errs = self._expand(snapshot, raw, continuation)
+            else:
+                plan, errs = raw, []
+            plans.append(plan)
+            errors.append(errs)
+        todo = [i for i, e in enumerate(errors) if not e]
+        batch = self.simulate_batch(snapshot, [plans[i] for i in todo], seed=seed, n_samples=n_samples,
+                                    scenario=scenario, rules=rules)
+        n_cand, n = len(plans), batch.times.shape[1]
+        times = np.full((n_cand, n), np.nan)
+        times[todo] = batch.times
+        valid = np.zeros(n_cand, dtype=bool)
+        valid[todo] = batch.valid
+        warnings = [[] for _ in plans]
+        for r, i in enumerate(todo):
+            plans[i], errors[i], warnings[i] = batch.plans[r], batch.errors[r], batch.support_warnings[r]
+
+        idx = np.flatnonzero(valid)
+        summaries = [summarise(times[i]) if valid[i] else None for i in range(n_cand)]
+        p_best = [None] * n_cand
+        if len(idx):
+            t = times[idx]
+            win = t == t.min(axis=0)
+            for i, share in zip(idx, (win / win.sum(axis=0)).mean(axis=1)):
+                p_best[i] = float(share)
+        ti, tj = times[:, None, :], times[None, :, :]
+        beats = (ti < tj).mean(axis=2) + 0.5 * (ti == tj).mean(axis=2)
+        gap = ti - tj
+        pair = valid[:, None] & valid[None, :]
+        mean = {i: summaries[i].mean_s for i in idx}
+        cvar = {i: summaries[i].cvar_90_s for i in idx}
+        dominated = [bool(valid[i]) and any(
+            mean[j] <= mean[i] and cvar[j] <= cvar[i] and (mean[j] < mean[i] or cvar[j] < cvar[i])
+            for j in idx if j != i) for i in range(n_cand)]
+        return CompareResult(
+            candidates=plans, valid=valid.tolist(), errors=errors, summaries=summaries, p_best=p_best,
+            p_beats=_matrix(beats, pair & ~np.eye(n_cand, dtype=bool)),
+            gap_mean_s=_matrix(gap.mean(axis=2), pair), gap_std_s=_matrix(gap.std(axis=2), pair),
+            best=int(idx[np.argmin([mean[i] for i in idx])]) if len(idx) else None,
+            dominated=dominated, n_samples=n, seed=seed, support_warnings=warnings,
+        )
+
+    def _expand(self, snapshot: Snapshot, raw, continuation):
+        """Turn a stay or pit action into a full plan from this snapshot. Returns (plan, errors)."""
+        try:
+            act = _Action.model_validate(raw)
+        except ValidationError as exc:
+            return None, _messages(exc)
+        if continuation is None:
+            return None, ["continuation required for action candidates"]
+        chosen = None
+        try:
+            if act.action == "stay":
+                advanced = _advance(snapshot, tyre_age=snapshot.tyre_age + 1)
+            else:
+                pool = [t for t in snapshot.sets_available or [] if t.source in self.config.inventory_sources]
+                age = act.start_age or 0
+                chosen = next((t for t in pool if (t.set_id == act.set_id if act.set_id is not None
+                               else t.compound == act.compound and t.laps_run == age)), None)
+                if chosen is not None and act.set_id is not None and age not in (0, chosen.laps_run):
+                    return None, [f"start_age {act.start_age} conflicts with set '{chosen.set_id}' "
+                                  f"({chosen.laps_run} laps run)"]
+                # laps on the fitted set in this race, from the stint history when it adds up
+                in_race = min(snapshot.tyre_age, snapshot.laps_completed - sum(s.laps for s in snapshot.stints))
+                done = StintRecord(compound=snapshot.compound, laps=in_race + 1,
+                                   start_lap=snapshot.laps_completed - in_race + 1,
+                                   start_age=snapshot.tyre_age - in_race)
+                update = {"compound": act.compound, "tyre_age": chosen.laps_run if chosen else age,
+                          "stints": [*snapshot.stints, done]}
+                if chosen is not None:
+                    update["sets_available"] = [t for t in snapshot.sets_available if t is not chosen]
+                advanced = _advance(snapshot, **update)
+        except ValidationError as exc:
+            return None, _messages(exc)
+        try:
+            cont = Plan.of(continuation(advanced))
+        except ValidationError as exc:
+            return None, _messages(exc)
+        first = cont.stints[0]
+        if first.compound != advanced.compound or (act.action == "stay" and first.start_age != 0):
+            return None, ["continuation must continue the current set"]
+        if act.action == "stay":
+            stints = [PlanStint(compound=snapshot.compound, laps=1 + first.laps), *cont.stints[1:]]
+        else:
+            carried = first.model_copy(update={"set_id": chosen.set_id if chosen else act.set_id,
+                                               "start_age": advanced.tyre_age})
+            stints = [PlanStint(compound=snapshot.compound, laps=1), carried, *cont.stints[1:]]
+        return Plan(stints=stints), []

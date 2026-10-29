@@ -1,0 +1,24 @@
+.................................................................        [100%]
+=============================== warnings summary ===============================
+tests/test_baselines_offline.py::test_legacy_adapter_matches_existing_simulator_for_every_full_race_candidate
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/fastf1/core.py:1452: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    data.loc[mask, 'PitOutTime'] = np.timedelta64("NaT")
+
+tests/test_baselines_offline.py: 20 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/fastf1/core.py:2093: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    pd.Timedelta(0), *pit_in_times, pd.Timedelta(days=1)
+
+tests/test_baselines_offline.py: 10 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/pandas/core/internals/concat.py:510: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    return dtype.type("NaT")
+
+tests/test_baselines_offline.py: 13 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/tools.py:102: SettingWithCopyWarning:
+  A value is trying to be set on a copy of a slice from a DataFrame.
+  Try using .loc[row_indexer,col_indexer] = value instead
+
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+    d["t"] = d["LapTime"].dt.total_seconds()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+65 passed, 44 warnings in 4.62s

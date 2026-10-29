@@ -1,0 +1,62 @@
+........................................................................ [ 36%]
+........................................................................ [ 72%]
+.......................................................                  [100%]
+=============================== warnings summary ===============================
+tests/test_baselines_offline.py: 20 warnings
+tests/test_sim_cache.py: 40 warnings
+tests/test_sim_filter.py: 20 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/fastf1/core.py:2219: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    pd.Timedelta(0), *stint_split_times, pd.Timedelta(days=1)
+
+tests/test_baselines_offline.py: 10 warnings
+tests/test_sim_cache.py: 20 warnings
+tests/test_sim_filter.py: 10 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/pandas/core/internals/concat.py:510: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    return dtype.type("NaT")
+
+tests/test_baselines_offline.py: 11 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/tools.py:108: SettingWithCopyWarning:
+  A value is trying to be set on a copy of a slice from a DataFrame.
+  Try using .loc[row_indexer,col_indexer] = value instead
+
+  See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+    d["t"] = d["LapTime"].dt.total_seconds()
+
+tests/test_sim_filter.py: 3960 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/tests/test_sim_filter.py:38: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    "TyreLife": float(age), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
+
+tests/test_sim_filter.py: 7920 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/tests/test_sim_filter.py:41: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    "LapStartTime": pd.Timedelta(seconds=0), "Time": pd.Timedelta(seconds=t),
+
+tests/test_sim_filter.py: 90 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/tests/test_sim_filter.py:39: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    "PitInTime": pd.Timedelta(seconds=1) if lap in pits else pd.NaT,
+
+tests/test_sim_filter.py: 90 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/tests/test_sim_filter.py:40: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    "PitOutTime": pd.Timedelta(seconds=1) if lap - 1 in pits else pd.NaT,
+
+tests/test_sim_filter.py::test_rare_compound_laps_stay_clean
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/tests/test_sim_filter.py:127: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    laps.loc[rare, "LapTime"] = laps.loc[rare, "LapTime"] + pd.Timedelta(seconds=5)
+
+tests/test_sim_position.py::test_observed_sc_factor_is_mean_with_median_alongside
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:3029: RuntimeWarning: Degrees of freedom <= 0 for slice
+    c = cov(x, y, rowvar, dtype=dtype)
+
+tests/test_sim_position.py::test_observed_sc_factor_is_mean_with_median_alongside
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:2902: RuntimeWarning: divide by zero encountered in divide
+    c *= np.true_divide(1, fact)
+
+tests/test_sim_position.py::test_observed_sc_factor_is_mean_with_median_alongside
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:2902: RuntimeWarning: invalid value encountered in multiply
+    c *= np.true_divide(1, fact)
+
+tests/test_sim_tyre_sets.py: 1209 warnings
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/tests/test_sim_tyre_sets.py:19: DeprecationWarning: The 'generic' unit for NumPy timedelta is deprecated, and will raise an error in the future. This includes implicit conversion of bare integers (e.g. `+ 1`). Please use a specific unit instead.
+    "LapTime": pd.Timedelta(seconds=t[0] if t else 90.0)})
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+199 passed, 13404 warnings in 3.22s

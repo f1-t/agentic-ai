@@ -1,0 +1,296 @@
+...................................................EEFFFFFFFFEEFF        [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_legacy_adapter_matches_existing_simulator_for_every_full_race_candidate _
+tests/test_baselines_offline.py:32: in context
+    return load_legacy_context()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+_____ ERROR at setup of test_new_optimizer_reproduces_frozen_ground_truth ______
+tests/test_baselines_offline.py:32: in context
+    return load_legacy_context()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+_ ERROR at setup of test_legacy_simulator_charges_only_future_pits_and_keeps_old_tyre_age _
+tests/test_baselines_offline.py:32: in context
+    return load_legacy_context()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+_ ERROR at setup of test_actual_replay_retains_recorded_compounds_even_when_same_compound_is_refitted _
+tests/test_baselines_offline.py:32: in context
+    return load_legacy_context()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+=================================== FAILURES ===================================
+___ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[0] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[15] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[28] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[30] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[42] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[60] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[65] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__ test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[66] ___
+tests/test_baselines_offline.py:62: in test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish
+    context = load_legacy_context(completed_laps=lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/baselines/legacy.py:41: in load_legacy_context
+    info = tools.get_race_info()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/tools.py:61: in get_race_info
+    s = _load_session()
+        ^^^^^^^^^^^^^^^
+src/tools.py:49: in _load_session
+    s = fastf1.get_session(SEASON, GP_NAME, SESSION)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:138: in get_session
+    event = get_event(year, gp, backend=backend, exact_match=exact_match)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/fastf1/events.py:234: in get_event
+    schedule = get_event_schedule(year=year,
+.venv/lib/python3.12/site-packages/fastf1/events.py:339: in get_event_schedule
+    raise ValueError("Failed to load any schedule data.")
+E   ValueError: Failed to load any schedule data.
+__________ test_cli_emits_parseable_json_from_a_fresh_offline_process __________
+tests/test_baselines_offline.py:105: in test_cli_emits_parseable_json_from_a_fresh_offline_process
+    completed = subprocess.run(
+../../../.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/bin/python', '-c', "import runpy, socket, sys\ndef forbidden(*args):\n    raise AssertionError('Unexpected network request')\nsocket.socket.connect = forbidden\nsys.argv = ['src.baselines', '--lap', '30', '--seeds', '0', '1', '2']\nrunpy.run_module('src.baselines', run_name='__main__')\n"]' returned non-zero exit status 2.
+________________ test_cli_invalid_lap_fails_with_a_clear_error _________________
+tests/test_baselines_offline.py:133: in test_cli_invalid_lap_fails_with_a_clear_error
+    assert "snapshot lap must be" in result.stderr
+E   AssertionError: assert 'snapshot lap must be' in 'Baseline comparison failed: Failed to load any schedule data.\n'
+E    +  where 'Baseline comparison failed: Failed to load any schedule data.\n' = CompletedProcess(args=['/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/bin/python', '-m', 'src.b...es', '--lap', '-1'], returncode=2, stdout='', stderr='Baseline comparison failed: Failed to load any schedule data.\n').stderr
+=============================== warnings summary ===============================
+tests/test_baselines_offline.py::test_legacy_adapter_matches_existing_simulator_for_every_full_race_candidate
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[0]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[15]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[28]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[30]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[42]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[60]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[65]
+tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[66]
+  /Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/.venv/lib/python3.12/site-packages/fastf1/ergast/legacy.py:43: UserWarning: Request returned: 504
+    warnings.warn(f"Request returned: {r.status_code}")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[0]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[15]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[28]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[30]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[42]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[60]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[65]
+FAILED tests/test_baselines_offline.py::test_cached_data_workflow_at_start_mid_race_pit_boundaries_and_finish[66]
+FAILED tests/test_baselines_offline.py::test_cli_emits_parseable_json_from_a_fresh_offline_process
+FAILED tests/test_baselines_offline.py::test_cli_invalid_lap_fails_with_a_clear_error
+ERROR tests/test_baselines_offline.py::test_legacy_adapter_matches_existing_simulator_for_every_full_race_candidate
+ERROR tests/test_baselines_offline.py::test_new_optimizer_reproduces_frozen_ground_truth
+ERROR tests/test_baselines_offline.py::test_legacy_simulator_charges_only_future_pits_and_keeps_old_tyre_age
+ERROR tests/test_baselines_offline.py::test_actual_replay_retains_recorded_compounds_even_when_same_compound_is_refitted
+10 failed, 51 passed, 9 warnings, 4 errors in 3.40s

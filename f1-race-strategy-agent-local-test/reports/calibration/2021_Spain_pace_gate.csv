@@ -1,0 +1,11 @@
+mode,pace,n_drivers,within_2_rate,mae_pos,exact_rate,config_hash,sim_code_version
+simulated_order,none,19,0.526,2.63,0.158,94a5373a6a20,d252a24f04f1
+simulated_order,practice,19,0.895,1.16,0.316,94a5373a6a20,d252a24f04f1
+simulated_order,team,19,0.842,1.68,0.105,94a5373a6a20,d252a24f04f1
+simulated_order,insample,19,0.947,0.63,0.579,94a5373a6a20,d252a24f04f1
+simulated_order,grid,19,0.737,1.58,0.368,94a5373a6a20,d252a24f04f1
+vs_real,none,19,0.421,3.47,0.158,94a5373a6a20,d252a24f04f1
+vs_real,practice,19,0.737,1.58,0.474,94a5373a6a20,d252a24f04f1
+vs_real,team,19,0.737,1.79,0.316,94a5373a6a20,d252a24f04f1
+vs_real,insample,19,0.789,1.16,0.526,94a5373a6a20,d252a24f04f1
+vs_real,grid,19,0.737,1.58,0.368,94a5373a6a20,d252a24f04f1
