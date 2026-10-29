@@ -1,8 +1,17 @@
 """Simulator configuration. Components are chosen by registry key plus params."""
 import json
+import logging
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+log = logging.getLogger(__name__)
+
+DEFAULT_COMPOUND_CLASSES = {
+    **dict.fromkeys(["HYPERSOFT", "ULTRASOFT", "SUPERSOFT", "SOFT", "MEDIUM", "HARD", "SUPERHARD"], "SLICK"),
+    "INTERMEDIATE": "INTERMEDIATE", "WET": "WET",
+}
 
 
 class _Cfg(BaseModel):
@@ -87,6 +96,10 @@ class SimConfig(_Cfg):
         "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008,
     })
     long_run: LongRun = Field(default_factory=LongRun)   # practice long-run test, for data.practice_frame
+    # tyre class per compound (SLICK, INTERMEDIATE, WET). Machinery for wet-weather rule
+    # waivers and track-state factors; no wet behaviour is modelled.
+    compound_classes: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_COMPOUND_CLASSES))
+    track: ComponentSpec = ComponentSpec(name="dry")   # track-state transform, see track.py
 
     @classmethod
     def from_file(cls, path):
@@ -95,3 +108,20 @@ class SimConfig(_Cfg):
                 import yaml
                 return cls.model_validate(yaml.safe_load(f))
             return cls.model_validate(json.load(f))
+
+
+def compound_class(config, compound) -> str:
+    """The tyre class of a compound. An unknown compound counts as SLICK (with a warning);
+    known_compounds still rejects compounds the degradation model has not seen."""
+    classes = DEFAULT_COMPOUND_CLASSES if config is None else config.compound_classes
+    if compound not in classes:
+        log.warning("compound %r has no class, treating it as SLICK", compound)
+        return "SLICK"
+    return classes[compound]
+
+
+def class_names(config) -> list[str]:
+    """Class labels in a fixed order (SLICK first), so engine class codes depend on the
+    config only and never on the plans scored."""
+    classes = DEFAULT_COMPOUND_CLASSES if config is None else config.compound_classes
+    return ["SLICK", *sorted(set(classes.values()) - {"SLICK"})]
