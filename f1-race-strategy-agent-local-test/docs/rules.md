@@ -28,7 +28,16 @@ uses the `pre_race` window.
 
 **R6 Randomness.** Sample `i` of seed `s` is `numpy.random.default_rng([s, i])` for every
 candidate. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
-`(seed=0, n_samples=n)` describe the same draws.
+`(seed=0, n_samples=n)` describe the same draws. Seed mapping in the bridge:
+`optimize_batch(seed=s, n_samples=n)` reports `Evaluation.seeds = (0, ..., n-1)`, the
+sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;
+sample `i` of those times was drawn from `default_rng([s, i])`. With `s = 0` the
+evaluation's seeds are exactly the baseline optimizer's seed tuple.
+
+**R7 Ties.** Ties on mean time break by fewer stops, then earlier pit laps, then the
+compound tuple (Quan's key). The additive model scores stint orders identically (on
+Spain, S28/S28/M10 and S28/M10/S28 tie exactly), so this is the convention that makes the
+optimizer return one plan.
 
 ## Where each rule lives
 
@@ -39,7 +48,8 @@ candidate. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator
 | R3 | `two_compounds` | `validate_plan` with `require_two_compounds` | `from_contract` clears `require_two_compounds` after a non-slick stint |
 | R4 | `inventory`, `apply_inventory` | no inventory (fresh sets) | `to_contract` assigns the sets |
 | R5 | `Simulator`, `SimConfig` | `Snapshot.pit_loss_s` is a legacy field | `optimize_batch` scores with the simulator only |
-| R6 | `simulate_batch` | `optimize(seeds=...)` | `optimize_batch` reports `seeds = (0, ..., n-1)` |
+| R6 | `simulate_batch` | `optimize(seeds=...)` | `optimize_batch` reports `seeds = (0, ..., n-1)`, batch seed in `diagnostics["seed"]` |
+| R7 | `compare` ranks by mean only (`best` is the lowest mean) | `optimize`'s tie-break key | `optimize_batch` uses the same key (`_key`) |
 
 `laps_on_set` is the laps since the last recorded stop, capped by the set's age when the
 stint history does not add up.
