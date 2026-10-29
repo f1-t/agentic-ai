@@ -99,7 +99,74 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
     summary["observed_pit_loss_s"] = round(by_kind.attrs["observed_pit_loss_s"], 2)
     summary["observed_sc_pit_loss_factor"], summary["n_sc_stops"] = _sc_pit_factor(
         laps, by_kind.attrs["observed_pit_loss_s"])
+    # neutralised periods, so fitting the event model's rates across races is a count
+    periods = observed_periods(frame)
+    for kind in ("sc", "vsc"):
+        mine = [(a, b) for k, a, b in periods if k == kind]
+        summary[f"{kind}_count"] = len(mine)
+        summary[f"{kind}_laps"] = sum(b - a + 1 for a, b in mine)
     return table, summary, by_kind
+
+
+def _runs(laps, kind):
+    """Consecutive runs of lap numbers as (kind, first, last)."""
+    out = []
+    for lap in sorted(int(x) for x in laps):
+        if out and lap == out[-1][2] + 1:
+            out[-1] = (kind, out[-1][1], lap)
+        else:
+            out.append((kind, lap, lap))
+    return out
+
+
+def _status_periods(frame):
+    """A race lap is SC when most cars' laps on it carry status 4, VSC when most carry 6 or 7.
+    A majority, not any car, because one car's lap can overlap the deployment (Spain 2021:
+    one of 20 cars' lap 7 carries the 4; race control deployed the SC on lap 8)."""
+    ts = frame[["lap"]].assign(sc=frame["track_status"].astype(str).str.contains("4"),
+                               vsc=frame["track_status"].astype(str).str.contains("[67]"))
+    share = ts.groupby("lap")[["sc", "vsc"]].mean()
+    sc = share.index[share["sc"] > 0.5]
+    vsc = share.index[(share["vsc"] > 0.5) & ~(share["sc"] > 0.5)]
+    return sorted(_runs(sc, "sc") + _runs(vsc, "vsc"), key=lambda p: p[1])
+
+
+def _message_periods(messages):
+    """Periods from FastF1 race control messages: a SafetyCar DEPLOYED message starts one on
+    its lap, IN THIS LAP (SC) or ENDING (VSC) ends it on its lap. A period still open at
+    the last message ends on that message's lap."""
+    msgs = messages[messages["Category"].astype(str) == "SafetyCar"].sort_values("Time")
+    last_lap = int(messages["Lap"].max()) if len(messages) else 0
+    out, open_ = [], {}
+    for row in msgs.itertuples():
+        kind = "vsc" if "VIRTUAL" in str(row.Message).upper() else "sc"
+        status = str(row.Status).upper()
+        if status == "DEPLOYED" and kind not in open_:
+            open_[kind] = int(row.Lap)
+        elif status in ("IN THIS LAP", "ENDING") and kind in open_:
+            out.append((kind, open_.pop(kind), int(row.Lap)))
+    out += [(kind, start, last_lap) for kind, start in open_.items()]
+    return sorted(out, key=lambda p: p[1])
+
+
+def observed_periods(frame: pd.DataFrame | None = None, messages: pd.DataFrame | None = None):
+    """Neutralised periods of one race as [(kind, start_lap, end_lap)], kind "sc" or "vsc",
+    laps inclusive.
+
+    Read from the lap frame's track status (4 = SC, 6/7 = VSC) when `frame` is given, with
+    the race control messages (session.race_control_messages) as the cross-check: a
+    disagreement warns and the track status wins. With `messages` alone the periods come
+    from the messages.
+    """
+    if frame is None and messages is None:
+        raise ValueError("observed_periods needs a lap frame or race control messages")
+    from_messages = None if messages is None else _message_periods(messages)
+    if frame is None:
+        return from_messages
+    periods = _status_periods(frame)
+    if from_messages is not None and from_messages != periods:
+        warnings.warn(f"track status periods {periods} differ from race control messages {from_messages}")
+    return periods
 
 
 def _sc_pit_factor(laps, green_pit_loss_s):
