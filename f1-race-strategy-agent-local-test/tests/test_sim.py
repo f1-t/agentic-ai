@@ -111,21 +111,35 @@ def test_return_laps_sums_to_remaining_less_pit_loss(sim):
     assert sum(res.lap_times_s) + res.pit_loss_total_s == pytest.approx(res.remaining.mean_s)
 
 
+# min_stint follows docs/rules.md R2: laps already run on the set count toward the minimum
 def test_min_stint_applies_to_first_stint_at_race_start(sim):
     res = sim.simulate(start(), [["SOFT", 5], ["MEDIUM", 45]])
     assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
+    assert sim.simulate(start(), [["SOFT", 8], ["MEDIUM", 42]]).valid
 
 
-def test_min_stint_exempts_stint_already_underway(sim):
+def test_min_stint_counts_laps_already_run_on_the_set(sim):
     snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="SOFT", tyre_age=20, stints=[])
     assert sim.simulate(snap, [["SOFT", 5], ["MEDIUM", 25]]).valid
+    # a 3-lap-old stint may not stop after one more lap (3 + 1 < 8); 3 + 5 reaches the minimum
+    snap = Snapshot(race=RACE, driver="X", laps_completed=23, compound="MEDIUM", tyre_age=3,
+                    stints=[{"compound": "SOFT", "laps": 20, "start_lap": 1}])
+    res = sim.simulate(snap, [["MEDIUM", 1], ["SOFT", 26]])
+    assert not res.valid and any("(3 already run on the set) is below the 8-lap minimum" in e
+                                 for e in res.errors)
+    assert sim.simulate(snap, [["MEDIUM", 5], ["SOFT", 22]]).valid
 
 
 def test_min_stint_applies_to_first_stint_just_after_a_stop(sim):
     snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="MEDIUM", tyre_age=0,
                     stints=[{"compound": "SOFT", "laps": 20, "start_lap": 1}])
-    res = sim.simulate(snap, [["MEDIUM", 7], ["SOFT", 23]])
-    assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
+    for plan in ([["MEDIUM", 7], ["SOFT", 23]], [["MEDIUM", 1], ["SOFT", 29]]):   # 0 + 1 < 8
+        res = sim.simulate(snap, plan)
+        assert not res.valid and any("below the 8-lap minimum" in e for e in res.errors)
+    # a first stint that runs to the flag has no minimum
+    late = Snapshot(race=RACE, driver="X", laps_completed=45, compound="MEDIUM", tyre_age=0,
+                    stints=[{"compound": "SOFT", "laps": 45, "start_lap": 1}])
+    assert sim.simulate(late, [["MEDIUM", 5]]).valid
 
 
 # --- rules -------------------------------------------------------------------

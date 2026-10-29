@@ -40,25 +40,43 @@ def known_compounds(ctx):
     return []
 
 
+def laps_on_set(snapshot):
+    """Laps already run on the fitted set in this race: the laps since the last recorded
+    stop, capped by the set's age when the stint history does not add up."""
+    return min(snapshot.tyre_age, snapshot.laps_completed - sum(s.laps for s in snapshot.stints))
+
+
 @RULES.register("min_stint")
 def min_stint(ctx):
-    """Enforce the minimum stint length.
+    """Enforce the minimum stint length (docs/rules.md, R2).
 
-    The minimum is a planning constraint rather than a legality rule.
+    The minimum is a planning constraint rather than a legality rule. It counts the laps
+    already run on the fitted set in this race: a stop may be taken only once
+    laps_on_set + first.laps reaches the minimum, every later stint has at least the
+    minimum, and a first stint that runs to the flag has no minimum.
     """
     snap = ctx.snapshot
     floor = snap.race.min_stint_laps
-    # the first stint is the remainder of a stint already underway, so it is exempt
-    underway = snap.laps_completed - sum(s.laps for s in snap.stints) > 0
+    stints = ctx.plan.stints
+    run = laps_on_set(snap)
+
+    def counted(i, s):
+        return run + s.laps if i == 0 else s.laps
+
     def short(i, s):
-        return s.laps < floor and not (
+        if i == 0 and len(stints) == 1:
+            return False   # runs to the flag
+        return counted(i, s) < floor and not (
             # class-change waiver: a stint on either side of a change of tyre class (inters
             # to slicks after three laps) is a crossover stop, not a short stint. Kept
             # separate from the clause above so the two rules compose.
             _class_change(ctx, i))
-    return [f"Stint of {s.laps} laps is below the {floor}-lap minimum."
-            for i, s in enumerate(ctx.plan.stints)
-            if short(i, s) and not (i == 0 and underway)]
+
+    def message(i, s):
+        already = f" ({run} already run on the set)" if i == 0 and run else ""
+        return f"Stint of {s.laps} laps{already} is below the {floor}-lap minimum."
+
+    return [message(i, s) for i, s in enumerate(stints) if short(i, s)]
 
 
 def _class_change(ctx, i):

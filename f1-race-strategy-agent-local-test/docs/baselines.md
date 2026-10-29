@@ -22,6 +22,7 @@ python -m src.baselines --driver HAM --lap 30 --seeds 0 1 2
 ```
 
 Each command prints a JSON report with the snapshot, optimizer result, and four baseline results.
+Add `--scorer batch` to score every plan through the simulator in one `simulate_batch` call (`src/sim/optimizer_bridge.py`); the seeds must then be `0 1 ... n-1`, and the report has the same shape.
 The command uses the committed race cache and makes no language model calls.
 The adapter currently supports only the race configured in the existing tools.
 Drivers with incomplete race histories are unavailable rather than extended with invented laps.
@@ -40,6 +41,8 @@ They also reproduce the frozen optimum with fresh starting tyres and exercise mi
 The existing agent test still requires its own backend dependencies and model access.
 
 ## Snapshot and plan contract
+
+The plan rules shared with the simulator are R1 to R6 in `docs/rules.md`.
 
 The records in `src/baselines/domain.py` are a proposed integration contract.
 The team has shared race contracts in `src/contracts.py` and Jason's extracted simulator in `src/sim`.
