@@ -48,6 +48,7 @@ import json
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 
 from ..contracts import RaceParams
@@ -263,19 +264,39 @@ def traffic_arms(cfg):
     return cfg.model_copy(update={"traffic": none}), cfg.model_copy(update={"traffic": on})
 
 
+def traffic_by_driver(on, off, frame, race):
+    """Per finisher, the full-race replay's traffic: traffic_s (net time added), passes, and
+    conjured_s, the sum of the negative per-lap increments (on less off lap times): time a
+    pass granted beyond the car's own pace because the ghosts do not react (traffic.py)."""
+    rows = {}
+    for d in calibration._finisher_ids(frame, 0.9):
+        _, r_on = calibration.replay_driver(on, frame, race, d)
+        _, r_off = calibration.replay_driver(off, frame, race, d)
+        inc = np.array(r_on.lap_times_s) - np.array(r_off.lap_times_s)
+        rows[d] = {"traffic_s": r_on.traffic_s, "passes": r_on.passes_mean,
+                   "conjured_s": float(inc[inc < 0].sum())}
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
 def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEMENT_LAP):
     """The SPEC 0012 tables for traffic off and on, the pace in the engine in both arms.
 
     Returns (one frame with `table` and `traffic` columns plus each table's own columns,
     {arm: summary dict}). Tables: by_kind and drivers (calibration.run), pairs
     (calibration.pairwise), gate (calibration.positions, both orders), rejoin and placement
-    at `placement_lap` (calibration.rejoin, .placement).
+    at `placement_lap` (calibration.rejoin, .placement). The traffic arm's drivers rows add
+    traffic_s, passes and conjured_s (traffic_by_driver), its summary their per-driver means.
     """
     parts, summaries = [], {}
+    sims = {}
     for arm_cfg in traffic_arms(cfg):
         arm = arm_cfg.traffic.name
-        sim = Simulator(frame, arm_cfg).with_pace(pace_series)
+        sim = sims[arm] = Simulator(frame, arm_cfg).with_pace(pace_series)
         table, summary, by_kind = calibration.run(sim, frame, race)
+        if arm != "none":
+            per = traffic_by_driver(sim, sims["none"], frame, race)
+            table = table.join(per)
+            summary = {**summary, **{f"{c}_per_driver": round(float(per[c].mean()), 2) for c in per}}
         pairs, pair_summary = calibration.pairwise(sim, frame, race)
         _, pos_summary = calibration.positions(sim, frame, race, results)
         rejoin = calibration.rejoin(sim, frame, race)

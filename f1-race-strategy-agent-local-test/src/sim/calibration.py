@@ -380,13 +380,11 @@ def config_hash(config: SimConfig) -> str:
 
     Identical configs give the same value on any machine or commit; a change to any config
     field (degradation, effects, shrinkage, long_run, ...) changes it. Code changes that keep
-    the config do not; SIM_CODE_VERSION covers those. `traffic` is left out while it is the
-    default "none", so configs from before the traffic hook keep their hash.
+    the config do not; SIM_CODE_VERSION covers those.
     """
     import hashlib
     import json
-    exclude = {"fit_window"} | ({"traffic"} if config.traffic == SimConfig().traffic else set())
-    data = config.model_dump(mode="json", exclude=exclude)
+    data = config.model_dump(mode="json", exclude={"fit_window"})
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
 N_BOOT = 500             # race-cluster bootstrap draws
