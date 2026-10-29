@@ -12,8 +12,11 @@ python -m src.eval report reports/eval/v1_baselines.csv
 
 `score` writes one row per (scenario, policy) to `--out` and the summary table beside it
 (`*_summary.csv`), and prints the table. `--policies agent` adds the live agent through
-whatever `LLM_BACKEND` is configured. `--belief-config` and `--world-config` (alias
-`--config`) choose the two simulators below.
+whatever `LLM_BACKEND` is configured (see "The agent policy"). `--belief-config` and
+`--world-config` (alias `--config`) choose the two simulators below; `--world-configs a b`
+is the optional model-disagreement flag. `--max-stops 0` with the agent or a recorded run
+in the policies warns (`NoStopReferenceWarning`: "agent decisions are compared against a
+no-stop reference"), so that comparison is a deliberate choice.
 
 ## Who sees what
 
@@ -30,7 +33,10 @@ A policy is called as `policy(scenario, belief, max_stops)` and never sees the w
 regret definition is unchanged: the policy's plan and the world optimizer's plan, both
 scored by the world. With the default world, v1 stays comparable with the numbers before
 the split. `configs/sim/world.yaml` is the world with ghost traffic on, for position regret
-(SPEC 0014 D); pass it with `--world-config`.
+(below); pass it with `--world-config`. Ghost traffic replays the recorded field, so it
+belongs to the world only, and only under the recorded events: an event model other than
+`none` (or a fixed scenario other than the record) adds `traffic_recorded_with_drawn_events`
+to every plan's support warnings (docs/traffic.md, limit 5).
 
 Rows carry `belief_config_hash`, `world_config_hash` and `belief_window`. The config hash
 leaves `fit_window` out, so the two hashes are equal under the defaults and
@@ -60,6 +66,25 @@ turns it into the plan the world scores:
 A submission that cannot become a legal plan (no compound, a compound the belief does not
 model, n below 1, no legal continuation) is an invalid row.
 
+## The agent policy
+
+`--policies agent` is `eval.policies.AgentPolicy`, the snapshot loop of `src/agent.py`, on
+any scenario of any race (the lap-0 same-race guard is gone):
+
+- the agent's view is `RaceSnapshot.from_contract(scenario.snapshot)` (`src/snapshot.py`):
+  lap, tyre, gaps, `field.nearby`, `recent_lap_times_s`, weather, `race.min_stint_laps`
+  and the inventory-legal compounds; the stint history and the sets stay out of it;
+- `run_agent(view, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
+  the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
+  the id written "_"; a rerun replaces the file);
+- the submission is scored as a decision (above); `tool_calls` is the trajectory length,
+  `input_tokens` and `output_tokens` the backend's reported usage (blank when it reports
+  none); a backend exception is an `error` row, not a crash.
+
+`src.grade.grade_decision(snapshot, submission)` grades one submission the same way (valid,
+regret against the optimizer from that snapshot) for `tests/test_case.py`, which reports
+the regret and does not assert it.
+
 ## Scenario sets
 
 A scenario is one (race, driver, lap) snapshot plus the driver's actual full-race stints. A
@@ -74,8 +99,24 @@ and at most two laps down (Tsunoda's DNF is out); the decision laps of
 VSC period) that leave at least one minimum stint to run. Snapshots come from Jason's
 stand-in builder `src.sim.calibration.snapshot_at`.
 
+v1 snapshots carry `race.min_stint_laps` 10 (the rule before R2 became 3), so v1 keeps
+scoring under 10: the committed split table reproduces row for row. Sets sampled from now
+on carry the registry's value, 3 by default (docs/rules.md R2).
+
 Next versions: v2 once Sarah's snapshot builder and the new races land (pass it as
 `builder=` to `build_set`; it has the same signature as `snapshot_at`).
+
+### Development and report sets
+
+`data/eval_set.json` is the registered eval split, written by `register_eval_set` (Sarah's
+item): the races held out for reporting, `{"races": [...], ...}` or a bare list of ids.
+While it exists, `build_set` (and `scenarios`, `--eval-set` for another file) refuses any
+race outside it, records the file's sha256 as `sampling["eval_set_digest"]`, and marks the
+set `development: false`. Without it a set is `development: true`.
+
+- **v1 is the development set**: sampled before the split, from the race we tuned on.
+  Its numbers are for debugging the harness and the baselines, not for the report.
+- **v2, sampled from the eval races, is the report set**: the numbers the report quotes.
 
 ## Metrics
 
@@ -95,14 +136,19 @@ policy's plan is scored by the world under the same draws (docs/rules.md R6).
 | `decision`, `p_pit` | agent rows only: PIT or STAY_OUT, and the stated probability that pitting now is right (`confidence` for PIT, `1 - confidence` for STAY_OUT) |
 | `brier` | summary, agent rows: mean of `(p_pit - pit_now_opt)^2`. Only in tables of rows that have `p_pit`. |
 | `pit_now_agreement` | summary, agent rows: share of decisions where PIT matches `pit_now_opt` |
+| `final_position_mean`, `opt_final_position_mean` | world traffic on: the plan's and the optimizer's mean finishing position over the samples, 1 + the ghosts that finished the last lap before the plan's world time (`traffic.place`); a DNF sample is behind every finisher, ordered by `dnf_lap` against the ghosts that retired |
+| `position_regret` | `final_position_mean - opt_final_position_mean`; positive means finishing behind the reference. NaN with world traffic off (the default world) or when traffic cannot be placed (no `elapsed_s`): without ghosts there is no field to finish in |
+| `mean_position_regret`, `mean_final_position` | summary, only when some row has a position |
+| `ref_models_agree` | optional (`--world-configs`): every alternative world's reference has the same number of stops and a first pit lap within 2 of the world's. `score` then also writes `*_summary_agree.csv`, the table over the agreeing rows |
 
 Row statuses: `ok`, `invalid`, `unavailable` (the policy does not apply here, e.g. the actual
 strategy of a driver whose real stint broke the minimum), `error` (the policy itself failed,
 e.g. an API error; not counted as invalid), `no_reference` (no legal plan exists).
 
 Each row is stamped with the scenario set version and digest, `belief_config_hash`,
-`world_config_hash`, `belief_window`, `sim_code_version`, the seed and `n_samples`. Rows
-scored before the split carry one `config_hash` instead.
+`world_config_hash`, `belief_window`, `sim_code_version`, the seed and `n_samples` (and
+`ref_world_config_hashes` with `--world-configs`). Rows scored before the split carry one
+`config_hash` instead.
 
 ## Current numbers (v1, deterministic)
 
@@ -142,15 +188,38 @@ Before the split, from `reports/eval/v1_baselines_summary.csv`:
 | baseline agent (recorded, 1 scenario) | 1 | 6.29 | | | 0.00 |
 
 The baseline agent row is the recorded run in `docs/sample_run.txt` (HAM from lap 0), scored
-under this simulator rather than the legacy linear one it was graded on. It is the only
-scenario the current agent loop can answer; the live agent covers the set once the loop takes
-a snapshot.
+under this simulator rather than the legacy linear one it was graded on. The live agent
+(`--policies agent`) now answers every scenario through the snapshot loop.
 
 Things the numbers show that the owners may want to look at:
 - `greedy_crossover` stops immediately (a zero-lap first stint, R1) on 141 of 264 scenarios
   before the split and on 79 under it, so it is unavailable there.
 - `actual_strategy` is unavailable on 65 scenarios where a real stint was shorter than the
-  10-lap minimum.
+  10-lap minimum v1 carries. Sets sampled under R2's default of 3 keep those strategies.
+
+## Position regret on v1 (world traffic on)
+
+`reports/eval/v1_world_baselines.csv` (summary beside it): v1, the baselines, belief
+default, world `configs/sim/world.yaml` (full window, ghost traffic, events none, so no
+drawn-events warning). The world model changes, so the reference and the time regrets move
+too:
+
+| policy | scored | mean regret s | median | stop agreement | mean position regret | mean final position |
+| --- | --- | --- | --- | --- | --- | --- |
+| fixed_one_stop | 250 | 5.74 | 3.68 | 0.88 | 0.34 | 6.88 |
+| actual_strategy | 199 | 7.45 | 7.99 | 0.58 | 0.32 | 7.46 |
+| greedy_crossover | 185 | 12.85 | 11.78 | 0.68 | 0.64 | 7.02 |
+| fixed_two_stop | 211 | 13.93 | 10.65 | 0.02 | 0.82 | 7.15 |
+
+The policy order by position regret is the order by time regret except that actual_strategy
+and fixed_one_stop swap (0.32 against 0.34). Per row, the signs of `position_regret` and
+`regret_s` agree on 332 of 845 scored rows (actual_strategy 86/199, fixed_one_stop 65/250,
+fixed_two_stop 101/211, greedy_crossover 80/185). All 513 disagreements are one kind: time
+lost (`regret_s` > 0) with the same finishing position (`position_regret` 0), median 7.8 s
+of regret against 14.1 s on the rows that lose a place. There is no row with opposite
+signs, no row that loses a place without losing time, and no negative position regret. The
+world is deterministic (one draw), so positions are whole numbers: a few seconds rarely
+cross a gap to the next car.
 
 ## Running on Sol
 
@@ -166,13 +235,26 @@ python -m src.eval jobs --scenarios data/scenarios/v1.json --policies baselines 
     aggregate eval_chunk --profile sol --manifest $OUT/manifest.json --out $OUT
 ```
 
-In `slurm/eval_chunk.sbatch` that means replacing `python -m src.sim.jobs eval_chunk ...` with
-the `python -m src.eval jobs ... -- eval_chunk ...` form.
+`slurm/eval_chunk.sbatch` uses the `python -m src.eval jobs ... -- eval_chunk ...` form
+(set `EVAL_SCENARIOS`, optionally `EVAL_POLICIES`, `EVAL_WORLD_CONFIG`,
+`EVAL_BELIEF_CONFIG`). `run-all` works with worker processes too:
+`install_job_runner` registers its spec (scenarios path, policy names, recorded files,
+config paths) with `jobs.set_eval_runner`, `run-all` carries it in every `eval_chunk`
+task's payload, and each worker installs the runner before its task, under any start
+method:
 
-Use the per-task form (or `n_jobs: 1`): `run-all` with worker processes does not carry the
-runner into the workers. LLM policies stay on the desktop.
+```bash
+python -m src.eval jobs --scenarios data/scenarios/v1.json --policies baselines \
+    --world-config configs/sim/world.yaml -- run-all eval_chunk --manifest M --out O
+```
+
+LLM policies stay on the desktop.
 
 ## Tests
 
 `tests/test_eval.py` runs offline: synthetic races for sampling and scoring, plus the
 committed Spain cache for the v1 set and an end-to-end baseline run.
+`tests/test_eval_integration.py` covers the belief and world split and the decision unit,
+`tests/test_eval_part2.py` positions, the drawn-events warning, the disagreement flag, the
+eval split, `run-all` with two spawned workers, the agent policy, the snapshot contract and
+the minimum-stint rule. No test calls a model.
