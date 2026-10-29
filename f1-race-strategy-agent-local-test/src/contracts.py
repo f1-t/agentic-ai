@@ -224,6 +224,9 @@ class TimeSummary(_Contract):
 
 
 class SimResult(_Contract):
+    """One plan's simulated outcome. p_dnf and p_big_loss are exclusive (a sample has at
+    most one hazard event), so p_dnf + p_big_loss is the probability of any hazard event."""
+
     valid: bool
     errors: list[str] = Field(default_factory=list)
     plan: Plan | None = None

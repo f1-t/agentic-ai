@@ -71,6 +71,8 @@ class BatchResult:
     and cvar_90_s are the honest views of the risk, and the eval should report them
     beside the mean. A position metric should rank on `dnf_lap` instead (a DNF behind
     every finisher, an earlier retirement worse), not on the penalised time.
+    `dnf` and `big_loss` are exclusive (at most one hazard event per sample), so
+    p_dnf + p_big_loss is the probability of any hazard event.
     """
 
     plans: list            # Plan, or None when the input did not parse
