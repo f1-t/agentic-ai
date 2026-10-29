@@ -36,7 +36,8 @@ def _messages(exc: ValidationError) -> list[str]:
 
 
 class _Action(BaseModel):
-    """A decision at the start of lap laps_completed + 1: stay out, or pit at its end."""
+    """A decision at the start of lap laps_completed + 1: stay out for `laps` laps, or pit at
+    the end of this lap (a pit takes laps 1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -44,18 +45,21 @@ class _Action(BaseModel):
     compound: Compound | None = None
     set_id: str | None = None
     start_age: int | None = Field(default=None, ge=0)
+    laps: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def _check(self):
         if self.action == "pit" and self.compound is None:
             raise ValueError("pit action needs a compound")
+        if self.action == "pit" and self.laps != 1:
+            raise ValueError("a pit action is taken at the end of this lap; stay out first for later stops")
         return self
 
 
-def _advance(snapshot: Snapshot, **update) -> Snapshot:
-    """The snapshot one lap on. Nested models are passed through, not re-dumped."""
+def _advance(snapshot: Snapshot, laps: int = 1, **update) -> Snapshot:
+    """The snapshot `laps` laps on. Nested models are passed through, not re-dumped."""
     data = {name: getattr(snapshot, name) for name in Snapshot.model_fields}
-    data.update(laps_completed=snapshot.laps_completed + 1, elapsed_s=None, **update)
+    data.update(laps_completed=snapshot.laps_completed + laps, elapsed_s=None, **update)
     return Snapshot.model_validate(data)
 
 
@@ -539,7 +543,7 @@ class Simulator:
         plans, errors = [], []
         for raw in candidates:
             if isinstance(raw, dict) and "action" in raw:
-                plan, errs = self._expand(snapshot, raw, continuation)
+                plan, errs = self.expand_action(snapshot, raw, continuation)
             else:
                 plan, errs = raw, []
             plans.append(plan)
@@ -581,8 +585,13 @@ class Simulator:
             dominated=dominated, n_samples=n, seed=seed, support_warnings=warnings,
         )
 
-    def _expand(self, snapshot: Snapshot, raw, continuation):
-        """Turn a stay or pit action into a full plan from this snapshot. Returns (plan, errors)."""
+    def expand_action(self, snapshot: Snapshot, raw, continuation):
+        """Turn a stay or pit action into a full plan from this snapshot. Returns (plan, errors).
+
+        `raw` is {"action": "stay", "laps": n} (n defaults to 1) or {"action": "pit",
+        "compound": c} with optional set_id and start_age. `continuation(snapshot_after)`
+        returns the plan for the laps after the action: n laps on after a stay, one lap on
+        after a pit. A stay must leave at least one lap for the continuation."""
         try:
             act = _Action.model_validate(raw)
         except ValidationError as exc:
@@ -592,7 +601,7 @@ class Simulator:
         chosen = None
         try:
             if act.action == "stay":
-                advanced = _advance(snapshot, tyre_age=snapshot.tyre_age + 1)
+                advanced = _advance(snapshot, act.laps, tyre_age=snapshot.tyre_age + act.laps)
             else:
                 pool = [t for t in snapshot.sets_available or [] if t.source in self.config.inventory_sources]
                 age = act.start_age or 0
@@ -621,9 +630,11 @@ class Simulator:
         if first.compound != advanced.compound or (act.action == "stay" and first.start_age != 0):
             return None, ["continuation must continue the current set"]
         if act.action == "stay":
-            stints = [PlanStint(compound=snapshot.compound, laps=1 + first.laps), *cont.stints[1:]]
+            stints = [PlanStint(compound=snapshot.compound, laps=act.laps + first.laps), *cont.stints[1:]]
         else:
             carried = first.model_copy(update={"set_id": chosen.set_id if chosen else act.set_id,
                                                "start_age": advanced.tyre_age})
             stints = [PlanStint(compound=snapshot.compound, laps=1), carried, *cont.stints[1:]]
         return Plan(stints=stints), []
+
+    _expand = expand_action   # the name before it was public

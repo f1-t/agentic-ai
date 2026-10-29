@@ -1,0 +1,7 @@
+# An eval world simulator with traffic: pass it with `score --world-config`
+# (docs/eval.md "Who sees what"). The default SimConfig, full fit window, with ghost-car
+# traffic on (src/sim/traffic.py, docs/traffic.md) for position regret (SPEC 0014 D).
+# Without --world-config the world is the profile's config, with traffic off.
+fit_window: full
+traffic:
+  name: ghost

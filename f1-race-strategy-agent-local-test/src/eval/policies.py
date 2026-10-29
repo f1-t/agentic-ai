@@ -1,11 +1,13 @@
 """Policies the eval scores. A policy maps a scenario to a plan for the remaining laps.
 
-    policy(scenario, sim, max_stops) -> Decision      raises PolicyUnavailable to skip
+    policy(scenario, belief, max_stops) -> Decision      raises PolicyUnavailable to skip
 
-The four baselines are Quan's reference policies (src/baselines) run through the optimizer
-bridge, so they see the same snapshot and the same fit as the optimizer they are measured
-against. `recorded_policy` replays plans saved from earlier agent runs, and `agent_policy`
-asks the live agent loop (src/agent.py) through whatever LLM_BACKEND is configured.
+`belief` is the belief simulator (docs/eval.md "Who sees what"): fitted only on what is
+known at the snapshot. Policies plan on it; the world simulator that scores them and plans
+the reference is not passed in. The four baselines are Quan's reference policies
+(src/baselines) run through the optimizer bridge on the belief's fit. `recorded_policy`
+replays plans saved from earlier agent runs, and `agent_policy` asks the live agent loop
+(src/agent.py) through whatever LLM_BACKEND is configured.
 """
 from __future__ import annotations
 
@@ -24,8 +26,10 @@ BASELINES = ("actual_strategy", "fixed_one_stop", "fixed_two_stop", "greedy_cros
 @dataclass
 class Decision:
     """What a policy decided. `plan` is anything contracts.Plan.of accepts, or None when the
-    policy produced no plan (an invalid decision). `error` marks a failure of the policy
-    itself (an API error, say), which is reported apart from invalid plans."""
+    policy produced no plan (an invalid decision). `submission` is an agent decision
+    (PIT or STAY_OUT, eval.decisions) given in place of a plan: the scorer expands it on
+    the belief simulator into an action plus a continuation. `error` marks a failure of the
+    policy itself (an API error, say), which is reported apart from invalid plans."""
 
     plan: object
     tool_calls: int | None = None
@@ -33,17 +37,19 @@ class Decision:
     output_tokens: int | None = None
     error: str | None = None
     meta: dict = field(default_factory=dict)
+    submission: dict | None = None
 
 
 def _bridged(choose):
-    """A baseline that plans on the bridge's small snapshot and returns a contracts.Plan."""
-    def policy(scenario, sim, max_stops):
-        state = from_contract(scenario.snapshot, sim)
-        plan = choose(scenario, state, sim, max_stops)
+    """A baseline that plans on the bridge's small snapshot of the belief's fit and returns a
+    contracts.Plan."""
+    def policy(scenario, belief, max_stops):
+        state = from_contract(scenario.snapshot, belief)
+        plan = choose(scenario, state, belief, max_stops)
         if plan.stints[0].laps == 0:
             raise PolicyUnavailable("The plan stops immediately; a first stint needs at least one lap "
                                     "(docs/rules.md R1).")
-        return Decision(to_contract(plan, scenario.snapshot, sources=sim.config.inventory_sources))
+        return Decision(to_contract(plan, scenario.snapshot, sources=belief.config.inventory_sources))
     return policy
 
 
@@ -52,8 +58,8 @@ BASELINE_POLICIES = {
         st, [domain.Stint(c, n) for c, n in sc.actual_stints])),
     "fixed_one_stop": _bridged(lambda sc, st, sim, m: policies.fixed_one_stop(st)),
     "fixed_two_stop": _bridged(lambda sc, st, sim, m: policies.fixed_two_stop(st)),
-    "greedy_crossover": _bridged(lambda sc, st, sim, m: policies.greedy_crossover(
-        st, pace_for_crossover(sim, sc.snapshot), m)),
+    "greedy_crossover": _bridged(lambda sc, st, belief, m: policies.greedy_crossover(
+        st, pace_for_crossover(belief, sc.snapshot), m)),
 }
 
 

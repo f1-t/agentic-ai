@@ -1,0 +1,6 @@
+# The eval's belief simulator (src/eval/score.py race_simulators, docs/eval.md "Who sees
+# what"): what a policy plans on. The default SimConfig fitted only on the laps up to the
+# snapshot, shrunk toward the practice prior, with traffic off.
+fit_window: to_snapshot
+traffic:
+  name: none
