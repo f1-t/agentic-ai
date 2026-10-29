@@ -16,7 +16,7 @@ def laps(stints, driver="AAA", first_lap=1, number="1", team="T1"):
             rows.append({"Driver": driver, "DriverNumber": number, "Team": team,
                          "LapNumber": lap, "Stint": float(i), "Compound": comp,
                          "TyreLife": float(life0 + k), "FreshTyre": fresh,
-                         "LapTime": pd.Timedelta(seconds=t[0] if t else 90.0)})
+                         "LapTime": pd.Timedelta(t[0] if t else 90.0, unit="s")})
             lap += 1
     return pd.DataFrame(rows)
 

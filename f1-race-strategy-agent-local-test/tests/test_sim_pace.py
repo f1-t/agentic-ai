@@ -28,10 +28,10 @@ def practice_laps(stints=(("SOFT", 10), ("MEDIUM", 10)), drivers=TEAMS, offsets=
                 t = BASE[comp] + 0.1 * age + offsets.get(d, 0.0) + noise + (8.0 if age in (0, n + 1) else 0.0)
                 rows.append({
                     "Driver": d, "LapNumber": float(lap), "Stint": float(k + 1), "Compound": comp,
-                    "TyreLife": float(age + 1), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
-                    "PitInTime": pd.Timedelta(seconds=1) if age == n + 1 else pd.NaT,
-                    "PitOutTime": pd.Timedelta(seconds=1) if age == 0 else pd.NaT,
-                    "LapStartTime": pd.Timedelta(seconds=clock), "Time": pd.Timedelta(seconds=clock + t),
+                    "TyreLife": float(age + 1), "LapTime": pd.Timedelta(t, unit="s"), "TrackStatus": "1",
+                    "PitInTime": pd.Timedelta(1, unit="s") if age == n + 1 else pd.NaT,
+                    "PitOutTime": pd.Timedelta(1, unit="s") if age == 0 else pd.NaT,
+                    "LapStartTime": pd.Timedelta(clock, unit="s"), "Time": pd.Timedelta(clock + t, unit="s"),
                     "Team": team, "Position": np.nan,
                 })
                 clock += t

@@ -35,10 +35,10 @@ def synthetic_laps(wear=0.1, bumps=None, seed=0, noise_s=NOISE_S, cliff=None):
                  + off + noise + bumps.get((d, lap), 0.0))
             rows.append({
                 "Driver": d, "LapNumber": float(lap), "Stint": float(stint + 1), "Compound": comp,
-                "TyreLife": float(age), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
-                "PitInTime": pd.Timedelta(seconds=1) if lap in pits else pd.NaT,
-                "PitOutTime": pd.Timedelta(seconds=1) if lap - 1 in pits else pd.NaT,
-                "LapStartTime": pd.Timedelta(seconds=0), "Time": pd.Timedelta(seconds=t),
+                "TyreLife": float(age), "LapTime": pd.Timedelta(t, unit="s"), "TrackStatus": "1",
+                "PitInTime": pd.Timedelta(1, unit="s") if lap in pits else pd.NaT,
+                "PitOutTime": pd.Timedelta(1, unit="s") if lap - 1 in pits else pd.NaT,
+                "LapStartTime": pd.Timedelta(0, unit="s"), "Time": pd.Timedelta(t, unit="s"),
                 "Team": "T", "Position": float(list(OFFSETS).index(d) + 1),
             })
     return pd.DataFrame(rows)
@@ -124,7 +124,7 @@ def test_rare_compound_laps_stay_clean():
     laps = synthetic_laps()
     rare = (laps["Driver"] == "A") & laps["LapNumber"].between(2, 5)
     laps.loc[rare, "Compound"] = "HARD"
-    laps.loc[rare, "LapTime"] = laps.loc[rare, "LapTime"] + pd.Timedelta(seconds=5)
+    laps.loc[rare, "LapTime"] = laps.loc[rare, "LapTime"] + pd.Timedelta(5, unit="s")
     f = lap_frame(laps, min_samples=5)
     hard = f[f["compound"] == "HARD"]
     assert len(hard) == 4
@@ -166,10 +166,10 @@ def practice_laps(stints, bumps=None, wear=0.1, seed=0, evo=0.0, noise_s=NOISE_S
                      + bumps.get((d, lap), 0.0) + (8.0 if age in (0, n + 1) else 0.0))
                 rows.append({
                     "Driver": d, "LapNumber": float(lap), "Stint": float(k + 1), "Compound": comp,
-                    "TyreLife": float(age + 1), "LapTime": pd.Timedelta(seconds=t), "TrackStatus": "1",
-                    "PitInTime": pd.Timedelta(seconds=1) if age == n + 1 else pd.NaT,
-                    "PitOutTime": pd.Timedelta(seconds=1) if age == 0 else pd.NaT,
-                    "LapStartTime": pd.Timedelta(seconds=clock), "Time": pd.Timedelta(seconds=clock + t),
+                    "TyreLife": float(age + 1), "LapTime": pd.Timedelta(t, unit="s"), "TrackStatus": "1",
+                    "PitInTime": pd.Timedelta(1, unit="s") if age == n + 1 else pd.NaT,
+                    "PitOutTime": pd.Timedelta(1, unit="s") if age == 0 else pd.NaT,
+                    "LapStartTime": pd.Timedelta(clock, unit="s"), "Time": pd.Timedelta(clock + t, unit="s"),
                     "Team": "T", "Position": np.nan,
                 })
                 clock += t
