@@ -264,3 +264,58 @@ class CompareResult(_Contract):
     dominated: list[bool]               # some valid j is no worse on mean and cvar_90, better on one
     n_samples: int
     seed: int
+    support_warnings: list[list[str]] = Field(default_factory=list)  # per candidate, as SimResult
+
+
+# --- Model report --------------------------------------------------------------
+class CoefficientReport(_Contract):
+    """One fitted coefficient: its value, posterior sd, and how much the data moved it.
+
+    source is "fitted" (data only, shrinkage_weight 1), "prior" (no data, weight 0) or
+    "shrunk" (in between). sd is NaN where it cannot be estimated (a fixed fuel prior).
+    """
+
+    value: float
+    sd: float
+    source: Literal["fitted", "shrunk", "prior"]
+    shrinkage_weight: float = Field(ge=0, le=1)
+
+
+class CompoundReport(_Contract):
+    """What the degradation fit knows about one compound. Unmodelled compounds cannot be planned."""
+
+    modelled: bool
+    reason: str | None = None              # why not modelled, None when modelled
+    n_rows: int = Field(default=0, ge=0)   # rows behind the line, practice support included
+    n_race_rows: int = Field(default=0, ge=0)
+    max_age_observed: float | None = None  # oldest tyre behind the line
+    base_s: CoefficientReport | None = None
+    wear_s_per_lap: CoefficientReport | None = None
+
+
+class ModelReport(_Contract):
+    """The simulator's view of its own uncertainty for one snapshot (Simulator.model_report).
+
+    flags:
+      wear_fuel_poorly_identified  fuel weight below 0.5 and race rows from at most one compound
+      prior_dominated:<compound>   wear weight below 0.5
+      extrapolation:<compound>     a requested tyre age beyond max_age_observed
+      no_hazard_support:<compound> the hazard model has no observed support for this modelled
+                                   compound, so its tyre risk is not known (only with a hazard
+                                   model that has per compound support)
+    calibration_error_s is the offset-adjusted mean absolute error of the remaining race
+    time for this fit window at the snapshot's horizon bucket, from the mid-race
+    calibration summary; NaN when there is no table or no row for it.
+    """
+
+    fit_window: str
+    compounds: dict[str, CompoundReport]
+    fuel_s_per_lap: CoefficientReport | None = None   # None for models without a fuel term
+    hinge: dict | None = None
+    condition_number: float
+    flags: list[str] = Field(default_factory=list)
+    calibration_error_s: float = float("nan")
+
+    @property
+    def modelled(self) -> list[str]:
+        return sorted(c for c, r in self.compounds.items() if r.modelled)

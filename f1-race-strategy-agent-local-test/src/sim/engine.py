@@ -7,8 +7,9 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ..contracts import (Compound, CompareResult, Plan, PlanStint, SimResult, Snapshot, StintRecord,
-                         TimeSummary)
+from ..contracts import (Compound, CompareResult, ModelReport, Plan, PlanStint, SimResult, Snapshot,
+                         StintRecord, TimeSummary)
+from . import model_report as _report
 from .config import SimConfig
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
@@ -71,6 +72,7 @@ class BatchResult:
     lap_times: np.ndarray | None = None  # (n_plans, n_laps) sample 0 lap times when requested
     elapsed_s: float | None = None
     seed: int = 0
+    support_warnings: list = None     # list[str] per plan, empty when invalid
 
     def __post_init__(self):
         self.valid = np.array([p is not None and not e for p, e in zip(self.plans, self.errors)], dtype=bool)
@@ -89,6 +91,7 @@ class BatchResult:
             stint_seconds=self.stint_seconds[i].mean(axis=1).tolist(),
             pit_loss_total_s=float(self.pit_loss[i].mean()),
             lap_times_s=self.lap_times[i].tolist() if self.lap_times is not None else None,
+            support_warnings=self.support_warnings[i] if self.support_warnings else [],
         )
 
 
@@ -188,6 +191,18 @@ class Simulator:
         return check(names, RuleContext(snapshot, plan, fit.modelled, self.config))
 
     # --- public API ----------------------------------------------------------
+    def model_report(self, snapshot: Snapshot, ages=None,
+                     calibration_summary=_report.CALIBRATION_SUMMARY) -> ModelReport:
+        """The fit behind this snapshot's window, and what it cannot tell (model_report.build).
+
+        `ages` ({compound: tyre age}) adds requested ages to the extrapolation check, which
+        always covers the current set's next lap. `calibration_summary` is the midrace
+        summary csv (or frame) calibration_error_s is read from; None gives NaN.
+        """
+        fit = self.fitted_for(snapshot)
+        return _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
+                             hazard=getattr(fit, "hazard", None))
+
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:
         return self.fitted_for(snapshot).simulate_batch(
@@ -211,6 +226,8 @@ class Simulator:
             parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
             errors.append(errs)
         out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
+        out.support_warnings = [_report.support_warnings(self.degradation, snapshot, p) if ok else []
+                                for p, ok in zip(parsed, out.valid)]
 
         n = n_samples or self.config.n_samples
         laps = np.arange(snapshot.laps_completed + 1, snapshot.race.total_laps + 1)
@@ -301,8 +318,9 @@ class Simulator:
         times[todo] = batch.times
         valid = np.zeros(n_cand, dtype=bool)
         valid[todo] = batch.valid
+        warnings = [[] for _ in plans]
         for r, i in enumerate(todo):
-            plans[i], errors[i] = batch.plans[r], batch.errors[r]
+            plans[i], errors[i], warnings[i] = batch.plans[r], batch.errors[r], batch.support_warnings[r]
 
         idx = np.flatnonzero(valid)
         summaries = [summarise(times[i]) if valid[i] else None for i in range(n_cand)]
@@ -326,7 +344,7 @@ class Simulator:
             p_beats=_matrix(beats, pair & ~np.eye(n_cand, dtype=bool)),
             gap_mean_s=_matrix(gap.mean(axis=2), pair), gap_std_s=_matrix(gap.std(axis=2), pair),
             best=int(idx[np.argmin([mean[i] for i in idx])]) if len(idx) else None,
-            dominated=dominated, n_samples=n, seed=seed,
+            dominated=dominated, n_samples=n, seed=seed, support_warnings=warnings,
         )
 
     def _expand(self, snapshot: Snapshot, raw, continuation):
