@@ -27,9 +27,15 @@ python -m src.sim.calibrate traffic --config configs/sim/traffic_ghost.yaml   # 
 
 The `traffic` command writes `reports/calibration/<race_id>_traffic.csv`: one csv with a
 `table` column (`by_kind`, `drivers`, `pairs`, `gate`, `rejoin`, `placement`) and a
-`traffic` column (`none`, `ghost`), the pace term in the engine in both arms, every row
-stamped with `pace`, `pit_loss_s`, `pit_loss_source`, `config_hash` (the arm's own) and
-`sim_code_version`. The drivers rows of the traffic arm add `traffic_s` (net time
+`traffic` column, with the pace term in the engine in every arm:
+- `none`: traffic off.
+- `ghost`: traffic on at the default params.
+- `ghost_dirty`: information only. This is `ghost` with `dirty_air_s` set to the ghost
+  arm's `clean_pack` mean residual (by_kind), the dirty air the clamp leaves unexplained.
+  The default `dirty_air_s` stays 0.
+
+Every row is stamped with `pace`, `pit_loss_s`, `pit_loss_source`, `config_hash` (the
+arm's own) and `sim_code_version`. The drivers rows of the traffic arm add `traffic_s` (net time
 traffic added over the race), `passes` and `conjured_s` (see below). With the default params
 the `traffic_ghost.yaml` config hash is `a50205e6c507`. `traffic` is part of every config
 hash, so adding the field moved the default hash too (`eccb59070c14`); under the reports
