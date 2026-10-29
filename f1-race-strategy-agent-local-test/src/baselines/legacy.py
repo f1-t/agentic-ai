@@ -36,7 +36,7 @@ class LegacyContext:
 
 
 def load_legacy_context(driver: str = "HAM", completed_laps: int = 0) -> LegacyContext:
-    from .. import tools
+    from .. import legacy_tools as tools
 
     info = tools.get_race_info()
     if type(completed_laps) is not int or not 0 <= completed_laps <= info["total_laps"]:

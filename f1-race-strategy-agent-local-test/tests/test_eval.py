@@ -174,10 +174,11 @@ def test_first_pit_error_and_stop_agreement(items, sim):
 def test_score_set_stamps_versions(items, sim):
     s = ScenarioSet(version="t2", items=items[:3])
     s.digest = s.compute_digest()
-    rows = score_set(s, lambda race_id: sim, {"p": _fixed(None)})
+    rows = score_set(s, lambda race_id, role: sim, {"p": _fixed(None)})
     assert len(rows) == 3
     assert set(rows["scenario_set"]) == {"t2"} and set(rows["scenario_digest"]) == {s.digest[:12]}
-    assert rows["config_hash"].notna().all() and rows["sim_code_version"].notna().all()
+    for col in ("belief_config_hash", "world_config_hash", "belief_window", "sim_code_version"):
+        assert rows[col].notna().all()
 
 
 # --- tables ----------------------------------------------------------------------

@@ -1,14 +1,25 @@
 """Regret scoring: each policy's plan against the optimizer's, from the same snapshot.
 
-For every scenario the optimizer (sim.optimizer_bridge.optimize_batch) finds the best plan
-with at most `max_stops` future stops, and every policy's plan is scored by the same
-simulator under the same draws (docs/rules.md R6: seed s, samples 0..n-1). Then
+Two simulators per race (docs/eval.md "Who sees what"): policies plan on the belief
+simulator, fitted only on what is known at the snapshot; the reference optimizer and every
+scoring call use the world simulator. For every scenario the optimizer
+(sim.optimizer_bridge.optimize_batch) finds the world's best plan with at most `max_stops`
+future stops, and every policy's plan is scored by the world under the same draws
+(docs/rules.md R6: seed s, samples 0..n-1). Then
 
     regret_s = mean remaining time of the policy's plan - mean remaining time of the optimizer's
 
 A plan with more stops than the optimizer may search (an actual three-stop, say) can come in
 below the reference, so regret can be negative; it is reported as it is. One row per
 (scenario, policy); `summarize` turns rows into the per-race and overall tables.
+
+A policy may return an agent decision (Decision.submission, PIT or STAY_OUT) instead of a
+plan. eval.decisions.to_plan expands it on the belief into the action plus an optimizer
+continuation, and the world scores that plan. Such rows also carry `decision` and `p_pit`
+(the stated probability that pitting now is right) against `pit_now_opt` (the world
+optimizer's first stop is at the end of this lap), for the Brier score. A decision's plan
+stays inside the reference's search space, so an agent row with negative regret is a bug
+and `summarize` warns about it (AgentRegretWarning).
 
 Row status: ok, invalid (the plan broke a rule or no plan was submitted), unavailable (the
 policy does not apply to this scenario), error (the policy itself failed, an API error say),
@@ -17,6 +28,8 @@ no_reference (no legal plan exists for the optimizer).
 from __future__ import annotations
 
 import json
+import warnings
+from pathlib import Path
 from time import perf_counter
 
 import numpy as np
@@ -25,10 +38,13 @@ import pandas as pd
 from ..baselines.domain import NoFeasiblePlan, PolicyUnavailable
 from ..sim import calibration
 from ..sim.optimizer_bridge import optimize_batch
+from . import decisions
 from .policies import Decision
 
 STATUSES = ("ok", "invalid", "unavailable", "error", "no_reference")
 REGRET_TOL_S = 1e-6
+ROLES = ("belief", "world")
+BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
 
 
 def _first_pit_error(pits, ref_pits):
@@ -40,28 +56,31 @@ def _first_pit_error(pits, ref_pits):
     return abs(pits[0] - ref_pits[0])
 
 
-def score_scenario(scenario, sim, policies: dict, *, seed: int = 0, n_samples: int | None = None,
-                   max_stops: int = 2) -> list[dict]:
-    """One row per policy for one scenario."""
+def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 0,
+                   n_samples: int | None = None, max_stops: int = 2) -> list[dict]:
+    """One row per policy for one scenario. Policies plan on `belief` (`world` when None, one
+    simulator in both roles); the reference and the scoring use `world`."""
+    belief = world if belief is None else belief
     snap = scenario.snapshot
     base = {"scenario_id": scenario.scenario_id, "race_id": scenario.race_id, "driver": scenario.driver,
             "lap": scenario.lap, "compound": snap.compound, "tyre_age": snap.tyre_age,
             "remaining_laps": snap.remaining_laps, "seed": seed, "max_stops": max_stops}
     try:
-        opt = optimize_batch(snap, sim, seed=seed, n_samples=n_samples, max_stops=max_stops)
+        opt = optimize_batch(snap, world, seed=seed, n_samples=n_samples, max_stops=max_stops)
     except NoFeasiblePlan as exc:
         return [{**base, "policy": name, "status": "no_reference", "reason": str(exc)} for name in policies]
     ref = opt.evaluation.mean_time_s
     ref_pits = opt.plan.pit_laps(snap)
     n = opt.diagnostics["n_samples"]
     base.update(n_samples=n, opt_plan=json.dumps(opt.plan.as_pairs()), opt_num_stops=opt.plan.num_stops,
-                opt_first_pit_lap=ref_pits[0] if ref_pits else None, opt_time_s=ref)
+                opt_first_pit_lap=ref_pits[0] if ref_pits else None, opt_time_s=ref,
+                pit_now_opt=bool(ref_pits) and ref_pits[0] == snap.laps_completed + 1)
     rows = []
     for name, policy in policies.items():
         row = {**base, "policy": name}
         started = perf_counter()
         try:
-            decision = policy(scenario, sim, max_stops)
+            decision = policy(scenario, belief, max_stops)
         except PolicyUnavailable as exc:
             rows.append({**row, "status": "unavailable", "reason": str(exc)})
             continue
@@ -72,13 +91,24 @@ def score_scenario(scenario, sim, policies: dict, *, seed: int = 0, n_samples: i
         if decision.error is not None:
             rows.append({**row, "status": "error", "reason": decision.error})
             continue
-        if decision.plan is None:
+        plan = decision.plan
+        if plan is None and decision.submission is not None:
+            sub = decision.submission
+            row.update(decision=str(sub.get("decision", "")).strip().upper() or None,
+                       p_pit=decisions.p_pit(sub))
+            try:
+                plan = decisions.to_plan(snap, sub, belief, max_stops, seed=seed, n_samples=n)
+            except decisions.InvalidDecision as exc:
+                rows.append({**row, "status": "invalid", "reason": str(exc)})
+                continue
+        if plan is None:
             rows.append({**row, "status": "invalid", "reason": "no plan submitted"})
             continue
-        batch = sim.simulate_batch(snap, [decision.plan], seed=seed, n_samples=n)
+        batch = world.simulate_batch(snap, [plan], seed=seed, n_samples=n)
         if not batch.valid[0]:
+            shown = plan.as_pairs() if hasattr(plan, "as_pairs") else plan
             rows.append({**row, "status": "invalid", "reason": "; ".join(batch.errors[0]),
-                         "plan": json.dumps(decision.plan, default=str)})
+                         "plan": json.dumps(shown, default=str)})
             continue
         res = batch.result(0, snap)
         mean = res.remaining.mean_s
@@ -95,34 +125,48 @@ def score_scenario(scenario, sim, policies: dict, *, seed: int = 0, n_samples: i
 
 def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples: int | None = None,
               max_stops: int = 2, items=None) -> pd.DataFrame:
-    """Rows for every scenario (or `items`), stamped with the set's version and digest and the
-    simulator's config hash and code version. `sim_for(race_id)` returns the race's Simulator."""
+    """Rows for every scenario (or `items`), stamped with the set's version and digest, both
+    simulators' config hashes, the belief's fit window and the code version.
+    `sim_for(race_id, role)` returns the race's Simulator for role "belief" or "world"
+    (race_simulators). config_hash leaves fit_window out, so belief_window says which
+    window the policies planned on."""
     rows = []
     for scenario in scenario_set.items if items is None else items:
-        sim = sim_for(scenario.race_id)
+        belief, world = sim_for(scenario.race_id, "belief"), sim_for(scenario.race_id, "world")
         stamp = {"scenario_set": scenario_set.version, "scenario_digest": scenario_set.digest[:12],
-                 "config_hash": calibration.config_hash(sim.config),
+                 "belief_config_hash": calibration.config_hash(belief.config),
+                 "world_config_hash": calibration.config_hash(world.config),
+                 "belief_window": belief.config.fit_window,
                  "sim_code_version": calibration.SIM_CODE_VERSION}
-        rows += [{**r, **stamp} for r in score_scenario(scenario, sim, policies, seed=seed,
+        rows += [{**r, **stamp} for r in score_scenario(scenario, world, policies, belief=belief, seed=seed,
                                                          n_samples=n_samples, max_stops=max_stops)]
     return pd.DataFrame(rows)
 
 
-def race_simulators(profile=None, config=None):
-    """sim_for(race_id) over the committed cache: the race's frame and practice from
-    sim.jobs.load_race, the profile's SimConfig unless `config` is given. Cached per race."""
-    from ..sim import jobs
+def race_simulators(profile=None, belief_config=None, world_config=None):
+    """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
+    the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
+    by default configs/sim/belief.yaml (to_snapshot window, traffic off); the world runs
+    `world_config`, by default the profile's SimConfig (full window, traffic off, as before
+    the split). Cached per race and role."""
+    from ..sim import SimConfig, jobs
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
 
     profile = profile or load_profile()
-    cache = {}
+    belief_config = belief_config or SimConfig.from_file(BELIEF_CONFIG)
+    races, cache = {}, {}
 
-    def sim_for(race_id):
-        if race_id not in cache:
-            data = jobs.load_race(race_id, profile)
-            cache[race_id] = Simulator(data.frame, config or data.config, data.practice)
-        return cache[race_id]
+    def sim_for(race_id, role):
+        if role not in ROLES:
+            raise ValueError(f"role must be one of {ROLES}, got {role!r}")
+        if (race_id, role) not in cache:
+            if race_id not in races:
+                races[race_id] = jobs.load_race(race_id, profile)
+            data = races[race_id]
+            config = belief_config if role == "belief" else world_config or data.config
+            cache[race_id, role] = Simulator(data.frame, config, data.practice)
+        return cache[race_id, role]
     return sim_for
 
 
@@ -139,7 +183,7 @@ def _summary(g: pd.DataFrame) -> dict:
         return float(g[col].dropna().mean()) if col in g and g[col].notna().any() else np.nan
 
     regret = ok["regret_s"] if len(ok) else pd.Series(dtype=float)
-    return {
+    out = {
         "scenarios": len(g), "scored": len(ok), "unavailable": int(count.get("unavailable", 0)),
         "errors": int(count.get("error", 0)),
         "invalid_rate": count.get("invalid", 0) / attempted if attempted else np.nan,
@@ -155,10 +199,39 @@ def _summary(g: pd.DataFrame) -> dict:
         "mean_input_tokens": g_mean("input_tokens"),
         "mean_output_tokens": g_mean("output_tokens"),
     }
+    if "p_pit" in g:   # rows from agent decisions: every row with a usable p_pit
+        agent = g[g["p_pit"].notna() & g["pit_now_opt"].notna()]
+        truth = agent["pit_now_opt"].astype(float)
+        out["brier"] = float(((agent["p_pit"].astype(float) - truth) ** 2).mean()) if len(agent) else np.nan
+        out["pit_now_agreement"] = (float(((agent["decision"] == "PIT").astype(float) == truth).mean())
+                                    if len(agent) else np.nan)
+    return out
+
+
+class AgentRegretWarning(UserWarning):
+    """An agent row came in below the reference by more than REGRET_TOL_S."""
+
+
+def check_agent_regret(rows: pd.DataFrame) -> pd.DataFrame:
+    """The scored agent rows (those with p_pit) whose regret is below -REGRET_TOL_S, with a
+    warning when there are any. A decision's plan lies inside the reference's search space
+    (eval.decisions counts max_stops the same way), so such a row means a bug. Baselines may
+    go below the reference (an actual three-stop against a two-stop search) and are not checked."""
+    if "p_pit" not in rows or "regret_s" not in rows:
+        return rows.iloc[0:0]
+    bad = rows[rows["p_pit"].notna() & (rows["status"] == "ok") & (rows["regret_s"] < -REGRET_TOL_S)]
+    if len(bad):
+        ids = ", ".join(f"{s} ({p}, {r:.3f} s)" for s, p, r in
+                        bad[["scenario_id", "policy", "regret_s"]].head(5).itertuples(index=False))
+        warnings.warn(f"{len(bad)} agent rows beat the reference optimizer, which their plans cannot "
+                      f"do unless the scoring is wrong: {ids}", AgentRegretWarning, stacklevel=2)
+    return bad
 
 
 def summarize(rows: pd.DataFrame) -> pd.DataFrame:
-    """One row per (race, policy), then one per policy over every race with race_id "ALL"."""
+    """One row per (race, policy), then one per policy over every race with race_id "ALL".
+    Agent rows below the reference raise an AgentRegretWarning (check_agent_regret)."""
+    check_agent_regret(rows)
     out = [{"race_id": race, "policy": pol, **_summary(g)}
            for (race, pol), g in rows.groupby(["race_id", "policy"], sort=True)]
     out += [{"race_id": "ALL", "policy": pol, **_summary(g)} for pol, g in rows.groupby("policy", sort=True)]
@@ -178,9 +251,11 @@ def to_markdown(table: pd.DataFrame, digits: int = 2) -> str:
 
 
 # --- sim.jobs eval_chunk -------------------------------------------------------------
-def install_job_runner(scenarios_path, policy_names=("baselines",), recorded=(), seed=0, config=None):
+def install_job_runner(scenarios_path, policy_names=("baselines",), recorded=(), seed=0,
+                       belief_config=None, world_config=None):
     """Register the eval with sim.jobs so `eval_chunk` tasks score slices of a scenario set.
-    Chunk i is items[i * size:(i + 1) * size], size = profile.parallel.eval_chunk_size."""
+    Chunk i is items[i * size:(i + 1) * size], size = profile.parallel.eval_chunk_size.
+    The configs go to race_simulators."""
     from ..sim import jobs
     from .policies import resolve
     from .scenarios import ScenarioSet
@@ -191,7 +266,7 @@ def install_job_runner(scenarios_path, policy_names=("baselines",), recorded=(),
     def runner(chunk_id, profile):
         index = int(chunk_id.rsplit("_", 1)[1])
         items = scenario_set.chunk(index, profile.parallel.eval_chunk_size)
-        return score_set(scenario_set, race_simulators(profile, config), pols, seed=seed,
+        return score_set(scenario_set, race_simulators(profile, belief_config, world_config), pols, seed=seed,
                          n_samples=profile.sim.n_samples, max_stops=profile.sim.max_stops, items=items)
     jobs.set_eval_runner(runner)
     return len(scenario_set.items)

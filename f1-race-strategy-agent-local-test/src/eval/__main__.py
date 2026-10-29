@@ -17,6 +17,14 @@ def _config(path):
     return SimConfig.from_file(path)
 
 
+def _sim_configs(p):
+    p.add_argument("--belief-config", help="SimConfig yaml or json the policies plan on "
+                                           "(default configs/sim/belief.yaml)")
+    p.add_argument("--world-config", "--config", dest="world_config",
+                   help="SimConfig yaml or json for the reference and the scoring (default: the "
+                        "profile's; configs/sim/world.yaml turns ghost traffic on)")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m src.eval", description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
@@ -39,7 +47,7 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--n-samples", type=int, help="default: the profile's sim.n_samples")
     p.add_argument("--max-stops", type=int, choices=(0, 1, 2), help="default: the profile's sim.max_stops")
-    p.add_argument("--config", help="SimConfig yaml or json for the scoring simulator")
+    _sim_configs(p)
     p.add_argument("--profile")
     p.add_argument("--out", required=True, help="per-row csv; the summary goes beside it")
 
@@ -51,7 +59,7 @@ def main(argv=None):
     p.add_argument("--scenarios", required=True)
     p.add_argument("--policies", nargs="*", default=["baselines"])
     p.add_argument("--recorded", nargs="*", default=[])
-    p.add_argument("--config")
+    _sim_configs(p)
 
     argv = list(sys.argv[1:] if argv is None else argv)
     rest = []
@@ -75,7 +83,8 @@ def main(argv=None):
         from ..sim.compute import load_profile
         profile = load_profile(args.profile)
         scenario_set = ScenarioSet.load(args.scenarios)
-        rows = score_set(scenario_set, race_simulators(profile, _config(args.config)),
+        sims = race_simulators(profile, _config(args.belief_config), _config(args.world_config))
+        rows = score_set(scenario_set, sims,
                          resolve(args.policies, args.recorded), seed=args.seed,
                          n_samples=args.n_samples or profile.sim.n_samples,
                          max_stops=profile.sim.max_stops if args.max_stops is None else args.max_stops)
@@ -92,7 +101,8 @@ def main(argv=None):
         return 0
 
     from ..sim import jobs
-    install_job_runner(args.scenarios, args.policies, args.recorded, config=_config(args.config))
+    install_job_runner(args.scenarios, args.policies, args.recorded,
+                       belief_config=_config(args.belief_config), world_config=_config(args.world_config))
     return jobs.main(rest)
 
 

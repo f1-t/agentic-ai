@@ -4,7 +4,7 @@ Success = the agent's recommended strategy is valid and its simulated race time
 is within `tolerance_pct` of the optimum (data/ground_truth.json). This rewards a
 near-optimal plan reached via the tools rather than one exact hard-coded plan.
 """
-from . import tools
+from . import legacy_tools as tools
 
 
 def grade(rec, gt):

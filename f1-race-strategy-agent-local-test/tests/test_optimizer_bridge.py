@@ -232,7 +232,7 @@ def test_pace_for_crossover_reads_the_fit(sim):
 # --- the legacy path and Spain (committed cache) ----------------------------------
 @pytest.fixture(scope="module")
 def legacy():
-    from src import tools
+    from src import legacy_tools as tools
     return tools._get_simulator(), tools._race_params()
 
 
@@ -252,7 +252,7 @@ def test_legacy_frame_reproduces_ground_truth(legacy):
 
 @pytest.mark.skipif(not HAS_CACHE, reason="no cache")
 def test_spain_two_stop_search_is_fast():
-    from src import tools
+    from src import legacy_tools as tools
     from src.sim.data import lap_frame, load_session
     sim = Simulator(lap_frame(load_session(2021, "Spain").laps))
     snap = Snapshot.at_start(tools._race_params(), "HAM", "SOFT")
@@ -269,7 +269,7 @@ def test_spain_two_stop_search_is_fast():
 @pytest.mark.skipif(not HAS_CACHE, reason="no cache")
 @pytest.mark.parametrize("lap", [0, 30])
 def test_batch_comparison_has_the_callback_report_shape(lap):
-    from src import tools
+    from src import legacy_tools as tools
     from src.baselines.__main__ import comparison
     from src.baselines.legacy import load_legacy_context
 

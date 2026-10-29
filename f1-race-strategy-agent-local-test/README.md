@@ -51,8 +51,10 @@ You can still confirm the environment, the offline data, and the deterministic
 simulator (no key, no network, no cost):
 
 ```bash
-python -c "from src import tools; print(tools.optimal_strategy('SOFT'))"
+python -c "from src import legacy_tools; print(legacy_tools.optimal_strategy('SOFT'))"
 # -> {'num_stops': 2, 'first_pit_lap': 28, ..., 'total_time_s': 5510.1}
+python -m src.eval report reports/eval/v1_baselines_split.csv
+# -> the current v1 baseline table (belief and world simulators, docs/eval.md)
 ```
 
 A full captured agent run (real `python tests/test_case.py` output ending in
@@ -97,7 +99,7 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
 - **Regenerate the cache** (needs network, optional):
   `python scripts/build_cache.py`.
 - **Deterministic ground truth:** `data/ground_truth.json` is produced by
-  `tools.optimal_strategy()` (a brute-force over the simulator) and is re-derivable.
+  `legacy_tools.optimal_strategy()` (a brute-force over the simulator) and is re-derivable.
 - Runtime: a few minutes (one cached `session.load` + the agent's ~5–8 tool calls).
 
 ## Known limitations (baseline)

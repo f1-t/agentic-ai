@@ -199,8 +199,8 @@ def batch_comparison(context, seeds, max_stops, sim=None, race=None):
     """baselines.__main__.comparison with every plan scored by simulate_batch.
 
     The report has the same shape. Samples are 0..n-1 of seed 0 (R6), so `seeds` must be
-    0..n-1. `sim` and `race` default to the legacy simulator and race in src.tools."""
-    from .. import tools
+    0..n-1. `sim` and `race` default to the legacy simulator and race in src.legacy_tools."""
+    from .. import legacy_tools as tools
 
     seeds = tuple(seeds)
     if seeds != tuple(range(len(seeds))) or not seeds:
