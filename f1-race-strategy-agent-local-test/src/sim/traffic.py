@@ -131,7 +131,13 @@ class GhostTable:
 
 
 def ghost_table(frame, driver, laps) -> GhostTable:
-    """Every driver in `frame` except `driver`, over the lap numbers `laps`."""
+    """Every driver in `frame` except `driver`, over the lap numbers `laps`.
+
+    The one place the end_s(L - 1) gap arithmetic lives: the anchor check in prepare and
+    calibration.rejoin / placement read gaps only through this table. data.lap_frame's gap
+    columns (SPEC 0010b) use the same arithmetic; whichever lands second dedupes onto the
+    other.
+    """
     laps = np.asarray(laps, dtype=int)
     ghosts = sorted(d for d in frame["driver"].unique() if d != driver)
     n_lap = int(max(laps.max(), frame["lap"].max())) + 1 if len(laps) else 1
