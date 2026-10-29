@@ -1,13 +1,9 @@
-"""F1 strategy tools + a deterministic strategy simulator.
+"""Uncertainty-aware F1 strategy tools.
 
-These are the tools the agent (src/agent.py) can call. Everything reads from the
-committed FastF1 cache in offline mode, so there is no network dependency on race
-data. The strategy simulator is a simplified, deterministic tyre-degradation model
--- it is the agent's "what-if" evaluator and also the source of ground truth.
+Tools evaluate a *current race snapshot*. They deliberately return ranges and
+probabilities: the simulator is a decision aid, not an oracle.
 """
-import logging
-import os
-import warnings
+from __future__ import annotations
 
 import fastf1
 import numpy as np
@@ -18,28 +14,24 @@ from .sim import SimConfig, Simulator
 from .sim.config import EventEffects
 from .sim.data import LEGACY_OUTLIER_FACTOR, lap_frame
 
-warnings.filterwarnings("ignore")
+import numpy as np
 
-# Keep FastF1's cache-loading chatter out of the agent's stdout so the trajectory
-# and the PASS/FAIL result are easy to read.
-try:
-    fastf1.set_log_level("ERROR")
-except Exception:
-    pass
-logging.getLogger("fastf1").setLevel(logging.ERROR)
+from .snapshot import RaceSnapshot
 
-# --- Race configuration (2021 Spanish GP) ------------------------------------
-SEASON = 2021
-GP_NAME = "Spain"
-SESSION = "R"
+MIN_STINT_LAPS = 3
+DEFAULT_PIT_LOSS_S = (19.0, 22.0, 25.0)
+_BASE_PACE = {"SOFT": 80.4, "MEDIUM": 80.9, "HARD": 81.5}
+_DEG = {"SOFT": (0.055, 0.085, 0.125), "MEDIUM": (0.035, 0.060, 0.090), "HARD": (0.025, 0.045, 0.070)}
 
 PIT_LOSS_S = 22.0      # approx pit-lane time loss at Barcelona (seconds)
 MIN_STINT_LAPS = 10    # a realistic minimum stint length
 OUTLIER_FACTOR = LEGACY_OUTLIER_FACTOR  # drop laps slower than 107% of the compound's fastest (traffic/SC)
 
-_CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "cache")
-_session = None  # lazily loaded, then reused
 
+def set_snapshot(snapshot: RaceSnapshot | dict[str, Any]) -> RaceSnapshot:
+    global _ACTIVE_SNAPSHOT
+    _ACTIVE_SNAPSHOT = snapshot if isinstance(snapshot, RaceSnapshot) else RaceSnapshot.from_dict(snapshot)
+    return _ACTIVE_SNAPSHOT
 
 def _load_session():
     global _session
@@ -51,75 +43,44 @@ def _load_session():
         _session = s
     return _session
 
-
-def race_laps():
-    return int(_load_session().total_laps)
-
-
-# --- Tool 1: race info -------------------------------------------------------
-def get_race_info():
-    s = _load_session()
-    laps = s.laps
-    compounds = sorted(laps["Compound"].dropna().unique().tolist())
-    return {
-        "race": s.event["EventName"],
-        "season": SEASON,
-        "total_laps": race_laps(),
-        "compounds_available": compounds,
-        "pit_loss_seconds": PIT_LOSS_S,
-        "min_stint_laps": MIN_STINT_LAPS,
-    }
+def _snapshot() -> RaceSnapshot:
+    if _ACTIVE_SNAPSHOT is None:
+        raise ValueError("No race snapshot is active for this agent run.")
+    return _ACTIVE_SNAPSHOT
 
 
-# --- Tool 2: a driver's actual stints ----------------------------------------
-def get_driver_stints(driver):
-    s = _load_session()
-    d = s.laps.pick_drivers(driver)
-    if len(d) == 0:
-        return {"error": f"No laps found for driver '{driver}'. "
-                         f"Use a 3-letter code like HAM or VER."}
-    stints = []
-    for stint_no, grp in d.groupby("Stint"):
-        laptimes = grp["LapTime"].dt.total_seconds().dropna()
-        stints.append({
-            "stint": int(stint_no),
-            "compound": grp["Compound"].iloc[0],
-            "laps": int(len(grp)),
-            "start_lap": int(grp["LapNumber"].min()),
-            "end_lap": int(grp["LapNumber"].max()),
-            "avg_laptime_s": round(float(laptimes.mean()), 3) if len(laptimes) else None,
-        })
-    stints.sort(key=lambda x: x["start_lap"])
-    return {
-        "driver": driver,
-        "starting_compound": stints[0]["compound"] if stints else None,
-        "num_stops": len(stints) - 1,
-        "stints": stints,
-    }
+def get_race_snapshot():
+    """Return the immutable decision-time state supplied to this run."""
+    return _snapshot().to_dict()
 
 
-# --- Tool 3: tyre degradation model ------------------------------------------
 def estimate_tyre_degradation(compound):
-    compound = compound.upper()
-    s = _load_session()
-    laps = s.laps
-    d = laps[(laps["Compound"] == compound) & (laps["TrackStatus"] == "1")].copy()
-    d = d[d["PitInTime"].isna() & d["PitOutTime"].isna()]  # drop in/out laps
-    d["t"] = d["LapTime"].dt.total_seconds()
-    d = d.dropna(subset=["t", "TyreLife"])
-    if len(d) >= 1:
-        d = d[d["t"] < d["t"].min() * OUTLIER_FACTOR]  # drop traffic/SC laps
-    if len(d) < 5:
-        return {"error": f"Not enough clean laps to model compound '{compound}'. "
-                         f"Available compounds: {sorted(laps['Compound'].dropna().unique().tolist())}"}
-    x = d["TyreLife"].astype(float).values
-    y = d["t"].values
-    slope, base = np.polyfit(x, y, 1)
+    comp = str(compound).upper()
+    if comp not in _DEG:
+        return {"error": f"Unknown compound '{comp}'."}
+    low, median, high = _DEG[comp]
+    s = _snapshot()
+    # A small contextual widening keeps the contract explicitly uncertain.
+    width = 1.15 if s.track_status != "GREEN" else 1.0
     return {
-        "compound": compound,
-        "base_laptime_s": round(float(base), 3),   # modelled lap time at zero tyre age
-        "deg_per_lap_s": round(float(slope), 4),    # seconds lost per lap of tyre age
-        "n_samples": int(len(d)),
+        "compound": comp,
+        "deg_per_lap_s": {"low": round(low / width, 4), "median": median, "high": round(high * width, 4)},
+        "confidence": "medium",
+        "basis": "historical/empirical prior adjusted to the supplied snapshot",
+        "warning": "This is an estimate, not a guaranteed degradation rate.",
+    }
+
+
+def estimate_pit_loss():
+    s = _snapshot()
+    low, median, high = DEFAULT_PIT_LOSS_S
+    if s.track_status in {"SC", "VSC"}:
+        factor = 0.65 if s.track_status == "SC" else 0.78
+        low, median, high = [x * factor for x in (low, median, high)]
+    return {
+        "pit_loss_s": {"low": round(low, 1), "median": round(median, 1), "high": round(high, 1)},
+        "track_status": s.track_status,
+        "confidence": "medium",
     }
 
 
@@ -207,53 +168,39 @@ def optimal_strategy(start_compound="SOFT", max_stops=2):
 # Registry consumed by the agent: name -> (callable, JSON schema)
 TOOL_SPECS = [
     {
-        "name": "get_race_info",
-        "description": "Get race name, total laps, tyre compounds available, pit-loss and the minimum stint length. Call this first.",
+        "name": "get_race_snapshot",
+        "description": "Read the current decision-time race snapshot: lap, position, tyre state, gaps, weather, nearby cars and recent context.",
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
-        "fn": lambda: get_race_info(),
-    },
-    {
-        "name": "get_driver_stints",
-        "description": "Get a driver's ACTUAL stints in this race (compound, laps, average lap time) and their starting compound. Driver is a 3-letter code, e.g. HAM.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"driver": {"type": "string", "description": "3-letter driver code, e.g. HAM"}},
-            "required": ["driver"],
-            "additionalProperties": False,
-        },
-        "fn": lambda driver: get_driver_stints(driver),
+        "fn": get_race_snapshot,
     },
     {
         "name": "estimate_tyre_degradation",
-        "description": "Fit a linear tyre-degradation model for a compound from this race's green-flag laps. Returns base lap time (s) and degradation (s per lap of tyre age).",
-        "input_schema": {
-            "type": "object",
-            "properties": {"compound": {"type": "string", "description": "SOFT, MEDIUM or HARD"}},
-            "required": ["compound"],
-            "additionalProperties": False,
-        },
-        "fn": lambda compound: estimate_tyre_degradation(compound),
+        "description": "Return an uncertain low/median/high degradation estimate for a compound. It is evidence, not truth.",
+        "input_schema": {"type": "object", "properties": {"compound": {"type": "string"}}, "required": ["compound"], "additionalProperties": False},
+        "fn": estimate_tyre_degradation,
     },
     {
-        "name": "simulate_strategy",
-        "description": "Estimate total race time for a proposed strategy. Input is a list of [compound, n_laps] stints that must sum to the race length and use >=2 compounds. Use this to compare candidate strategies.",
+        "name": "estimate_pit_loss",
+        "description": "Estimate current pit-lane loss as a low/median/high range, adjusted for track status.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": estimate_pit_loss,
+    },
+    {
+        "name": "evaluate_strategy",
+        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "stints": {
-                    "type": "array",
-                    "description": "e.g. [[\"SOFT\", 28], [\"MEDIUM\", 38]]",
-                    "items": {
-                        "type": "array",
-                        "prefixItems": [{"type": "string"}, {"type": "integer"}],
-                        "minItems": 2,
-                        "maxItems": 2,
-                    },
+                "action": {
+                    "type": "object",
+                    "description": "Either {action:'pit', compound:'MEDIUM'} or {action:'stay_out', laps:3}.",
+                    "properties": {"action": {"type": "string"}, "compound": {"type": "string"}, "laps": {"type": "integer"}},
+                    "required": ["action"],
                 }
             },
-            "required": ["stints"],
+            "required": ["action"],
             "additionalProperties": False,
         },
-        "fn": lambda stints: simulate_strategy(stints),
+        "fn": evaluate_strategy,
     },
 ]
