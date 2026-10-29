@@ -33,8 +33,9 @@ Ghost-car traffic (traffic.py), off against on, with the pace term in the engine
     python -m src.sim.calibrate traffic --season 2021 --gp Spain --pace practice
 
 writes reports/calibration/<race_id>_traffic.csv, one csv with a `table` column (by_kind,
-drivers, pairs, gate, rejoin, placement) and a `traffic` column (none; ghost_no_bunching,
-ghost with sc_bunching False; ghost; and ghost_dirty: information only, ghost with
+drivers, pairs, gate, rejoin, placement, and sc_laps for a bunching arm) and a `traffic`
+column (none; ghost; ghost_bunching, ghost with sc_bunching True; and ghost_dirty:
+information only, ghost with
 dirty_air_s at the ghost arm's clean_pack mean residual), stamped like the midrace csvs
 plus `pace` and `pace_offset_def`; config_hash is the arm's own.
 
@@ -279,8 +280,12 @@ def traffic_by_driver(on, off, frame, race):
     """Per finisher, the full-race replay's traffic: traffic_s (net time added on green laps),
     bunching_s (net time the SC queue added, traffic.py), passes, and conjured_s, the sum of
     the negative per-lap increments (on less off lap times) off the SC laps: time a pass
-    granted beyond the car's own pace because the ghosts do not react (traffic.py)."""
-    rows = {}
+    granted beyond the car's own pace because the ghosts do not react (traffic.py).
+
+    Returns (that frame, sc_laps): one row per finisher and bunched SC lap with
+    sc_field_delta_s, the field's recorded SC lap less the engine's (traffic.py), empty
+    without bunching."""
+    rows, sc_rows = {}, []
     for d in calibration._finisher_ids(frame, 0.9):
         g, r_on = calibration.replay_driver(on, frame, race, d)
         _, r_off = calibration.replay_driver(off, frame, race, d)
@@ -288,7 +293,11 @@ def traffic_by_driver(on, off, frame, race):
         green = ~g["lap"].isin(calibration._scenario(g).sc_laps).to_numpy()
         rows[d] = {"traffic_s": r_on.traffic_s, "bunching_s": r_on.bunching_s, "passes": r_on.passes_mean,
                    "conjured_s": float(inc[green & (inc < 0)].sum())}
-    return pd.DataFrame.from_dict(rows, orient="index")
+        delta = np.array(r_on.sc_field_delta_s if r_on.sc_field_delta_s is not None else [np.nan] * len(g))
+        sc_rows += [{"driver": d, "lap": int(lap), "sc_field_delta_s": float(x)}
+                    for lap, x in zip(g["lap"], delta) if np.isfinite(x)]
+    sc_laps = pd.DataFrame(sc_rows, columns=["driver", "lap", "sc_field_delta_s"])
+    return pd.DataFrame.from_dict(rows, orient="index"), sc_laps
 
 
 def _sc_pitters(frame, before_lap):
@@ -317,13 +326,16 @@ def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEME
     at `placement_lap` (calibration.rejoin, .placement). The traffic arms' drivers rows add
     traffic_s, passes and conjured_s (traffic_by_driver), their summaries the per-driver means.
 
-    With `bunching` an arm `ghost_no_bunching`, the traffic arm with sc_bunching False (SC
-    laps keep their time gaps, #27's rule), for the bunching off against on comparison.
+    With `bunching` an arm `ghost_bunching`, the traffic arm with sc_bunching True (the SC
+    queue, traffic.py), for the bunching off against on comparison.
 
     With `dirty_air` an arm `ghost_dirty`, information only: the traffic arm with
     dirty_air_s set to the traffic arm's clean_pack mean residual (by_kind), the dirty air
     the clamp leaves unexplained. Its traffic column is "ghost_dirty"; the default params
     are unchanged.
+
+    With bunching on, a table sc_laps (traffic_by_driver) gives the field's SC lap less the
+    engine's per finisher and SC lap, and the summary its median per lap.
 
     The placement rows add pit_under_sc (an in-lap on an SC lap before `placement_lap`), and
     the summaries split the placement on it. Every row carries pace_offset_def, the
@@ -337,8 +349,9 @@ def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEME
         return on_cfg.model_copy(update={"traffic": on_cfg.traffic.model_copy(
             update={"params": {**on_cfg.traffic.params, **params}})})
 
-    arms = ([("none", off_cfg)] + ([("ghost_no_bunching", with_params(sc_bunching=False))] if bunching else [])
-            + [("ghost", on_cfg)] + ([("ghost_dirty", None)] if dirty_air else []))
+    arms = ([("none", off_cfg), ("ghost", on_cfg)]
+            + ([("ghost_bunching", with_params(sc_bunching=True))] if bunching else [])
+            + ([("ghost_dirty", None)] if dirty_air else []))
     sc_pitters = _sc_pitters(frame, placement_lap)
     for arm, arm_cfg in arms:
         if arm_cfg is None:   # the dirty-air ablation, from the traffic arm's clean_pack residual
@@ -346,8 +359,9 @@ def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEME
             arm_cfg = with_params(dirty_air_s=dirty if dirty > 0 else 0.0)
         sim = sims[arm] = Simulator(frame, arm_cfg).with_pace(pace_series)
         table, summary, by_kind = calibration.run(sim, frame, race)
+        sc_laps = pd.DataFrame()
         if arm != "none":
-            per = traffic_by_driver(sim, sims["none"], frame, race)
+            per, sc_laps = traffic_by_driver(sim, sims["none"], frame, race)
             table = table.join(per)
             summary = {**summary, **{f"{c}_per_driver": round(float(per[c].mean()), 2) for c in per}}
         pairs, pair_summary = calibration.pairwise(sim, frame, race)
@@ -370,9 +384,13 @@ def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEME
             "placement": _placement_summary(place),
             "placement_pit_under_sc": _placement_summary(place[place["pit_under_sc"]]),
             "placement_no_pit_under_sc": _placement_summary(place[~place["pit_under_sc"]]),
+            "sc_field_delta_by_lap": ({int(k): round(float(v), 2) for k, v in
+                                       sc_laps.groupby("lap")["sc_field_delta_s"].median().items()}
+                                      if len(sc_laps) else {}),
         }
         for name, t in (("by_kind", by_kind.reset_index()), ("drivers", table.reset_index()),
-                        ("pairs", pairs.reset_index()), ("gate", gate), ("rejoin", rejoin), ("placement", place)):
+                        ("pairs", pairs.reset_index()), ("gate", gate), ("rejoin", rejoin), ("placement", place),
+                        ("sc_laps", sc_laps)):
             # all-NaN columns (traffic_s with traffic off) are dropped; the concat restores them as NaN
             if not t.empty:
                 parts.append(t.dropna(axis=1, how="all").assign(

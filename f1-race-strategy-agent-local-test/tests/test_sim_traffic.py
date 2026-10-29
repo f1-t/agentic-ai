@@ -66,7 +66,7 @@ def apply(model, state, laps, lap_s=F, pit=None, sc=(), vsc=(), n_plans=1, bunch
     """Returns (increment per lap, traffic_s, passes), each per plan; with `bunching` also bunching_s."""
     lap_s = np.broadcast_to(np.asarray(lap_s, dtype=float), (n_plans, len(laps))).copy()
     pit = np.zeros_like(lap_s) if pit is None else pit
-    out, (traffic_s, passes, bunching_s) = model.apply(state, lap_s, pit, np.isin(laps, sc), np.isin(laps, vsc),
+    out, (traffic_s, passes, bunching_s, _) = model.apply(state, lap_s, pit, np.isin(laps, sc), np.isin(laps, vsc),
                                                        Scenario(sc_laps=list(sc), vsc_laps=list(vsc)))
     return (out - lap_s, traffic_s, passes) + ((bunching_s,) if bunching else ())
 
@@ -465,16 +465,18 @@ def test_traffic_flows_into_compare_and_times():
 SC_LAPS, SC_LAP_S = (5, 6), 110.0
 
 
-def sc_ghost(name, ahead, lap_s=80.0):
-    return ghost(name, lap_s, ahead, k=4, times={lap: SC_LAP_S for lap in SC_LAPS})
+def sc_ghost(name, ahead, lap_s=80.0, sc_lap_s=SC_LAP_S, **kw):
+    times = {lap: sc_lap_s for lap in SC_LAPS}
+    times.update(kw.pop("times", {}))
+    return ghost(name, lap_s, ahead, k=4, times=times, **kw)
 
 
-def sc_apply(ghosts, f_extra=0.0, pit=None, vsc=False, **params):
-    """(model, state, laps, increments, traffic_s, passes, bunching_s) over laps 5-20."""
+def sc_apply(ghosts, f_extra=0.0, pit=None, vsc=False, ref_lap_s=F, **params):
+    """(model, state, laps, increments, traffic_s, passes, bunching_s) over laps 5-20, bunching on."""
     df = frame(*ghosts)
-    model = GhostTraffic(**params)
+    model = GhostTraffic(**{"sc_bunching": True, **params})
     laps = np.arange(5, N + 1)
-    state = model.prepare(snap(4, 4 * F), laps, df, OUR)
+    state = model.prepare(snap(4, 4 * F), laps, df, OUR, ref_lap_s=ref_lap_s)
     extra = np.atleast_1d(np.asarray(f_extra, dtype=float))   # per plan, on lap 5 only
     lap_s = np.tile(np.where(np.isin(laps, SC_LAPS), SC_LAP_S, F), (len(extra), 1))
     lap_s[:, 0] += extra
@@ -506,9 +508,63 @@ def test_sc_bunching_closes_a_20_s_gap_to_the_queue_interval():
 
 
 def test_sc_bunching_leader_keeps_the_sc_lap_time_exactly():
-    # 2. no ghost ahead at the line: end = e, the lap time unchanged bit for bit
+    # 2. no ghost ahead at the line: end = e, the field's SC lap (here equal to ours) bit for bit
     model, state, laps, inc, traffic_s, passes, bunching_s = sc_apply([sc_ghost("AAA", -5.0), sc_ghost("BBB", -15.0)])
     assert np.all(inc[0, :2] == 0.0) and bunching_s[0] == 0.0
+
+
+def field_apply(ghosts, sc_lap_s=110.0, ref_lap_s=F):
+    """sc_apply with the engine's SC lap at sc_lap_s; returns (state, laps, lap_s out, field delta, bunching_s)."""
+    df = frame(*ghosts)
+    model = GhostTraffic(sc_bunching=True)
+    laps = np.arange(5, N + 1)
+    state = model.prepare(snap(4, 4 * F), laps, df, OUR, ref_lap_s=ref_lap_s)
+    lap_s = np.where(np.isin(laps, SC_LAPS), sc_lap_s, F)[None, :]
+    out, (_, _, bunching_s, delta) = model.apply(state, lap_s, np.zeros_like(lap_s), np.isin(laps, SC_LAPS),
+                                                 np.zeros(len(laps), dtype=bool), Scenario(sc_laps=list(SC_LAPS)))
+    return state, laps, out, delta, bunching_s
+
+
+def test_sc_lap_is_the_field_recorded_sc_lap():
+    # the queue ran 130 s and 135 s; the engine gives 110 s. The leader laps at the field's
+    # median, and the per-lap field delta is recorded; a car 20 s back still queues at G_A + 1.2
+    times = {5: 130.0, 6: 135.0}
+    lead = [sc_ghost("AAA", -5.0, times=times), sc_ghost("BBB", -15.0, times={5: 131.0, 6: 136.0}),
+            sc_ghost("CCC", -25.0, times={5: 129.0, 6: 134.0})]
+    state, laps, out, delta, bunching_s = field_apply(lead)
+    assert out[0, :2].tolist() == [130.0, 135.0]
+    assert delta[0, :2].tolist() == [20.0, 25.0] and np.all(np.isnan(delta[0, 2:]))
+    assert bunching_s[0] == pytest.approx(45.0)
+    state, laps, out, delta, _ = field_apply([sc_ghost("AAA", 20.0, times=times), sc_ghost("BBB", -10.0, times=times)])
+    end6 = state.anchor + out[0, :2].sum()
+    assert end6 == pytest.approx(line(state, "AAA", 6, laps) + 1.2)
+    # no ghost in the queue: the engine's lap is the fallback, nothing recorded
+    state, laps, out, delta, bunching_s = field_apply([sc_ghost("AAA", -60.0, times=times)])
+    assert out[0, :2].tolist() == [110.0, 110.0] and np.all(np.isnan(delta)) and bunching_s[0] == 0.0
+
+
+def test_sc_queue_half_lap_guard_drops_cars_a_lap_away():
+    # AAA 50 s ahead is more than half a reference lap (40 s) away: not in the queue, so we
+    # lead and keep e; inside the guard (ref 120 s, 60 s) it is the car ahead
+    state, laps, out, delta, _ = field_apply([sc_ghost("AAA", 50.0)])
+    assert out[0, :2].tolist() == [110.0, 110.0]
+    state, laps, out, delta, _ = field_apply([sc_ghost("AAA", 50.0)], ref_lap_s=120.0)
+    assert state.anchor + out[0, 0] == pytest.approx(line(state, "AAA", 5, laps) + 1.2)
+
+
+def test_sc_queue_drops_in_lap_ghosts_and_keeps_out_lap_ghosts():
+    # AAA pits on lap 5 (its in-lap, 3 s ahead): it leaves the queue, so BBB (8 s ahead) is A
+    pit = {"pit_in": (5,), "times": {5: 125.0, 6: 110.0}}
+    state, laps, out, delta, _ = field_apply([sc_ghost("AAA", 3.0, **pit), sc_ghost("BBB", 8.0)])
+    assert state.anchor + out[0, 0] == pytest.approx(line(state, "BBB", 5, laps) + 1.2)
+    assert delta[0, 0] == 0.0   # the median is BBB's 110 s alone, not AAA's in-lap
+    # lap 6 is AAA's out-lap (91.5 s, rejoining 1.5 s behind BBB): it stays in the queue as B,
+    # so half its gap to BBB binds (0.75 s), but its lap is not timed (the median stays 110 s)
+    state, laps, out, delta, _ = field_apply([sc_ghost("AAA", 3.0, **{"pit_in": (5,), "times": {5: 125.0, 6: 91.5}}),
+                                              sc_ghost("BBB", 8.0)])
+    assert delta[0, 1] == 0.0
+    assert line(state, "AAA", 6, laps) == pytest.approx(line(state, "BBB", 6, laps) + 1.5)
+    assert state.anchor + out[0, :2].sum() == pytest.approx(line(state, "BBB", 6, laps) + 0.75)
 
 
 def test_sc_bunching_pushes_a_close_car_back_to_the_interval():
@@ -553,12 +609,15 @@ def test_sc_bunching_off_is_the_old_sc_branch():
 def test_sc_bunching_never_ends_past_the_car_behind():
     # 8. many provisional ends across a field: the order against every ghost is kept, and
     # the end is never past the ghost directly behind e
-    ghosts = [sc_ghost(n, a) for n, a in (("AAA", 9.0), ("BBB", 8.5), ("CCC", 3.0), ("DDD", 0.0),
-                                           ("EEE", -0.8), ("FFF", -12.0))]
-    extra = np.linspace(-14.0, 14.0, 113)   # moves e over the whole queue
-    model, state, laps, inc, *_ = sc_apply(ghosts, f_extra=extra)
+    # the lap time is the field's, so a pit loss under the SC moves e over the queue
+    ghosts = [sc_ghost(n, a) for n, a in (("AAA", -1.0), ("BBB", -1.5), ("CCC", -7.0), ("DDD", -10.0),
+                                           ("EEE", -10.8), ("FFF", -22.0))]
+    pit_s = np.linspace(0.0, 28.0, 113)
+    pit = np.zeros((len(pit_s), N - 4))
+    pit[:, 0] = pit_s
+    model, state, laps, inc, *_ = sc_apply(ghosts, f_extra=np.zeros(len(pit_s)), pit=pit)
     G = state.G[0]
-    e = state.anchor + SC_LAP_S + extra
+    e = state.anchor + SC_LAP_S + pit_s
     end = e + inc[:, 0]
     assert np.array_equal(G[None, :] <= e[:, None], G[None, :] <= end[:, None])
     b = np.where(G[None, :] > e[:, None], G, np.inf).min(axis=1)
@@ -588,7 +647,9 @@ def test_sc_bunching_off_and_traffic_none_digests_equal_main():
     # 6 and 7
     assert ghost_digest({"name": "ghost", "params": {"sc_bunching": False}}) == GHOST_MAIN_DIGEST
     assert ghost_digest({"name": "none"}) == NONE_MAIN_DIGEST
-    assert ghost_digest({"name": "ghost"}) != GHOST_MAIN_DIGEST   # the default bunches
+    assert ghost_digest({"name": "ghost"}) == GHOST_MAIN_DIGEST   # bunching is off by default
+    assert ghost_digest({"name": "ghost", "params": {"sc_bunching": True}}) != GHOST_MAIN_DIGEST
+    assert GhostTraffic().params.sc_bunching is False
 
 
 def test_bunching_flows_into_the_batch_and_the_result():
@@ -596,13 +657,19 @@ def test_bunching_flows_into_the_batch_and_the_result():
     s = snap(4, 4 * F)
     cfg = SimConfig(degradation=LIN, events={"name": "fixed", "params": {"sc_laps": list(SC_LAPS)}})
     plans = [[["SOFT", 16]]]
-    on = Simulator(df, cfg.model_copy(update={"traffic": ComponentSpec(name="ghost")})).simulate_batch(
-        s, plans, rules=RULES)
-    off = Simulator(df, cfg).simulate_batch(s, plans, rules=RULES)
+    sim = Simulator(df, cfg.model_copy(update={"traffic": ComponentSpec(name="ghost", params={"sc_bunching": True})}))
+    on = sim.simulate_batch(s, plans, rules=RULES, return_laps=True)
+    off = Simulator(df, cfg).simulate_batch(s, plans, rules=RULES, return_laps=True)
     assert on.bunching_s[0, 0] < -10.0   # about 18 s behind AAA closed to the queue
     assert on.times[0, 0] - off.times[0, 0] == pytest.approx(on.traffic_s[0, 0] + on.bunching_s[0, 0])
     assert on.result(0, s).bunching_s == pytest.approx(on.bunching_s[0].mean())
     assert off.result(0, s).bunching_s is None and np.all(off.bunching_s == 0.0)
+    # the SC laps run at the field's 110 s: the delta to the engine's SC lap, per SC lap
+    engine_sc = off.lap_times[0, :2]
+    assert on.sc_field_delta[0, :2] == pytest.approx(110.0 - engine_sc) and np.all(np.isnan(on.sc_field_delta[0, 2:]))
+    assert on.result(0, s).sc_field_delta_s[:2] == pytest.approx((110.0 - engine_sc).tolist())
+    assert off.result(0, s).sc_field_delta_s is None
+    assert sim.simulate_batch(s, plans, rules=RULES).sc_field_delta is None   # sample 0 only with return_laps
 
 
 # --- rejoin ----------------------------------------------------------------------------
@@ -656,18 +723,18 @@ def test_traffic_report_dirty_air_ablation_uses_the_clean_pack_residual():
     from src.sim.data import gap_columns
     df = gap_columns(rejoin_frame().assign(team="T"))   # AAA runs close: some clean laps in the pack
     table, summaries = calibrate.traffic_report(df, RACE, SimConfig(degradation=LIN), {OUR: 0.0}, None)
-    assert set(summaries) == {"none", "ghost_no_bunching", "ghost", "ghost_dirty"}
+    assert set(summaries) == {"none", "ghost", "ghost_bunching", "ghost_dirty"}
     pack = summaries["ghost"]["by_kind_clean_pack_mean_s"]
     assert summaries["ghost_dirty"]["dirty_air_s"] == (round(pack, 3) if pack > 0 else 0.0)
     assert summaries["ghost"]["dirty_air_s"] == 0.0
     assert table.groupby("traffic")["config_hash"].nunique().to_dict() == {
-        "ghost": 1, "ghost_dirty": 1, "ghost_no_bunching": 1, "none": 1}
-    assert summaries["ghost_no_bunching"]["sc_bunching"] is False and summaries["ghost"]["sc_bunching"] is True
+        "ghost": 1, "ghost_bunching": 1, "ghost_dirty": 1, "none": 1}
+    assert summaries["ghost"]["sc_bunching"] is False and summaries["ghost_bunching"]["sc_bunching"] is True
     # traffic arms measure the drivers-table offset on free-air laps, and every row says so
     assert table.groupby("traffic")["pace_offset_def"].unique().map(list).to_dict() == {
-        "none": ["all_laps"], "ghost_no_bunching": ["free_air"], "ghost": ["free_air"], "ghost_dirty": ["free_air"]}
+        "none": ["all_laps"], "ghost": ["free_air"], "ghost_bunching": ["free_air"], "ghost_dirty": ["free_air"]}
     assert {k: summaries[k]["pace_offset_def"] for k in summaries} == {
-        "none": "all_laps", "ghost_no_bunching": "free_air", "ghost": "free_air", "ghost_dirty": "free_air"}
+        "none": "all_laps", "ghost": "free_air", "ghost_bunching": "free_air", "ghost_dirty": "free_air"}
 
 
 # --- information boundary --------------------------------------------------------------
