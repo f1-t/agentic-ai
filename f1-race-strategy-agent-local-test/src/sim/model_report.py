@@ -108,11 +108,15 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     flags += [f"extrapolation:{c}" for c, age in sorted(requested_ages(snapshot, ages).items())
               if c in compounds and compounds[c].modelled and compounds[c].max_age_observed is not None
               and age > compounds[c].max_age_observed]
+    hinge = rep.get("hinge")
+    flags += [f"beyond_knot_unsupported:{c}" for c, age in sorted(requested_ages(snapshot, ages).items())
+              if c in (hinge or {}) and hinge[c]["source"] == "dropped" and age > hinge[c]["knot"]]
     supported = hazard_support(hazard)
     if supported is not None:
         flags += [f"no_hazard_support:{c}" for c, r in compounds.items() if r.modelled and c not in supported]
     return ModelReport(
-        fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel, hinge=rep.get("hinge"),
+        fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel,
+        hinge=None if hinge is None else {c: dict(e) for c, e in hinge.items()},
         condition_number=rep["condition_number"], flags=flags,
         calibration_error_s=calibration_error(fit_window, snapshot.remaining_laps, summary))
 

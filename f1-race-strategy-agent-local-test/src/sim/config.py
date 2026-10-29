@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 log = logging.getLogger(__name__)
 
+# tyre age past which wear may steepen: the filter's reference model (data.pace_design) and
+# the linear_fuel_hinge degradation model bend here unless SimConfig.hinge_knots says otherwise
+HINGE_KNOT = 25
+HINGE_TAU_S_PER_LAP = 0.05   # to_snapshot prior sd of a hinge slope, SimConfig.shrinkage["hinge_s_per_lap"]
+
 DEFAULT_COMPOUND_CLASSES = {
     **dict.fromkeys(["HYPERSOFT", "ULTRASOFT", "SUPERSOFT", "SOFT", "MEDIUM", "HARD", "SUPERHARD"], "SLICK"),
     "INTERMEDIATE": "INTERMEDIATE", "WET": "WET",
@@ -116,7 +121,11 @@ class SimConfig(_Cfg):
     # identified while every car is in its first stint.
     shrinkage: dict[str, float] = Field(default_factory=lambda: {
         "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008,
+        "hinge_s_per_lap": HINGE_TAU_S_PER_LAP,   # linear_fuel_hinge only
     })
+    # linear_fuel_hinge: tyre age where a compound's hinge starts, hinge_knot_default for the rest
+    hinge_knots: dict[str, int] = Field(default_factory=dict)
+    hinge_knot_default: int = HINGE_KNOT
     # Calibrator (calibrators.py) for the pre_race and to_snapshot windows: "shrinkage" (the
     # to_snapshot fit toward the practice prior, the default), "none" (physics plus config
     # values, held), or a learned class. The full window never calls one.

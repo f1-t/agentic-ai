@@ -311,6 +311,8 @@ class ModelReport(_Contract):
                                    with min_samples race rows; w to two decimals
       prior_dominated:<compound>   wear weight below 0.5
       extrapolation:<compound>     a requested tyre age beyond max_age_observed
+      beyond_knot_unsupported:<compound>  a requested tyre age past the hinge knot of a
+                                   compound whose hinge was dropped (linear_fuel_hinge only)
       no_hazard_support:<compound> the hazard model has no observed support for this modelled
                                    compound, so its tyre risk is not known (only with a hazard
                                    model that has per compound support)
@@ -322,6 +324,8 @@ class ModelReport(_Contract):
     fit_window: str
     compounds: dict[str, CompoundReport]
     fuel_s_per_lap: CoefficientReport | None = None   # None for models without a fuel term
+    # linear_fuel_hinge: {compound: {value, sd, source, weight, knot, n_past_knot}} from the
+    # fit_report, source "fitted", "shrunk", "prior" or "dropped"; None for models without a hinge
     hinge: dict | None = None
     condition_number: float
     flags: list[str] = Field(default_factory=list)
