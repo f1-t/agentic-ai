@@ -3,7 +3,6 @@ name: local
 sim:
   n_samples: 50
   max_stops: 2
-  min_stint: null            # RaceParams.min_stint_laps
   compare_n_samples: null    # same as n_samples
 parallel:
   n_jobs: 8

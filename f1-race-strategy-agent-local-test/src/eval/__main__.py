@@ -53,6 +53,9 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--eval-set", help="the registered eval split (default data/eval_set.json): when it "
                                       "exists, races outside it are refused and the set is a report set")
+    p.add_argument("--development", action="store_true",
+                   help="sample a development (debug) set even when the eval split exists: no race is "
+                        "refused, the split's digest is still recorded; never a source of report numbers")
     p.add_argument("--profile")
 
     p = sub.add_parser("score", help="score policies against the optimizer on a scenario set")
@@ -90,7 +93,7 @@ def main(argv=None):
         from ..sim.compute import load_profile
         out = build_set(args.races, args.version, profile=load_profile(args.profile), drivers=args.drivers,
                         max_laps_down=args.max_laps_down, max_per_race=args.max_per_race, seed=args.seed,
-                        eval_set=args.eval_set)
+                        eval_set=args.eval_set, development=args.development)
         path = out.save(args.out)
         kind = "development set" if out.development else "report set"
         print(f"{out.version} ({kind}): {len(out.items)} scenarios, {len(out.skipped)} skipped, "
@@ -101,6 +104,8 @@ def main(argv=None):
         from ..sim.compute import load_profile
         profile = load_profile(args.profile)
         scenario_set = ScenarioSet.load(args.scenarios)
+        print(f"scoring {scenario_set.version}, a {scenario_set.kind}"
+              + (": not a source of report numbers" if scenario_set.development else ": report numbers"))
         world, alts = _worlds(ap, args)
         belief = _config(args.belief_config)
         sims = race_simulators(profile, belief, _config(world))

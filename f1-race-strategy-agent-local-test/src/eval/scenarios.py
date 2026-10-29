@@ -21,7 +21,10 @@ written by the data team's register_eval_set, lists the races held out for repor
 While it exists, build_set refuses any race outside it, records the file's sha256 in
 sampling["eval_set_digest"] and marks the set development=False: a report set. Without it a
 set is a development set (development=True), which v1 is: sampled before the split, from a
-race we tuned on. Report numbers come from report sets only.
+race we tuned on. build_set(..., development=True) (`scenarios --development`) samples a
+development set while the split exists, a debug set of any race: no refusal, and the digest
+is still recorded so the set shows the split existed. Report numbers come from sets with
+development=False only.
 """
 from __future__ import annotations
 
@@ -100,6 +103,11 @@ class ScenarioSet(BaseModel):
         path.write_text(self.model_dump_json(indent=1) + "\n")
         return path
 
+    @property
+    def kind(self) -> str:
+        """"development set" or "report set", for the score CLI's one-line notice."""
+        return "development set" if self.development else "report set"
+
     @classmethod
     def load(cls, path) -> ScenarioSet:
         out = cls.model_validate_json(Path(path).read_text())
@@ -172,13 +180,15 @@ def load_eval_set(path=None) -> tuple[list[str], str] | None:
 
 
 def build_set(race_ids: list[str], version: str, *, profile=None, builder: SnapshotBuilder = calibration.snapshot_at,
-              builder_name: str = DEFAULT_BUILDER, eval_set=None, **sampling) -> ScenarioSet:
+              builder_name: str = DEFAULT_BUILDER, eval_set=None, development: bool = False,
+              **sampling) -> ScenarioSet:
     """Sample every race in `race_ids` from the committed cache (sim.jobs.load_race).
 
     `eval_set` is the registered split's file, data/eval_set.json when None. When it exists,
     a race outside it raises OutsideEvalSet before anything is sampled, and the set is a
     report set (development False) stamped with sampling["eval_set_digest"]. Without it the
-    set is a development set."""
+    set is a development set. `development` True asks for a development set while the split
+    exists: any race is sampled and the digest is still recorded."""
     from ..sim import jobs
     from ..sim.compute import load_profile
 
@@ -187,7 +197,7 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     if registered is not None:
         allowed, digest = registered
         outside = [canonical_race_id(r) for r in race_ids if canonical_race_id(r) not in set(allowed)]
-        if outside:
+        if outside and not development:
             raise OutsideEvalSet(f"races {outside} are not in the registered eval set ({len(allowed)} races, "
                                  f"sha256 {digest[:12]}); a set sampled under the split takes eval races only")
         split = {"eval_set_digest": digest}
@@ -201,4 +211,4 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     return ScenarioSet(version=version, builder=builder_name,
                        sampling={"races": [canonical_race_id(r) for r in race_ids], **sampling, **split},
                        sim_code_version=calibration.SIM_CODE_VERSION, items=items, skipped=skipped,
-                       development=registered is None)
+                       development=development or registered is None)

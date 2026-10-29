@@ -32,7 +32,9 @@ class _Cfg(BaseModel):
 class SimCompute(_Cfg):
     n_samples: int = Field(gt=0)
     max_stops: int = Field(default=2, ge=1)          # plan sweep depth
-    min_stint: int | None = None                      # None: RaceParams.min_stint_laps
+    # R2 override for every race of a run; None (the default) leaves each race its own value:
+    # the race registry's when it exists, else RaceParams.min_stint_laps (3)
+    min_stint: int | None = Field(default=None, ge=1)
     compare_n_samples: int | None = None              # None: same as n_samples
 
 

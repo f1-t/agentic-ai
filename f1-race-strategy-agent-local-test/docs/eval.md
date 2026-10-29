@@ -118,6 +118,12 @@ set `development: false`. Without it a set is `development: true`.
   Its numbers are for debugging the harness and the baselines, not for the report.
 - **v2, sampled from the eval races, is the report set**: the numbers the report quotes.
 
+`scenarios --development` (`build_set(..., development=True)`) still samples a development
+set once the split exists, a Spain debug set say: no race is refused, the set is marked
+`development: true`, and `sampling["eval_set_digest"]` is recorded anyway so the set shows
+the split existed. Report numbers come only from sets with `development: false`; `score`
+prints one line naming which kind of set it scored.
+
 ## Metrics
 
 For each scenario the optimizer (`optimizer_bridge.optimize_batch`, Quan's search scored by
@@ -220,6 +226,14 @@ of regret against 14.1 s on the rows that lose a place. There is no row with opp
 signs, no row that loses a place without losing time, and no negative position regret. The
 world is deterministic (one draw), so positions are whole numbers: a few seconds rarely
 cross a gap to the next car.
+
+That shape is expected, not a defect. With one draw a position is an integer, and in a
+spread-out field a few seconds rarely move a place, so most rows that lose time finish where
+the reference does: 513 of 845 lose time at the same position, and the signs agree on 332.
+Position regret becomes informative with `n_samples` above 1 (the mean over draws moves in
+fractions of a place) and where the field is close, after an SC, which is exactly where the
+SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
+`final_position_mean`, not instead of the time regret.
 
 ## Running on Sol
 

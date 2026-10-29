@@ -77,6 +77,13 @@ def split_race_id(race_id: str) -> tuple[int, int | str]:
         return race_season(race_id), race_id.partition("_")[2]
 
 
+def race_min_stint(profile: ComputeProfile) -> int:
+    """R2's minimum stint for a race loaded under `profile`: the profile's sim.min_stint when
+    set, else the race's own value. There is no race registry yet, so the race's value is the
+    RaceParams default (calibrate.MIN_STINT_DEFAULT, 3); the registry replaces it here."""
+    return calibrate.MIN_STINT_DEFAULT if profile.sim.min_stint is None else profile.sim.min_stint
+
+
 def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
     """Frame, race constants (observed pit loss, as `calibrate midrace` does), practice and results.
 
@@ -84,7 +91,7 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
     race_id = canonical_race_id(race_id)
     season, rnd, _ = parse_race_id(race_id)
     args = SimpleNamespace(season=season, gp=rnd, pit_loss="observed", degradation=SimConfig().degradation.name,
-                           config=None, min_stint=profile.sim.min_stint or calibrate.MIN_STINT_DEFAULT)
+                           config=None, min_stint=race_min_stint(profile))
     session, frame, cfg, race = calibrate._race_setup(args)
     pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
     race = race.model_copy(update={"pit_loss_s": pit_loss, "race_id": race_id})

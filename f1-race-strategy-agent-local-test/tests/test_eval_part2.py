@@ -210,6 +210,38 @@ def test_an_eval_set_refuses_other_races_and_stamps_its_digest(sample_load, tmp_
         scen_mod.build_set([SAMPLE_RACE.race_id, "2021_Spain"], "r", eval_set=path)
 
 
+def test_development_flag_samples_a_debug_set_under_the_split(sample_load, tmp_path):
+    path = tmp_path / "eval_set.json"
+    path.write_text(json.dumps(["2022_05_miami"]))
+    out = scen_mod.build_set([SAMPLE_RACE.race_id], "dbg", eval_set=path, development=True)
+    assert out.development and out.kind == "development set" and out.items
+    assert out.sampling["eval_set_digest"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert ScenarioSet(version="r", development=False).kind == "report set"
+
+
+@pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
+def test_score_names_the_kind_of_set_it_scored(tmp_path, capsys):
+    from src.eval.__main__ import main
+
+    full = ScenarioSet.load(ROOT / "data" / "scenarios" / "v1.json")
+    path = ScenarioSet(version="t1", items=full.items[:1]).save(tmp_path / "t1.json")
+    assert main(["score", "--scenarios", str(path), "--policies", "fixed_one_stop", "--n-samples", "1",
+                 "--out", str(tmp_path / "rows.csv")]) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first == "scoring t1, a development set: not a source of report numbers"
+
+
+def test_profiles_leave_the_minimum_stint_to_the_race():
+    from src.sim.compute import load_profile
+
+    for name in ("local", "sol"):
+        p = load_profile(name)
+        assert p.sim.min_stint is None and jobs.race_min_stint(p) == 3
+        pinned = p.model_copy(update={"sim": p.sim.model_copy(update={"min_stint": 10})})
+        assert jobs.race_min_stint(pinned) == 10
+        assert "min_stint" not in (ROOT / "configs" / "compute" / f"{name}.yaml").read_text()
+
+
 def test_default_eval_set_path_and_v1_is_a_development_set():
     assert scen_mod.EVAL_SET == ROOT / "data" / "eval_set.json"
     assert ScenarioSet.load(ROOT / "data" / "scenarios" / "v1.json").development

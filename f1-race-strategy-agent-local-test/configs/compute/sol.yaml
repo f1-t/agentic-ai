@@ -3,7 +3,6 @@ name: sol
 sim:
   n_samples: 500
   max_stops: 3
-  min_stint: null
   compare_n_samples: null
 parallel:
   n_jobs: 1
