@@ -105,9 +105,11 @@ def test_default_off_and_no_pace_hash_equal_to_main():
     assert batch_digest(syn_sim(pace={"OTHER": 0.5}))[1] == digest   # not the snapshot driver
 
 
-def test_default_config_hash_is_unchanged_and_traffic_changes_it():
-    assert calibration.config_hash(SimConfig()) == "ffd423d35d0c"   # origin/main 7a53507
-    assert calibration.config_hash(SimConfig(traffic={"name": "ghost"})) != "ffd423d35d0c"
+def test_traffic_is_part_of_the_config_hash():
+    # no special case for the default: adding the field moved the default hash off main's
+    # ffd423d35d0c, as any new config field does
+    default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
+    assert default == "559101587697" and ghost_on == "85b39a61f3ba" and default != "ffd423d35d0c"
 
 
 @pytest.fixture(scope="module")
@@ -157,6 +159,7 @@ def test_ghost_table_arrays():
     assert t.ghosts == ["AAA"] and t.G.shape == (1, N - 5)
     assert t.G_prev[0, 0] == pytest.approx(5 * F - 3.0)            # the lap-k row
     assert np.allclose(t.g, 80.5) and t.in_lap[0].tolist() == [lap == 8 for lap in range(6, N + 1)]
+    assert t.out_lap[0].tolist() == [lap == 9 for lap in range(6, N + 1)]
     assert np.isnan(ghost_table(df, OUR, np.arange(1, N + 1)).G_prev[0, 0])   # no lap-0 row
 
 
@@ -171,31 +174,39 @@ def test_held_behind_a_slower_car():
     assert passes[0] == 0
 
 
-def test_a_clean_pass_pays_pass_cost_once():
-    # 4. 1.0 s/lap faster, caught within pass reach: one lap pays pass_cost_s, then free air.
-    # The spec's 3 s start does not give this under the rule, see the next test.
-    df = frame(ghost("AAA", 81.0, 0.5))
-    model, state, laps = prepare(df)
-    inc, traffic_s, passes = apply(model, state, laps)
-    assert by_lap(inc, laps)[6] == pytest.approx(0.4)
-    assert np.all(inc[0, 1:] == 0.0)
-    assert passes[0] == 1 and traffic_s[0] == pytest.approx(0.4)
-    end6 = 6 * F + 0.4
-    assert end6 - state.table.G[0, 0] < 0                             # next lap d < 0
-
-
-def test_a_pass_that_ends_behind_the_ghost_is_charged_again():
-    # the rule as written: from 3 s at 1.0 s/lap the catch lap starts 1.0 s behind, the pass
-    # costs 0.4 and ends 0.4 s behind the ghost's line, so the next lap passes it again
-    model, state, laps = prepare(frame(ghost("AAA", 81.0, 3.0)))
+def test_a_pass_is_a_position_swap():
+    # 4. 1.0 s/lap faster than a ghost 3 s ahead, pass_delta 0.8: caught on the third lap
+    # (lap 8, 1.0 s behind its line at the start), passed once, ending pass_gap_s ahead of
+    # it; arrive + pass_cost_s would be 0.4 s behind, so the swap binds: increment -0.2
+    model, state, laps = prepare(frame(ghost("AAA", 81.0, 3.0)), **NO_DRS)
     inc, traffic_s, passes = apply(model, state, laps)
     got = by_lap(inc, laps)
-    assert got[8] == pytest.approx(0.4) and got[9] == pytest.approx(0.4)
-    assert passes[0] == 2 and traffic_s[0] == pytest.approx(0.8)
+    assert got[6] == got[7] == 0.0
+    assert got[8] == pytest.approx(-0.2)
+    assert all(got[lap] == 0.0 for lap in range(9, N + 1))           # no further charge
+    assert passes[0] == 1 and traffic_s[0] == pytest.approx(-0.2)
+    end8 = 8 * F - 0.2
+    G8 = state.table.G[0, laps.tolist().index(8)]
+    assert end8 == pytest.approx(G8 - 0.2) and end8 < G8               # d < 0 from lap 9 on
 
 
-def first_pass_lap(inc, laps, cost=0.4):
-    hit = np.isclose(inc[0], cost)
+def test_held_until_drs_then_one_pass():
+    # 0.5 s/lap faster, 3 s behind after lap 1: free laps 2-5 close to 1.0 s at the start of
+    # lap 6, where DRS (0.3) lets the pass through; one charge, then free air
+    model = GhostTraffic()
+    laps = np.arange(2, N + 1)
+    state = model.prepare(snap(1, F), laps, frame(ghost("AAA", 80.5, 3.0, k=1)), OUR)
+    inc, traffic_s, passes = apply(model, state, laps)
+    got = by_lap(inc, laps)
+    assert all(got[lap] == 0.0 for lap in range(2, 6))
+    assert got[6] == pytest.approx(-0.7)                               # G - pass_gap_s, from G + 0.5
+    assert all(got[lap] == 0.0 for lap in range(7, N + 1))
+    assert passes[0] == 1
+
+
+def first_pass_lap(inc, laps):
+    """The first lap whose increment is negative: a pass from close behind, where the swap binds."""
+    hit = inc[0] < 0
     return int(laps[hit.argmax()]) if hit.any() else None
 
 
@@ -209,7 +220,7 @@ def test_drs_off_on_the_first_laps():
     inc, _, passes = apply(model, state, laps)
     got = by_lap(inc, laps)
     assert got[1] == 0.0 and got[2] == pytest.approx(0.7)            # 0.3 s behind its line, held to G + 1
-    assert first_pass_lap(inc, laps) == 3 and passes[0] >= 1
+    assert first_pass_lap(inc, laps) == 3 and got[3] == pytest.approx(-0.7) and passes[0] == 1
 
 
 def test_drs_off_for_two_laps_after_an_sc_period():
@@ -220,11 +231,11 @@ def test_drs_off_for_two_laps_after_an_sc_period():
     laps = np.arange(5, N + 1)
     state = model.prepare(snap(4, 4 * F), laps, df, OUR)
     lap_s = np.where(np.isin(laps, [5, 6]), 110.0, F)
-    inc, _, _ = apply(model, state, laps, lap_s=lap_s, sc=(5, 6))
+    inc, _, passes = apply(model, state, laps, lap_s=lap_s, sc=(5, 6))
     got = by_lap(inc, laps)
     assert got[5] == got[6] == 0.0
     assert got[7] == pytest.approx(0.5) and got[8] == pytest.approx(0.5)   # held, DRS off
-    assert first_pass_lap(inc, laps) == 9
+    assert first_pass_lap(inc, laps) == 9 and passes[0] == 1
     # the snapshot's SC history counts for the first remaining laps
     df = frame(ghost("AAA", 80.5, 1.0, k=6))
     laps = np.arange(7, N + 1)
@@ -237,14 +248,40 @@ def test_drs_off_for_two_laps_after_an_sc_period():
 
 
 def test_ghost_in_lap_never_clamps_its_out_lap_does():
-    # 6. held at the follow gap; the ghost's in-lap (8) frees us, its out-lap (9) holds us again
-    df = frame(ghost("AAA", 80.5, 1.0, pit_in=(8,)))
+    # 6. held at the follow gap; the ghost's in-lap (8) frees us (0.5 s behind after it), its
+    # out-lap (9, 80.2 s) has it rejoin 0.3 s ahead of our line: held to G + 1
+    df = frame(ghost("AAA", 80.5, 1.0, pit_in=(8,), times={9: 80.2}))
     model, state, laps = prepare(df, **NO_DRS)
     assert not state.eligible[laps.tolist().index(8)].any() and state.eligible[laps.tolist().index(9)].all()
     got = by_lap(apply(model, state, laps)[0], laps)
     assert got[6] == pytest.approx(0.5) and got[7] == pytest.approx(0.5)
     assert got[8] == 0.0
-    assert got[9] == pytest.approx(1.0)                               # 0.5 s behind, held to G + 1
+    assert got[9] == pytest.approx(0.7)
+
+
+def out_lap_ghost(gap_after_line):
+    """AAA pits on lap 7 and runs its out-lap 8 in 82 s, 2 s/lap slower than us, so it would
+    be passable on track; we finish lap 8 `gap_after_line` seconds after its line."""
+    return frame(car("AAA", F, start=-2.0 - gap_after_line, compound="MEDIUM", pit_in=(7,), times={8: 82.0}))
+
+
+@pytest.mark.parametrize("on_out_lap", [True, False])
+def test_out_lap_ghost_is_never_passed(on_out_lap):
+    model = GhostTraffic()
+    laps = np.arange(8, N + 1)
+    df = out_lap_ghost(0.3)
+    if not on_out_lap:
+        df.loc[df["driver"] == "AAA", ["pit_in", "pit_out"]] = False
+    state = model.prepare(snap(7), laps, df, OUR)
+    inc, _, passes = apply(model, state, laps)
+    if on_out_lap:   # it rejoined 0.3 s ahead of us: a clamp, not a pass
+        assert by_lap(inc, laps)[8] == pytest.approx(0.7) and passes[0] == 0
+    else:            # the same car on track is passed
+        assert by_lap(inc, laps)[8] == pytest.approx(-0.5) and passes[0] == 1
+    # rejoining behind us: nothing, no cost and no swap
+    state = model.prepare(snap(7), laps, out_lap_ghost(-0.3), OUR)
+    inc, traffic_s, passes = apply(model, state, laps)
+    assert np.all(inc == 0.0) and passes[0] == 0
 
 
 def test_neutral_laps_get_no_increment():
@@ -255,15 +292,55 @@ def test_neutral_laps_get_no_increment():
     assert got[6] == pytest.approx(0.5) and got[8] > 0 and got[10] > 0
 
 
-def test_max_passes_per_lap_caps_the_charge():
-    # 12. three cars 2 s/lap slower just ahead, all passed on lap 6
+def test_three_passes_in_one_lap():
+    # three cars 2 s/lap slower just ahead, all passed on lap 6: free (arrive + 1.2) is
+    # ahead of the swap bound, so it binds
     ghosts = [ghost(name, 82.0, gap) for name, gap in (("AAA", 0.2), ("BBB", 0.3), ("CCC", 0.4))]
-    for cap, charged in ((3, 3), (2, 2)):
-        model, state, laps = prepare(frame(*ghosts), max_passes_per_lap=cap)
-        inc, traffic_s, passes = apply(model, state, laps)
-        assert passes[0] == charged
-        assert by_lap(inc, laps)[6] == pytest.approx(0.4 * charged)
-        assert np.all(inc[0, 1:] == 0.0)
+    model, state, laps = prepare(frame(*ghosts))
+    inc, traffic_s, passes = apply(model, state, laps)
+    assert passes[0] == 3 and by_lap(inc, laps)[6] == pytest.approx(1.2)
+    assert np.all(inc[0, 1:] == 0.0)
+
+
+def test_max_passes_per_lap_keeps_the_closest():
+    # 12. four passable cars, cap 3: the three closest (largest G_prev, 0.2-0.4 s ahead) are
+    # passed and charged, DDD (1.7 s ahead) holds us at G + 1
+    ghosts = [ghost(name, 82.0, gap) for name, gap in (("AAA", 0.2), ("BBB", 0.3), ("CCC", 0.4), ("DDD", 1.7))]
+    df, lap6 = frame(*ghosts), np.array([6])
+
+    def one_lap(**params):
+        model = GhostTraffic(**params)
+        state = model.prepare(snap(), lap6, df, OUR)
+        inc, _, passes = apply(model, state, lap6)
+        return state, 6 * F + inc[0, 0], passes[0]
+
+    state, end, passes = one_lap()
+    G = dict(zip(state.table.ghosts, state.table.G[:, 0]))
+    assert passes == 3
+    assert end == pytest.approx(G["DDD"] + 1.0)                       # behind DDD, ahead of the three
+    assert end < min(G["AAA"], G["BBB"], G["CCC"]) - 0.2
+    # over the race DDD is passed on lap 7, from 1 s behind with DRS: 4 passes in all
+    model, state, laps = prepare(df)
+    inc, _, passes = apply(model, state, laps)
+    assert passes[0] == 4 and by_lap(inc, laps)[7] == pytest.approx(0.4)
+    # cap 1: AAA is kept, but BBB (ahead of AAA on the line) is now held, and a kept pass
+    # never ends past the car holding us, so nothing is passed
+    _, end, passes = one_lap(max_passes_per_lap=1)
+    assert passes == 0 and end == pytest.approx(G["BBB"] + 1.0)
+    _, end, passes = one_lap(max_passes_per_lap=0)
+    assert passes == 0 and end == pytest.approx(G["AAA"] + 1.0)        # held behind the last on the line
+
+
+def test_no_swap_past_the_car_that_holds_us():
+    # held by AAA (0.5 s/lap slower, no DRS help); BBB is passable but ahead of AAA on the
+    # line, so passing it would put us past the car holding us: no swap
+    a, b = ghost("AAA", 80.5, 0.5), ghost("BBB", 82.0, 2.5)
+    model, state, laps = prepare(frame(a, b), **NO_DRS)
+    inc, _, passes = apply(model, state, laps)
+    assert passes[0] == 0 and by_lap(inc, laps)[6] == pytest.approx(1.0)   # held at G_AAA + 1
+    model, state, laps = prepare(frame(b), **NO_DRS)                        # without AAA it swaps
+    inc, _, passes = apply(model, state, laps)
+    assert passes[0] == 1 and by_lap(inc, laps)[6] == pytest.approx(-0.7)
 
 
 def test_dirty_air_is_off_by_default_and_charged_within_range():

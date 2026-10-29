@@ -27,28 +27,48 @@ agent's tools run with traffic off until a projected-ghost source exists (0012b;
 Ghost table (ghost_table). Common clock = session time. Over the remaining lap numbers L:
 G[j, L] is the end_s of ghost j's lap L (NaN where absent), G_prev[j, L] the end_s of its
 lap L - 1 (the lap-k row for the first remaining lap; NaN without one, lap 0 included),
-g = G - G_prev its recorded lap time, in_lap[j, L] its pit_in on L. A ghost's in-lap never
-clamps (its time has the pit entry in it); its out-lap does, since being held behind a car
-on cold tyres is the undercut victim's reality. Our anchor is t0 + snapshot.elapsed_s,
-with t0 the race start: the snapshot driver's lap-1 start_s, else the field minimum.
+g = G - G_prev its recorded lap time, in_lap[j, L] its pit_in on L, out_lap[j, L] its
+pit_out on L. A ghost's in-lap never clamps (its time has the pit entry in it). A ghost on
+its out-lap is never passed on track (it rejoined from the pit lane): if we arrive before
+its G we are simply ahead (it rejoined behind us; no cost, no swap), if we arrive within
+follow_gap_s after its G we are held behind the car that rejoined in front of us (the
+undercut victim's reality), later than that nothing. Our anchor is t0 +
+snapshot.elapsed_s, with t0 the race start: the snapshot driver's lap-1 start_s, else the
+field minimum.
 
 Per sample, sequential over the remaining laps, vectorised over plans and ghosts, with T
-our clock at the lap start and f our lap time as the engine produced it:
+our clock at the lap start, f our lap time as the engine produced it and arrive = T + f:
 
-    neutral lap (SC or VSC): no traffic, end = T + f
+    neutral lap (SC or VSC): no traffic, end = arrive
     else  d       = T - G_prev                          gap at the lap start, per ghost
           behind  = d > 0, ghost eligible (both ends recorded, not its in-lap)
-          catch   = behind & (T + f < G + follow_gap_s)  we would reach the car this lap
+          catch   = behind & (arrive < G + follow_gap_s)  we would reach the car this lap
           thresh  = pass_delta_drs_s when DRS is on and d <= drs_range_s, else pass_delta_s
-          passing = catch & (g - f >= thresh), held = catch & ~passing
-          end     = max(T + f + min(#passing, max_passes_per_lap) * pass_cost_s + dirty,
-                        max over held of G + follow_gap_s)
+          fast    = g - f >= thresh
+          held    = catch & ~fast (not on its out-lap)  |  catch & out-lap & (arrive > G)
+          clamp   = max over held of (G + follow_gap_s), -inf if none
+          passing = catch & fast & passable & (G - pass_gap_s >= clamp)
+                    passable = not on its out-lap; never past the car that holds us
+          cap:      more than max_passes_per_lap passing: the closest ones (largest G_prev)
+                    are passed, the rest count as held (clamp recomputed, the kept passes
+                    rechecked against it)
+          free    = arrive + #passing * pass_cost_s + dirty
+          swap    = min over passing of (G - pass_gap_s), +inf if none
+          end     = max(clamp, min(free, swap))
     lap_s = end - T; then T = end + pit loss, so the out-lap starts from the rejoin position.
+
+A pass is a position swap: it always ends at least pass_gap_s ahead of every car passed,
+so the next lap's d is negative for them and a pass is never charged twice. When free >
+swap the swap grants time the car did not earn, at most follow_gap_s + pass_gap_s +
+pass_cost_s - (g - f) on that lap, so a lap's increment can be negative ("conjured"
+time). That is the price of ghosts that do not react: in a reactive world the passed car
+would lose that time instead. calibrate traffic reports the conjured total.
 
 DRS is off on race laps 1 to drs_off_first_laps, on SC and VSC laps, and for
 drs_off_after_sc_laps after the last lap of an SC period (the snapshot's SC history
-counts). dirty is dirty_air_s while any ghost ahead is within dirty_air_range_s and we are
-not passing (off by default).
+counts). A held car sits at follow_gap_s = drs_range_s, which is in DRS range by design
+(compared with a 1e-9 s tolerance). dirty is dirty_air_s while any ghost ahead is within
+dirty_air_range_s and we are not passing (off by default).
 
 Constants, a priori and frozen; sources are placeholders, not facts the code depends on,
 and all of them will be selected by leave-one-race-out across races later:
@@ -58,6 +78,7 @@ and all of them will be selected by leave-one-race-out across races later:
                            often quoted for easy tracks
     pass_delta_drs_s 0.3
     pass_cost_s 0.4        the order of a lap lost per ten overtakes
+    pass_gap_s 0.2         a car length and a bit at the line; a pass never ends in a tie
     dirty_air_range_s 2.0  drivers and commentary put the dirty-air window near 2 s
 
 Known limits, not solved here:
@@ -111,6 +132,7 @@ class GhostParams(BaseModel):
     pass_delta_s: float = 0.8
     pass_delta_drs_s: float = 0.3
     pass_cost_s: float = Field(default=0.4, ge=0)
+    pass_gap_s: float = Field(default=0.2, ge=0)   # a pass ends at least this far ahead
     drs_off_first_laps: int = Field(default=2, ge=0)
     drs_off_after_sc_laps: int = Field(default=2, ge=0)
     dirty_air_s: float = Field(default=0.0, ge=0)
@@ -128,6 +150,7 @@ class GhostTable:
     G_prev: np.ndarray
     g: np.ndarray
     in_lap: np.ndarray
+    out_lap: np.ndarray
 
 
 def ghost_table(frame, driver, laps) -> GhostTable:
@@ -142,14 +165,17 @@ def ghost_table(frame, driver, laps) -> GhostTable:
     ghosts = sorted(d for d in frame["driver"].unique() if d != driver)
     n_lap = int(max(laps.max(), frame["lap"].max())) + 1 if len(laps) else 1
     end = np.full((len(ghosts), n_lap), np.nan)
-    pit = np.zeros((len(ghosts), n_lap), dtype=bool)
+    pit_in = np.zeros((len(ghosts), n_lap), dtype=bool)
+    pit_out = np.zeros((len(ghosts), n_lap), dtype=bool)
     rows = frame[frame["driver"].isin(ghosts)]
     j = np.searchsorted(ghosts, rows["driver"].to_numpy())
     lap = rows["lap"].to_numpy(dtype=int)
     end[j, lap] = rows["end_s"].to_numpy(dtype=float)
-    pit[j, lap] = rows["pit_in"].to_numpy(dtype=bool)
+    pit_in[j, lap] = rows["pit_in"].to_numpy(dtype=bool)
+    pit_out[j, lap] = rows["pit_out"].to_numpy(dtype=bool)
     G, G_prev = end[:, laps], end[:, laps - 1]   # lap 0 has no row, so NaN
-    return GhostTable(ghosts=ghosts, laps=laps, G=G, G_prev=G_prev, g=G - G_prev, in_lap=pit[:, laps])
+    return GhostTable(ghosts=ghosts, laps=laps, G=G, G_prev=G_prev, g=G - G_prev, in_lap=pit_in[:, laps],
+                      out_lap=pit_out[:, laps])
 
 
 def race_start(frame, driver):
@@ -182,9 +208,12 @@ class GhostState:
     warnings: list = field(default_factory=list)
     # per lap rows (n_laps, n_ghosts), contiguous for the lap loop
     G_prev: np.ndarray = None
+    G: np.ndarray = None
     G_follow: np.ndarray = None   # G + follow_gap_s
+    G_swap: np.ndarray = None     # G - pass_gap_s
     g: np.ndarray = None
     eligible: np.ndarray = None
+    out_lap: np.ndarray = None    # eligible and on its out-lap: held or nothing, never passed
 
 
 @TRAFFIC.register("ghost")
@@ -201,10 +230,13 @@ class GhostTraffic:
         table = ghost_table(frame, driver, laps)
         state = GhostState(table=table, anchor=t0, sc_history=list(snapshot.sc_laps))
         state.G_prev = np.ascontiguousarray(table.G_prev.T)
-        state.G_follow = np.ascontiguousarray(table.G.T + self.params.follow_gap_s)
+        state.G = np.ascontiguousarray(table.G.T)
+        state.G_follow = state.G + self.params.follow_gap_s
+        state.G_swap = state.G - self.params.pass_gap_s
         state.g = np.ascontiguousarray(table.g.T)
         state.eligible = np.ascontiguousarray(
             (np.isfinite(table.G_prev) & np.isfinite(table.G) & ~table.in_lap).T)
+        state.out_lap = state.eligible & table.out_lap.T
         if (snapshot.car_ahead is not None and snapshot.gap_ahead_s is not None
                 and snapshot.car_ahead in table.ghosts and len(table.laps)):
             implied = t0 - table.G_prev[table.ghosts.index(snapshot.car_ahead), 0]
@@ -223,6 +255,11 @@ class GhostTraffic:
         for last in _runs([*state.sc_history, *scenario.sc_laps]):
             on &= ~((laps > last) & (laps <= last + p.drs_off_after_sc_laps))
         return on
+
+    @staticmethod
+    def _clamp(held, G_follow):
+        """(n_plans,) max over held ghosts of G + follow_gap_s, -inf where none."""
+        return np.where(held, G_follow, -np.inf).max(axis=1, initial=-np.inf)
 
     def apply(self, state, lap_s, pit_s_lap, neutral, scenario):
         p = self.params
@@ -249,17 +286,30 @@ class GhostTraffic:
                 thresh = np.where(d <= p.drs_range_s + _GAP_EPS, p.pass_delta_drs_s, p.pass_delta_s)
             else:
                 thresh = p.pass_delta_s
-            passing = catch & (state.g[i] - f[:, None] >= thresh)
-            held = catch & ~passing
-            n_pass = np.minimum(passing.sum(axis=1), p.max_passes_per_lap)
+            fast = state.g[i] - f[:, None] >= thresh
+            out = state.out_lap[i]
+            # an out-lap ghost is never passed: held when we arrive after its line, else nothing
+            held = catch & np.where(out, arrive[:, None] > state.G[i], ~fast)
+            clamp = self._clamp(held, state.G_follow[i])
+            passing = catch & fast & ~out & (state.G_swap[i] >= clamp[:, None])
+            over = passing.sum(axis=1) > p.max_passes_per_lap
+            if over.any():
+                # the closest (largest G_prev) are passed, the rest hold us
+                key = np.where(passing, state.G_prev[i], -np.inf)
+                rank = np.argsort(np.argsort(-key, axis=1, kind="stable"), axis=1)
+                keep = passing & (rank < p.max_passes_per_lap)
+                held = held | (passing & ~keep)
+                clamp = self._clamp(held, state.G_follow[i])
+                passing = keep & (state.G_swap[i] >= clamp[:, None])
+            n_pass = passing.sum(axis=1)
             extra = n_pass * p.pass_cost_s
             if dirty_on:
                 near = behind & (d <= p.dirty_air_range_s + _GAP_EPS) & ~passing
                 extra = extra + p.dirty_air_s * near.any(axis=1)
-            clamp = np.where(held, state.G_follow[i], -np.inf).max(axis=1, initial=-np.inf)
-            # end = max(arrive + extra, clamp), kept as an increment so a lap without traffic
-            # keeps its lap time bit for bit
-            inc = np.maximum(extra, clamp - arrive)
+            swap = np.where(passing, state.G_swap[i], np.inf).min(axis=1, initial=np.inf)
+            # end = max(clamp, min(arrive + extra, swap)), kept as an increment so a lap
+            # without traffic keeps its lap time bit for bit; negative when the swap binds
+            inc = np.maximum(clamp - arrive, np.minimum(extra, swap - arrive))
             lap_s[:, i] = f + inc
             traffic_s += inc
             passes += n_pass
