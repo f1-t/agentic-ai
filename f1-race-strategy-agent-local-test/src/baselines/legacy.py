@@ -65,7 +65,7 @@ def load_legacy_context(driver: str = "HAM", completed_laps: int = 0) -> LegacyC
     history = tuple(Stint(s["compound"], s["laps"]) for s in actual["stints"])
     models = []
     for compound in info["compounds_available"]:
-        fitted = tools.estimate_tyre_degradation(compound)
+        fitted = tools.fit_tyre_degradation(compound)
         if "error" not in fitted:
             models.append((compound, fitted["base_laptime_s"], fitted["deg_per_lap_s"]))
     state = Snapshot(
