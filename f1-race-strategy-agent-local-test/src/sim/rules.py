@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from ..contracts import Plan, Snapshot
+from .config import compound_class
 from .registry import Registry
 
 RULES = Registry("rule")
@@ -43,20 +44,36 @@ def known_compounds(ctx):
 def min_stint(ctx):
     """Enforce the minimum stint length.
 
-    The minimum is a planning constraint rather than a legality rule; a waiver
-    for tyre-class changes (e.g. intermediates to slicks) comes with the wet hooks.
+    The minimum is a planning constraint rather than a legality rule.
     """
     snap = ctx.snapshot
     floor = snap.race.min_stint_laps
     # the first stint is the remainder of a stint already underway, so it is exempt
     underway = snap.laps_completed - sum(s.laps for s in snap.stints) > 0
+    def short(i, s):
+        return s.laps < floor and not (
+            # class-change waiver: a stint on either side of a change of tyre class (inters
+            # to slicks after three laps) is a crossover stop, not a short stint. Kept
+            # separate from the clause above so the two rules compose.
+            _class_change(ctx, i))
     return [f"Stint of {s.laps} laps is below the {floor}-lap minimum."
-            for s in (ctx.plan.stints[1:] if underway else ctx.plan.stints) if s.laps < floor]
+            for i, s in enumerate(ctx.plan.stints)
+            if short(i, s) and not (i == 0 and underway)]
+
+
+def _class_change(ctx, i):
+    """Whether stint i has a different tyre class from the stint before or after it."""
+    stints = ctx.plan.stints
+    cls = compound_class(ctx.config, stints[i].compound)
+    return any(compound_class(ctx.config, stints[j].compound) != cls
+               for j in (i - 1, i + 1) if 0 <= j < len(stints))
 
 
 @RULES.register("two_compounds")
 def two_compounds(ctx):
     used = ctx.snapshot.compounds_used | {s.compound for s in ctx.plan.stints}
+    if any(compound_class(ctx.config, c) != "SLICK" for c in used):
+        return []   # a wet-weather plan or history: the two-compound rule is a dry rule
     if len(used) < 2:
         return ["A valid dry strategy must use at least two different compounds."]
     return []
