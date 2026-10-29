@@ -76,7 +76,7 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
     race_id = canonical_race_id(race_id)
     season, rnd, _ = parse_race_id(race_id)
     args = SimpleNamespace(season=season, gp=rnd, pit_loss="observed", degradation=SimConfig().degradation.name,
-                           config=None, min_stint=profile.sim.min_stint or RaceParams.model_fields["min_stint_laps"].default)
+                           config=None, min_stint=profile.sim.min_stint or calibrate.MIN_STINT_DEFAULT)
     session, frame, cfg, race = calibrate._race_setup(args)
     pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
     race = race.model_copy(update={"pit_loss_s": pit_loss, "race_id": race_id})

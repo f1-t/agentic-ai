@@ -12,7 +12,14 @@ happens at the end of a lap. The first stint of any plan has at least one lap; a
 stop may be taken only when `current_stint_laps + first.laps >= min`; every later stint
 has at least `min` laps; a first stint that runs to the flag has no minimum. A stint on
 either side of a change of tyre class (for example inters to slicks) is exempt
-(class-change waiver).
+(class-change waiver). The value is `RaceParams.min_stint_laps`: default 3, set per race
+by the race registry (the profile's `sim.min_stint` overrides it for a whole run). Real
+races have 3-lap stints, and the simulator prices short stints honestly, so the rule no
+longer needs a 10-lap floor to keep plans sensible. The agent's tools read it from the
+snapshot (`race.min_stint_laps`, shown to the agent as `RaceSnapshot.min_stint_laps`),
+not from a tool-layer constant (SPEC 0015 points the tools at it). `src/legacy_tools.py`,
+the frozen baseline, pins 10. A scenario set keeps the value inside its snapshots: v1
+carries 10 and keeps scoring under 10; sets sampled from now on carry 3.
 
 **R3 Compounds.** A dry race uses at least two dry compounds over the whole race, history
 included. The rule is waived when a non-slick class appears.

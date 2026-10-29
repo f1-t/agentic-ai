@@ -35,6 +35,23 @@ SnapshotBuilder = Callable[[pd.DataFrame, RaceParams, str, int], Snapshot]
 DEFAULT_BUILDER = "src.sim.calibration.snapshot_at"
 
 
+# Snapshot fields added to the contract after sets were published (SPEC 0014 I). The digest
+# leaves each out while it holds its default, so a set saved before the field existed keeps
+# its digest, and a set that fills the field hashes it.
+_ADDED_FIELDS = {("snapshot", "recent_lap_times_s"): [], ("snapshot", "context"): {},
+                 ("snapshot", "weather", "rain_probability"): None, ("snapshot", "field", "nearby"): []}
+
+
+def _digest_view(item: dict) -> dict:
+    for path, default in _ADDED_FIELDS.items():
+        parent = item
+        for key in path[:-1]:
+            parent = parent.get(key, {})
+        if path[-1] in parent and parent[path[-1]] == default:
+            del parent[path[-1]]
+    return item
+
+
 class Scenario(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -59,7 +76,7 @@ class ScenarioSet(BaseModel):
     skipped: list[dict] = Field(default_factory=list)   # {race_id, driver, lap, reason}
 
     def compute_digest(self) -> str:
-        payload = json.dumps([s.model_dump(mode="json") for s in self.items], sort_keys=True)
+        payload = json.dumps([_digest_view(s.model_dump(mode="json")) for s in self.items], sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def save(self, path) -> Path:
