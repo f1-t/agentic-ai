@@ -137,3 +137,12 @@ def test_sc_pit_laps_are_classified_as_pit_laps_not_sc():
                       "pit_in": [False, False, True, False, False], "pit_out": [False, False, False, True, False],
                       "clean": [True, False, False, False, True]})
     assert calibration._lap_kind(g).tolist() == ["lap1", "sc", "in_lap", "out_lap", "clean"]
+
+
+def test_single_driver_summary_emits_no_runtime_warning(sim):
+    import warnings
+    frame = race_frame(("AAA", "T", A_PLAN))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        _, summary, _ = calibration.run(sim, frame, RACE)
+    assert pd.isna(summary["spearman_raw"])

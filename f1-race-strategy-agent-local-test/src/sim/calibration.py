@@ -142,7 +142,9 @@ def _summary(t):
         "bias_offset_adjusted_s": round(float(t["err_offset_s"].mean()), 2),
         "mae_green_s": round(float(t["err_green_s"].abs().mean()), 2),
         "bias_green_s": round(float(t["err_green_s"].mean()), 2),
-        "spearman_raw": round(float(t["pred_s"].rank().corr(t["real_s"].rank())), 3),
+        # a rank correlation needs at least two drivers; numpy would warn and return NaN
+        "spearman_raw": (round(float(t["pred_s"].rank().corr(t["real_s"].rank())), 3)
+                         if len(t) >= 2 else float("nan")),
     }
 
 
