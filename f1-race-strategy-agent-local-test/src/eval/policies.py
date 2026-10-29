@@ -85,7 +85,9 @@ def agent_policy(scenario, sim, max_stops):
     """The live agent. Its tools are fixed to one race and plan whole races from the start,
     so only lap-0 scenarios of that race with the full race length are available until the
     loop takes a snapshot."""
-    from .. import tools
+    # temporary: the lap-0 same-race guard reads the legacy race until the agent policy runs
+    # the snapshot loop (SPEC 0014 H)
+    from .. import legacy_tools as tools
 
     if (scenario.lap != 0 or scenario.race_id != canonical_race_id(tools._race_params().race_id)
             or scenario.snapshot.race.total_laps != tools.race_laps()):

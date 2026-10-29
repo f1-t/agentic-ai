@@ -22,7 +22,7 @@ def frame(session):
 
 
 def test_baseline_fit_and_ground_truth_are_reproduced(frame):
-    from src import tools
+    from src import legacy_tools as tools
     gt = json.load(open(os.path.join(os.path.dirname(__file__), "..", "data", "ground_truth.json")))
     res = tools.simulate_strategy(gt["optimal_strategy"])
     assert res["total_time_s"] == pytest.approx(gt["optimal_total_time_s"], abs=0.05)
@@ -37,7 +37,7 @@ def test_default_model_fit_on_filtered_laps(frame):
 
 
 def test_tool_errors_keep_the_original_contract():
-    from src import tools
+    from src import legacy_tools as tools
     assert "sum to 65" in tools.simulate_strategy([["SOFT", 28], ["MEDIUM", 37]])["error"]
     assert "Unknown compound" in tools.simulate_strategy([["SOFT", 28], ["HARD", 38]])["error"]
 
