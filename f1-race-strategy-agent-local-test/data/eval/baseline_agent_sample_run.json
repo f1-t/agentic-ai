@@ -1,0 +1,7 @@
+{
+ "name": "baseline_agent_recorded",
+ "source": "docs/sample_run.txt: the stakeholder baseline agent (model and legacy linear tools as recorded there), one full-race question about HAM from the start. Scored here under the eval simulator, not the legacy one, so its regret differs from the 0.0% the legacy grader reports.",
+ "decisions": {
+  "2021_04_spain:HAM:00": {"stint_plan": [["SOFT", 28], ["SOFT", 28], ["MEDIUM", 10]], "tool_calls": 12, "input_tokens": null, "output_tokens": null}
+ }
+}
