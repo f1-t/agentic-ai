@@ -287,7 +287,8 @@ class Simulator:
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
-            # draw order: events, then the degradation model, then the hazard (when on), then the track
+            # draw order: events, degradation, hazard, track: do not reorder, seeds depend on it
+            # (the hazard uniform is drawn here, ahead of the track state; its use comes later)
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, rng)
             model = self.degradation.draw(rng)
