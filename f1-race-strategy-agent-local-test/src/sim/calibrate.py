@@ -23,8 +23,17 @@ command does, unless --pit-loss gives a number. Every row of both csvs carries p
 pit_loss_source ("observed" or "--pit-loss"), config_hash (calibration.config_hash, a hash
 of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a hash of the
 src/sim and src/contracts.py source). The second prints the summary pivot and writes
-reports/calibration/midrace_summary.csv; it refuses rows with more than one value of
+reports/calibration/midrace_summary.csv, every row with the same four columns taken from
+the input rows (calibrate._provenance); it refuses rows with more than one value of
 either version column unless --allow-mixed is given.
+
+Ghost-car traffic (traffic.py), off against on, with the pace term in the engine:
+
+    python -m src.sim.calibrate traffic --season 2021 --gp Spain --pace practice
+
+writes reports/calibration/<race_id>_traffic.csv, one csv with a `table` column (by_kind,
+drivers, pairs, gate, rejoin, placement) and a `traffic` column (none, ghost), stamped
+like the midrace csvs plus `pace`; config_hash is the arm's own.
 
 Calibrators side by side (calibrators.py), per cadence N:
 
@@ -51,6 +60,7 @@ DEFAULT_PIT_LOSS_S = 22.0
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration")
 PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
 VERSION_COLUMNS = ("config_hash", "sim_code_version")
+PROVENANCE_COLUMNS = ("pit_loss_s", "pit_loss_source", *VERSION_COLUMNS)
 PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
                  "within_2_rate_real", "mae_pos_real"]
 
@@ -90,6 +100,21 @@ def _pit_loss(args, frame, cfg, race):
 def _stamp(df, stamp):
     """`df` with the run's pit_loss_s, pit_loss_source, config_hash and sim_code_version as plain columns."""
     return df.assign(**stamp)
+
+
+def _provenance(rows):
+    """The stamp columns of stamped `rows` for a summary over them: the value when the rows
+    share one, the sorted distinct values joined by a space when they do not (pit loss differs
+    per race; the version columns only under --allow-mixed), "missing" for a column the rows
+    lack."""
+    out = {}
+    for col in PROVENANCE_COLUMNS:
+        values = sorted(set(rows[col].dropna().astype(str))) if col in rows else []
+        if col in rows and len(values) == 1:
+            out[col] = rows[col].dropna().iloc[0]
+        else:
+            out[col] = " ".join(values) if values else "missing"
+    return out
 
 
 def _practice(season, gp, long_run=None):
@@ -153,7 +178,7 @@ def midrace_aggregate_main(argv):
             ap.error(f"rows come from {len(versions)} {col} values {versions}; "
                      "rerun them on one config and code version or pass --allow-mixed")
         print(f"{col}: {', '.join(versions)}")
-    summary = calibration.aggregate(rows)
+    summary = _stamp(calibration.aggregate(rows), _provenance(rows))
     print(f"{len(rows)} rows from {rows['race_id'].nunique()} race(s)")
     _print_pivot(summary)
     print("\nmae_offset_s with race-cluster bootstrap 95% CI:\n",
@@ -225,8 +250,100 @@ def calibrators_main(argv):
           factor_table[["n", "rmse", "coverage_68"]].unstack("calibrator").round(4).to_string())
 
 
+TRAFFIC_TABLES = ("by_kind", "drivers", "pairs", "gate", "rejoin", "placement")
+PLACEMENT_LAP = 12   # Spain's SC is laps 8-10: the post-SC placement for the 0013 decision
+
+
+def traffic_arms(cfg):
+    """(off, on) configs: `cfg` with traffic none, and `cfg` with its traffic, or "ghost" at
+    the default params when `cfg` has none."""
+    from .config import ComponentSpec
+    none = ComponentSpec(name="none")
+    on = cfg.traffic if cfg.traffic != none else ComponentSpec(name="ghost")
+    return cfg.model_copy(update={"traffic": none}), cfg.model_copy(update={"traffic": on})
+
+
+def traffic_report(frame, race, cfg, pace_series, results, placement_lap=PLACEMENT_LAP):
+    """The SPEC 0012 tables for traffic off and on, the pace in the engine in both arms.
+
+    Returns (one frame with `table` and `traffic` columns plus each table's own columns,
+    {arm: summary dict}). Tables: by_kind and drivers (calibration.run), pairs
+    (calibration.pairwise), gate (calibration.positions, both orders), rejoin and placement
+    at `placement_lap` (calibration.rejoin, .placement).
+    """
+    parts, summaries = [], {}
+    for arm_cfg in traffic_arms(cfg):
+        arm = arm_cfg.traffic.name
+        sim = Simulator(frame, arm_cfg).with_pace(pace_series)
+        table, summary, by_kind = calibration.run(sim, frame, race)
+        pairs, pair_summary = calibration.pairwise(sim, frame, race)
+        _, pos_summary = calibration.positions(sim, frame, race, results)
+        rejoin = calibration.rejoin(sim, frame, race)
+        place = calibration.placement(sim, frame, race, placement_lap)
+        gate = pd.DataFrame([{"mode": m, **pos_summary["by_mode"][m]} for m in ("simulated_order", "vs_real")])
+        early = rejoin["in_lap"] < placement_lap
+        summaries[arm] = {
+            "run": summary, "pairs": pair_summary, "gate": pos_summary["by_mode"],
+            "rejoin": calibration.rejoin_summary(rejoin),
+            f"rejoin_before_{placement_lap}": calibration.rejoin_summary(rejoin[early]),
+            f"rejoin_from_{placement_lap}": calibration.rejoin_summary(rejoin[~early]),
+            "placement": {"n": int(len(place)), "mae_pos": round(float(place["abs_err"].mean()), 2),
+                          "within_1_rate": round(float((place["abs_err"] <= 1).mean()), 3)},
+        }
+        for name, t in (("by_kind", by_kind.reset_index()), ("drivers", table.reset_index()),
+                        ("pairs", pairs.reset_index()), ("gate", gate), ("rejoin", rejoin), ("placement", place)):
+            # all-NaN columns (traffic_s with traffic off) are dropped; the concat restores them as NaN
+            parts.append(t.dropna(axis=1, how="all").assign(
+                table=name, traffic=arm, config_hash=calibration.config_hash(arm_cfg)))
+    out = pd.concat(parts, ignore_index=True)
+    first = ["table", "traffic"]
+    return out[first + [c for c in out.columns if c not in first]], summaries
+
+
+def traffic_main(argv):
+    """SPEC 0012 acceptance: the traffic tables, off and on, written to <race_id>_traffic.csv."""
+    from .race_ids import make_race_id
+    ap = argparse.ArgumentParser(prog="calibrate traffic", description="ghost-car traffic, off against on")
+    _race_args(ap)
+    ap.add_argument("--pace", choices=pace.PACE_KINDS, default="practice", help="pace term in the engine, both arms")
+    ap.add_argument("--pace-sessions", default=",".join(pace.PRACTICE_SESSIONS))
+    args = ap.parse_args(argv)
+
+    session, frame, cfg, race = _race_setup(args)
+    off_cfg, _ = traffic_arms(cfg)
+    used, observed = _pit_loss(args, frame, off_cfg, race)
+    race_id = make_race_id(args.season, int(session.event["RoundNumber"]), args.gp)
+    race = race.model_copy(update={"pit_loss_s": used, "race_id": race_id})
+    results = session_results(session)
+    pace_series = None
+    if args.pace != "none":
+        practice, notes = pace.load_practice(args.season, args.gp, args.pace_sessions.split(","), cfg.long_run)
+        for note in notes:
+            print("practice:", note)
+        paces, _ = pace.offsets(Simulator(frame, off_cfg), frame, race, practice)
+        if args.pace not in paces:
+            ap.error(f"--pace {args.pace} needs practice laps")
+        pace_series = paces[args.pace]
+    table, summaries = traffic_report(frame, race, cfg, pace_series, results)
+    # the committed gate's path for reference: traffic off, pace added post hoc
+    summaries["posthoc_gate"] = calibration.positions(Simulator(frame, off_cfg), frame, race, results,
+                                                      pace=pace_series)[1]["by_mode"]
+    stamp = {"pace": args.pace, "pit_loss_s": used,
+             "pit_loss_source": "observed" if args.pit_loss == "observed" else "--pit-loss",
+             "sim_code_version": calibration.SIM_CODE_VERSION}
+    print(f"pit loss used: {used} ({stamp['pit_loss_source']}), observed: {observed}; pace {args.pace}; "
+          f"sim_code_version {stamp['sim_code_version']}")
+    print(json.dumps(summaries, indent=2, default=str))
+    os.makedirs(args.report_dir, exist_ok=True)
+    path = os.path.normpath(os.path.join(args.report_dir, f"{race_id}_traffic.csv"))
+    _stamp(table, stamp).to_csv(path, index=False)
+    print(f"written to {path}")
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "traffic":
+        return traffic_main(argv[1:])
     if argv and argv[0] == "calibrators":
         return calibrators_main(argv[1:])
     if argv and argv[0] == "midrace":

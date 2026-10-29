@@ -53,6 +53,15 @@ def test_replay_of_actual_strategy(session, frame):
     assert (summary["sc_count"], summary["sc_laps"], summary["vsc_count"], summary["vsc_laps"]) == (1, 3, 0, 0)
 
 
+def test_traffic_anchor_driver_start_agrees_with_the_field_start(frame):
+    """traffic.race_start: each driver's lap-1 start_s against the field minimum, within 1 s."""
+    from src.sim import traffic
+    field = float(frame.loc[frame["lap"] == 1, "start_s"].min())
+    gaps = [abs(traffic.race_start(frame, d) - field) for d in frame["driver"].unique()]
+    assert max(gaps) <= 1.0
+    assert traffic.race_start(frame, "NOBODY") == field
+
+
 def test_weather_is_empty_by_default_and_loads_offline(session):
     assert list(session_weather(session).columns) == WEATHER_COLUMNS
     assert session_weather(session).empty
