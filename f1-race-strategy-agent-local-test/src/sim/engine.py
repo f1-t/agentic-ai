@@ -133,6 +133,8 @@ class BatchResult:
         )
 
 
+# support warning on every plan when recorded ghosts run under events other than the record's
+TRAFFIC_DRAWN_EVENTS = "traffic_recorded_with_drawn_events"
 FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
 # events draw from their own substream, default_rng([seed, k, EVENT_STREAM]), so the main
 # stream never sees an event draw: with events on, every other draw matches the run without
@@ -401,6 +403,8 @@ class Simulator:
         tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver, ref_lap_s=self.ref_lap_s)
         out.traffic_on = tstate is not None
         tw = self.traffic.support_warnings(snapshot, tstate)
+        if tstate is not None and self._events_drawn(snapshot, scenario):
+            tw = [*tw, TRAFFIC_DRAWN_EVENTS]
         if tw:
             for i in idx:
                 out.support_warnings[i] = out.support_warnings[i] + tw
@@ -530,6 +534,28 @@ class Simulator:
         for r, i in enumerate(idx):
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
+
+    def _events_drawn(self, snapshot: Snapshot, scenario: Scenario | None) -> bool:
+        """Whether the samples' SC and VSC laps may differ from the recorded race's: an event
+        model other than "none", or a fixed scenario (the `scenario` argument or the "fixed"
+        model) other than the record over the remaining laps. Recorded ghosts are valid only
+        under the recorded events: under a drawn SC the field ran green, so positions and
+        traffic are approximate there."""
+        if scenario is None:
+            if self.config.events.name == "none":
+                return False
+            if self.config.events.name != "fixed":
+                return True
+            scenario = self.events.scenario
+        first, last = snapshot.laps_completed + 1, snapshot.race.total_laps
+        g = self.laps[self.laps["driver"] == snapshot.driver] if "driver" in self.laps else self.laps.iloc[0:0]
+        g = g[(g["lap"] >= first) & (g["lap"] <= last)]
+        status = g["track_status"].astype(str) if "track_status" in g else pd.Series(dtype=str)
+
+        def laps(xs):
+            return {int(x) for x in xs if first <= int(x) <= last}
+        recorded = (laps(g.loc[status.str.contains("4"), "lap"]), laps(g.loc[status.str.contains("[67]"), "lap"]))
+        return (laps(scenario.sc_laps), laps(scenario.vsc_laps)) != recorded
 
     def compare(self, snapshot: Snapshot, candidates, *, seed=0, n_samples=None,
                 scenario: Scenario | None = None, rules=None, continuation=None) -> CompareResult:

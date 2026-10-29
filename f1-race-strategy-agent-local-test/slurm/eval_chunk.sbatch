@@ -3,8 +3,11 @@
 # that calls an LLM stays on the desktop; this runs only the simulator side.
 #   python -m src.sim.jobs manifest eval_chunk --profile sol --n-items <N_ITEMS> --manifest $OUT/manifest.json --out $OUT
 #   N=$(python -c "import json;print(len(json.load(open('$OUT/manifest.json'))))")
-#   sbatch --array=0-$((N-1))%50 slurm/eval_chunk.sbatch
-# Needs an eval runner installed with jobs.set_eval_runner (the eval harness registers it).
+#   EVAL_SCENARIOS=data/scenarios/v1.json sbatch --array=0-$((N-1))%50 slurm/eval_chunk.sbatch
+# The eval runner is installed by `python -m src.eval jobs` (the spec: scenarios, policies,
+# recorded files, config paths) before sim.jobs runs the task. EVAL_POLICIES defaults to
+# the baselines; EVAL_WORLD_CONFIG (e.g. configs/sim/world.yaml) and EVAL_BELIEF_CONFIG
+# are optional.
 # Partition, QOS, time limit and module names below are placeholders: verify them against
 # ASU's Sol documentation before the first submission.
 #SBATCH --job-name=sim-eval-chunk
@@ -30,5 +33,10 @@ OUT="${SIM_OUT:-$SCRATCH/sim_out}"
 MANIFEST="${SIM_MANIFEST:-$OUT/manifest.json}"
 mkdir -p logs "$OUT"
 
-python -m src.sim.jobs eval_chunk --profile "$SIM_PROFILE" --manifest "$MANIFEST" \
-    --task-id "$SLURM_ARRAY_TASK_ID" --out "$OUT"
+CONFIGS=()
+[ -n "${EVAL_WORLD_CONFIG:-}" ] && CONFIGS+=(--world-config "$EVAL_WORLD_CONFIG")
+[ -n "${EVAL_BELIEF_CONFIG:-}" ] && CONFIGS+=(--belief-config "$EVAL_BELIEF_CONFIG")
+
+python -m src.eval jobs --scenarios "${EVAL_SCENARIOS:?set EVAL_SCENARIOS to a scenario set json}" \
+    --policies ${EVAL_POLICIES:-baselines} "${CONFIGS[@]}" \
+    -- eval_chunk --profile "$SIM_PROFILE" --manifest "$MANIFEST" --task-id "$SLURM_ARRAY_TASK_ID" --out "$OUT"

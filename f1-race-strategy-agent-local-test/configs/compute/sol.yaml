@@ -3,7 +3,6 @@ name: sol
 sim:
   n_samples: 500
   max_stops: 3
-  min_stint: null
   compare_n_samples: null
 parallel:
   n_jobs: 1
@@ -37,3 +36,5 @@ wandb:
   mode: offline              # wandb sync afterwards
   project: f1-strategy-sim
   tags: [sol]
+agent:
+  max_steps: 10             # model turns per decision for the live agent in the eval

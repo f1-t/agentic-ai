@@ -196,3 +196,20 @@ clock.
 4. **Clock drift.** Our clock drifts from the real one by the model error (0.1-0.3 s/lap),
    so positions far from the snapshot are noisy; the rejoin a few laps on is the
    trustworthy use (`calibration.rejoin`).
+5. **Recorded ghosts are valid only under the recorded events.** Under a drawn SC the field
+   ran green, so any field-time rule prices that SC at nothing. With an event model other
+   than `none`, or a fixed scenario (the `fixed` model or a `scenario=` argument) other than
+   the record over the remaining laps, the engine adds `traffic_recorded_with_drawn_events`
+   to every plan's support warnings: positions and traffic are approximate there. The
+   optimizer with rate events keeps traffic off; the ghost model is for replay, calibration
+   and hindsight ground truth under the real events. A simulated field (each rival's
+   recorded strategy scored by the world model under the sample's own scenario) is the
+   direction if positions under drawn events matter.
+
+## Positions in the eval
+
+`traffic.place(frame, driver, lap, t)` ranks a session time among the ghosts at the end of
+a lap (1 + the ghosts that finished it earlier). The eval's position regret (SPEC 0014 D,
+`docs/eval.md`) ranks each sample's finishing time this way when the world runs
+`configs/sim/world.yaml`; `calibration.rejoin` and `placement` use it for the out-lap and
+post-SC checks.
