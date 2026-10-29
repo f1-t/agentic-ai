@@ -122,7 +122,8 @@ def _runs(laps, kind):
 def _status_periods(frame):
     """A race lap is SC when most cars' laps on it carry status 4, VSC when most carry 6 or 7.
     A majority, not any car, because one car's lap can overlap the deployment (Spain 2021:
-    one of 20 cars' lap 7 carries the 4; race control deployed the SC on lap 8)."""
+    one of 20 cars' lap 7 carries the 4; race control deployed the SC on lap 8).
+    The per-driver replay keeps each driver's own status (_scenario), not this race view."""
     ts = frame[["lap"]].assign(sc=frame["track_status"].astype(str).str.contains("4"),
                                vsc=frame["track_status"].astype(str).str.contains("[67]"))
     share = ts.groupby("lap")[["sc", "vsc"]].mean()
@@ -134,7 +135,9 @@ def _status_periods(frame):
 def _message_periods(messages):
     """Periods from FastF1 race control messages: a SafetyCar DEPLOYED message starts one on
     its lap, IN THIS LAP (SC) or ENDING (VSC) ends it on its lap. A period still open at
-    the last message ends on that message's lap."""
+    the last message ends on that message's lap. Messages without a lap (older seasons)
+    are skipped; with no lap at all, last_lap is 0."""
+    messages = messages[messages["Lap"].notna()]
     msgs = messages[messages["Category"].astype(str) == "SafetyCar"].sort_values("Time")
     last_lap = int(messages["Lap"].max()) if len(messages) else 0
     out, open_ = [], {}

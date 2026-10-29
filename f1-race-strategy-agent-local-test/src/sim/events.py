@@ -49,9 +49,10 @@ class RateEvents:
     remaining length, which the geometric's lack of memory makes the right law.
 
     Rates come from the race when its RaceParams carries them (sc_rate_per_lap,
-    sc_mean_laps, vsc_rate_per_lap, vsc_mean_laps), else from these params. With both
-    rates zero and the snapshot green, nothing is drawn, so the rng stream, and every
-    seed, is the same as under "none".
+    sc_mean_laps, vsc_rate_per_lap, vsc_mean_laps), else from these params. The engine
+    passes the events substream (engine.EVENT_STREAM), so these draws never shift the
+    degradation, hazard or track draws. With both rates zero and the snapshot green,
+    nothing is drawn.
     """
 
     def __init__(self, **params):
@@ -64,8 +65,12 @@ class RateEvents:
         def pick(override, default):
             return default if override is None else override
 
-        return (pick(race.sc_rate_per_lap, cfg.p_sc), pick(race.sc_mean_laps, cfg.d_sc),
-                pick(race.vsc_rate_per_lap, cfg.p_vsc), pick(race.vsc_mean_laps, cfg.d_vsc))
+        out = (pick(race.sc_rate_per_lap, cfg.p_sc), pick(race.sc_mean_laps, cfg.d_sc),
+               pick(race.vsc_rate_per_lap, cfg.p_vsc), pick(race.vsc_mean_laps, cfg.d_vsc))
+        # RaceParams checks each field alone, not the sum, so check it after the overrides
+        if out[0] + out[2] > 1:
+            raise ValueError(f"race {race.race_id}: p_sc + p_vsc = {out[0] + out[2]} exceeds 1")
+        return out
 
     def draw(self, snapshot: Snapshot, rng) -> Scenario:
         p_sc, d_sc, p_vsc, d_vsc = self.rates(snapshot.race)

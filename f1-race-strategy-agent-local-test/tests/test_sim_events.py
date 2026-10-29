@@ -11,6 +11,7 @@ from src.sim import SimConfig, Simulator, calibration
 from src.sim.config import EventEffects, EventModel
 from src.sim.data import CACHE_DIR
 from src.sim.degradation import DEGRADATION
+from src.sim.engine import EVENT_STREAM
 from src.sim.events import EVENTS
 
 RACE = RaceParams(race_id="syn", total_laps=50, pit_loss_s=20.0, min_stint_laps=8,
@@ -161,7 +162,7 @@ def test_common_random_numbers_two_plans_see_the_same_scenario():
     fx = EventEffects()
     sc_s = fx.sc_lap_factor * sim.ref_lap_s
     for seed in range(20):
-        scen = sim.events.draw(start(), np.random.default_rng([seed, 0]))
+        scen = sim.events.draw(start(), np.random.default_rng([seed, 0, EVENT_STREAM]))
         batch = sim.simulate_batch(start(), PLANS, seed=seed, return_laps=True)
         for row in batch.lap_times:
             assert np.flatnonzero(np.isclose(row, sc_s)).tolist() == [lap - 1 for lap in scen.sc_laps]
@@ -171,6 +172,32 @@ def test_common_random_numbers_two_plans_see_the_same_scenario():
         for row, base in zip(batch.lap_times, green.lap_times):
             changed = set(np.flatnonzero(~np.isclose(row, base)).tolist())
             assert {lap - 1 for lap in scen.sc_laps + scen.vsc_laps} <= changed
+
+
+def test_events_substream_pairs_on_and_off_runs():
+    # the main stream never sees an event draw, so with events on every lap outside the
+    # scenario's SC and VSC laps equals the run without events, noise and hazard included.
+    # Neutralised laps age the tyre by 1 here, so later laps of the same stint keep their age.
+    fx = {"sc_age_increment": 1.0, "vsc_age_increment": 1.0}
+    off = make_sim(effects=fx)
+    on = make_sim({"name": "rate", "params": {"p_sc": 0.08}}, effects=fx)
+    n_events = 0
+    for seed in range(20):
+        scen = on.events.draw(start(), np.random.default_rng([seed, 0, EVENT_STREAM]))
+        a = off.simulate_batch(start(), PLANS, seed=seed, return_laps=True)
+        b = on.simulate_batch(start(), PLANS, seed=seed, return_laps=True)
+        green = ~np.isin(np.arange(1, RACE.total_laps + 1), scen.sc_laps + scen.vsc_laps)
+        assert np.array_equal(a.lap_times[:, green], b.lap_times[:, green])
+        n_events += not green.all()
+    assert n_events >= 5
+
+
+def test_race_rate_sum_above_one_is_rejected():
+    model = EVENTS.get("rate")(p_sc=0.3, p_vsc=0.3)
+    with pytest.raises(ValueError, match="exceeds 1"):
+        model.rates(RACE.model_copy(update={"sc_rate_per_lap": 0.6, "vsc_rate_per_lap": 0.5}))
+    with pytest.raises(ValueError, match="exceeds 1"):
+        model.draw(start(RACE.model_copy(update={"sc_rate_per_lap": 0.8})), np.random.default_rng(0))
 
 
 # --- observed periods ------------------------------------------------------------
@@ -211,6 +238,19 @@ def test_observed_periods_from_messages_and_cross_check():
     assert calibration.observed_periods(messages=still_out) == [("sc", 4, 9)]
     with pytest.raises(ValueError):
         calibration.observed_periods()
+
+
+def test_message_periods_skip_messages_without_a_lap():
+    msgs = _messages([(np.nan, "Other", None, "RISK OF RAIN"),
+                      (3, "SafetyCar", "DEPLOYED", "SAFETY CAR DEPLOYED"),
+                      (np.nan, "SafetyCar", "IN THIS LAP", "SAFETY CAR IN THIS LAP"),
+                      (5, "SafetyCar", "IN THIS LAP", "SAFETY CAR IN THIS LAP"),
+                      (np.nan, "Flag", None, "CHEQUERED FLAG")])
+    assert calibration.observed_periods(messages=msgs) == [("sc", 3, 5)]
+    no_laps = _messages([(np.nan, "SafetyCar", "DEPLOYED", "SAFETY CAR DEPLOYED"),
+                         (np.nan, "Flag", None, "CHEQUERED FLAG")])
+    assert calibration.observed_periods(messages=no_laps) == []
+    assert calibration._message_periods(no_laps.iloc[:0]) == []
 
 
 @pytest.mark.skipif(not os.path.isdir(os.path.join(CACHE_DIR, "2021")), reason="no cache")
