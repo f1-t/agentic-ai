@@ -141,9 +141,10 @@ def test_default_off_digest_equals_main():
     assert batch_digest(with_columns)[1] == MAIN_DIGEST
 
 
-def test_default_config_hash_is_unchanged_and_the_filter_changes_it():
-    assert calibration.config_hash(SimConfig()) == "94a5373a6a20"   # origin/main 940f61d
-    assert calibration.config_hash(SimConfig(fit_free_air_only=True)) != "94a5373a6a20"
+def test_the_filter_changes_the_config_hash():
+    # the hash keeps one meaning (every field), so the new field moved the default stamp too
+    assert calibration.config_hash(SimConfig()) != "94a5373a6a20"   # origin/main 940f61d
+    assert calibration.config_hash(SimConfig(fit_free_air_only=True)) != calibration.config_hash(SimConfig())
 
 
 # --- filter on -----------------------------------------------------------------
@@ -259,3 +260,59 @@ def test_by_kind_splits_clean_into_free_and_pack():
     assert "clean_pack" not in old.index
     other = [k for k in by_kind.index if not k.startswith("clean")]
     pd.testing.assert_frame_equal(by_kind.loc[other], old.loc[other])
+
+
+def test_pack_penalty_is_in_the_summary():
+    f = lap_frame(race_laps(pace=(0.0, 0.3, 2.5)))
+    race = race_params(f)
+    sim = Simulator(f, SimConfig(degradation={"name": "linear"}))
+    table, summary, by_kind = calibration.run(sim, f, race)
+    pack = by_kind.loc["clean_pack"]
+    free = by_kind.loc["clean_free"]
+    assert summary["observed_pack_penalty_s"] == pytest.approx(pack["mean"] - free["mean"], abs=2e-3)
+    assert summary["observed_pack_penalty_median_s"] == pytest.approx(pack["median"] - free["median"], abs=2e-3)
+    old = calibration.run(sim, f.drop(columns=GAP_COLUMNS), race)[1]
+    assert np.isnan(old["observed_pack_penalty_s"]) and np.isnan(old["observed_pack_penalty_median_s"])
+
+
+# --- pace offset under the filter ------------------------------------------------
+def offset_frame(pack_laps):
+    """Three cars; B's laps in `pack_laps` are pack-bound and 1 s slow, its free-air laps 0.2 s slow."""
+    f = lap_frame(race_laps(pace=(0.0, 3.0, 6.0)))
+    b = f["driver"] == "B"
+    f.loc[b & f["lap"].gt(1), "lap_time_s"] += 0.2
+    pack = b & f["lap"].isin(pack_laps)
+    f.loc[pack, "lap_time_s"] += 0.8
+    f["free_air"] = ~pack
+    return f
+
+
+def test_pace_offset_uses_free_air_laps_when_the_filter_is_on():
+    f = offset_frame(pack_laps=[2, 3, 4])   # B pits at the end of lap 5: free-air green laps 7-12
+    on = Simulator(f, SimConfig(degradation={"name": "linear"}, fit_free_air_only=True))
+    g = f[f["driver"] == "B"].sort_values("lap")
+    flags = []
+    got = calibration._pace_offset(on, g, 12, flags)
+    assert flags == []
+    c = g[g["lap"].between(2, 12) & ~g["pit_in"] & ~g["pit_out"]]
+    resid = c["lap_time_s"].to_numpy() - np.array([
+        on.degradation.lap_times(r.compound, np.array([float(r.tyre_age)]), np.array([float(r.lap)]))[0]
+        for r in c.itertuples()])
+    assert got == pytest.approx(float(np.median(resid[c["free_air"].to_numpy()])))
+    assert got < float(np.median(resid))   # the all-laps median absorbs B's own traffic
+
+
+def test_pace_offset_falls_back_to_every_green_lap_with_a_flag():
+    f = offset_frame(pack_laps=list(range(2, 9)))
+    on = Simulator(f, SimConfig(degradation={"name": "linear"}, fit_free_air_only=True))
+    g = f[f["driver"] == "B"].sort_values("lap")
+    flags = []
+    got = calibration._pace_offset(on, g, 9, flags)
+    assert flags == [calibration.PACE_OFFSET_ALL_LAPS]
+    plain = Simulator(f, SimConfig(degradation={"name": "linear"}))
+    plain.degradation = on.degradation   # the same model, the filter off: every green lap
+    assert got == pytest.approx(calibration._pace_offset(plain, g, 9))
+    rows = calibration.midrace(lambda w: on, f, race_params(f), laps_k=[9], windows=["full"])
+    assert rows.set_index("driver").loc["B", "pace_offset_flag"] == calibration.PACE_OFFSET_ALL_LAPS
+    assert "pace_offset_flag" not in calibration.midrace(lambda w: plain, f, race_params(f), laps_k=[9],
+                                                         windows=["full"]).columns
