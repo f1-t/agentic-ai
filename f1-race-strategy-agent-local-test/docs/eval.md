@@ -46,8 +46,14 @@ turns it into the plan the world scores:
 - PIT c is `{"action": "pit", "compound": c}`, a stop at the end of this lap;
 - STAY_OUT with `reassess_after_laps` n is `{"action": "stay", "laps": n}`;
 - the continuation from the snapshot after the action is
-  `optimizer_bridge.optimize_batch(advanced, belief, max_stops)`, on the belief's fit at
+  `optimizer_bridge.optimize_batch(advanced, belief, stops left)`, on the belief's fit at
   the decision snapshot, so no lap after the decision enters it;
+- `max_stops` counts future stops from the decision snapshot, as the reference optimizer
+  does: after a PIT the continuation gets `max_stops - 1` (at least 0), after a STAY_OUT
+  `max_stops`. Every plan from a decision lies inside the space the reference searched, so
+  an agent row with negative regret (beyond 1e-6 s) is a bug, and `summarize` warns
+  (`AgentRegretWarning`). Baselines keep their exception: an actual three-stop can beat a
+  two-stop reference;
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
 
@@ -100,10 +106,12 @@ scored before the split carry one `config_hash` instead.
 
 ## Current numbers (v1, deterministic)
 
-Under the split, from `reports/eval/v1_baselines_split_summary.csv` (belief `to_snapshot`,
-world the default SimConfig with the full window), next to the single-simulator numbers
-from before the split (`reports/eval/v1_baselines_summary.csv`, default SimConfig, full
-window for both planning and scoring):
+The current table is `reports/eval/v1_baselines_split.csv` (summary
+`reports/eval/v1_baselines_split_summary.csv`; `python -m src.eval report
+reports/eval/v1_baselines_split.csv` prints it): belief `to_snapshot`, world the default
+SimConfig with the full window. `reports/eval/v1_baselines.csv` is kept as the record from
+before the split (default SimConfig, full window for both planning and scoring). Both,
+overall:
 
 | policy | scored before | scored after | mean regret s before | after | median before | after | p90 before | after | stop agreement before | after |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -117,7 +125,11 @@ Only greedy_crossover moves: it is the one baseline that reads the fitted pace. 
 policies and the actual strategy depend only on the snapshot and the modelled compounds,
 which are the same in both fits, and the recorded plan is fixed. Every reference plan is
 the same. On the 123 scenarios greedy_crossover scored both times, 60 have lower regret
-under the belief and none higher; on 62 more it no longer stops immediately.
+under the belief and none higher; on 62 more it no longer stops immediately. Under the
+hindsight fit, the race-fitted linear MEDIUM wear (0.068 s/lap, the curvature #26
+explained) brought its crossover early; on the to_snapshot fit it does not. A baseline
+planned on hindsight doing worse than one planned on the belief is the direction an honest
+eval should show.
 
 Before the split, from `reports/eval/v1_baselines_summary.csv`:
 

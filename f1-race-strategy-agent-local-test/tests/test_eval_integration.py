@@ -158,6 +158,38 @@ def test_to_plan_pit_and_stay_with_a_stub_continuation(world, monkeypatch):
     assert calls[-1] == {"seed": 5, "n_samples": 4, "max_stops": 1}
 
 
+def test_a_pit_spends_one_of_the_future_stops(world, monkeypatch):
+    snap = mid_race()
+    pit = {"decision": "PIT", "compound": "MEDIUM", "confidence": 0.5}
+    plan = decisions.to_plan(snap, pit, world, 1)
+    assert plan.num_stops == 1 and plan.pit_laps(snap) == [11]
+    assert decisions.to_plan(snap, pit, world, 2).num_stops <= 2
+    stay = decisions.to_plan(snap, {"decision": "STAY_OUT", "reassess_after_laps": 2}, world, 1)
+    assert stay.num_stops <= 1
+    calls = []
+    monkeypatch.setattr(decisions, "as_continuation", lambda sim, **kw: calls.append(kw) or stub(12))
+    for m in (0, 1, 2):
+        decisions.to_plan(snap, pit, world, m)
+        decisions.to_plan(snap, {"decision": "STAY_OUT", "reassess_after_laps": 2}, world, m)
+    assert [c["max_stops"] for c in calls] == [0, 0, 0, 1, 1, 2]
+
+
+def test_summary_warns_on_agent_rows_below_the_reference():
+    from src.eval.score import AgentRegretWarning, check_agent_regret
+
+    rows = pd.DataFrame([
+        {"scenario_id": "s1", "race_id": "r", "policy": "agent", "status": "ok", "regret_s": -2.0,
+         "p_pit": 0.4, "pit_now_opt": False, "decision": "STAY_OUT", "stop_agree": True},
+        {"scenario_id": "s1", "race_id": "r", "policy": "actual", "status": "ok", "regret_s": -5.0,
+         "stop_agree": False},
+    ])
+    with pytest.warns(AgentRegretWarning, match="1 agent rows"):
+        summarize(rows)
+    assert list(check_agent_regret(rows.iloc[1:])["policy"]) == []   # baselines may beat it
+    rows.loc[0, "regret_s"] = -1e-9
+    assert check_agent_regret(rows).empty
+
+
 def test_to_plan_continuation_is_the_belief_optimizer(world):
     snap = mid_race()
     plan = decisions.to_plan(snap, {"decision": "STAY_OUT", "reassess_after_laps": 2}, world, 2)

@@ -10,7 +10,11 @@ The eval turns it into a plan for the remaining laps and the world scores that p
 
     PIT c                          -> {"action": "pit", "compound": c}, pit at the end of this lap
     STAY_OUT, reassess_after n     -> {"action": "stay", "laps": n}
-    continuation                   =  optimizer_bridge.optimize_batch(advanced, belief_sim, max_stops)
+    continuation                   =  optimizer_bridge.optimize_batch(advanced, belief_sim, stops left)
+
+`max_stops` counts future stops from the decision snapshot, the same space the reference
+optimizer searches: after a PIT the continuation may add max_stops - 1 (at least 0), after a
+stay max_stops. Every plan from a decision therefore lies inside the reference's space.
 
 Simulator.expand_action joins the action and the continuation, which is planned from the
 snapshot after the action on the belief simulator's fit at the decision snapshot (no lap
@@ -69,7 +73,9 @@ def p_pit(decision: dict) -> float | None:
 def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, seed: int = 0,
             n_samples: int | None = None) -> Plan:
     """The decision's plan for the remaining laps: its action expanded by belief_sim with an
-    optimize_batch continuation (seed, n_samples and max_stops go to it). Raises
+    optimize_batch continuation (seed and n_samples go to it). `max_stops` limits the future
+    stops of the whole plan, as for the reference: the continuation gets max_stops - 1
+    (at least 0) after a PIT and max_stops after a STAY_OUT. Raises
     InvalidDecision when the submission is malformed, the action breaks a rule, or no legal
     continuation exists."""
     action = to_action(decision)
@@ -81,7 +87,10 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     if action["action"] == "pit" and action["compound"].upper() not in fit.modelled:
         raise InvalidDecision(f"PIT onto {action['compound']!r}, which the belief does not model "
                               f"(modelled: {sorted(fit.modelled)})")
-    continuation = as_continuation(fit, seed=seed, n_samples=n_samples, max_stops=max_stops)
+    # max_stops counts future stops from the decision snapshot, as the reference does: a PIT
+    # spends one, so its continuation may add max_stops - 1; a stay spends none
+    left = max(0, max_stops - 1) if action["action"] == "pit" else max_stops
+    continuation = as_continuation(fit, seed=seed, n_samples=n_samples, max_stops=left)
     try:
         plan, errors = fit.expand_action(snapshot, action, continuation)
     except NoFeasiblePlan as exc:
