@@ -17,7 +17,9 @@ A policy may return an agent decision (Decision.submission, PIT or STAY_OUT) ins
 plan. eval.decisions.to_plan expands it on the belief into the action plus an optimizer
 continuation, and the world scores that plan. Such rows also carry `decision` and `p_pit`
 (the stated probability that pitting now is right) against `pit_now_opt` (the world
-optimizer's first stop is at the end of this lap), for the Brier score.
+optimizer's first stop is at the end of this lap), for the Brier score. A decision's plan
+stays inside the reference's search space, so an agent row with negative regret is a bug
+and `summarize` warns about it (AgentRegretWarning).
 
 Row status: ok, invalid (the plan broke a rule or no plan was submitted), unavailable (the
 policy does not apply to this scenario), error (the policy itself failed, an API error say),
@@ -26,6 +28,7 @@ no_reference (no legal plan exists for the optimizer).
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from time import perf_counter
 
@@ -205,8 +208,30 @@ def _summary(g: pd.DataFrame) -> dict:
     return out
 
 
+class AgentRegretWarning(UserWarning):
+    """An agent row came in below the reference by more than REGRET_TOL_S."""
+
+
+def check_agent_regret(rows: pd.DataFrame) -> pd.DataFrame:
+    """The scored agent rows (those with p_pit) whose regret is below -REGRET_TOL_S, with a
+    warning when there are any. A decision's plan lies inside the reference's search space
+    (eval.decisions counts max_stops the same way), so such a row means a bug. Baselines may
+    go below the reference (an actual three-stop against a two-stop search) and are not checked."""
+    if "p_pit" not in rows or "regret_s" not in rows:
+        return rows.iloc[0:0]
+    bad = rows[rows["p_pit"].notna() & (rows["status"] == "ok") & (rows["regret_s"] < -REGRET_TOL_S)]
+    if len(bad):
+        ids = ", ".join(f"{s} ({p}, {r:.3f} s)" for s, p, r in
+                        bad[["scenario_id", "policy", "regret_s"]].head(5).itertuples(index=False))
+        warnings.warn(f"{len(bad)} agent rows beat the reference optimizer, which their plans cannot "
+                      f"do unless the scoring is wrong: {ids}", AgentRegretWarning, stacklevel=2)
+    return bad
+
+
 def summarize(rows: pd.DataFrame) -> pd.DataFrame:
-    """One row per (race, policy), then one per policy over every race with race_id "ALL"."""
+    """One row per (race, policy), then one per policy over every race with race_id "ALL".
+    Agent rows below the reference raise an AgentRegretWarning (check_agent_regret)."""
+    check_agent_regret(rows)
     out = [{"race_id": race, "policy": pol, **_summary(g)}
            for (race, pol), g in rows.groupby(["race_id", "policy"], sort=True)]
     out += [{"race_id": "ALL", "policy": pol, **_summary(g)} for pol, g in rows.groupby("policy", sort=True)]

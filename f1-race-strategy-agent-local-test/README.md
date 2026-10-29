@@ -53,6 +53,8 @@ simulator (no key, no network, no cost):
 ```bash
 python -c "from src import legacy_tools; print(legacy_tools.optimal_strategy('SOFT'))"
 # -> {'num_stops': 2, 'first_pit_lap': 28, ..., 'total_time_s': 5510.1}
+python -m src.eval report reports/eval/v1_baselines_split.csv
+# -> the current v1 baseline table (belief and world simulators, docs/eval.md)
 ```
 
 A full captured agent run (real `python tests/test_case.py` output ending in
