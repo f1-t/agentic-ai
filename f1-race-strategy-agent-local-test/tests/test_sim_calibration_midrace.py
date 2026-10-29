@@ -383,7 +383,10 @@ def test_aggregate_cli_reads_race_csvs_and_writes_the_summary(frame, tmp_path, c
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
     got = pd.read_csv(out, index_col=["window", "horizon_bucket"])
-    pd.testing.assert_frame_equal(got, calibration.aggregate(three), check_dtype=False)
+    stamp = list(calibrate.PROVENANCE_COLUMNS)
+    pd.testing.assert_frame_equal(got.drop(columns=stamp), calibration.aggregate(three), check_dtype=False)
+    # the summary carries the rows' provenance, as every other report does
+    assert got[stamp].drop_duplicates().values.tolist() == [[23.81, "observed", "abc", "c0de"]]
     assert "mae_offset_s (horizon bucket x window)" in capsys.readouterr().out
 
 
@@ -410,7 +413,11 @@ def test_aggregate_cli_allow_mixed(frame, tmp_path, hashes, codes):
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out), "--allow-mixed"])
     got = pd.read_csv(out, index_col=["window", "horizon_bucket"])
-    pd.testing.assert_frame_equal(got, calibration.aggregate(three), check_dtype=False)
+    pd.testing.assert_frame_equal(got.drop(columns=list(calibrate.PROVENANCE_COLUMNS)), calibration.aggregate(three),
+                                  check_dtype=False)
+    # mixed values are listed, sorted
+    assert set(got["config_hash"]) == {" ".join(sorted(set(hashes)))}
+    assert set(got["sim_code_version"]) == {" ".join(sorted(set(codes or ["c0de"])))}
 
 
 @pytest.mark.parametrize("drop", [["config_hash"], ["sim_code_version"], ["config_hash", "sim_code_version"]])
@@ -422,3 +429,5 @@ def test_aggregate_cli_old_csvs_without_a_version_column_are_one_version(frame, 
     out = tmp_path / "midrace_summary.csv"
     calibrate.main(["midrace-aggregate", *files, "--out", str(out)])
     assert out.exists()
+    got = pd.read_csv(out)
+    assert all((got[c] == "missing").all() for c in drop)
