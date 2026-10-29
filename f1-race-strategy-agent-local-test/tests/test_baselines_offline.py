@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src import tools
+from src import legacy_tools as tools
 from src.baselines import Plan, Stint, actual_strategy, candidate_plans, optimize
 from src.baselines.__main__ import comparison
 from src.baselines.legacy import load_legacy_context
