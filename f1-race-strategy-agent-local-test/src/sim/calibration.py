@@ -810,13 +810,6 @@ def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver
     return snap, res, traffic.anchor(frame, snap) + res.remaining.mean_s
 
 
-def _place(frame, driver, lap, t):
-    """(1 + ghosts that finished `lap` before t, t less the end of the car directly ahead)."""
-    G = traffic.ghost_table(frame, driver, [lap]).G[:, 0]
-    ahead = G[np.isfinite(G) & (G < t)]
-    return 1 + len(ahead), (float(t - ahead.max()) if len(ahead) else float("nan"))
-
-
 def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min_laps_frac=0.9) -> pd.DataFrame:
     """One row per real pit stop of a finisher: the replay from the snapshot at k = in_lap - 1
     over the in-lap and the out-lap, with the real remaining plan and SC/VSC laps.
@@ -836,8 +829,8 @@ def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min
             if out not in g.index or (k > 0 and k not in g.index):
                 continue
             _, res, t = _replay_window(sim, frame, race, d, k, out)
-            pred_pos, pred_gap = _place(frame, d, out, t)
-            clock_pos, real_gap = _place(frame, d, out, float(g.loc[out, "end_s"]))
+            pred_pos, pred_gap = traffic.place(frame, d, out, t)
+            clock_pos, real_gap = traffic.place(frame, d, out, float(g.loc[out, "end_s"]))
             real_pos = float(g.loc[out, "position"])
             rows.append({"driver": d, "in_lap": int(in_lap), "k": k, "out_lap": out,
                          "pred_pos": pred_pos, "real_pos": real_pos, "pos_err": pred_pos - real_pos,
@@ -871,7 +864,7 @@ def placement(sim: Simulator, frame: pd.DataFrame, race: RaceParams, lap: int, p
         if lap not in g.index:
             continue
         _, res, t = _replay_window(sim, frame, race, d, 0, lap)
-        pred_pos, _ = _place(frame, d, lap, t)
+        pred_pos, _ = traffic.place(frame, d, lap, t)
         real_pos = float(g.loc[lap, "position"])
         rows.append({"driver": d, "lap": lap, "pred_pos": pred_pos, "real_pos": real_pos,
                      "abs_err": abs(pred_pos - real_pos), "traffic_s": res.traffic_s, "passes": res.passes_mean})
