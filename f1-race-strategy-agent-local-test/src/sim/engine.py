@@ -94,8 +94,9 @@ class BatchResult:
     support_warnings: list = None     # list[str] per plan, empty when invalid
     # traffic (traffic.py): time added by the ghosts and overtakes charged, both included in
     # times and the stint sums; zeros when traffic is off or could not be placed
-    traffic_s: np.ndarray = None      # (n_plans, n_samples) float
+    traffic_s: np.ndarray = None      # (n_plans, n_samples) float, green laps
     passes: np.ndarray = None         # (n_plans, n_samples) int
+    bunching_s: np.ndarray = None     # (n_plans, n_samples) float, SC laps (the SC queue)
     traffic_on: bool = False          # a traffic state was placed for this snapshot
 
     def __post_init__(self):
@@ -119,6 +120,7 @@ class BatchResult:
             support_warnings=self.support_warnings[i] if self.support_warnings else [],
             traffic_s=float(self.traffic_s[i].mean()) if self.traffic_on else None,
             passes_mean=float(self.passes[i].mean()) if self.traffic_on else None,
+            bunching_s=float(self.bunching_s[i].mean()) if self.traffic_on else None,
         )
 
 
@@ -381,6 +383,7 @@ class Simulator:
         out.dnf_lap = np.full((n_plans, n), np.nan)
         out.traffic_s = np.zeros((n_plans, n))
         out.passes = np.zeros((n_plans, n), dtype=int)
+        out.bunching_s = np.zeros((n_plans, n))
         idx = np.flatnonzero(out.valid)
         if len(idx) == 0:
             return out
@@ -501,8 +504,8 @@ class Simulator:
             if tstate is not None:
                 # the full pit loss is booked at the end of the in-lap, so the out-lap starts
                 # from the rejoin position; it stays out of lap_s, as below
-                lap_s, extra = self.traffic.apply(tstate, lap_s, v["pit_loss_s"] * stops * scale, sc | vsc, scen)
-                out.traffic_s[idx, k], out.passes[idx, k] = extra
+                lap_s, extra = self.traffic.apply(tstate, lap_s, v["pit_loss_s"] * stops * scale, sc, vsc, scen)
+                out.traffic_s[idx, k], out.passes[idx, k], out.bunching_s[idx, k] = extra
             pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s
             out.pit_loss[idx, k] = pit_s

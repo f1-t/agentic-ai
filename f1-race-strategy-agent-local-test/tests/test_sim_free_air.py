@@ -316,3 +316,51 @@ def test_pace_offset_falls_back_to_every_green_lap_with_a_flag():
     assert rows.set_index("driver").loc["B", "pace_offset_flag"] == calibration.PACE_OFFSET_ALL_LAPS
     assert "pace_offset_flag" not in calibration.midrace(lambda w: plain, f, race_params(f), laps_k=[9],
                                                          windows=["full"]).columns
+
+
+# --- pace offset under traffic (0013 ruling) --------------------------------------
+GHOST = {"name": "ghost"}
+
+
+def test_free_air_offset_rule():
+    assert not calibration.free_air_offset(SimConfig())
+    assert calibration.free_air_offset(SimConfig(fit_free_air_only=True))
+    assert calibration.free_air_offset(SimConfig(traffic=GHOST))
+    assert [calibration.pace_offset_definition(c) for c in (SimConfig(), SimConfig(traffic=GHOST))] == [
+        "all_laps", "free_air"]
+
+
+def test_pace_offset_uses_free_air_laps_when_traffic_is_on():
+    # the free-air laps whenever traffic is on, the filter off; the fallback holds as well
+    f = offset_frame(pack_laps=[2, 3, 4])
+    g = f[f["driver"] == "B"].sort_values("lap")
+    plain = Simulator(f, SimConfig(degradation={"name": "linear"}))
+    traffic = Simulator(f, SimConfig(degradation={"name": "linear"}, traffic=GHOST))
+    filt = Simulator(f, SimConfig(degradation={"name": "linear"}, fit_free_air_only=True))
+    traffic.degradation = plain.degradation = filt.degradation   # one model, so only the lap choice differs
+    assert calibration._pace_offset(traffic, g, 12) == pytest.approx(calibration._pace_offset(filt, g, 12))
+    assert calibration._pace_offset(traffic, g, 12) < calibration._pace_offset(plain, g, 12)
+    flags = []
+    f = offset_frame(pack_laps=list(range(2, 9)))
+    traffic = Simulator(f, SimConfig(degradation={"name": "linear"}, traffic=GHOST))
+    calibration._pace_offset(traffic, f[f["driver"] == "B"].sort_values("lap"), 9, flags)
+    assert flags == [calibration.PACE_OFFSET_ALL_LAPS]
+
+
+def test_run_offset_uses_clean_free_air_laps_when_traffic_is_on():
+    f = offset_frame(pack_laps=[2, 3, 4, 8])
+    race = race_params(f)
+    sim = Simulator(f, SimConfig(degradation={"name": "linear"}, traffic=GHOST))
+    table = calibration.run(sim, f, race)[0]
+    g, res = calibration.replay_driver(sim, f, race, "B")
+    resid = g["lap_time_s"].to_numpy() - np.array(res.lap_times_s)
+    use = g["clean"].to_numpy() & g["free_air"].to_numpy()
+    assert table.loc["B", "pace_offset_s"] == pytest.approx(float(np.median(resid[use])))
+    assert table.loc["B", "pace_offset_s"] < float(np.median(resid[g["clean"].to_numpy()]))
+    assert table.loc["B", "pace_offset_flag"] == ""
+    default = calibration.run(Simulator(f, SimConfig(degradation={"name": "linear"})), f, race)[0]
+    assert "pace_offset_flag" not in default.columns
+    # too few clean free-air laps: every clean lap, flagged
+    f = offset_frame(pack_laps=list(range(2, 12)))
+    table = calibration.run(Simulator(f, SimConfig(degradation={"name": "linear"}, traffic=GHOST)), f, race)[0]
+    assert table.loc["B", "pace_offset_flag"] == calibration.PACE_OFFSET_ALL_LAPS
