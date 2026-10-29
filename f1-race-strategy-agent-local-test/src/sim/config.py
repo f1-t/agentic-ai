@@ -22,6 +22,21 @@ class EventEffects(_Cfg):
     sc_pit_loss_factor: float = 0.5   # share of the normal pit loss paid under SC
     vsc_pit_loss_factor: float = 0.6
     lap1_extra_s: float = 9.0         # provisional: standing start extra on lap 1, 2021 Spain median +8.7 to +10 s
+    # tyre age gained per neutralised lap (1 per green lap), so a set run under SC/VSC is
+    # younger afterwards. Provisional, fitted in sprint 2 from annotated races.
+    sc_age_increment: float = 0.3
+    vsc_age_increment: float = 0.5
+
+
+class HazardEffects(_Cfg):
+    """What a tyre hazard event costs (hazard.py gives the per lap probability). Provisional."""
+
+    dnf_share: float = Field(default=0.5, ge=0, le=1)  # share of events that end the race
+    # added once to a DNF sample, on top of its remaining laps run as if it had continued.
+    # An arbitrary time-metric convention that only keeps a DNF slower than finishing; a
+    # position metric uses BatchResult.dnf_lap (the lap of retirement) instead.
+    dnf_penalty_s: float = 300.0
+    big_loss_s: float = 20.0          # added on the event lap when the car carries on
 
 
 class LongRun(_Cfg):
@@ -43,6 +58,8 @@ class SimConfig(_Cfg):
     degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
     effects: EventEffects = Field(default_factory=EventEffects)
+    hazard: ComponentSpec = ComponentSpec(name="none")
+    hazard_effects: HazardEffects = Field(default_factory=HazardEffects)
     rules: list[str] = Field(default_factory=lambda: [
         "first_stint_matches", "lap_sum", "known_compounds", "min_stint", "two_compounds", "inventory",
     ])

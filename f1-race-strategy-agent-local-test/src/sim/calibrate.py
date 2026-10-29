@@ -6,6 +6,12 @@
 Also prints the team-mate and finishing position checks and writes them to
 reports/calibration/<race_id>_pairs.csv and <race_id>_positions.csv.
 
+    python -m src.sim.calibrate --pace practice      # positions with a pace term (pace.py)
+    python -m src.sim.calibrate --pace-table         # the gate under every pace term, both orders
+
+--pace-table also writes <race_id>_pace_gate.csv and <race_id>_pace_offsets.csv, every row
+with config_hash and sim_code_version as below.
+
 Mid-race replay, per race and then over every race replayed so far:
 
     python -m src.sim.calibrate midrace --season 2021 --gp Spain [--windows ...] [--laps ...]
@@ -28,7 +34,7 @@ import sys
 import pandas as pd
 
 from ..contracts import RaceParams
-from . import calibration
+from . import calibration, pace
 from .config import SimConfig
 from .data import lap_frame, load_session, practice_frame, session_results
 from .engine import Simulator
@@ -166,6 +172,10 @@ def main(argv=None):
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--out", help="write per driver csv here")
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the pairs and positions csvs go")
+    ap.add_argument("--pace", choices=pace.PACE_KINDS, default="none", help="pace term in the position check")
+    ap.add_argument("--pace-table", action="store_true", help="the position gate under every pace term")
+    ap.add_argument("--pace-sessions", default=",".join(pace.PRACTICE_SESSIONS),
+                    help="practice sessions for the practice and team pace terms")
     args = ap.parse_args(argv)
 
     session = load_session(args.season, args.gp)
@@ -199,7 +209,16 @@ def main(argv=None):
         table.to_csv(args.out)
 
     pairs, pair_summary = calibration.pairwise(sim, frame, race)
-    pos, pos_summary = calibration.positions(sim, frame, race, session_results(session))
+    results = session_results(session)
+    paces, practice_table = {"none": None}, None
+    if args.pace != "none" or args.pace_table:
+        practice, notes = pace.load_practice(args.season, args.gp, args.pace_sessions.split(","), cfg.long_run)
+        paces, practice_table = pace.offsets(sim, frame, race, practice)
+        for note in notes + (practice_table.attrs["notes"] if practice_table is not None else []):
+            print("practice:", note)
+    if args.pace not in paces:
+        ap.error(f"--pace {args.pace} needs practice laps")
+    pos, pos_summary = calibration.positions(sim, frame, race, results, pace=paces[args.pace])
     print("\nteam-mate pairs (gap = first driver minus second):\n", pairs.round(2).to_string())
     print("\npair summary:", json.dumps(pair_summary, indent=2))
     print("\nfinishing positions:\n", pos.round(1).to_string())
@@ -207,6 +226,16 @@ def main(argv=None):
     os.makedirs(args.report_dir, exist_ok=True)
     pairs.to_csv(os.path.join(args.report_dir, f"{race.race_id}_pairs.csv"))
     pos.to_csv(os.path.join(args.report_dir, f"{race.race_id}_positions.csv"))
+    if args.pace_table:
+        stamp = {"config_hash": calibration.config_hash(cfg), "sim_code_version": calibration.SIM_CODE_VERSION}
+        gate = pace.gate_table(sim, frame, race, results, paces)
+        print("\nposition gate by pace term:\n", gate.to_string(index=False))
+        _stamp(gate, stamp).to_csv(os.path.join(args.report_dir, f"{race.race_id}_pace_gate.csv"), index=False)
+        if practice_table is not None:
+            table, corr = pace.offsets_table(practice_table, paces["insample"])
+            print("\npace offsets (s/lap):\n", table.round(3).to_string())
+            print("\npractice vs in-sample:", json.dumps(corr))
+            _stamp(table, stamp).to_csv(os.path.join(args.report_dir, f"{race.race_id}_pace_offsets.csv"))
 
 
 if __name__ == "__main__":

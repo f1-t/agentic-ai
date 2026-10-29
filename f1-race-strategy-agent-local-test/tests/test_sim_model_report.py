@@ -240,8 +240,16 @@ def test_no_hazard_support_flag_hook():
 
 
 def test_no_hazard_support_flag_with_the_fitted_hazard_model():
-    pytest.importorskip("src.sim.hazard", reason="hazard model not on this branch yet (PR #17)")
+    from src.sim.hazard import AgeLogisticHazard
     s = Simulator(synthetic_frame(), SimConfig(hazard={"name": "age_logistic"}))
+    assert isinstance(s.hazard, AgeLogisticHazard) and set(s.hazard.a0) == set(TRUE)
     assert not any(f.startswith("no_hazard_support") for f in s.model_report(start(), calibration_summary=None).flags)
-    s.hazard.a0.pop("MEDIUM")
+    s.hazard.a0.pop("MEDIUM")  # MEDIUM now borrows the mean a0: no support of its own
     assert "no_hazard_support:MEDIUM" in s.model_report(start(), calibration_summary=None).flags
+    # under to_snapshot the hazard is the one fitted for the window
+    w = Simulator(synthetic_frame(), window("to_snapshot", hazard={"name": "age_logistic"}), synthetic_practice())
+    fit = w.fitted_for(at_lap(30))
+    fit.hazard.a0.pop("SOFT")
+    assert "no_hazard_support:SOFT" in w.model_report(at_lap(30), calibration_summary=None).flags
+    none = Simulator(synthetic_frame())  # default hazard "none": draws nothing, no flag
+    assert not any(f.startswith("no_hazard_support") for f in none.model_report(start(), calibration_summary=None).flags)

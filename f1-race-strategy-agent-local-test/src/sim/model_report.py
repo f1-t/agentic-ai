@@ -60,14 +60,14 @@ def _observed(rep, compound):
 
 
 def hazard_support(hazard):
-    """Compounds a fitted hazard model has observed support for, or None when there is no
-    hazard model with per compound support (none at all, one that draws nothing, or one
-    without a per compound table). Reads `support`, else the age_logistic `a0` table."""
+    """Compounds the fitted hazard model has observed support for (hazard.py): the keys of
+    age_logistic's `a0`, the compounds with min_samples clean laps; the others borrow the
+    mean a0, so their tyre risk is a guess. None when the model draws nothing ("none") or
+    has no per compound table, as then it says nothing about tyre risk."""
     if hazard is None or not getattr(hazard, "draws", False):
         return None
-    table = getattr(hazard, "support", None)
-    table = getattr(hazard, "a0", None) if table is None else table
-    return set(table) if isinstance(table, (dict, set, frozenset, list, tuple)) else None
+    a0 = getattr(hazard, "a0", None)
+    return set(a0) if isinstance(a0, dict) else None
 
 
 def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_SUMMARY,

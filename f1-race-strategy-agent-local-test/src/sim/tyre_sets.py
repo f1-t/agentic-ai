@@ -64,6 +64,19 @@ def _stints(laps, driver):
     return out
 
 
+def stand_in(ran, regulars, driver):
+    """The code that drove for `driver` in a session, by team, or None.
+
+    `ran` is the codes with laps for the team in the session, `regulars` the team's race
+    drivers. When `driver` is the only regular without laps and exactly one other code
+    ran for the team, that code drove for him.
+    """
+    others = set(ran) - set(regulars)
+    if set(regulars) - set(ran) == {driver} and len(others) == 1:
+        return next(iter(others))
+    return None
+
+
 def _session_stints(book, laps, driver, name):
     """The driver's stints in one session, or the reserve's who drove for him.
 
@@ -82,10 +95,9 @@ def _session_stints(book, laps, driver, name):
     codes = [r for r, d in book["reserves"].get(name, {}).items() if d == driver]
     how = "reserves"
     if not codes and book["team"] is not None and "Team" in laps:
-        ran = set(laps.loc[laps["Team"] == book["team"], "Driver"].dropna())
-        others = ran - book["regulars"]
-        if book["regulars"] - ran == {driver} and len(others) == 1:
-            codes, how = sorted(others), book["team"]
+        code = stand_in(set(laps.loc[laps["Team"] == book["team"], "Driver"].dropna()), book["regulars"], driver)
+        if code is not None:
+            codes, how = [code], book["team"]
     if not codes:
         return []  # nobody ran for him: no running, returns come from unseen sets
     book["notes"].append(f"{name}: no {driver} laps, took {', '.join(codes)} laps ({how})")

@@ -13,6 +13,7 @@ from . import model_report as _report
 from .config import SimConfig
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
+from .hazard import HAZARD
 from .rules import RuleContext, apply_inventory, check
 
 
@@ -61,7 +62,19 @@ def _matrix(values, mask):
 
 @dataclass
 class BatchResult:
-    """Many plans scored under the same draws. Rows follow the input plan order."""
+    """Many plans scored under the same draws. Rows follow the input plan order.
+
+    With a hazard model on (SimConfig.hazard), `times` include the hazard penalties: a
+    DNF sample keeps the remaining laps as if the car had continued and adds
+    dnf_penalty_s once, a big loss sample pays big_loss_s on the event lap. The
+    `lap_times` of sample 0 carry the same penalties. The mean time then depends on
+    dnf_penalty_s, an arbitrary time-metric convention for pricing a retirement; p_dnf
+    and cvar_90_s are the honest views of the risk, and the eval should report them
+    beside the mean. A position metric should rank on `dnf_lap` instead (a DNF behind
+    every finisher, an earlier retirement worse), not on the penalised time.
+    `dnf` and `big_loss` are exclusive (at most one hazard event per sample), so
+    p_dnf + p_big_loss is the probability of any hazard event.
+    """
 
     plans: list            # Plan, or None when the input did not parse
     errors: list           # list[str] per plan, empty when valid
@@ -70,6 +83,9 @@ class BatchResult:
     pit_loss: np.ndarray = None       # (n_plans, n_samples)
     stint_seconds: list = None        # per plan (n_stints, n_samples), pit loss excluded, None if invalid
     lap_times: np.ndarray | None = None  # (n_plans, n_laps) sample 0 lap times when requested
+    dnf: np.ndarray = None            # (n_plans, n_samples) bool, a hazard event ended the race
+    big_loss: np.ndarray = None       # (n_plans, n_samples) bool, a hazard event the car survived
+    dnf_lap: np.ndarray = None        # (n_plans, n_samples) race lap of retirement, NaN without a DNF
     elapsed_s: float | None = None
     seed: int = 0
     support_warnings: list = None     # list[str] per plan, empty when invalid
@@ -91,6 +107,7 @@ class BatchResult:
             stint_seconds=self.stint_seconds[i].mean(axis=1).tolist(),
             pit_loss_total_s=float(self.pit_loss[i].mean()),
             lap_times_s=self.lap_times[i].tolist() if self.lap_times is not None else None,
+            p_dnf=float(self.dnf[i].mean()), p_big_loss=float(self.big_loss[i].mean()),
             support_warnings=self.support_warnings[i] if self.support_warnings else [],
         )
 
@@ -137,9 +154,12 @@ class Simulator:
             base_delta=cfg.pre_race_base_delta_s, **spec.params, **extra)
 
     def _fit(self, frame, ref=None, **extra):
-        """Fit the degradation model on `frame`; ref_lap_s is the median clean lap of `ref`."""
+        """Fit the degradation model on `frame`; the hazard model and ref_lap_s (the median
+        clean lap) on `ref`, which adds practice to the race laps under to_snapshot."""
         ref = frame if ref is None else ref
         self.degradation = self._model(frame, **extra)
+        hz = self.config.hazard
+        self.hazard = HAZARD.get(hz.name).fit(ref, min_samples=self.config.min_samples, **hz.params)
         self.ref_lap_s = float(ref.loc[ref["clean"].astype(bool), "lap_time_s"].median())
 
     def fitted_for(self, snapshot: Snapshot) -> "Simulator":
@@ -201,7 +221,7 @@ class Simulator:
         """
         fit = self.fitted_for(snapshot)
         return _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
-                             hazard=getattr(fit, "hazard", None))
+                             hazard=fit.hazard)
 
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:
@@ -236,25 +256,34 @@ class Simulator:
         out.pit_loss = np.full((n_plans, n), np.nan)
         out.stint_seconds = [None] * n_plans
         out.lap_times = np.full((n_plans, n_laps), np.nan) if return_laps else None
+        out.dnf = np.zeros((n_plans, n), dtype=bool)
+        out.big_loss = np.zeros((n_plans, n), dtype=bool)
+        out.dnf_lap = np.full((n_plans, n), np.nan)
         idx = np.flatnonzero(out.valid)
         if len(idx) == 0:
             return out
 
-        # layout: plan-dependent, sample-independent, built once
+        # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
+        # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
         valid = [parsed[i] for i in idx]
-        code_of = {c: k for k, c in enumerate(sorted(self.modelled))}
+        names = sorted(self.modelled)
+        code_of = {c: k for k, c in enumerate(names)}
         codes = np.empty((len(valid), n_laps), dtype=int)
         ages = np.empty((len(valid), n_laps))
+        age0 = np.empty((len(valid), n_laps))                  # the lap's stint starting age
+        stint_start = np.empty((len(valid), n_laps), dtype=int)  # index of the stint's first lap
         stops = np.zeros((len(valid), n_laps))
         n_stints = np.array([len(p.stints) for p in valid])
         bounds = np.full((len(valid), n_stints.max() + 1), n_laps, dtype=int)
         for r, p in enumerate(valid):
             pos = 0
             for j, s in enumerate(p.stints):
-                age0 = snapshot.tyre_age if j == 0 else s.start_age
+                a0 = snapshot.tyre_age if j == 0 else s.start_age
                 bounds[r, j] = pos
                 codes[r, pos:pos + s.laps] = code_of[s.compound]
-                ages[r, pos:pos + s.laps] = age0 + np.arange(1, s.laps + 1)
+                ages[r, pos:pos + s.laps] = a0 + np.arange(1, s.laps + 1)
+                age0[r, pos:pos + s.laps] = a0
+                stint_start[r, pos:pos + s.laps] = pos
                 pos += s.laps
                 if j < len(p.stints) - 1:
                     stops[r, pos - 1] = 1.0
@@ -263,23 +292,59 @@ class Simulator:
                   if (m := codes == code).any()]
         padded = np.arange(bounds.shape[1] - 1) >= n_stints[:, None]
 
-        fx = self.config.effects
+        fx, hx = self.config.effects, self.config.hazard_effects
         pit_loss_s = snapshot.race.pit_loss_s
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
+        green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
+            # draw order: events, then the degradation model, then the hazard (when on)
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, rng)
             model = self.degradation.draw(rng)
-            green = np.empty(codes.shape)
-            for name, m, a, ln in groups:
-                green[m] = model.lap_times(name, a, ln)
             sc = np.isin(laps, scen.sc_laps)
             vsc = np.isin(laps, scen.vsc_laps)
+            green = np.empty(codes.shape)
+            if sc.any() or vsc.any():
+                # effective age: neutralised laps age the tyre by sc/vsc_age_increment, and
+                # only within the current stint. Ages may be fractional, so a degradation
+                # model's lap_times must accept float ages (linear ones do).
+                inc = np.where(sc, fx.sc_age_increment, np.where(vsc, fx.vsc_age_increment, 1.0))
+                cum = inc.cumsum()
+                cum_before = np.concatenate([[0.0], cum[:-1]])
+                eff = age0 + cum - cum_before[stint_start]
+                for name, m, _, ln in groups:
+                    green[m] = model.lap_times(name, eff[m], ln)
+            else:
+                eff = ages
+                for name, m, a, ln in groups:
+                    green[m] = model.lap_times(name, a, ln)
             lap_s = np.where(sc, fx.sc_lap_factor * self.ref_lap_s, np.where(vsc, fx.vsc_lap_factor * green, green))
             if lap1_extra:
                 lap_s[:, 0] += fx.lap1_extra_s
             scale = np.where(sc, fx.sc_pit_loss_factor, np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
+            if self.hazard.draws:
+                u = rng.uniform(size=(2, n_laps))   # shared by every plan (common random numbers)
+                if eff is ages:
+                    if green_p is None:
+                        green_p = self.hazard.per_lap_probability(codes, ages, names)
+                    p = green_p
+                else:
+                    p = self.hazard.per_lap_probability(codes, eff, names)
+                hit = p > u[0]
+                event = hit.any(axis=1)
+                lap = hit.argmax(axis=1)            # the first event lap; one event per sample
+                dnf = event & (u[1, lap] < hx.dnf_share)
+                big = event & ~dnf
+                lap_s[big, lap[big]] += hx.big_loss_s
+                # a DNF keeps the remaining laps and stops as if the car had continued and
+                # adds dnf_penalty_s once, booked on the lap after the event (on the event
+                # lap when it is the last), so a DNF always costs dnf_penalty_s more than
+                # finishing. Dropping the laps after the event would make a DNF faster.
+                rows = np.flatnonzero(dnf)
+                lap_s[rows, np.minimum(lap[rows] + 1, n_laps - 1)] += hx.dnf_penalty_s
+                out.dnf[idx, k], out.big_loss[idx, k] = dnf, big
+                out.dnf_lap[idx, k] = np.where(dnf, laps[lap], np.nan)
             pit_s = pit_loss_s * (stops * scale).sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s
             out.pit_loss[idx, k] = pit_s
