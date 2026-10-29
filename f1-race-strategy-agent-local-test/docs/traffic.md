@@ -26,12 +26,13 @@ python -m src.sim.calibrate traffic --config configs/sim/traffic_ghost.yaml   # 
 ```
 
 The `traffic` command writes `reports/calibration/<race_id>_traffic.csv`: one csv with a
-`table` column (`by_kind`, `drivers`, `pairs`, `gate`, `rejoin`, `placement`) and a
-`traffic` column, with the pace term in the engine in every arm:
+`table` column (`by_kind`, `drivers`, `pairs`, `gate`, `rejoin`, `placement`, and `sc_laps`
+for the bunching arm) and a `traffic` column, with the pace term in the engine in every arm:
 - `none`: traffic off.
-- `ghost_no_bunching`: `ghost` with `sc_bunching` false, the SC laps keeping their time
-  gaps (the rule before 0013), for the bunching off against on comparison.
-- `ghost`: traffic on at the default params.
+- `ghost`: traffic on at the default params (SC bunching off).
+- `ghost_bunching`: `ghost` with `sc_bunching` true, for the bunching off against on
+  comparison. Its `sc_laps` rows give `sc_field_delta_s`, the field's recorded SC lap
+  less the engine's, per finisher and SC lap.
 - `ghost_dirty`: information only. This is `ghost` with `dirty_air_s` set to the ghost
   arm's `clean_pack` mean residual (by_kind), the dirty air the clamp leaves unexplained.
   The default `dirty_air_s` stays 0.
@@ -50,7 +51,9 @@ README rule that drift alone regenerates nothing.
 In code: `Simulator(frame, SimConfig(traffic={"name": "ghost"}))`, with a snapshot whose
 `elapsed_s` is set. `BatchResult.traffic_s`, `.passes` and `.bunching_s` (per plan and
 sample) and `SimResult.traffic_s` / `.passes_mean` / `.bunching_s` report what traffic
-added; `times`, the stint sums and `compare` include it.
+added; `times`, the stint sums and `compare` include it. With `return_laps`,
+`BatchResult.sc_field_delta` and `SimResult.sc_field_delta_s` (sample 0) give the field's
+SC lap less the engine's on each bunched SC lap.
 
 **Pace offsets under traffic.** With traffic on, the drivers table's `pace_offset_s`
 (calibration.run) and the midrace `_pace_offset` use the driver's free-air laps, as under
@@ -69,7 +72,8 @@ our clock at the lap start, `f` our lap time as the engine produced it and
 `arrive = T + f`:
 
 - VSC lap: no traffic, the gaps are kept.
-- SC lap: the queue (below). With `sc_bunching` false, no traffic, as on a VSC lap.
+- SC lap: no traffic, as on a VSC lap (the default); with `sc_bunching` true, the queue
+  (below).
 - Otherwise a ghost is *eligible* when we start the lap behind it (`d = T - G_prev > 0`),
   both its lap ends are recorded, and the lap is not its in-lap. We *catch* it when
   `arrive < G + follow_gap_s`. It is *fast* for us when `g - f >= pass_delta_s`
@@ -91,33 +95,56 @@ the swap grants time the car did not earn, at most `follow_gap_s + pass_gap_s +
 pass_cost_s - (g - f)` on that lap, so a lap's increment can be negative. That is the price
 of ghosts that do not react (in a reactive world the passed car would lose that time). The
 `conjured_s` column sums the negative increments per driver off the SC laps (the SC queue's
-increments are `bunching_s`); on Spain 2021 it is -1.39 s per driver at the default params
-(5.74 passes per driver), and -1.55 s with bunching off (5.16 passes).
+increments are `bunching_s`); on Spain 2021 it is -1.55 s per driver at the default params
+(5.16 passes per driver), and -2.22 s with bunching on (7.11 passes).
 
-**SC bunching.** Under the SC the field closes up into a queue about `sc_interval_s`
-apart, so on an SC lap we take our place in it instead of keeping the pre-SC time gap.
-With `f` the SC lap time as the engine gives it (the same for every car), the provisional
-end is `e = T + f + pit loss` on that lap: a stop under the SC is booked before the
-placement, so we join the queue where the reduced pit loss puts us. Among the ghosts with
-a recorded line crossing on this lap, `A` is directly ahead of `e` (largest `G <= e`) and
-`B` directly behind (smallest `G > e`):
+**SC bunching (`sc_bunching`, off by default; see the decision below).** Under the SC the
+field closes up into a queue about `sc_interval_s` apart, so on an SC lap we take our place
+in it instead of keeping the pre-SC time gap.
+
+- **The queue** is the ghosts with both lap ends recorded, not on their in-lap (they leave
+  for the pit lane; out-laps rejoin and stay), and within half a reference lap of our
+  clock, `|G_prev - T| < 0.5 * ref_lap_s`. That is the same-lap-count guard: a lapped
+  car's end of lap `i`, about a lap away in time, is not the car ahead.
+- **The lap time is the field's.** `f_field` = the median of `G - G_prev` over the queue's
+  ghosts not on their out-lap: the recorded SC lap on this lap, so our clock and the
+  ghosts' are comparable. The engine's `f` is the fallback when no ghost qualifies.
+- The provisional end is `e = T + f_field + pit loss`. A stop under the SC is booked
+  before the placement, so we join the queue where the reduced pit loss puts us. In the
+  queue, `A` is directly ahead of `e` (largest `G <= e`) and `B` directly behind
+  (smallest `G > e`):
 
 - `A` and `B`: `end = G_A + min(sc_interval_s, (G_B - G_A) / 2)`
 - `A` only: `end = G_A + sc_interval_s`
-- no ghost ahead (we lead): `end = e`, the lap time unchanged
+- no ghost ahead (we lead): `end = e`, the lap is `f_field`
 
-The lap time becomes `end - T - pit loss`, so the pit loss stays out of it. The increment
-is negative when we close up to the queue and positive when we were closer to `A` than the
-interval. We stay between `A` and `B` (never past `B`) and nobody is passed on an SC lap.
-The increments are reported as `bunching_s`, apart from `traffic_s`. The SC laps are the
-engine's (`scenario.sc_laps`), which for drawn events already start inside the snapshot's
-SC.
+The lap time becomes `end - T - pit loss`, so the pit loss stays out of it. We stay
+between `A` and `B` (never past `B`) and nobody is passed on an SC lap. The change over
+the engine's lap (`f_field - f` plus `end - e`) is reported as `bunching_s`, apart from
+`traffic_s`. With bunching on, the engine's SC lap factor matters only with traffic off.
+The SC laps are the engine's (`scenario.sc_laps`), which for drawn events already start
+inside the snapshot's SC.
 
-The order is kept relative to `e`, which is the engine's time-based SC lap. Over several
-SC laps the queue reproduces the recorded one only as far as `f` matches the recorded SC
-laps. On Spain 2021 the leader's laps 8-10 are 85.5, 134.9 and 139.9 s against the model's
-114.1 s each, while the recorded queue at the end of lap 10 is 8.5 s long for 18 cars, so
-the mismatch moves cars by several places in one lap (see the 0013 PR).
+The field lap was added after the first version, which used the engine's flat SC lap for
+`e`. On Spain 2021 that lap is 114.1 s, while the recorded leader ran laps 8-10 in 85.5,
+134.9 and 139.9 s, and the queue at the end of lap 10 is 8.5 s long for 18 cars. The
+mismatch moved cars through the queue by up to ten places a lap. With the field lap, the
+medians of `sc_field_delta_s` on laps 8, 9 and 10 are -19.4, +3.3 and +17.6 s.
+
+**Decision (0013, fixed in advance).** `sc_bunching` would default on only if, with the
+field lap, post-SC placement at lap 12 improved on bunching off (mae 3.00) and the
+simulated gate and the pairs were no worse. On Spain 2021 it does not pass:
+
+| | bunching off | bunching on |
+|---|---|---|
+| placement at lap 12: mae / within_1 | 3.00 / 0.316 | 3.05 / 0.158 |
+| simulated gate: within_2 / mae_pos | 0.895 / 1.16 | 0.842 / 1.26 |
+| pairs sign agreement | 6 / 8 | 5 / 8 |
+
+So it is off by default and stays available. Under drawn events it is also not a model
+of an SC: a drawn SC lap is usually green in the recorded field, so `f_field` is a green
+lap, and an SC costs about nothing (the Spain optimum with rate events is about 55 s
+faster with bunching on).
 
 A ghost on its out-lap is never passed on track: if we arrive before its line it rejoined
 behind us (no cost, no swap); within `follow_gap_s` after its line it holds us (the
@@ -142,19 +169,27 @@ later. The sources are placeholders for that selection, not facts the code depen
 | `drs_off_first_laps` | 2 | |
 | `drs_off_after_sc_laps` | 2 | SC only, not VSC |
 | `dirty_air_s` | 0.0 | off by default |
-| `dirty_air_range_s` | 1.5 | `FREE_AIR_GAP_S` (config): `dirty_air_s` is measured on `clean_pack` laps, gaps under that, so it is applied over the same window |
+| `dirty_air_range_s` | 1.5 | `FREE_AIR_GAP_S` (config): `dirty_air_s` is measured on `clean_pack` laps, gaps under that, so it is applied over the same window; see below |
 | `max_passes_per_lap` | 3 | |
-| `sc_bunching` | true | |
+| `sc_bunching` | false | failed the 0013 decision rule on Spain (above) |
 | `sc_interval_s` | 1.2 | about ten car lengths under the SC, 1-1.5 s at SC speed |
+
+The dirty-air window is tied to `FREE_AIR_GAP_S`, one constant. LORO may still select a
+wider application window, because the penalty is measured on recorded gaps but applied
+on simulated ones. Our clock drifts by 0.1 to 0.3 s per lap, so on Spain 2021 a wider
+window (2.0 s) was partly compensating for drift: at `dirty_air_s` 0.229 the clean_pack
+residual is 2.5 s per driver with 2.0 s and 2.9 s with 1.5 s. The proper fix is a better
+clock.
 
 ## Known limits
 
-1. **SC bunching is a queue rule.** It places us in the recorded queue lap by lap (see
-   the rule above) and does not model the restart: a car keeps its slot, nobody gains on
-   the restart lap beyond the green-lap rule, and lapped cars are queued by lap index like
-   everything else here. Its queue position is only as good as the engine's per-lap SC lap
-   time against the recorded one. The `placement` table (lap 12 on Spain, after the lap
-   8-10 SC) and its `pit_under_sc` split record the evidence.
+1. **SC laps keep their time gaps by default.** The SC model is time-based, so a car 20 s
+   ahead of a ghost before the SC is still 20 s ahead after it, while the recorded ghosts
+   are bunched. `sc_bunching` (above) is the queue rule, available but off: it did not
+   improve the post-SC placement on Spain, and under drawn events the recorded field's lap
+   on a drawn SC lap is not an SC lap. With it on, the restart is not modelled (a car keeps
+   its slot and gains only by the green-lap rule). The `placement` table (lap 12 on Spain,
+   after the lap 8-10 SC), its `pit_under_sc` split and `sc_laps` record the evidence.
 2. **Lapped cars.** Ghosts are compared on the same lap number, so a car a lap down is
    "behind" in lap index even when ahead on track; blue flags make this second order.
 3. **Ghosts do not react.** No undercut defence, no rival strategist.

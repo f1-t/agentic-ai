@@ -97,6 +97,9 @@ class BatchResult:
     traffic_s: np.ndarray = None      # (n_plans, n_samples) float, green laps
     passes: np.ndarray = None         # (n_plans, n_samples) int
     bunching_s: np.ndarray = None     # (n_plans, n_samples) float, SC laps (the SC queue)
+    # (n_plans, n_laps) sample 0 with return_laps: the field's SC lap less the engine's on each
+    # bunched SC lap (traffic.py), NaN elsewhere; None without return_laps
+    sc_field_delta: np.ndarray | None = None
     traffic_on: bool = False          # a traffic state was placed for this snapshot
 
     def __post_init__(self):
@@ -121,6 +124,8 @@ class BatchResult:
             traffic_s=float(self.traffic_s[i].mean()) if self.traffic_on else None,
             passes_mean=float(self.passes[i].mean()) if self.traffic_on else None,
             bunching_s=float(self.bunching_s[i].mean()) if self.traffic_on else None,
+            sc_field_delta_s=(self.sc_field_delta[i].tolist()
+                              if self.traffic_on and self.sc_field_delta is not None else None),
         )
 
 
@@ -384,11 +389,12 @@ class Simulator:
         out.traffic_s = np.zeros((n_plans, n))
         out.passes = np.zeros((n_plans, n), dtype=int)
         out.bunching_s = np.zeros((n_plans, n))
+        out.sc_field_delta = np.full((n_plans, n_laps), np.nan) if return_laps else None
         idx = np.flatnonzero(out.valid)
         if len(idx) == 0:
             return out
         # traffic: placed once per call, plan- and sample-independent, draws nothing
-        tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver)
+        tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver, ref_lap_s=self.ref_lap_s)
         out.traffic_on = tstate is not None
         tw = self.traffic.support_warnings(snapshot, tstate)
         if tw:
@@ -505,7 +511,9 @@ class Simulator:
                 # the full pit loss is booked at the end of the in-lap, so the out-lap starts
                 # from the rejoin position; it stays out of lap_s, as below
                 lap_s, extra = self.traffic.apply(tstate, lap_s, v["pit_loss_s"] * stops * scale, sc, vsc, scen)
-                out.traffic_s[idx, k], out.passes[idx, k], out.bunching_s[idx, k] = extra
+                out.traffic_s[idx, k], out.passes[idx, k], out.bunching_s[idx, k], field_delta = extra
+                if k == 0 and return_laps:
+                    out.sc_field_delta[idx] = field_delta
             pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s
             out.pit_loss[idx, k] = pit_s
