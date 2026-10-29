@@ -17,6 +17,7 @@ from .events import EVENTS, Scenario
 from .hazard import HAZARD
 from .rules import RuleContext, apply_inventory, check
 from .track import TRACK
+from .traffic import TRAFFIC
 
 
 def summarise(totals) -> TimeSummary:
@@ -91,6 +92,11 @@ class BatchResult:
     elapsed_s: float | None = None
     seed: int = 0
     support_warnings: list = None     # list[str] per plan, empty when invalid
+    # traffic (traffic.py): time added by the ghosts and overtakes charged, both included in
+    # times and the stint sums; zeros when traffic is off or could not be placed
+    traffic_s: np.ndarray = None      # (n_plans, n_samples) float
+    passes: np.ndarray = None         # (n_plans, n_samples) int
+    traffic_on: bool = False          # a traffic state was placed for this snapshot
 
     def __post_init__(self):
         self.valid = np.array([p is not None and not e for p, e in zip(self.plans, self.errors)], dtype=bool)
@@ -111,6 +117,8 @@ class BatchResult:
             lap_times_s=self.lap_times[i].tolist() if self.lap_times is not None else None,
             p_dnf=float(self.dnf[i].mean()), p_big_loss=float(self.big_loss[i].mean()),
             support_warnings=self.support_warnings[i] if self.support_warnings else [],
+            traffic_s=float(self.traffic_s[i].mean()) if self.traffic_on else None,
+            passes_mean=float(self.passes[i].mean()) if self.traffic_on else None,
         )
 
 
@@ -134,13 +142,18 @@ class Simulator:
     `calibrator` is an instance (a fitted learned class, say), else the one
     config.calibrator names. `weather` (weather.lap_weather) feeds the cadence's rain and
     temperature refreshes and the context, `race_features` the context.
+
+    `pace` (driver -> offset_s, a dict or Series such as pace.practice_pace(...)["offset_s"])
+    adds the snapshot driver's offset to every green lap, lap 1 included, never to an SC or
+    VSC lap (the field's lap, or a delta every car drives to). Drivers it does not list,
+    and None, get 0. `with_pace` gives a copy with another pace.
     """
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
-                 practice: pd.DataFrame | None = None, *, weather: pd.DataFrame | None = None,
+                 practice: pd.DataFrame | None = None, pace=None, *, weather: pd.DataFrame | None = None,
                  race_features: dict | None = None, calibrator=None):
         self.config = config or SimConfig()
-        self.laps, self.practice = laps, practice
+        self.laps, self.practice, self.pace = laps, practice, pace
         self.weather, self.race_features = weather, race_features
         spec = self.config.calibrator
         self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
@@ -152,6 +165,8 @@ class Simulator:
         self.events = EVENTS.get(ev.name)(**ev.params)
         tr = self.config.track
         self.track = TRACK.get(tr.name)(**tr.params)
+        tf = self.config.traffic
+        self.traffic = TRAFFIC.get(tf.name)(**tf.params)
         if self.config.fit_window != "full" and self._has_practice:
             self._fit(self.practice.assign(lap=np.nan))
         else:
@@ -160,6 +175,19 @@ class Simulator:
     @property
     def modelled(self):
         return self.degradation.compounds
+
+    def with_pace(self, pace) -> "Simulator":
+        """A shallow copy with `pace` set. The fits are shared, the windowed copies are not
+        (they carry the pace they were built with)."""
+        out = copy.copy(self)
+        out.pace, out._fits = pace, {}
+        return out
+
+    def _pace_offset(self, driver) -> float:
+        if self.pace is None:
+            return 0.0
+        offset = float(self.pace.get(driver, 0.0))
+        return 0.0 if np.isnan(offset) else offset
 
     @property
     def _has_practice(self):
@@ -351,9 +379,19 @@ class Simulator:
         out.dnf = np.zeros((n_plans, n), dtype=bool)
         out.big_loss = np.zeros((n_plans, n), dtype=bool)
         out.dnf_lap = np.full((n_plans, n), np.nan)
+        out.traffic_s = np.zeros((n_plans, n))
+        out.passes = np.zeros((n_plans, n), dtype=int)
         idx = np.flatnonzero(out.valid)
         if len(idx) == 0:
             return out
+        # traffic: placed once per call, plan- and sample-independent, draws nothing
+        tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver)
+        out.traffic_on = tstate is not None
+        tw = self.traffic.support_warnings(snapshot, tstate)
+        if tw:
+            for i in idx:
+                out.support_warnings[i] = out.support_warnings[i] + tw
+        offset = self._pace_offset(snapshot.driver)
 
         # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
         # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
@@ -434,6 +472,8 @@ class Simulator:
             green *= self.track.factor(track, class_codes, lapnums)
             lap_s = np.where(sc, v["sc_lap_factor"] * self.ref_lap_s,
                              np.where(vsc, v["vsc_lap_factor"] * green, green))
+            if offset:   # green laps only; skipped at 0 so a run without pace is bit for bit unchanged
+                lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
             scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
@@ -458,6 +498,11 @@ class Simulator:
                 lap_s[rows, np.minimum(lap[rows] + 1, n_laps - 1)] += hx.dnf_penalty_s
                 out.dnf[idx, k], out.big_loss[idx, k] = dnf, big
                 out.dnf_lap[idx, k] = np.where(dnf, laps[lap], np.nan)
+            if tstate is not None:
+                # the full pit loss is booked at the end of the in-lap, so the out-lap starts
+                # from the rejoin position; it stays out of lap_s, as below
+                lap_s, extra = self.traffic.apply(tstate, lap_s, v["pit_loss_s"] * stops * scale, sc | vsc, scen)
+                out.traffic_s[idx, k], out.passes[idx, k] = extra
             pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s
             out.pit_loss[idx, k] = pit_s

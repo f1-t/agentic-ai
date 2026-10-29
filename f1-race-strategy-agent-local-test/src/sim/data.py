@@ -185,6 +185,21 @@ def robust_filter(df, base, design, k_resid=2.5, n_iter=2, min_samples=5):
 GAP_COLUMNS = ["gap_ahead_s", "car_ahead", "gap_behind_s", "free_air"]
 
 
+def line_crossings(df):
+    """Line crossings: one row per (driver, lap L) with t, the end_s of lap L - 1, the session
+    time the driver starts lap L. Rows without a lap number or an end_s are left out, a
+    duplicated (driver, lap) keeps its first row, and the rows are sorted by lap, then t.
+
+    The one home of the end_s(L - 1) arithmetic: gap_columns ranks it per lap,
+    traffic.ghost_table reads it per driver.
+    """
+    lap = pd.to_numeric(df["lap"], errors="coerce").to_numpy(dtype=float)
+    end = df["end_s"].to_numpy(dtype=float)
+    ok = np.isfinite(lap) & np.isfinite(end)
+    cross = pd.DataFrame({"driver": df["driver"].to_numpy()[ok], "lap": lap[ok] + 1, "t": end[ok]})
+    return cross.drop_duplicates(["driver", "lap"]).sort_values(["lap", "t"], kind="mergesort")
+
+
 def gap_columns(df, free_air_gap_s=FREE_AIR_GAP_S):
     """Gaps at the line at the start of each lap, from end_s: sets the GAP_COLUMNS on `df`.
 
@@ -200,11 +215,7 @@ def gap_columns(df, free_air_gap_s=FREE_AIR_GAP_S):
     (lap 1, the leader, missing data).
     """
     lap = pd.to_numeric(df["lap"], errors="coerce").to_numpy(dtype=float)
-    end = df["end_s"].to_numpy(dtype=float)
-    ok = np.isfinite(lap) & np.isfinite(end)
-    # line crossings at the end of lap L - 1, keyed by the lap L they start
-    cross = pd.DataFrame({"driver": df["driver"].to_numpy()[ok], "lap": lap[ok] + 1, "t": end[ok]})
-    cross = cross.drop_duplicates(["driver", "lap"]).sort_values(["lap", "t"], kind="mergesort")
+    cross = line_crossings(df)
     parts = []
     for _, c in cross.groupby("lap", sort=False):
         t, d = c["t"].to_numpy(), c["driver"].to_numpy()
