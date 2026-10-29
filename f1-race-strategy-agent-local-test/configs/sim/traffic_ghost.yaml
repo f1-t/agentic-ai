@@ -1,0 +1,4 @@
+# The default SimConfig with ghost-car traffic on (src/sim/traffic.py, docs/traffic.md).
+# World-model only: ground truth, calibration and replay. The agent's tools keep traffic off.
+traffic:
+  name: ghost
