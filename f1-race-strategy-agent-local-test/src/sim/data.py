@@ -11,11 +11,10 @@ import os
 import numpy as np
 import pandas as pd
 
-from .config import LongRun
+from .config import HINGE_KNOT, LongRun   # HINGE_KNOT lives in config, shared with linear_fuel_hinge
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 LEGACY_OUTLIER_FACTOR = 1.07  # baseline rule: drop laps slower than 107% of the compound's fastest
-HINGE_KNOT = 25               # tyre age where the filter's reference model may bend upwards
 MIN_SCALE_S = 0.05            # floor on the robust residual scale, so noise free data cuts nothing
 EVOLUTION_TAU_S_PER_MIN = 0.02  # ridge toward 0 on the practice session evolution slopes
 
