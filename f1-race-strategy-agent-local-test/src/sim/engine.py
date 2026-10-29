@@ -9,11 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from ..contracts import (Compound, CompareResult, Plan, PlanStint, SimResult, Snapshot, StintRecord,
                          TimeSummary)
-from .config import SimConfig
+from .config import SimConfig, class_names, compound_class
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
 from .hazard import HAZARD
 from .rules import RuleContext, apply_inventory, check
+from .track import TRACK
 
 
 def summarise(totals) -> TimeSummary:
@@ -131,6 +132,8 @@ class Simulator:
         self._fits = {}
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
+        tr = self.config.track
+        self.track = TRACK.get(tr.name)(**tr.params)
         if self.config.fit_window != "full" and self._has_practice:
             self._fit(self.practice.assign(lap=np.nan))
         else:
@@ -252,6 +255,8 @@ class Simulator:
         names = sorted(self.modelled)
         code_of = {c: k for k, c in enumerate(names)}
         codes = np.empty((len(valid), n_laps), dtype=int)
+        class_of = {c: k for k, c in enumerate(class_names(self.config))}
+        class_codes = np.empty((len(valid), n_laps), dtype=int)   # tyre class, see track.py
         ages = np.empty((len(valid), n_laps))
         age0 = np.empty((len(valid), n_laps))                  # the lap's stint starting age
         stint_start = np.empty((len(valid), n_laps), dtype=int)  # index of the stint's first lap
@@ -264,6 +269,7 @@ class Simulator:
                 a0 = snapshot.tyre_age if j == 0 else s.start_age
                 bounds[r, j] = pos
                 codes[r, pos:pos + s.laps] = code_of[s.compound]
+                class_codes[r, pos:pos + s.laps] = class_of[compound_class(self.config, s.compound)]
                 ages[r, pos:pos + s.laps] = a0 + np.arange(1, s.laps + 1)
                 age0[r, pos:pos + s.laps] = a0
                 stint_start[r, pos:pos + s.laps] = pos
@@ -281,10 +287,13 @@ class Simulator:
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
-            # draw order: events, then the degradation model, then the hazard (when on)
+            # draw order: events, then the degradation model, then the hazard (when on), then the track
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, rng)
             model = self.degradation.draw(rng)
+            u = rng.uniform(size=(2, n_laps)) if self.hazard.draws else None
+            # u is shared by every plan (common random numbers)
+            track = self.track.draw(snapshot, rng)
             sc = np.isin(laps, scen.sc_laps)
             vsc = np.isin(laps, scen.vsc_laps)
             green = np.empty(codes.shape)
@@ -302,12 +311,12 @@ class Simulator:
                 eff = ages
                 for name, m, a, ln in groups:
                     green[m] = model.lap_times(name, a, ln)
+            green *= self.track.factor(track, class_codes, lapnums)
             lap_s = np.where(sc, fx.sc_lap_factor * self.ref_lap_s, np.where(vsc, fx.vsc_lap_factor * green, green))
             if lap1_extra:
                 lap_s[:, 0] += fx.lap1_extra_s
             scale = np.where(sc, fx.sc_pit_loss_factor, np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
             if self.hazard.draws:
-                u = rng.uniform(size=(2, n_laps))   # shared by every plan (common random numbers)
                 if eff is ages:
                     if green_p is None:
                         green_p = self.hazard.per_lap_probability(codes, ages, names)
