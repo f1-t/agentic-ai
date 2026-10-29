@@ -1,0 +1,10 @@
+# Code owners: a PR that touches these paths requests a review from the owner.
+# Add your own area below in the same form. https://docs.github.com/articles/about-code-owners
+
+# Evaluation harness (Manya)
+/f1-race-strategy-agent-local-test/src/eval/             @ManyaJainrkm
+/f1-race-strategy-agent-local-test/tests/test_eval*.py   @ManyaJainrkm
+/f1-race-strategy-agent-local-test/docs/eval.md          @ManyaJainrkm
+/f1-race-strategy-agent-local-test/data/scenarios/       @ManyaJainrkm
+/f1-race-strategy-agent-local-test/data/eval/            @ManyaJainrkm
+/f1-race-strategy-agent-local-test/reports/eval/         @ManyaJainrkm
