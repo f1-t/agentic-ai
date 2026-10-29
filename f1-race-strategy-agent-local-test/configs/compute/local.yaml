@@ -1,0 +1,39 @@
+# Desktop: Ryzen 9850X3D, RTX 5080. The default profile.
+name: local
+sim:
+  n_samples: 50
+  max_stops: 2
+  min_stint: null            # RaceParams.min_stint_laps
+  compare_n_samples: null    # same as n_samples
+parallel:
+  n_jobs: 8
+  eval_chunk_size: 50
+g:
+  laps_every: 5
+  sc_adjacent: true
+  windows: [full, to_snapshot, pre_race]
+  n_boot: 200
+  cadences: [1, 5, null]
+h:
+  loro_folds: 20             # seeded subsample of the leave-one-race-out folds
+  loso: false
+  mlp:
+    ensemble: 3
+    epochs: 200
+    batch_size: 64
+    patience: 20
+    hidden_sizes: [32, 32]
+    weight_decay: 0.0001
+    device: auto             # cuda if available, else cpu
+  gbm:
+    n_estimators: 200
+    max_depth: 3
+  seed: 0
+build:
+  workers: 4
+  retries: 3
+  rate_pause_s: 1.0
+wandb:
+  mode: online
+  project: f1-strategy-sim
+  tags: [local]
