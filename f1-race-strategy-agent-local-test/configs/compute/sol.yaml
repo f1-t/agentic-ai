@@ -1,0 +1,39 @@
+# ASU Sol: one core per array task, the scheduler provides the parallelism.
+name: sol
+sim:
+  n_samples: 500
+  max_stops: 3
+  min_stint: null
+  compare_n_samples: null
+parallel:
+  n_jobs: 1
+  eval_chunk_size: 20
+g:
+  laps_every: 2
+  sc_adjacent: true
+  windows: [full, to_snapshot, pre_race]
+  n_boot: 2000
+  cadences: [1, 2, 5, null]
+h:
+  loro_folds: null           # every race in the pool
+  loso: true
+  mlp:
+    ensemble: 10
+    epochs: 2000
+    batch_size: 64
+    patience: 100
+    hidden_sizes: [32, 32]
+    weight_decay: 0.0001
+    device: cpu              # the net is tiny; "cuda" only on a GPU partition
+  gbm:
+    n_estimators: 200
+    max_depth: 3
+  seed: 0
+build:
+  workers: 4                 # unused: the build never runs on Sol
+  retries: 3
+  rate_pause_s: 1.0
+wandb:
+  mode: offline              # wandb sync afterwards
+  project: f1-strategy-sim
+  tags: [sol]
