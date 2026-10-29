@@ -26,12 +26,14 @@ and records the substitution.
 simulator and its fit window, never from the snapshot record. The Milestone's optimizer
 uses the `pre_race` window.
 
-**R6 Randomness.** Sample `i` of seed `s` is `numpy.random.default_rng([s, i])` for every
-candidate. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
+**R6 Randomness.** Sample `i` of seed `s` is `numpy.random.default_rng([s, i])` (the main
+stream) for every candidate; its SC/VSC scenario comes from the events substream
+`default_rng([s, i, 1])`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
 `(seed=0, n_samples=n)` describe the same draws. Seed mapping in the bridge:
 `optimize_batch(seed=s, n_samples=n)` reports `Evaluation.seeds = (0, ..., n-1)`, the
 sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;
-sample `i` of those times was drawn from `default_rng([s, i])`. With `s = 0` the
+sample `i` of those times was drawn from `default_rng([s, i])`, its events from
+`default_rng([s, i, 1])`. With `s = 0` the
 evaluation's seeds are exactly the baseline optimizer's seed tuple.
 
 **R7 Ties.** Ties on mean time break by fewer stops, then earlier pit laps, then the

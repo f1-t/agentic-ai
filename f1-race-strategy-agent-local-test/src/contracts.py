@@ -43,6 +43,12 @@ class RaceParams(_Contract):
     pit_loss_s: float = Field(ge=0)
     min_stint_laps: int = Field(default=10, ge=1)
     compounds: list[Compound] = Field(default_factory=list)  # available to run
+    # circuit SC/VSC rates for the "rate" event model: chance per green lap that a period
+    # starts, and its mean length in laps. None takes the SimConfig events params.
+    sc_rate_per_lap: float | None = Field(default=None, ge=0, le=1)
+    sc_mean_laps: float | None = Field(default=None, ge=1)
+    vsc_rate_per_lap: float | None = Field(default=None, ge=0, le=1)
+    vsc_mean_laps: float | None = Field(default=None, ge=1)
 
 
 # --- Snapshot ----------------------------------------------------------------

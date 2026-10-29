@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 log = logging.getLogger(__name__)
@@ -40,6 +40,28 @@ class EventEffects(_Cfg):
     # younger afterwards. Provisional, fitted in sprint 2 from annotated races.
     sc_age_increment: float = 0.3
     vsc_age_increment: float = 0.5
+
+
+class EventModel(_Cfg):
+    """Rates for the "rate" event model (events.py), its ComponentSpec params.
+
+    p_* is the chance per green lap that a period starts, d_* the mean period length in
+    laps. A race whose RaceParams carries circuit rates (sc_rate_per_lap and friends)
+    overrides these per race. Provisional, Spain only: one SC of 3 laps in 66 gives
+    p_sc 0.015 and d_sc 3; the VSC values are placeholders. Fitted across races from
+    the factor rows (calibration.observed_periods) later.
+    """
+
+    p_sc: float = Field(default=0.015, ge=0, le=1)
+    d_sc: float = Field(default=3.0, ge=1)
+    p_vsc: float = Field(default=0.02, ge=0, le=1)
+    d_vsc: float = Field(default=2.0, ge=1)
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.p_sc + self.p_vsc > 1:
+            raise ValueError("p_sc + p_vsc must be at most 1")
+        return self
 
 
 class HazardEffects(_Cfg):

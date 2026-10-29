@@ -49,6 +49,8 @@ def test_replay_of_actual_strategy(session, frame):
     assert table.loc["HAM", "stops"] == 2
     assert table.loc["HAM", "real_s"] == pytest.approx(5587.8, abs=0.1)
     assert {"lap1", "sc", "in_lap", "out_lap", "clean"} <= set(by_kind.index)
+    # one SC period, laps 8 to 10, no VSC (calibration.observed_periods)
+    assert (summary["sc_count"], summary["sc_laps"], summary["vsc_count"], summary["vsc_laps"]) == (1, 3, 0, 0)
 
 
 def test_weather_is_empty_by_default_and_loads_offline(session):

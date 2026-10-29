@@ -115,6 +115,9 @@ class BatchResult:
 
 
 FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
+# events draw from their own substream, default_rng([seed, k, EVENT_STREAM]), so the main
+# stream never sees an event draw: with events on, every other draw matches the run without
+EVENT_STREAM = 1
 
 
 class Simulator:
@@ -377,12 +380,13 @@ class Simulator:
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
-            # draw order: events, calibrated factors, correction z, degradation, hazard, track:
-            # do not reorder, seeds depend on it (the hazard uniform is drawn here, ahead of the
-            # track state; its use comes later). The factor and z draws happen only when the
-            # calibrator gives a factor sd or a correction sd above 0.
+            # main stream draw order: calibrated factors, correction z, degradation, hazard,
+            # track: do not reorder, seeds depend on it (the hazard uniform is drawn here, ahead
+            # of the track state; its use comes later). The factor and z draws happen only when
+            # the calibrator gives a factor sd or a correction sd above 0. Events draw from
+            # their own substream (EVENT_STREAM), never from rng.
             rng = np.random.default_rng([seed, k])
-            scen = scenario or self.events.draw(snapshot, rng)
+            scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
             model = self.degradation.draw(rng)
