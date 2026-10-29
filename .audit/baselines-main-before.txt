@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/baselines/__main__.py", line 85, in <module>
+    main()
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/baselines/__main__.py", line 77, in main
+    context = load_legacy_context(args.driver, args.lap)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/baselines/legacy.py", line 39, in load_legacy_context
+    from .. import tools
+  File "/Users/quan/Repos/agentic-ai/f1-race-strategy-agent-local-test/src/tools.py", line 14, in <module>
+    from pydantic import ValidationError
+ModuleNotFoundError: No module named 'pydantic'

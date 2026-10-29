@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "race": "Spanish Grand Prix",
+  "driver": "HAM",
+  "simulator": "legacy_deterministic_linear",
+  "objective": "minimum_mean_remaining_time_over_supplied_seeds",
+  "max_future_stops": 2,
+  "snapshot": {
+    "total_laps": 66,
+    "completed_laps": 30,
+    "current_compound": "MEDIUM",
+    "tyre_age": 2,
+    "current_stint_laps": 2,
+    "used_compounds": [
+      "MEDIUM",
+      "SOFT"
+    ],
+    "available_compounds": [
+      "MEDIUM",
+      "SOFT"
+    ],
+    "min_stint_laps": 10,
+    "pit_loss_s": 22.0,
+    "require_two_compounds": true
+  },
+  "optimizer": {
+    "stint_plan": [
+      [
+        "MEDIUM",
+        8
+      ],
+      [
+        "SOFT",
+        28
+      ]
+    ],
+    "num_stops": 1,
+    "pit_laps": [
+      38
+    ],
+    "first_pit_lap": 38,
+    "expected_remaining_time_s": 3006.1,
+    "stddev_time_s": 0.0,
+    "standard_error_s": 0.0,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "seed_times_s": [
+      3006.1,
+      3006.1,
+      3006.1
+    ],
+    "candidates_evaluated": 219
+  },
+  "baselines": {
+    "actual_strategy": {
+      "status": "ok",
+      "stint_plan": [
+        [
+          "MEDIUM",
+          12
+        ],
+        [
+          "MEDIUM",
+          24
+        ]
+      ],
+      "num_stops": 1,
+      "pit_laps": [
+        42
+      ],
+      "first_pit_lap": 42,
+      "expected_remaining_time_s": 3036.4,
+      "stddev_time_s": 0.0,
+      "standard_error_s": 0.0,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "seed_times_s": [
+        3036.4,
+        3036.4,
+        3036.4
+      ],
+      "regret_s": 30.300000000000182
+    },
+    "fixed_one_stop": {
+      "status": "ok",
+      "stint_plan": [
+        [
+          "MEDIUM",
+          18
+        ],
+        [
+          "SOFT",
+          18
+        ]
+      ],
+      "num_stops": 1,
+      "pit_laps": [
+        48
+      ],
+      "first_pit_lap": 48,
+      "expected_remaining_time_s": 3012.8000000000006,
+      "stddev_time_s": 0.0,
+      "standard_error_s": 0.0,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "seed_times_s": [
+        3012.8,
+        3012.8,
+        3012.8
+      ],
+      "regret_s": 6.700000000000728
+    },
+    "fixed_two_stop": {
+      "status": "ok",
+      "stint_plan": [
+        [
+          "MEDIUM",
+          12
+        ],
+        [
+          "SOFT",
+          12
+        ],
+        [
+          "MEDIUM",
+          12
+        ]
+      ],
+      "num_stops": 2,
+      "pit_laps": [
+        42,
+        54
+      ],
+      "first_pit_lap": 42,
+      "expected_remaining_time_s": 3039.5,
+      "stddev_time_s": 0.0,
+      "standard_error_s": 0.0,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "seed_times_s": [
+        3039.5,
+        3039.5,
+        3039.5
+      ],
+      "regret_s": 33.40000000000009
+    },
+    "greedy_crossover": {
+      "status": "ok",
+      "stint_plan": [
+        [
+          "MEDIUM",
+          8
+        ],
+        [
+          "SOFT",
+          28
+        ]
+      ],
+      "num_stops": 1,
+      "pit_laps": [
+        38
+      ],
+      "first_pit_lap": 38,
+      "expected_remaining_time_s": 3006.1,
+      "stddev_time_s": 0.0,
+      "standard_error_s": 0.0,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "seed_times_s": [
+        3006.1,
+        3006.1,
+        3006.1
+      ],
+      "regret_s": 0.0
+    }
+  }
+}

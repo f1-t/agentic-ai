@@ -1,0 +1,69 @@
+{
+  "stored_ground_truth_s": 5510.1,
+  "current_simulator": {
+    "strategy": [
+      [
+        "SOFT",
+        28
+      ],
+      [
+        "SOFT",
+        28
+      ],
+      [
+        "MEDIUM",
+        10
+      ]
+    ],
+    "num_stops": 2,
+    "first_pit_lap": 28,
+    "per_stint_seconds": [
+      2314.8,
+      2314.8,
+      836.5
+    ],
+    "pit_loss_total_s": 44.0,
+    "total_time_s": 5510.1
+  },
+  "actual_strategy": {
+    "driver": "HAM",
+    "starting_compound": "SOFT",
+    "num_stops": 2,
+    "stints": [
+      {
+        "stint": 1,
+        "compound": "SOFT",
+        "laps": 28,
+        "start_lap": 1,
+        "end_lap": 28,
+        "avg_laptime_s": 87.564
+      },
+      {
+        "stint": 2,
+        "compound": "MEDIUM",
+        "laps": 14,
+        "start_lap": 29,
+        "end_lap": 42,
+        "avg_laptime_s": 83.277
+      },
+      {
+        "stint": 3,
+        "compound": "MEDIUM",
+        "laps": 24,
+        "start_lap": 43,
+        "end_lap": 66,
+        "avg_laptime_s": 82.083
+      }
+    ]
+  },
+  "models": {
+    "SOFT": [
+      81.93,
+      0.0512
+    ],
+    "MEDIUM": [
+      83.564,
+      0.0152
+    ]
+  }
+}
