@@ -5,14 +5,16 @@ A traffic model maps to the engine through two calls, mirroring track.py:
     model.prepare(snapshot, laps, frame, driver) -> state     once per batch call, plan- and
                                                               sample-independent; None when
                                                               traffic cannot be placed
-    model.apply(state, lap_s, pit_s_lap, neutral, scenario) -> (lap_s, extra)
+    model.apply(state, lap_s, pit_s_lap, sc, vsc, scenario) -> (lap_s, extra)
                                                               per sample, after the lap time is
                                                               complete (overlay, lap 1 extra,
                                                               hazard, pace) and before pit loss
 
 `lap_s` is (n_plans, n_laps) over the remaining laps, `pit_s_lap` the pit loss booked on
-each lap (in-laps only), `neutral` the sample's SC or VSC laps. apply returns lap_s with
-the traffic increments added and extra = (traffic_s, passes), both (n_plans,). Traffic
+each lap (in-laps only), `sc` and `vsc` the sample's SC and VSC laps (bool, (n_laps,)).
+apply returns lap_s with the traffic increments added and extra = (traffic_s, passes,
+bunching_s), each (n_plans,): traffic_s the green-lap increments, bunching_s the SC-lap
+ones (below). Traffic
 draws nothing, so every seed keeps its draws. model.support_warnings(snapshot, state)
 gives the strings added to every plan's support warnings.
 
@@ -39,7 +41,8 @@ field minimum.
 Per sample, sequential over the remaining laps, vectorised over plans and ghosts, with T
 our clock at the lap start, f our lap time as the engine produced it and arrive = T + f:
 
-    neutral lap (SC or VSC): no traffic, end = arrive
+    VSC lap (and SC lap with sc_bunching False): no traffic, end = arrive
+    SC lap with sc_bunching: the queue, below
     else  d       = T - G_prev                          gap at the lap start, per ghost
           behind  = d > 0, ghost eligible (both ends recorded, not its in-lap)
           catch   = behind & (arrive < G + follow_gap_s)  we would reach the car this lap
@@ -64,6 +67,26 @@ pass_cost_s - (g - f) on that lap, so a lap's increment can be negative ("conjur
 time). That is the price of ghosts that do not react: in a reactive world the passed car
 would lose that time instead. calibrate traffic reports the conjured total.
 
+SC bunching (sc_bunching, on by default). Under the SC the field closes up into a queue
+about sc_interval_s apart, so on an SC lap we take our place in it rather than keep our
+pre-SC time gap. With f the SC lap time as the engine gives it (the leader's, the same for
+every car), the provisional end is e = T + f + pit_s_lap (a pit under the SC is booked
+before the placement, so we join the queue where the reduced pit loss puts us). Among the
+ghosts with a recorded G on this lap, A is directly ahead of e (largest G <= e) and B
+directly behind (smallest G > e):
+
+    end = G_A + min(sc_interval_s, (G_B - G_A) / 2)    A and B exist
+        = G_A + sc_interval_s                          A only
+        = e                                            no ghost ahead (we lead the queue)
+
+lap_s = end - T - pit_s_lap, so the pit loss stays out of the lap time. The increment is
+negative when we close up to the queue and positive when we were closer to A than the
+interval. Order is kept (we stay between A and B, never past B), and no car is passed on
+an SC lap; repeating it on every SC lap converges like a real queue. The increments go to
+bunching_s, not traffic_s. A VSC keeps the gaps (no bunching). The SC laps are the
+engine's, scenario.sc_laps, which for drawn events already starts inside the snapshot's
+SC.
+
 DRS is off on race laps 1 to drs_off_first_laps, on SC and VSC laps, and for
 drs_off_after_sc_laps after the last lap of an SC period (the snapshot's SC history
 counts). A held car sits at follow_gap_s = drs_range_s, which is in DRS range by design
@@ -79,12 +102,15 @@ and all of them will be selected by leave-one-race-out across races later:
     pass_delta_drs_s 0.3
     pass_cost_s 0.4        the order of a lap lost per ten overtakes
     pass_gap_s 0.2         a car length and a bit at the line; a pass never ends in a tie
-    dirty_air_range_s 2.0  drivers and commentary put the dirty-air window near 2 s
+    dirty_air_range_s 1.5  FREE_AIR_GAP_S (config): dirty_air_s is measured on clean_pack
+                           laps, gaps under that, so it is applied over the same window
+    sc_bunching True
+    sc_interval_s 1.2      about ten car lengths under the SC, 1 to 1.5 s at SC speed
 
 Known limits, not solved here:
-(1) SC bunching: the SC model is time-based, so a plan 20 s ahead of a ghost before the SC
-    is still 20 s ahead after it while the recorded ghosts are bunched; positions on the
-    laps after an SC are approximate. A position-based SC is the 0013 candidate.
+(1) SC bunching is a queue rule (above), not a model of the restart: a car keeps its slot
+    in the queue, nobody gains on the restart lap beyond the green-lap rule, and lapped
+    cars are queued by lap index like everything else here.
 (2) Lapped cars: ghosts are compared on the same lap number, so a car a lap down is
     "behind" in lap index even when ahead on track; blue flags make this second order.
 (3) Ghosts do not react: no undercut defence, no rival strategist.
@@ -97,6 +123,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from .config import FREE_AIR_GAP_S
 from .data import line_crossings
 from .registry import Registry
 
@@ -115,7 +142,7 @@ class NoTraffic:
     def prepare(self, snapshot, laps, frame, driver):
         return None
 
-    def apply(self, state, lap_s, pit_s_lap, neutral, scenario):
+    def apply(self, state, lap_s, pit_s_lap, sc, vsc, scenario):
         raise RuntimeError("apply is never called when prepare returns None")
 
     def support_warnings(self, snapshot, state):
@@ -137,8 +164,10 @@ class GhostParams(BaseModel):
     drs_off_first_laps: int = Field(default=2, ge=0)
     drs_off_after_sc_laps: int = Field(default=2, ge=0)
     dirty_air_s: float = Field(default=0.0, ge=0)
-    dirty_air_range_s: float = Field(default=2.0, ge=0)
+    dirty_air_range_s: float = Field(default=FREE_AIR_GAP_S, ge=0)
     max_passes_per_lap: int = Field(default=3, ge=0)
+    sc_bunching: bool = True
+    sc_interval_s: float = Field(default=1.2, ge=0)   # queue interval under the SC
 
 
 @dataclass
@@ -264,18 +293,43 @@ class GhostTraffic:
         """(n_plans,) max over held ghosts of G + follow_gap_s, -inf where none."""
         return np.where(held, G_follow, -np.inf).max(axis=1, initial=-np.inf)
 
-    def apply(self, state, lap_s, pit_s_lap, neutral, scenario):
+    def _bunch(self, G, e):
+        """(n_plans,) end of an SC lap from the provisional end `e`: behind the ghost directly
+        ahead of e at the queue interval, never past the one behind (module docstring)."""
+        G = G[np.isfinite(G)]
+        a = np.where(G <= e[:, None], G, -np.inf).max(axis=1, initial=-np.inf)
+        b = np.where(G > e[:, None], G, np.inf).min(axis=1, initial=np.inf)
+        has_a, has_b = np.isfinite(a), np.isfinite(b)
+        a = np.where(has_a, a, 0.0)   # finite stand-ins, so no inf arithmetic warns
+        interval = self.params.sc_interval_s
+        interval = np.where(has_b, np.minimum(interval, 0.5 * (np.where(has_b, b, 0.0) - a)), interval)
+        return np.where(has_a, a + interval, e)
+
+    def apply(self, state, lap_s, pit_s_lap, sc, vsc, scenario):
         p = self.params
         lap_s = np.array(lap_s, dtype=float)
         n_plans, n_laps = lap_s.shape
+        sc, vsc = np.asarray(sc, dtype=bool), np.asarray(vsc, dtype=bool)
+        neutral = sc | vsc
+        bunch = sc if p.sc_bunching else np.zeros(n_laps, dtype=bool)
         drs = self.drs_on(state, neutral, scenario)
         T = np.full(n_plans, state.anchor)
         traffic_s = np.zeros(n_plans)
+        bunching_s = np.zeros(n_plans)
         passes = np.zeros(n_plans, dtype=int)
         dirty_on = p.dirty_air_s > 0
         for i in range(n_laps):
             f = lap_s[:, i]
             arrive = T + f
+            if bunch[i]:
+                e = arrive + pit_s_lap[:, i]
+                end = self._bunch(state.G[i], e)
+                # the leader's lap keeps its time bit for bit: inc is exactly 0 where end is e
+                inc = end - e
+                lap_s[:, i] = f + inc
+                bunching_s += inc
+                T = end
+                continue
             if neutral[i]:
                 T = arrive + pit_s_lap[:, i]
                 continue
@@ -317,4 +371,4 @@ class GhostTraffic:
             traffic_s += inc
             passes += n_pass
             T = arrive + inc + pit_s_lap[:, i]
-        return lap_s, (traffic_s, passes)
+        return lap_s, (traffic_s, passes, bunching_s)
