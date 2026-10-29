@@ -248,6 +248,10 @@ class SimResult(_Contract):
     support_warnings: list[str] = Field(default_factory=list)  # e.g. stint longer than observed tyre age
     traffic_s: float | None = None     # mean traffic time over samples (included in remaining), None when off
     passes_mean: float | None = None   # mean overtakes charged per sample, None when off
+    bunching_s: float | None = None    # mean SC-queue time over samples (included in remaining), None when off
+    # sample 0, per remaining lap: the field's SC lap less the engine's on bunched SC laps, NaN
+    # elsewhere; None when traffic is off or lap times were not requested
+    sc_field_delta_s: list[float] | None = None
 
     @property
     def race_time_s(self) -> float | None:

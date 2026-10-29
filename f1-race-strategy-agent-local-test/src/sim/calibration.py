@@ -73,9 +73,15 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
 
     `pace` (driver -> offset_s) replays on a copy of `sim` with that pace in the engine
     (Simulator.with_pace), green laps only; pace_offset_s is then what is left over it.
+
+    pace_offset_s is the median actual minus predicted over the driver's clean laps; under
+    free_air_offset(config) over the clean free-air ones, falling back to every clean lap
+    below MIN_OFFSET_LAPS of them, and the table then has pace_offset_flag
+    ("pace_offset_all_laps" where it fell back, else empty).
     """
     if pace is not None:
         sim = sim.with_pace(pace)
+    free_offset = free_air_offset(sim.config)
     rows, laps = [], []
     for d in _finisher_ids(frame, min_laps_frac):
         g, res = replay_driver(sim, frame, race, d)
@@ -83,7 +89,16 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
         n = len(g)
         real = float(g["end_s"].iloc[-1] - g["start_s"].iloc[0])
         clean = g["clean"].to_numpy()
-        offset = float(np.median(g["lap_time_s"].to_numpy()[clean] - pred[clean]))
+        use, flag = clean, {}
+        if free_offset:
+            flag = {"pace_offset_flag": ""}
+            if "free_air" in g:
+                free = clean & g["free_air"].eq(True).to_numpy()
+                if free.sum() >= MIN_OFFSET_LAPS:
+                    use = free
+                else:
+                    flag = {"pace_offset_flag": PACE_OFFSET_ALL_LAPS}
+        offset = float(np.median(g["lap_time_s"].to_numpy()[use] - pred[use]))
         err = res.race_time_s - real
         actual = g["lap_time_s"].to_numpy().copy()
         actual[0] = g["end_s"].iloc[0] - g["start_s"].iloc[0]  # lap 1 has no LapTime
@@ -94,6 +109,7 @@ def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9
             "err_s": err, "err_pct": 100 * err / real, "pace_offset_s": offset,
             "err_offset_s": err + offset * n,
             "err_green_s": float(np.nansum(pred[green] - actual[green] + offset)),
+            **flag,
         })
         laps.append(g[["driver", "lap", "track_status", "pit_in", "clean"]].assign(
             kind=kind, resid_s=actual - pred, actual_s=actual))
@@ -498,6 +514,19 @@ def default_laps_k(frame: pd.DataFrame, total_laps: int) -> list[int]:
     return sorted(x for x in laps if 0 <= x < total_laps)
 
 
+def free_air_offset(config: SimConfig) -> bool:
+    """Whether the pace offsets (run's pace_offset_s, _pace_offset) use free-air laps only:
+    under fit_free_air_only, where an all-laps offset against a free-air model absorbs the
+    driver's own traffic, and whenever traffic is on, where the engine already adds that
+    traffic and an all-laps offset would count part of it twice."""
+    return bool(config.fit_free_air_only or config.traffic.name != "none")
+
+
+def pace_offset_definition(config: SimConfig) -> str:
+    """The label for a table's pace offsets: "free_air" or "all_laps" (free_air_offset)."""
+    return "free_air" if free_air_offset(config) else "all_laps"
+
+
 def _pace_offset(sim: Simulator, g: pd.DataFrame, k: int, flags: list | None = None) -> float:
     """Median actual minus predicted lap time over the driver's green non-pit laps up to k.
 
@@ -505,15 +534,16 @@ def _pace_offset(sim: Simulator, g: pd.DataFrame, k: int, flags: list | None = N
     window's own model. Not the frame's clean flag, whose filter saw the whole race. The
     median shrugs off the few traffic laps that this lets in. NaN below MIN_OFFSET_LAPS.
 
-    Under SimConfig.fit_free_air_only the laps are the driver's free-air ones (free_air True,
-    known at k from the gaps): the pace term is the driver's free-air pace, and against a
-    free-air model an all-laps median would absorb the driver's own traffic. With fewer than
+    Under free_air_offset(config) (SimConfig.fit_free_air_only, or traffic on) the laps are
+    the driver's free-air ones (free_air True, known at k from the gaps): the pace term is the
+    driver's free-air pace, and against a free-air model, or an engine that adds traffic, an
+    all-laps median would absorb the driver's own traffic. With fewer than
     MIN_OFFSET_LAPS of them it falls back to every green lap and appends
     "pace_offset_all_laps" to `flags`.
     """
     c = g[(g["lap"] <= k) & (g["lap"] > 1) & (g["track_status"].astype(str) == "1") & ~g["pit_in"]
           & ~g["pit_out"] & g["lap_time_s"].notna() & g["tyre_age"].notna() & g["compound"].isin(sim.modelled)]
-    if sim.config.fit_free_air_only and "free_air" in c:
+    if free_air_offset(sim.config) and "free_air" in c:
         free = c[c["free_air"].eq(True)]
         if len(free) >= MIN_OFFSET_LAPS:
             c = free
@@ -563,8 +593,8 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     bias common to every driver cancels; pred_pos_real ranks it against their real totals.
     real_pos is the classified position from `results` (data.session_results) when it
     covers every finisher, otherwise the last-lap Position. A window fitted with
-    fit_free_air_only adds pace_offset_flag ("pace_offset_all_laps" where _pace_offset fell
-    back to every green lap, else empty).
+    fit_free_air_only, or a config with traffic on (free_air_offset), adds pace_offset_flag
+    ("pace_offset_all_laps" where _pace_offset fell back to every green lap, else empty).
     """
     if sim_factory is None:
         def sim_factory(window):
@@ -594,7 +624,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
                 pred_rem = res.remaining.mean_s if res.valid else float("nan")
                 flags = []
                 err, offset, horizon = pred_rem - real_rem, _pace_offset(s, g, k, flags), snap.remaining_laps
-                at_k.append({**({"pace_offset_flag": ";".join(flags)} if s.config.fit_free_air_only else {}),
+                at_k.append({**({"pace_offset_flag": ";".join(flags)} if free_air_offset(s.config) else {}),
                     "race_id": race.race_id, "window": window, "driver": d, "team": fin.loc[d, "team"],
                     "k": k, "laps": len(g), "horizon": horizon, "elapsed_s": snap.elapsed_s,
                     "real_remaining_s": real_rem, "pred_remaining_s": pred_rem, "err_s": err,
@@ -619,7 +649,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     if not rows:
         return pd.DataFrame(columns=MIDRACE_COLUMNS)
     out = pd.concat(rows, ignore_index=True)
-    # pace_offset_flag only on free-air runs (fit_free_air_only), so default rows keep their columns
+    # pace_offset_flag only on free-air offset runs (free_air_offset), so default rows keep their columns
     return out[MIDRACE_COLUMNS + (["pace_offset_flag"] if "pace_offset_flag" in out else [])]
 
 
