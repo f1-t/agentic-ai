@@ -107,9 +107,9 @@ def test_default_off_and_no_pace_hash_equal_to_main():
 
 def test_traffic_is_part_of_the_config_hash():
     # no special case for the default: adding the field moved the default hash off main's
-    # ffd423d35d0c, as any new config field does
+    # 94a5373a6a20 (76aa6a1), as any new config field does
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "559101587697" and ghost_on == "85b39a61f3ba" and default != "ffd423d35d0c"
+    assert default == "e56663f618bd" and ghost_on == "d366f35d04bf" and default != "94a5373a6a20"
 
 
 @pytest.fixture(scope="module")

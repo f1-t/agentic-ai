@@ -29,9 +29,11 @@ The `traffic` command writes `reports/calibration/<race_id>_traffic.csv`: one cs
 `table` column (`by_kind`, `drivers`, `pairs`, `gate`, `rejoin`, `placement`) and a
 `traffic` column (`none`, `ghost`), the pace term in the engine in both arms, every row
 stamped with `pace`, `pit_loss_s`, `pit_loss_source`, `config_hash` (the arm's own) and
-`sim_code_version`. With the default params the `traffic_ghost.yaml` config hash is
-`85b39a61f3ba`; the default config keeps its hash (`ffd423d35d0c`), since `traffic` is left
-out of the hash while it is `none`.
+`sim_code_version`. The drivers rows of the traffic arm add `traffic_s` (net time
+traffic added over the race), `passes` and `conjured_s` (see below). With the default params
+the `traffic_ghost.yaml` config hash is `d366f35d04bf`. `traffic` is part of every config
+hash, so adding the field moved the default hash too (`e56663f618bd`); under the reports
+README rule that drift alone regenerates nothing.
 
 In code: `Simulator(frame, SimConfig(traffic={"name": "ghost"}))`, with a snapshot whose
 `elapsed_s` is set. `BatchResult.traffic_s` and `.passes` (per plan and sample) and
@@ -44,20 +46,39 @@ Common clock = session time. Over the remaining laps, `G[j, L]` is the end of gh
 lap `L`, `G_prev` the end of its previous lap (the lap-k row for the first remaining lap),
 `g = G - G_prev` its recorded lap time. Our clock starts at the anchor: the race start (our
 driver's lap-1 start, else the field minimum) plus `snapshot.elapsed_s`. Per lap, with `T`
-our clock at the lap start and `f` our lap time as the engine produced it:
+our clock at the lap start, `f` our lap time as the engine produced it and
+`arrive = T + f`:
 
 - SC or VSC lap: no traffic.
-- Otherwise a ghost is *behind-eligible* when we start the lap behind it (`d = T - G_prev > 0`),
+- Otherwise a ghost is *eligible* when we start the lap behind it (`d = T - G_prev > 0`),
   both its lap ends are recorded, and the lap is not its in-lap. We *catch* it when
-  `T + f < G + follow_gap_s`. A caught car is passed when its lap is slower than ours by at
-  least `pass_delta_s` (`pass_delta_drs_s` with DRS on and `d <= drs_range_s`), else it holds us.
-- `end = max(T + f + passes * pass_cost_s + dirty, max over held cars of G + follow_gap_s)`,
-  with at most `max_passes_per_lap` passes charged. The lap time becomes `end - T`.
+  `arrive < G + follow_gap_s`. It is *fast* for us when `g - f >= pass_delta_s`
+  (`pass_delta_drs_s` with DRS on and `d <= drs_range_s`).
+- **Held:** a caught car that is not fast; or a caught car on its out-lap when we arrive
+  after its line. `clamp` = the largest `G + follow_gap_s` over held cars.
+- **Passing:** a caught, fast car that is not on its out-lap and whose `G - pass_gap_s` is
+  not below `clamp`, so a pass never takes us past the car that holds us. With more than
+  `max_passes_per_lap` such cars the closest ones (largest `G_prev`) are passed and the
+  rest count as held (clamp recomputed, the kept passes rechecked against it).
+- `free = arrive + passes * pass_cost_s + dirty`, `swap = min over passed cars of
+  G - pass_gap_s`, and `end = max(clamp, min(free, swap))`. The lap time becomes `end - T`.
 - Pit loss is booked at the end of the in-lap, so the out-lap starts from the rejoin
   position; it stays out of the lap time, as before.
 
+A pass is a position swap: it always ends at least `pass_gap_s` ahead of every car passed,
+so the next lap starts ahead of them and a pass is never charged twice. When `free > swap`
+the swap grants time the car did not earn, at most `follow_gap_s + pass_gap_s +
+pass_cost_s - (g - f)` on that lap, so a lap's increment can be negative. That is the price
+of ghosts that do not react (in a reactive world the passed car would lose that time). The
+`conjured_s` column sums the negative increments per driver; on Spain 2021 it is -1.55 s
+per driver (-29.5 s over 19 finishers, 98 passes).
+
+A ghost on its out-lap is never passed on track: if we arrive before its line it rejoined
+behind us (no cost, no swap); within `follow_gap_s` after its line it holds us (the
+undercut victim's reality); later than that, nothing. Its in-lap never holds us.
+
 DRS is off on race laps 1-2, on SC and VSC laps, and for two laps after an SC period ends.
-A ghost's out-lap can hold us (the undercut victim's reality); its in-lap cannot.
+A held car sits at `follow_gap_s = drs_range_s`, which is in DRS range by design.
 
 ## Constants
 
@@ -71,6 +92,7 @@ later. The sources are placeholders for that selection, not facts the code depen
 | `pass_delta_s` | 0.8 | Barcelona is hard to pass on, hence 0.8 rather than the 0.5 often quoted for easy tracks |
 | `pass_delta_drs_s` | 0.3 | |
 | `pass_cost_s` | 0.4 | the order of a lap lost per ten overtakes |
+| `pass_gap_s` | 0.2 | a car length and a bit at the line; a pass never ends in a tie |
 | `drs_off_first_laps` | 2 | |
 | `drs_off_after_sc_laps` | 2 | SC only, not VSC |
 | `dirty_air_s` | 0.0 | off by default |
