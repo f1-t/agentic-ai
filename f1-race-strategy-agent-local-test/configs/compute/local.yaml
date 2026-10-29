@@ -37,3 +37,5 @@ wandb:
   mode: online
   project: f1-strategy-sim
   tags: [local]
+agent:
+  max_steps: 10             # model turns per decision for the live agent in the eval

@@ -10,6 +10,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from . import tools
+from .contracts import Snapshot
 from .llm import create_backend
 from .snapshot import RaceSnapshot
 
@@ -99,14 +100,38 @@ def _append_log(path: str | os.PathLike[str] | None, record: dict[str, Any]):
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
 
+def _usage(raw):
+    """(input_tokens, output_tokens) a backend reported for one turn, None when it did not:
+    an Anthropic response's usage, or a dict payload's "usage" (either naming)."""
+    usage = raw.get("usage") if isinstance(raw, dict) else getattr(raw, "usage", None)
+    if usage is None:
+        return None
+
+    def get(*names):
+        for n in names:
+            v = usage.get(n) if isinstance(usage, dict) else getattr(usage, n, None)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                return int(v)
+        return None
+    pair = get("input_tokens", "prompt_tokens"), get("output_tokens", "completion_tokens")
+    return None if pair == (None, None) else pair
+
+
 def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=None,
-              max_tool_calls=None, log_path=None):
+              max_tool_calls=None, log_path=None, stats=None):
     """Run one decision episode. Returns ``(recommendation, trajectory)``.
 
-    ``snapshot`` may be a RaceSnapshot or JSON-compatible dict. Every attempted
-    tool call, including invalid calls and submission attempts, is logged.
+    ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot
+    (converted with RaceSnapshot.from_contract). Every attempted tool call, including
+    invalid calls and submission attempts, is logged. When ``stats`` is a dict it receives
+    ``steps`` and, if the backend reports usage, the summed ``input_tokens`` and
+    ``output_tokens`` (None when it does not).
     """
+    if isinstance(snapshot, Snapshot):
+        snapshot = RaceSnapshot.from_contract(snapshot)
     snapshot = tools.set_snapshot(snapshot)
+    stats = {} if stats is None else stats
+    stats.update(steps=0, input_tokens=None, output_tokens=None)
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))
@@ -124,6 +149,12 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
 
     for step in range(1, max_steps + 1):
         turn = backend.run_turn(system_prompt=SYSTEM_PROMPT, messages=messages, tools=api_tools, max_tokens=4000)
+        stats["steps"] = step
+        used = _usage(turn.raw)
+        if used is not None:
+            for key, n in zip(("input_tokens", "output_tokens"), used):
+                if n is not None:
+                    stats[key] = (stats[key] or 0) + n
         if not turn.tool_calls:
             messages.append({"role": "user", "content": "No tool call was detected. Respond with a valid tool call; submit if you have enough evidence."})
             continue

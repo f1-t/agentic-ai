@@ -80,6 +80,11 @@ class BuildCompute(_Cfg):
     rate_pause_s: float = Field(ge=0)
 
 
+class AgentCompute(_Cfg):
+    """The live agent's budget in the eval (eval.policies agent policy, src/agent.py run_agent)."""
+    max_steps: int = Field(default=10, gt=0)          # model turns per decision, agent.DEFAULT_MAX_STEPS
+
+
 class WandbCompute(_Cfg):
     mode: Literal["online", "offline", "disabled"] = "disabled"
     project: str = "f1-strategy-sim"
@@ -94,6 +99,7 @@ class ComputeProfile(_Cfg):
     h: HCompute
     build: BuildCompute
     wandb: WandbCompute
+    agent: AgentCompute = Field(default_factory=AgentCompute)
 
     @property
     def hash(self) -> str:
