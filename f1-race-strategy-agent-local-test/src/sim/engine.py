@@ -151,7 +151,8 @@ class Simulator:
         spec, cfg = self.config.degradation, self.config
         return DEGRADATION.get(spec.name).fit(
             frame, min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
-            base_delta=cfg.pre_race_base_delta_s, **spec.params, **extra)
+            base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"],
+            **spec.params, **extra)
 
     def _fit(self, frame, ref=None, **extra):
         """Fit the degradation model on `frame`; the hazard model and ref_lap_s (the median
@@ -221,7 +222,7 @@ class Simulator:
         """
         fit = self.fitted_for(snapshot)
         return _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
-                             hazard=fit.hazard)
+                             hazard=fit.hazard, min_samples=self.config.min_samples)
 
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:

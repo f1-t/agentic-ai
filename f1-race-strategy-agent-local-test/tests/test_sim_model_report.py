@@ -50,20 +50,52 @@ def test_sd_is_the_ols_standard_error_on_an_unpenalised_fit():
     assert rep["sd"]["residual_s"] == pytest.approx(0.3, rel=0.15)
 
 
-def test_sd_with_no_race_rows_is_the_prior_residual_times_tau():
+def test_sd_held_at_the_prior_is_the_prior_tau():
     practice = synthetic_practice().pipe(noisy)
     s = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot"), practice)
     prior = Simulator(synthetic_frame(fuel=FUEL), window("pre_race"), practice).fitted_for(start())
-    sigma = prior.degradation.fit_report["sd"]["residual_s"]
-    assert prior.degradation.fit_report["sd"]["fuel_s_per_lap"] != prior.degradation.fit_report["sd"]["fuel_s_per_lap"]
-    zero = s.fitted_for(start()).degradation.fit_report["sd"]
-    assert zero["residual_s"] == pytest.approx(sigma)
+    psd = prior.degradation.fit_report["sd"]
+    assert psd["fuel_s_per_lap"] == TAU["fuel_s_per_lap"] == 0.008  # the fixed fuel slope
+    zero = s.fitted_for(start()).degradation.fit_report
+    assert zero["sd"]["residual_s"] == pytest.approx(psd["residual_s"])  # no race rows: the prior's
     for comp in TRUE:
-        assert zero["base_s"][comp] == pytest.approx(sigma * TAU["base_s"])
-        assert zero["wear_s_per_lap"][comp] == pytest.approx(sigma * TAU["wear_s_per_lap"])
-    assert zero["fuel_s_per_lap"] == pytest.approx(sigma * TAU["fuel_s_per_lap"])
+        assert zero["shrinkage_weight"]["wear_s_per_lap"][comp] == 0.0
+        assert zero["sd"]["base_s"][comp] == pytest.approx(TAU["base_s"])
+        assert zero["sd"]["wear_s_per_lap"][comp] == pytest.approx(TAU["wear_s_per_lap"])
+    assert zero["sd"]["fuel_s_per_lap"] == pytest.approx(TAU["fuel_s_per_lap"])
     late = s.fitted_for(at_lap(30)).degradation.fit_report["sd"]
-    assert all(late["wear_s_per_lap"][c] < zero["wear_s_per_lap"][c] for c in TRUE)  # data tightens it
+    assert all(late["wear_s_per_lap"][c] < zero["sd"]["wear_s_per_lap"][c] for c in TRUE)  # data tightens it
+    # the fixed fuel slope without a configured tau is NaN
+    from src.sim.degradation import LinearFuelDegradation
+    bare = LinearFuelDegradation.fit(practice.assign(lap=np.nan))
+    assert math.isnan(bare.fit_report["sd"]["fuel_s_per_lap"])
+
+
+@pytest.mark.parametrize("name", ["linear", "linear_fuel"])
+def test_tiny_window_with_no_residual_dof_uses_the_prior_sd_without_warnings(name):
+    import warnings
+    practice = synthetic_practice().pipe(noisy)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        s = Simulator(noisy(synthetic_frame(fuel=FUEL)), window("to_snapshot", degradation={"name": name}), practice)
+        prior = s.fitted_for(start()).degradation.fit_report["sd"]["residual_s"]
+        for k in (1, 2):  # 2 and 4 race rows against 4 or 5 columns: n - p <= 0
+            fit = s.fitted_for(at_lap(k)).degradation.fit_report
+            assert 0 < fit["n_race_rows"] <= 2 * len(TRUE) + (name == "linear_fuel")
+            assert fit["sd"]["residual_s"] == pytest.approx(prior)
+            values = [*fit["sd"]["base_s"].values(), *fit["sd"]["wear_s_per_lap"].values()]
+            assert all(np.isfinite(values)) and all(v > 0 for v in values)
+            rep = s.model_report(at_lap(k), calibration_summary=None)
+            assert all(np.isfinite(c.wear_s_per_lap.sd) for c in rep.compounds.values() if c.modelled)
+            s.simulate(at_lap(k), [["SOFT", 20], ["MEDIUM", 50 - k - 20]])
+        bare = Simulator(synthetic_frame(fuel=FUEL), window("to_snapshot", degradation={"name": name}))
+        bare.fitted_for(at_lap(1))  # no practice, no compound with min_samples race rows
+
+
+def test_source_thresholds():
+    from src.sim.model_report import _source
+    assert [_source(w) for w in (0.0, 0.1, 0.1001, 0.5, 0.8999, 0.9, 1.0)] == \
+        ["prior", "prior", "shrunk", "shrunk", "shrunk", "fitted", "fitted"]
 
 
 # --- ModelReport ---------------------------------------------------------------
@@ -88,13 +120,15 @@ def test_report_fields_on_the_synthetic_frame(name):
         assert (c.base_s.value, c.wear_s_per_lap.value) == fit.coefs[comp]
         assert c.base_s.sd == fr["sd"]["base_s"][comp] and c.wear_s_per_lap.sd == fr["sd"]["wear_s_per_lap"][comp]
         assert c.wear_s_per_lap.shrinkage_weight == fr["shrinkage_weight"]["wear_s_per_lap"][comp]
-        assert c.base_s.source == c.wear_s_per_lap.source == "shrunk"
+        w = c.wear_s_per_lap.shrinkage_weight
+        assert c.wear_s_per_lap.source == ("fitted" if w >= 0.9 else "shrunk") and w > 0.5
         assert 0 < c.wear_s_per_lap.sd < TAU["wear_s_per_lap"]
     assert rep.condition_number == fr["condition_number"]
     assert rep.hinge is None and math.isnan(rep.calibration_error_s)
     if name == "linear_fuel":
-        assert rep.fuel_s_per_lap.value == fit.fuel_slope and rep.fuel_s_per_lap.source == "shrunk"
-        assert rep.fuel_s_per_lap.shrinkage_weight == fr["shrinkage_weight"]["fuel_s_per_lap"]
+        fw = fr["shrinkage_weight"]["fuel_s_per_lap"]
+        assert 0.1 < fw < 0.9 and rep.fuel_s_per_lap.source == "shrunk"
+        assert rep.fuel_s_per_lap.value == fit.fuel_slope and rep.fuel_s_per_lap.shrinkage_weight == fw
         assert rep.fuel_s_per_lap.sd == fr["sd"]["fuel_s_per_lap"] > 0
     else:
         assert rep.fuel_s_per_lap is None
@@ -102,7 +136,13 @@ def test_report_fields_on_the_synthetic_frame(name):
 
     zero = s.model_report(start(), calibration_summary=None)
     assert {c.wear_s_per_lap.source for c in zero.compounds.values()} == {"prior"}
+    assert {c.wear_s_per_lap.sd for c in zero.compounds.values()} == {TAU["wear_s_per_lap"]}
+    assert {c.base_s.sd for c in zero.compounds.values()} == {TAU["base_s"]}
     assert {"prior_dominated:MEDIUM", "prior_dominated:SOFT"} <= set(zero.flags)
+    if name == "linear_fuel":
+        assert zero.fuel_s_per_lap.source == "prior" and zero.fuel_s_per_lap.shrinkage_weight == 0.0
+        assert zero.fuel_s_per_lap.sd == TAU["fuel_s_per_lap"]
+        assert "wear_fuel_poorly_identified(fuel_weight=0.00)" in zero.flags
     assert all(c.n_race_rows == 0 and c.max_age_observed == 10 for c in zero.compounds.values())
 
     full = Simulator(noisy(synthetic_frame(fuel=FUEL)), SimConfig(degradation={"name": name}))
@@ -122,23 +162,38 @@ def test_unmodelled_compound_carries_the_fit_reason():
     assert rep.compounds["HARD"].n_rows == 0 and rep.compounds["HARD"].max_age_observed is None
 
 
+def wear_fuel(flags):
+    return [f for f in flags if f.startswith("wear_fuel_poorly_identified")]
+
+
 def test_wear_fuel_flag_fires_on_a_one_compound_first_stint_and_clears_with_a_second():
     s = Simulator(first_stint_race(), window("to_snapshot"), synthetic_practice())
 
-    def flags(k):
+    def report(k):
         snap = Snapshot(race=RACE, driver="A", laps_completed=k, compound="SOFT" if k < 20 else "MEDIUM",
                         tyre_age=k if k < 20 else k - 20)
-        return s.model_report(snap, calibration_summary=None).flags
+        return s.model_report(snap, calibration_summary=None)
 
-    rep10 = s.model_report(at_lap(10, "A"), calibration_summary=None)
+    rep10 = report(10)
     assert rep10.compounds["SOFT"].n_race_rows > 0 and rep10.compounds["MEDIUM"].n_race_rows == 0
-    assert rep10.fuel_s_per_lap.shrinkage_weight < 0.5
-    assert "wear_fuel_poorly_identified" in flags(10)
-    assert "wear_fuel_poorly_identified" in flags(19)
-    assert "wear_fuel_poorly_identified" not in flags(30)  # MEDIUM rows from lap 21
-    assert "prior_dominated:MEDIUM" in flags(10)
+    w = rep10.fuel_s_per_lap.shrinkage_weight
+    assert w < 0.5 and wear_fuel(rep10.flags) == [f"wear_fuel_poorly_identified(fuel_weight={w:.2f})"]
+    assert wear_fuel(report(19).flags)
+    assert wear_fuel(report(21).flags)  # 3 MEDIUM race rows, under min_samples
+    rep30 = report(30)
+    assert rep30.fuel_s_per_lap.shrinkage_weight >= 0.5 and wear_fuel(rep30.flags) == []  # MEDIUM from lap 21
+    assert "prior_dominated:MEDIUM" in rep10.flags
     linear = Simulator(first_stint_race(), window("to_snapshot", degradation={"name": "linear"}), synthetic_practice())
-    assert "wear_fuel_poorly_identified" not in linear.model_report(at_lap(10, "A"), calibration_summary=None).flags
+    assert wear_fuel(linear.model_report(at_lap(10, "A"), calibration_summary=None).flags) == []
+
+
+def test_wear_fuel_flag_fires_on_one_compound_even_with_a_well_identified_fuel_weight():
+    many = [f"D{i}" for i in range(20)]
+    s = Simulator(first_stint_race(drivers=many, pit=40), window("to_snapshot"), synthetic_practice())
+    rep = s.model_report(at_lap(30, "D0"), calibration_summary=None)
+    w = rep.fuel_s_per_lap.shrinkage_weight
+    assert w >= 0.9 and rep.compounds["MEDIUM"].n_race_rows == 0
+    assert wear_fuel(rep.flags) == [f"wear_fuel_poorly_identified(fuel_weight={w:.2f})"]
 
 
 def test_extrapolation_flag_beyond_the_observed_age():

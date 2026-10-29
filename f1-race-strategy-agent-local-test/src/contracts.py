@@ -274,8 +274,9 @@ class CompareResult(_Contract):
 class CoefficientReport(_Contract):
     """One fitted coefficient: its value, posterior sd, and how much the data moved it.
 
-    source is "fitted" (data only, shrinkage_weight 1), "prior" (no data, weight 0) or
-    "shrunk" (in between). sd is NaN where it cannot be estimated (a fixed fuel prior).
+    source is "fitted" (shrinkage_weight >= 0.9), "prior" (weight <= 0.1) or "shrunk" (in
+    between). A coefficient held at its prior (weight 0, a fixed fuel slope included)
+    reports the prior tau as sd. sd is NaN where it cannot be estimated.
     """
 
     value: float
@@ -300,7 +301,8 @@ class ModelReport(_Contract):
     """The simulator's view of its own uncertainty for one snapshot (Simulator.model_report).
 
     flags:
-      wear_fuel_poorly_identified  fuel weight below 0.5 and race rows from at most one compound
+      wear_fuel_poorly_identified(fuel_weight=w)  fuel weight below 0.5, or at most one compound
+                                   with min_samples race rows; w to two decimals
       prior_dominated:<compound>   wear weight below 0.5
       extrapolation:<compound>     a requested tyre age beyond max_age_observed
       no_hazard_support:<compound> the hazard model has no observed support for this modelled

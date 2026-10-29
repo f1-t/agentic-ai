@@ -45,9 +45,10 @@ practice) only the fuel slope is penalised; base and wear are plain least square
                               with D the penalty (0 unpenalised, the evolution ridge on its
                               columns) and s2 = RSS / (n - p) over the fit's rows, p its
                               non-zero columns. A shrunk fit with no residual degrees of
-                              freedom takes s2 from the prior, so with no race rows the sd is
-                              the prior's residual sd times tau. NaN for a fixed fuel prior,
-                              and wherever s2 cannot be estimated.
+                              freedom takes s2 from the prior. A parameter held at its prior
+                              (weight 0) reports the prior tau instead: the shrinkage tau, and
+                              for a fixed fuel slope `fuel_prior_sd` (NaN when not given).
+                              NaN wherever s2 cannot be estimated.
 
 `fit(..., base_delta=x)` adds x seconds per lap to the base of every compound fitted on
 practice rows only (no race rows): the practice-to-race level difference (practice runs
@@ -222,6 +223,8 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None):
     support = prior.fit_report if prior is not None else None
     prior_res = ((support or {}).get("sd") or {}).get("residual_s", float("nan"))
     sd, res = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
+    tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
+    sd = np.where((weight <= 0) & (prec > 0), tau, sd)  # held at the prior: its tau
     return comps, beta, _report(d, comps, X, source, weight, fuel_prior is not None, support,
                                 unmodelled=_unmodelled(data, comps, min_samples, support), sd=sd, residual_s=res)
 
@@ -290,6 +293,8 @@ class LinearFuelDegradation:
     identified, so the slope is fixed to `fuel_prior` (SimConfig.pre_race_fuel_slope_s_per_lap)
     and base and wear are fitted on lap times with the prior's contribution taken off.
     With `shrinkage`, the penalised fit toward `prior` described in the module docstring.
+    `fuel_prior_sd` (SimConfig.shrinkage fuel tau) is the fit_report sd of a fixed fuel
+    slope; NaN when not given.
     """
 
     def __init__(self, coefs, fuel_slope, fit_report=None):
@@ -298,16 +303,18 @@ class LinearFuelDegradation:
         self.fit_report = fit_report
 
     @classmethod
-    def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0, **_):
+    def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
+            fuel_prior_sd=None, **_):
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior)
             return cls(_coefs(comps, beta), float(beta[-1]), rep)
+        fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
         comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
         d = data[data["compound"].isin(comps) & data["clean"]]
         unmodelled = _unmodelled(data, comps, min_samples)
         if not comps:
             return cls({}, fuel_prior, _report(d, comps, np.empty((0, 0)), "prior", np.zeros(1), True,
-                                               unmodelled=unmodelled))
+                                               unmodelled=unmodelled, sd=np.array([fixed_sd])))
         lap = _race_lap(d)
         race = ~np.isnan(lap)
         lap = np.where(race, lap, 0.0)
@@ -330,7 +337,7 @@ class LinearFuelDegradation:
             beta = _evolution_fit(X, y - fuel_prior * lap, len(evo))
             fuel, source, slopes = float(fuel_prior), "prior", beta[k:]
             sd, res = _posterior_sd(X, y - fuel_prior * lap, beta, _evolution_prec(X.shape[1], len(evo)))
-            sd = np.append(sd[:k], np.nan)  # the fuel slope is fixed, not estimated
+            sd = np.append(sd[:k], fixed_sd)  # the fuel slope is fixed at the prior: its tau
         weight = np.append(np.ones(k), 1.0 if source == "fitted" else 0.0)
         evolution = {s: float(b) for s, b in zip(sessions, slopes)}
         rep = _report(d, comps, X, source, weight, True, evolution=evolution, unmodelled=unmodelled,

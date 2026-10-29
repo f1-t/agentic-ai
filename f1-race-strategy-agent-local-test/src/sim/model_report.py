@@ -12,15 +12,17 @@ from ..contracts import CoefficientReport, CompoundReport, ModelReport, Plan, Sn
 
 CALIBRATION_SUMMARY = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration",
                                    "midrace_summary.csv")
-WEAK_WEIGHT = 0.5  # a parameter whose data share of the posterior precision is below this is flagged
+WEAK_WEIGHT = 0.5    # a parameter whose data share of the posterior precision is below this is flagged
+FITTED_WEIGHT = 0.9  # source "fitted" at or above this weight
+PRIOR_WEIGHT = 0.1   # source "prior" at or below this weight, "shrunk" in between
 
 
 def _source(weight):
-    return "prior" if weight <= 0.0 else "fitted" if weight >= 1.0 else "shrunk"
+    return "fitted" if weight >= FITTED_WEIGHT else "prior" if weight <= PRIOR_WEIGHT else "shrunk"
 
 
-def _coefficient(value, sd, weight, source=None):
-    return CoefficientReport(value=float(value), sd=float(sd), source=source or _source(weight),
+def _coefficient(value, sd, weight):
+    return CoefficientReport(value=float(value), sd=float(sd), source=_source(weight),
                              shrinkage_weight=float(weight))
 
 
@@ -71,7 +73,7 @@ def hazard_support(hazard):
 
 
 def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_SUMMARY,
-          hazard=None) -> ModelReport:
+          hazard=None, min_samples=5) -> ModelReport:
     """The ModelReport of `model` (a fitted degradation model) for this snapshot.
 
     `hazard` is the fitted hazard model, when the simulator has one; modelled compounds
@@ -95,13 +97,12 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
 
     fuel = None
     if weight["fuel_s_per_lap"] is not None and hasattr(model, "fuel_slope"):
-        fuel = _coefficient(model.fuel_slope, sd["fuel_s_per_lap"], weight["fuel_s_per_lap"],
-                            rep["fuel_slope_source"])
+        fuel = _coefficient(model.fuel_slope, sd["fuel_s_per_lap"], weight["fuel_s_per_lap"])
 
     flags = []
-    raced = sum(1 for n in rep["n_race_rows_per_compound"].values() if n > 0)
-    if fuel is not None and fuel.shrinkage_weight < WEAK_WEIGHT and raced <= 1:
-        flags.append("wear_fuel_poorly_identified")
+    raced = sum(1 for n in rep["n_race_rows_per_compound"].values() if n >= min_samples)
+    if fuel is not None and (fuel.shrinkage_weight < WEAK_WEIGHT or raced <= 1):
+        flags.append(f"wear_fuel_poorly_identified(fuel_weight={fuel.shrinkage_weight:.2f})")
     flags += [f"prior_dominated:{c}" for c, r in compounds.items()
               if r.modelled and r.wear_s_per_lap.shrinkage_weight < WEAK_WEIGHT]
     flags += [f"extrapolation:{c}" for c, age in sorted(requested_ages(snapshot, ages).items())
