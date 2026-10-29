@@ -25,6 +25,13 @@ of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a has
 src/sim and src/contracts.py source). The second prints the summary pivot and writes
 reports/calibration/midrace_summary.csv; it refuses rows with more than one value of
 either version column unless --allow-mixed is given.
+
+Calibrators side by side (calibrators.py), per cadence N:
+
+    python -m src.sim.calibrate calibrators --season 2021 --gp Spain [--calibrators none shrinkage] [--every 1 none]
+
+writes reports/calibration/<race_id>_calibrators.csv and <race_id>_calibrator_factors.csv,
+named by the canonical race id (2021_04_spain).
 """
 import argparse
 import json
@@ -156,8 +163,62 @@ def midrace_aggregate_main(argv):
     summary.to_csv(args.out)
 
 
+CALIBRATOR_METRICS = ["n", "mae_s", "bias_s", "mae_offset_s", "mae_offset_ci_lo", "mae_offset_ci_hi"]
+
+
+def _cadence(value):
+    return None if value.lower() == "none" else int(value)
+
+
+def calibrators_main(argv):
+    """SPEC G per calibrator and cadence: calibrators.loro on this race's fold.
+
+    With one race the fold trains on nothing (none and shrinkage need no training) and the
+    race-bootstrap CIs are NaN. Writes <race_id>_calibrators.csv (the G summary per
+    calibrator, cadence, window and horizon bucket) and <race_id>_calibrator_factors.csv
+    (per factor rmse and 68 percent coverage), both stamped like the midrace csvs.
+    """
+    from . import calibrators
+    from .race_ids import make_race_id
+    ap = argparse.ArgumentParser(prog="calibrate calibrators", description="G pivot per calibrator and cadence")
+    _race_args(ap)
+    ap.add_argument("--calibrators", nargs="+", default=list(calibrators.REFERENCE))
+    ap.add_argument("--every", nargs="+", type=_cadence, default=[1, None], help="cadences N, 'none' = pre-race only")
+    ap.add_argument("--laps", nargs="+", type=int, help="snapshot laps k, default calibration.default_laps_k")
+    args = ap.parse_args(argv)
+
+    session, frame, cfg, race = _race_setup(args)
+    used, _ = _pit_loss(args, frame, cfg, race)
+    race_id = make_race_id(args.season, int(session.event["RoundNumber"]), args.gp)
+    race = race.model_copy(update={"pit_loss_s": used, "race_id": race_id})
+    data = calibrators.RaceInput(race_id, frame, race, _practice(args.season, args.gp, cfg.long_run),
+                                 session_results(session), cfg)
+    dataset = calibrators.build_dataset([data], laps_k=args.laps)
+    stamp = {"pit_loss_s": used, "pit_loss_source": "observed" if args.pit_loss == "observed" else "--pit-loss",
+             "config_hash": calibration.config_hash(cfg), "sim_code_version": calibration.SIM_CODE_VERSION}
+    summaries, factors = [], []
+    for name in args.calibrators:
+        res = calibrators.loro(dataset, name, race_id, cadences=args.every)
+        summaries.append(res.midrace().assign(calibrator=name).set_index("calibrator", append=True))
+        factors.append(res.targets().assign(calibrator=name).set_index("calibrator", append=True))
+    summary = pd.concat(summaries).reorder_levels(["calibrator", "calibration_every", "window", "horizon_bucket"])
+    factor_table = pd.concat(factors).reorder_levels(["calibrator", "calibration_every", "window", "factor"])
+    os.makedirs(args.report_dir, exist_ok=True)
+    for table, suffix in ((summary, "calibrators"), (factor_table, "calibrator_factors")):
+        path = os.path.normpath(os.path.join(args.report_dir, f"{race_id}_{suffix}.csv"))
+        _stamp(table, stamp).to_csv(path)
+        print(f"written to {path}")
+    for metric in ("mae_offset_s", "mae_s"):
+        pivot = summary[metric].unstack(["calibrator", "calibration_every"])
+        print(f"\n{metric} (window, horizon bucket) x (calibrator, N):\n", pivot.round(2).to_string())
+    print("\nfactors (rmse, 68% coverage):\n",
+          factor_table[["n", "rmse", "coverage_68"]].unstack("calibrator").round(4).to_string())
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "calibrators":
+        return calibrators_main(argv[1:])
     if argv and argv[0] == "midrace":
         return midrace_main(argv[1:])
     if argv and argv[0] == "midrace-aggregate":

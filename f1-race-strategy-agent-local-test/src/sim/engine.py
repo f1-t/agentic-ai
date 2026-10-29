@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from ..contracts import (Compound, CompareResult, ModelReport, Plan, PlanStint, SimResult, Snapshot,
                          StintRecord, TimeSummary)
+from . import calibrators as _cal
 from . import model_report as _report
 from .config import SimConfig, class_names, compound_class
 from .degradation import DEGRADATION
@@ -125,14 +126,25 @@ class Simulator:
     at lap 0: every race lap for "full", and the practice fit for "pre_race" and
     "to_snapshot" (every race lap when there is no practice). `fitted_for(snapshot)`
     gives the instance fitted on the window `config.fit_window` picks for that snapshot.
+
+    The pre_race and to_snapshot windows go through the calibrator (calibrators.py):
+    `calibrator` is an instance (a fitted learned class, say), else the one
+    config.calibrator names. `weather` (weather.lap_weather) feeds the cadence's rain and
+    temperature refreshes and the context, `race_features` the context.
     """
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
-                 practice: pd.DataFrame | None = None):
+                 practice: pd.DataFrame | None = None, *, weather: pd.DataFrame | None = None,
+                 race_features: dict | None = None, calibrator=None):
         self.config = config or SimConfig()
         self.laps, self.practice = laps, practice
+        self.weather, self.race_features = weather, race_features
+        spec = self.config.calibrator
+        self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
+        self.calibration = None   # CalibrationState on a pre_race or to_snapshot instance
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
         self._fits = {}
+        self._outputs, self._physics = {}, {}   # shared with the windowed copies
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
         tr = self.config.track
@@ -152,62 +164,115 @@ class Simulator:
 
     def _model(self, frame, **extra):
         spec, cfg = self.config.degradation, self.config
-        return DEGRADATION.get(spec.name).fit(
-            frame, min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
-            base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"],
-            **spec.params, **extra)
+        kw = dict(min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
+                  base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"], **spec.params)
+        kw.update(extra)
+        return DEGRADATION.get(spec.name).fit(frame, **kw)
 
-    def _fit(self, frame, ref=None, **extra):
-        """Fit the degradation model on `frame`; the hazard model and ref_lap_s (the median
-        clean lap) on `ref`, which adds practice to the race laps under to_snapshot."""
+    def _fit(self, frame, ref=None, model=None, **extra):
+        """Fit the degradation model on `frame` (or use `model`); the hazard model and ref_lap_s
+        (the median clean lap) on `ref`, which adds practice to the race laps under to_snapshot."""
         ref = frame if ref is None else ref
-        self.degradation = self._model(frame, **extra)
+        self.degradation = model if model is not None else self._model(frame, **extra)
         hz = self.config.hazard
         self.hazard = HAZARD.get(hz.name).fit(ref, min_samples=self.config.min_samples, **hz.params)
         self.ref_lap_s = float(ref.loc[ref["clean"].astype(bool), "lap_time_s"].median())
 
     def fitted_for(self, snapshot: Snapshot) -> "Simulator":
-        """The instance fitted on this snapshot's fit window. Built once per key, then cached."""
+        """The instance fitted on this snapshot's fit window. Built once per key, then cached.
+
+        Under to_snapshot the key's lap is the calibration point k0 (calibrators.calibration_point),
+        so with calibration_every N the fit at k0 serves every k up to the next point.
+        """
         cfg = self.config
         if self.window is not None or (cfg.fit_window == "full" and not cfg.exclude_snapshot_driver):
             return self
-        key = (cfg.fit_window, snapshot.laps_completed if cfg.fit_window == "to_snapshot" else None,
-               snapshot.driver if cfg.exclude_snapshot_driver else None)
+        k0 = (_cal.calibration_point(snapshot, cfg.calibration_every, self.weather, cfg.recalibrate_temp_delta_c)
+              if cfg.fit_window == "to_snapshot" else None)
+        key = (cfg.fit_window, k0, snapshot.driver if cfg.exclude_snapshot_driver else None)
         if key not in self._fits:
             if len(self._fits) >= FIT_CACHE_SIZE:
                 del self._fits[next(iter(self._fits))]
             fit = copy.copy(self)
             fit.window, fit._fits = key, {}
-            fit._fit_window(snapshot)
+            fit._fit_window(snapshot, k0 or 0)
             self._fits[key] = fit
         return self._fits[key]
 
-    def _fit_window(self, snapshot: Snapshot):
+    def _keep(self, drop):
+        def keep(f):
+            return f[f["driver"] != drop] if drop is not None and "driver" in f else f
+        return keep
+
+    def physics_prior(self, drop=None):
+        """The practice fit with no base delta (calibrators.prior_model adds the factors), None
+        without practice. Cached per excluded driver."""
+        if drop not in self._physics:
+            practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
+            self._physics[drop] = self._model(practice, base_delta=0.0) if practice is not None else None
+        return self._physics[drop]
+
+    def _calibrate(self, snapshot: Snapshot, k0: int, drop):
+        """The calibrator's output at k0, cached per (calibrator, k0, exclusion, driver)."""
+        cfg, every = self.config, self.config.calibration_every
+        key = (self.calibrator.name, k0, drop)
+        if key in self._outputs:
+            return self._outputs[key]
+        pre = self._calibrate(snapshot, 0, drop) if k0 > 0 else None
+        earlier = [k for (n, k, d) in self._outputs if n == key[0] and d == drop and k < k0]
+        previous = self._outputs[(key[0], max(earlier), drop)] if earlier else pre
+        race = self._keep(drop)(self.laps)
+        race = race[race["lap"] <= k0]
+        practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
+        raw = self.physics_prior(drop)
+        ctx = _cal.CalibrationContext(
+            k=k0, config=cfg, race=snapshot.race, valid_until_lap=_cal.valid_until(k0, every, snapshot.race.total_laps),
+            laps_so_far=race, practice=practice, practice_model=raw,
+            residuals_so_far=_cal.residuals(_cal.prior_model(raw, {}, cfg) if raw is not None else None, race, k0),
+            weather_so_far=self.weather[self.weather.index <= k0] if self.weather is not None else None,
+            sc_history=Scenario(sc_laps=[x for x in snapshot.sc_laps if x <= k0],
+                                vsc_laps=[x for x in snapshot.vsc_laps if x <= k0]),
+            race_features=self.race_features, pre_race_output=pre, previous_output=previous)
+        out = self.calibrator.calibrate(ctx)
+        if len(self._outputs) >= FIT_CACHE_SIZE:
+            del self._outputs[next(iter(self._outputs))]
+        self._outputs[key] = out
+        return out
+
+    def _fit_window(self, snapshot: Snapshot, k0: int = 0):
         """Refit this instance on the snapshot's window.
 
-        full: every race lap. pre_race: practice only. to_snapshot: every car's race laps
-        up to laps_completed (they are public), shrunk toward the pre_race fit, which is
-        the only way practice enters; ref_lap_s is the median of both. Exclusion drops
-        the snapshot driver from whichever frames apply.
+        full: every race lap. pre_race: the calibrator's lap-0 prior, held (for "none" and
+        "shrinkage" the practice fit plus the config base delta). to_snapshot: every car's
+        race laps up to the calibration point k0 (they are public), shrunk toward the prior
+        with the calibrator's sds as taus; practice enters only through the prior, and
+        ref_lap_s is the median of both. When the sds are all 0 ("none") the prior is held
+        and the instance is the pre_race one. Exclusion drops the snapshot driver from
+        whichever frames apply.
         """
         cfg = self.config
         drop = snapshot.driver if cfg.exclude_snapshot_driver else None
-
-        def keep(f):
-            return f[f["driver"] != drop] if drop is not None and "driver" in f else f
-
+        keep = self._keep(drop)
         race = keep(self.laps)
         if cfg.fit_window == "full":
             return self._fit(race)
-        race = race[race["lap"] <= (snapshot.laps_completed if cfg.fit_window == "to_snapshot" else 0)]
+        race = race[race["lap"] <= (k0 if cfg.fit_window == "to_snapshot" else 0)]
         practice = keep(self.practice.assign(lap=np.nan)) if self._has_practice else None
         if practice is None and race.empty:
             raise ValueError("fit window needs practice laps")
+        out = self._calibrate(snapshot, k0 if cfg.fit_window == "to_snapshot" else 0, drop)
+        raw = self.physics_prior(drop)
+        prior, taus, fuel, held = _cal.degradation_prior(out, raw, cfg)
         if cfg.fit_window == "pre_race":
-            return self._fit(practice)
-        prior = self._model(practice) if practice is not None else None
+            self.calibration = _cal.CalibrationState(out, 0, True, raw)
+            return self._fit(practice, model=prior)
+        self.calibration = _cal.CalibrationState(out, k0, held, raw)
+        if held:   # nothing from the race: the pre_race fit, hazard and ref_lap_s included
+            if prior is None:
+                raise ValueError(f"calibrator {out.source!r} holds the prior, which needs practice laps")
+            return self._fit(practice, model=prior)
         ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
-        self._fit(race, ref=ref, prior=prior, shrinkage=cfg.shrinkage)
+        self._fit(race, ref=ref, prior=prior, shrinkage=taus, fuel_prior=fuel)
 
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
@@ -300,15 +365,25 @@ class Simulator:
         padded = np.arange(bounds.shape[1] - 1) >= n_stints[:, None]
 
         fx, hx = self.config.effects, self.config.hazard_effects
-        pit_loss_s = snapshot.race.pit_loss_s
+        cal = self.calibration.output if self.calibration is not None else None
+        factors = _cal.EventDraws(cal, {
+            "pit_loss_s": snapshot.race.pit_loss_s, "sc_lap_factor": fx.sc_lap_factor,
+            "vsc_lap_factor": fx.vsc_lap_factor, "sc_pit_loss_factor": fx.sc_pit_loss_factor,
+            "lap1_extra_s": fx.lap1_extra_s})
+        corr = (_cal.CorrectionLookup(cal.correction, names, codes, laps)
+                if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
-            # draw order: events, degradation, hazard, track: do not reorder, seeds depend on it
-            # (the hazard uniform is drawn here, ahead of the track state; its use comes later)
+            # draw order: events, calibrated factors, correction z, degradation, hazard, track:
+            # do not reorder, seeds depend on it (the hazard uniform is drawn here, ahead of the
+            # track state; its use comes later). The factor and z draws happen only when the
+            # calibrator gives a factor sd or a correction sd above 0.
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, rng)
+            v = factors.sample(rng)
+            z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
             model = self.degradation.draw(rng)
             u = rng.uniform(size=(2, n_laps)) if self.hazard.draws else None
             # u is shared by every plan (common random numbers)
@@ -330,11 +405,14 @@ class Simulator:
                 eff = ages
                 for name, m, a, ln in groups:
                     green[m] = model.lap_times(name, a, ln)
+            if corr is not None:
+                green += corr.add(eff, z)
             green *= self.track.factor(track, class_codes, lapnums)
-            lap_s = np.where(sc, fx.sc_lap_factor * self.ref_lap_s, np.where(vsc, fx.vsc_lap_factor * green, green))
+            lap_s = np.where(sc, v["sc_lap_factor"] * self.ref_lap_s,
+                             np.where(vsc, v["vsc_lap_factor"] * green, green))
             if lap1_extra:
-                lap_s[:, 0] += fx.lap1_extra_s
-            scale = np.where(sc, fx.sc_pit_loss_factor, np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
+                lap_s[:, 0] += v["lap1_extra_s"]
+            scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
             if self.hazard.draws:
                 if eff is ages:
                     if green_p is None:
@@ -356,7 +434,7 @@ class Simulator:
                 lap_s[rows, np.minimum(lap[rows] + 1, n_laps - 1)] += hx.dnf_penalty_s
                 out.dnf[idx, k], out.big_loss[idx, k] = dnf, big
                 out.dnf_lap[idx, k] = np.where(dnf, laps[lap], np.nan)
-            pit_s = pit_loss_s * (stops * scale).sum(axis=1)
+            pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s
             out.pit_loss[idx, k] = pit_s
             cs = np.concatenate([np.zeros((len(valid), 1)), lap_s.cumsum(axis=1)], axis=1)

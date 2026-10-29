@@ -95,6 +95,15 @@ class SimConfig(_Cfg):
     shrinkage: dict[str, float] = Field(default_factory=lambda: {
         "base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008,
     })
+    # Calibrator (calibrators.py) for the pre_race and to_snapshot windows: "shrinkage" (the
+    # to_snapshot fit toward the practice prior, the default), "none" (physics plus config
+    # values, held), or a learned class. The full window never calls one.
+    calibrator: ComponentSpec = ComponentSpec(name="shrinkage")
+    # calibration cadence N: recalibrate at multiples of N laps (1 = every decision point,
+    # None = pre-race only), and at an SC or VSC start or end, rain onset, or a track
+    # temperature change above recalibrate_temp_delta_c since the last calibration point
+    calibration_every: int | None = Field(default=1, ge=1)
+    recalibrate_temp_delta_c: float = Field(default=3.0, gt=0)
     long_run: LongRun = Field(default_factory=LongRun)   # practice long-run test, for data.practice_frame
     # tyre class per compound (SLICK, INTERMEDIATE, WET). Machinery for wet-weather rule
     # waivers and track-state factors; no wet behaviour is modelled.

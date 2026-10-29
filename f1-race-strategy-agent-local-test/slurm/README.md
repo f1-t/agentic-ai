@@ -16,7 +16,7 @@ Run from `f1-race-strategy-agent-local-test/` with the venv active and `SIM_PROF
 OUT=$SCRATCH/sim_out
 
 # 1. manifest: the list of units; the array size is its length
-python -m src.sim.jobs manifest g_race --profile sol --races 2021_Spain --manifest $OUT/manifest.json --out $OUT
+python -m src.sim.jobs manifest g_race --profile sol --races 2021_04_spain --manifest $OUT/manifest.json --out $OUT
 N=$(python -c "import json;print(len(json.load(open('$OUT/manifest.json'))))")
 
 # 2. one array task per unit (K = how many run at once)

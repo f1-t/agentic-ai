@@ -1,5 +1,6 @@
 """Compute profiles and resumable batch jobs. Offline; synthetic races except one Spain run."""
 import json
+import math
 import os
 import sys
 import time
@@ -7,7 +8,7 @@ import time
 import pandas as pd
 import pytest
 
-from src.sim import calibration, compute, jobs
+from src.sim import calibration, calibrators, compute, jobs
 from src.sim.config import EventEffects, SimConfig
 from src.sim.data import CACHE_DIR
 from test_sim import RACE, synthetic_practice
@@ -178,34 +179,49 @@ def test_eval_manifest_is_chunks_of_the_profile_size():
 
 
 # --- h_fold, eval_chunk, build_weekend ---------------------------------------------------
-class StubCalibrator:
-    def __init__(self, profile):
-        self.trained = None
-
-    def fit(self, train, profile):
-        self.trained = sorted(train)
-
-    def predict(self, race):
-        assert race.race_id not in self.trained
-        return jobs.Prediction({"pre_race_base_delta_s": 0.0}, {"base": 1.0, "fuel": 2.0}, {"base": 2.0, "fuel": 2.0})
+R0, R1 = "2021_01_aaa", "2021_02_bbb"   # synthetic races in the canonical id form
 
 
-def test_h_fold_with_a_stub_calibrator(tmp_path, fake_load, monkeypatch):
-    monkeypatch.setitem(jobs.CALIBRATORS, "stub", StubCalibrator)
-    p = small(compute.load_profile("local"))
-    args = jobs.build_parser().parse_args(["h_fold", "--out", str(tmp_path), "--task-id", "0", "--calibrator", "stub",
-                                           "--races", "r0", "r1"])
+def h_args(tmp_path, calibrator, *races):
+    args = jobs.build_parser().parse_args(["h_fold", "--out", str(tmp_path), "--task-id", "0",
+                                           "--calibrator", calibrator, "--races", *races])
     args.pool = args.races
+    return args
+
+
+def test_h_fold_runs_one_loro_fold(tmp_path, fake_load, monkeypatch):
+    seen = []
+    real = calibrators.loro
+
+    def spy(dataset, name, fold, **kw):
+        seen.append((sorted(dataset.races), name, fold, kw["cadences"], kw["windows"]))
+        return real(dataset, name, fold, **kw)
+    monkeypatch.setattr(calibrators, "loro", spy)
+    p = small(compute.load_profile("local"))
+    args = h_args(tmp_path, "shrinkage", R0, R1)
     job = jobs.JOBS["h_fold"]
-    assert jobs.run_task(job, "r0", p, tmp_path, args) == "done"
-    assert jobs.run_task(job, "r0", p, tmp_path, args) == "skipped"
-    rows = pd.read_parquet(tmp_path / "h" / "stub" / "r0.parquet")
-    assert set(rows["window"]) == {"pre_race", "to_snapshot"} and set(rows["calibrator"]) == {"stub"}
-    rmse = json.loads((tmp_path / "h" / "stub" / "r0.rmse.json").read_text())
-    assert rmse["targets"]["base"]["rmse"] == pytest.approx(1.0) and rmse["targets"]["fuel"]["rmse"] == 0.0
-    status = jobs.aggregate(job, ["r0", "r1"], p, tmp_path, args)
-    assert status["missing"] == ["r1"]
-    assert json.loads((tmp_path / "h" / "stub" / "rmse.json").read_text())["base"]["rmse"] == pytest.approx(1.0)
+    assert jobs.run_task(job, R0, p, tmp_path, args) == "done"
+    assert jobs.run_task(job, R0, p, tmp_path, args) == "skipped"
+    assert seen == [([R0, R1], "shrinkage", R0, p.g.cadences, ["pre_race", "to_snapshot"])]
+    rows = pd.read_parquet(tmp_path / "h" / "shrinkage" / f"{R0}.parquet")
+    assert set(rows["window"]) == {"pre_race", "to_snapshot"} and set(rows["calibrator"]) == {"shrinkage"}
+    assert set(rows["race_id"]) == {R0} and set(rows["fold"]) == {R0}
+    assert set(rows["cadence"]) == set(rows["calibration_every"]) == {"1", "5", "none"}
+    rmse = json.loads((tmp_path / "h" / "shrinkage" / f"{R0}.rmse.json").read_text())
+    assert rmse["held_out"] == [R0]
+    fuel = rmse["targets"]["to_snapshot/fuel_s_per_lap/N=1"]
+    assert fuel["n"] > 0 and fuel["rmse"] == pytest.approx(math.sqrt(fuel["sse"] / fuel["n"]))
+    status = jobs.aggregate(job, [R0, R1], p, tmp_path, args)
+    assert status["missing"] == [R1]
+    total = json.loads((tmp_path / "h" / "shrinkage" / "rmse.json").read_text())
+    assert total["to_snapshot/fuel_s_per_lap/N=1"]["rmse"] == pytest.approx(fuel["rmse"])
+    assert 0.0 <= total["to_snapshot/fuel_s_per_lap/N=1"]["coverage_68"] <= 1.0
+
+
+def test_h_fold_with_a_learned_stub_says_it_needs_data(tmp_path, fake_load):
+    p = small(compute.load_profile("local"))
+    with pytest.raises(NotImplementedError, match="needs the multi-race dataset"):
+        jobs.run_task(jobs.JOBS["h_fold"], R0, p, tmp_path, h_args(tmp_path, "ridge", R0, R1))
 
 
 def test_h_fold_folds_subsample_and_loso():
@@ -218,9 +234,23 @@ def test_h_fold_folds_subsample_and_loso():
     assert jobs.JOBS["h_fold"].units(sol) == ["2021_A", "2022_B", "season:2021", "season:2022"]
 
 
-def test_unknown_calibrator_names_the_registered_ones():
-    with pytest.raises(KeyError, match="unknown calibrator"):
-        jobs.get_calibrator("not_there", compute.load_profile("local"))
+def test_unknown_calibrator_names_the_registered_ones(tmp_path, fake_load):
+    with pytest.raises(KeyError, match="unknown calibrator 'not_there'.*shrinkage"):
+        jobs.run_task(jobs.JOBS["h_fold"], R0, small(compute.load_profile("local")), tmp_path,
+                      h_args(tmp_path, "not_there", R0, R1))
+
+
+def test_race_ids_default_to_spain_and_accept_the_alias():
+    assert jobs.DEFAULT_RACES == ["2021_04_spain"]
+    args = jobs.build_parser().parse_args(["manifest", "g_race", "--out", ".", "--races", "2021_Spain"])
+    assert jobs.JOBS["g_race"].units(args) == ["2021_04_spain"]
+    args.races = None
+    assert jobs.JOBS["g_race"].units(args) == ["2021_04_spain"]
+    sol = jobs.build_parser().parse_args(["manifest", "h_fold", "--out", ".", "--profile", "sol",
+                                          "--races", "2021_Spain", "2022_01_bahrain"])
+    assert jobs.JOBS["h_fold"].units(sol) == ["2021_04_spain", "2022_01_bahrain", "season:2021", "season:2022"]
+    assert jobs.split_race_id("2021_Spain") == jobs.split_race_id("2021_04_spain") == (2021, 4)
+    assert jobs.JOBS["g_race"].output("o", "2021_Spain") == jobs.JOBS["g_race"].output("o", "2021_04_spain")
 
 
 def test_eval_chunk_uses_the_installed_runner(tmp_path):
@@ -241,7 +271,7 @@ def test_eval_chunk_uses_the_installed_runner(tmp_path):
 
 def test_build_weekend_is_a_stub(tmp_path):
     with pytest.raises(NotImplementedError, match="owned by the data pipeline"):
-        jobs.run_task(jobs.JOBS["build_weekend"], "2021_Spain", compute.load_profile("local"), tmp_path)
+        jobs.run_task(jobs.JOBS["build_weekend"], "2021_04_spain", compute.load_profile("local"), tmp_path)
 
 
 # --- Spain, end to end ------------------------------------------------------------------
@@ -249,9 +279,11 @@ def test_build_weekend_is_a_stub(tmp_path):
 def test_local_profile_runs_g_on_spain_in_under_a_minute(tmp_path):
     p = compute.load_profile("local")
     start = time.perf_counter()
-    assert jobs.run_task(jobs.JOBS["g_race"], "2021_Spain", p, tmp_path) == "done"
+    assert jobs.run_task(jobs.JOBS["g_race"], "2021_Spain", p, tmp_path) == "done"   # the alias
     elapsed = time.perf_counter() - start
     print(f"local profile, G on Spain: {elapsed:.1f} s")
     assert elapsed < 60
-    rows = pd.read_parquet(tmp_path / "g" / "2021_Spain.parquet")
+    rows = pd.read_parquet(tmp_path / "g" / "2021_04_spain.parquet")
     assert set(rows["window"]) == set(p.g.windows) and set(rows["cadence"]) == {"1", "5", "none"}
+    assert set(rows["race_id"]) == {"2021_04_spain"}
+    assert jobs.run_task(jobs.JOBS["g_race"], "2021_04_spain", p, tmp_path) == "skipped"
