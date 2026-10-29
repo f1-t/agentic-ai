@@ -14,11 +14,19 @@ Jobs: g_race (SPEC G rows for one race), h_fold (one held-out race or season for
 calibrator, run by calibrators.loro), eval_chunk (one chunk of scenario items through a
 pluggable runner), build_weekend (not here: owned by the data pipeline).
 
+eval_chunk runs through the eval, which installs its runner first:
+
+    python -m src.eval jobs --scenarios data/scenarios/v1.json -- run-all eval_chunk --manifest M --out O
+
+The runner's spec rides in every task's payload (set_eval_runner), so run-all's worker
+processes install the same runner before their tasks.
+
 Race ids are <season>_<round:02d>_<gp_slug> (race_ids.py); the aliases there (2021_Spain)
 are accepted anywhere and mapped to the canonical id, which names the output files.
 """
 import argparse
 import contextlib
+import importlib
 import json
 import logging
 import math
@@ -87,11 +95,26 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
 # --- eval runner (the eval harness plugs in here) --------------------------------------
 EvalRunner = Callable[[str, ComputeProfile], pd.DataFrame]
 _EVAL_RUNNER: list[EvalRunner | None] = [None]
+_EVAL_SPEC: list[dict | None] = [None]
 
 
-def set_eval_runner(fn: EvalRunner | None):
-    """Install fn(chunk_id, profile) -> DataFrame of that chunk's results."""
+def set_eval_runner(fn: EvalRunner | None, spec: dict | None = None):
+    """Install fn(chunk_id, profile) -> DataFrame of that chunk's results.
+
+    `spec` says how another process installs the same runner: {"installer": "module:function",
+    **kwargs}, plain picklable values. run-all carries it in every eval_chunk task's payload
+    (args.eval_runner), and a worker calls installer(**kwargs) before its task, so the
+    workers need no state from the parent process (spawn and forkserver start them empty)."""
     _EVAL_RUNNER[0] = fn
+    _EVAL_SPEC[0] = spec
+
+
+def install_eval_runner(spec: dict | None):
+    """Install the runner a set_eval_runner spec describes, unless it is the one installed."""
+    if spec is None or (spec == _EVAL_SPEC[0] and _EVAL_RUNNER[0] is not None):
+        return
+    module, _, name = spec["installer"].partition(":")
+    getattr(importlib.import_module(module), name)(**{k: v for k, v in spec.items() if k != "installer"})
 
 
 # --- job definitions ---------------------------------------------------------------
@@ -300,6 +323,8 @@ class EvalChunk(Job):
         return [f"chunk_{i:04d}" for i in range(math.ceil(args.n_items / size))]
 
     def run(self, unit, profile, out, args=None):
+        # the task payload's runner spec (main sets args.eval_runner), for workers started empty
+        install_eval_runner(getattr(args, "eval_runner", None))
         runner = _EVAL_RUNNER[0]
         if runner is None:
             raise NotImplementedError("no eval runner installed; call jobs.set_eval_runner(fn)")
@@ -433,6 +458,7 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     profile = load_profile(args.profile)
     args.profile = profile.name   # units() reloads by name
+    args.eval_runner = _EVAL_SPEC[0]   # eval_chunk payload: how a worker installs the runner
     cmd = args.command
     job = JOBS[args.job if cmd in ("manifest", "run-all", "aggregate") else cmd]
     if cmd == "manifest":
