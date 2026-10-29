@@ -196,7 +196,8 @@ class Simulator:
     def _model(self, frame, **extra):
         spec, cfg = self.config.degradation, self.config
         kw = dict(min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
-                  base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"], **spec.params)
+                  base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"],
+                  hinge_knots=cfg.hinge_knots, hinge_knot_default=cfg.hinge_knot_default, **spec.params)
         kw.update(extra)
         return DEGRADATION.get(spec.name).fit(frame, **kw)
 

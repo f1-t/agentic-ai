@@ -772,7 +772,8 @@ def test_fit_report_fields_present(name):
 
 def test_pre_race_base_delta_is_added_to_practice_bases_and_learned_by_the_race():
     delta = SimConfig().pre_race_base_delta_s
-    assert delta == 1.0 and SimConfig().shrinkage == {"base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008}
+    assert delta == 1.0 and SimConfig().shrinkage == {"base_s": 0.5, "wear_s_per_lap": 0.03, "fuel_s_per_lap": 0.008,
+                                                      "hinge_s_per_lap": 0.05}
     practice = synthetic_practice()
     s = Simulator(synthetic_frame(), SimConfig(fit_window="to_snapshot", degradation={"name": "linear"}), practice)
     pre = s.fitted_for(start()).degradation

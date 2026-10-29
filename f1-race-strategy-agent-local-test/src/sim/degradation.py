@@ -9,6 +9,9 @@ together, so practice alone cannot tell wear from the fuel gain: linear_fuel giv
 practice rows a fuel column, lap_in_stint, with its coefficient fixed to `fuel_prior`
 (the prior's part is taken off their lap times before fitting).
 
+linear_fuel_hinge is linear_fuel plus a per compound hinge max(0, age - knot), the
+robustness variant to linear_fuel (the default); its hinge rides every fit path below.
+
 `fit(..., prior=model, shrinkage=taus)` is the to_snapshot fit: race rows only, by
 penalised least squares toward `prior` (the pre-race fit from practice), minimising
 ||y - X b||^2 + sum_j ((b_j - b0_j) / tau_j)^2, closed form b = (X'X + D)^-1 (X'y + D b0)
@@ -49,6 +52,8 @@ practice) only the fuel slope is penalised; base and wear are plain least square
                               (weight 0) reports the prior tau instead: the shrinkage tau, and
                               for a fixed fuel slope `fuel_prior_sd` (NaN when not given).
                               NaN wherever s2 cannot be estimated.
+  hinge                       linear_fuel_hinge only: {compound: {value, sd, source, weight,
+                              knot, n_past_knot}}, see LinearFuelHingeDegradation
 
 `fit(..., base_delta=x)` adds x seconds per lap to the base of every compound fitted on
 practice rows only (no race rows): the practice-to-race level difference (practice runs
@@ -63,6 +68,7 @@ The term is constant within a stint, so it is identified across stints only.
 """
 import numpy as np
 
+from .config import HINGE_KNOT, HINGE_TAU_S_PER_LAP
 from .data import EVOLUTION_TAU_S_PER_MIN, evolution_columns, ridge_lstsq
 from .registry import Registry
 
@@ -182,11 +188,40 @@ def _apply_base_delta(coefs, rep, base_delta):
     return {c: (b + base_delta, w) if c in practice else (b, w) for c, (b, w) in coefs.items()}
 
 
-def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None):
+def _knots(comps, hinge_knots, hinge_knot_default):
+    """compound -> hinge knot: SimConfig.hinge_knots, else hinge_knot_default."""
+    return {c: int((hinge_knots or {}).get(c, hinge_knot_default)) for c in comps}
+
+
+def _hinge_column(d, compound, knot):
+    m = (d["compound"] == compound).to_numpy(dtype=float)
+    return m * np.maximum(0.0, d["tyre_age"].to_numpy(dtype=float) - knot)
+
+
+def _past_knot(d, compound, knot):
+    """Rows of `compound` in `d` with tyre age past `knot`."""
+    return int(((d["compound"] == compound).to_numpy() & (d["tyre_age"].to_numpy(dtype=float) > knot)).sum())
+
+
+def _hinge_entry(value, sd, source, weight, knot, n_past):
+    return {"value": float(value), "sd": float(sd), "source": source, "weight": float(weight),
+            "knot": int(knot), "n_past_knot": int(n_past)}
+
+
+def _dropped(knot, n_past):
+    """A hinge with too few rows past its knot: fixed at 0, no sd."""
+    return _hinge_entry(0.0, float("nan"), "dropped", 0.0, knot, n_past)
+
+
+def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None):
     """Penalised fit of the race rows toward `prior`. Returns (comps, beta, report).
 
     Modelled: every compound of the prior, plus race compounds with min_samples clean
-    race rows. The fuel column is added when fuel_prior is not None.
+    race rows. The fuel column is added when fuel_prior is not None. With `knots`
+    ({compound: knot}, linear_fuel_hinge) a hinge column per compound with min_samples
+    rows past its knot, the prior's support included, follows; its prior mean is the
+    prior's hinge (0 when the prior has none) with tau shrinkage["hinge_s_per_lap"].
+    beta holds the hinge coefficients last; report["hinge"] has every compound.
     """
     race = data[data["clean"].to_numpy(dtype=bool) & ~np.isnan(_race_lap(data))]
     pc = dict(prior.coefs) if prior is not None else {}
@@ -208,6 +243,17 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None):
         cols.append(_race_lap(d))
         beta0.append(fuel_prior)
         prec.append(shrinkage["fuel_s_per_lap"] ** -2)
+    n_main = len(cols)
+    support = prior.fit_report if prior is not None else None
+    if knots is not None:
+        prior_hinge = (support or {}).get("hinge") or {}
+        n_past = {c: _past_knot(d, c, knots[c]) + prior_hinge.get(c, {}).get("n_past_knot", 0) for c in comps}
+        hinged = [c for c in comps if n_past[c] >= min_samples]
+        tau_hinge = shrinkage.get("hinge_s_per_lap", HINGE_TAU_S_PER_LAP)
+        for c in hinged:
+            cols.append(_hinge_column(d, c, knots[c]))
+            beta0.append(float((getattr(prior, "hinges", None) or {}).get(c, 0.0)))
+            prec.append(tau_hinge ** -2)
     X = np.column_stack(cols) if cols else np.empty((len(d), 0))
     beta0, prec = np.asarray(beta0, dtype=float), np.asarray(prec, dtype=float)
     xtx = X.T @ X
@@ -220,13 +266,18 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None):
     dj = np.diag(xtx)
     weight = np.divide(dj, dj + prec, out=np.ones_like(dj), where=prec > 0)
     source = None if fuel_prior is None else ("shrunk" if len(d) else "prior")
-    support = prior.fit_report if prior is not None else None
     prior_res = ((support or {}).get("sd") or {}).get("residual_s", float("nan"))
     sd, res = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
     tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
     sd = np.where((weight <= 0) & (prec > 0), tau, sd)  # held at the prior: its tau
-    return comps, beta, _report(d, comps, X, source, weight, fuel_prior is not None, support,
-                                unmodelled=_unmodelled(data, comps, min_samples, support), sd=sd, residual_s=res)
+    rep = _report(d, comps, X, source, weight[:n_main], fuel_prior is not None, support,
+                  unmodelled=_unmodelled(data, comps, min_samples, support), sd=sd[:n_main], residual_s=res)
+    if knots is not None:
+        rep["hinge"] = {c: _dropped(knots[c], n_past[c]) for c in comps}
+        for j, c in enumerate(hinged, start=n_main):
+            rep["hinge"][c] = _hinge_entry(beta[j], sd[j], "shrunk" if dj[j] > 0 else "prior", weight[j],
+                                           knots[c], n_past[c])
+    return comps, beta, rep
 
 
 def _coefs(comps, beta):
@@ -308,41 +359,8 @@ class LinearFuelDegradation:
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior)
             return cls(_coefs(comps, beta), float(beta[-1]), rep)
-        fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
-        comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
-        d = data[data["compound"].isin(comps) & data["clean"]]
-        unmodelled = _unmodelled(data, comps, min_samples)
-        if not comps:
-            return cls({}, fuel_prior, _report(d, comps, np.empty((0, 0)), "prior", np.zeros(1), True,
-                                               unmodelled=unmodelled, sd=np.array([fixed_sd])))
-        lap = _race_lap(d)
-        race = ~np.isnan(lap)
-        lap = np.where(race, lap, 0.0)
-        y = d["lap_time_s"].to_numpy(dtype=float)
-        if "lap_in_stint" in d:  # practice: in-stint fuel column, coefficient fixed to the prior
-            run = d["lap_in_stint"].to_numpy(dtype=float)
-            y = y - np.where(~race & ~np.isnan(run), fuel_prior * np.nan_to_num(run), 0.0)
-        n_race = [int(((d["compound"] == c).to_numpy() & race).sum()) for c in comps]
-        cols = _compound_columns(d, comps)
-        sessions, evo = evolution_columns(d)
-        k = 2 * len(comps)
-        if any(n >= min_samples for n in n_race):
-            X = np.column_stack(cols + [lap] + evo)
-            beta = _evolution_fit(X, y, len(evo))
-            fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1:]
-            sd, res = _posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo)))
-            sd = sd[:k + 1]
-        else:
-            X = np.column_stack(cols + evo)
-            beta = _evolution_fit(X, y - fuel_prior * lap, len(evo))
-            fuel, source, slopes = float(fuel_prior), "prior", beta[k:]
-            sd, res = _posterior_sd(X, y - fuel_prior * lap, beta, _evolution_prec(X.shape[1], len(evo)))
-            sd = np.append(sd[:k], fixed_sd)  # the fuel slope is fixed at the prior: its tau
-        weight = np.append(np.ones(k), 1.0 if source == "fitted" else 0.0)
-        evolution = {s: float(b) for s, b in zip(sessions, slopes)}
-        rep = _report(d, comps, X, source, weight, True, evolution=evolution, unmodelled=unmodelled,
-                      sd=sd, residual_s=res)
-        return cls(_apply_base_delta(_coefs(comps, beta), rep, base_delta), fuel, rep)
+        coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd)
+        return cls(coefs, fuel, rep)
 
     @property
     def compounds(self):
@@ -354,3 +372,103 @@ class LinearFuelDegradation:
     def lap_times(self, compound, ages, laps):
         base, slope = self.coefs[compound]
         return base + slope * np.asarray(ages, dtype=float) + self.fuel_slope * np.asarray(laps, dtype=float)
+
+
+def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None):
+    """The unpenalised linear_fuel fit. Returns (coefs, fuel slope, hinges, report).
+
+    With `hinge_knots` ({compound: knot}, linear_fuel_hinge) a hinge column follows the
+    fuel column for each compound with min_samples fit rows past its knot; the others are
+    dropped (hinge 0). hinges is {compound: s/lap} and the report gains "hinge"; without
+    knots hinges is None and the fit is exactly linear_fuel's.
+    """
+    fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
+    comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
+    d = data[data["compound"].isin(comps) & data["clean"]]
+    unmodelled = _unmodelled(data, comps, min_samples)
+    n_past = {c: _past_knot(d, c, hinge_knots[c]) for c in comps} if hinge_knots is not None else {}
+    hinged = [c for c in comps if n_past.get(c, 0) >= min_samples]
+    if not comps:
+        rep = _report(d, comps, np.empty((0, 0)), "prior", np.zeros(1), True,
+                      unmodelled=unmodelled, sd=np.array([fixed_sd]))
+        if hinge_knots is not None:
+            rep["hinge"] = {}
+        return {}, fuel_prior, None if hinge_knots is None else {}, rep
+    lap = _race_lap(d)
+    race = ~np.isnan(lap)
+    lap = np.where(race, lap, 0.0)
+    y = d["lap_time_s"].to_numpy(dtype=float)
+    if "lap_in_stint" in d:  # practice: in-stint fuel column, coefficient fixed to the prior
+        run = d["lap_in_stint"].to_numpy(dtype=float)
+        y = y - np.where(~race & ~np.isnan(run), fuel_prior * np.nan_to_num(run), 0.0)
+    n_race = [int(((d["compound"] == c).to_numpy() & race).sum()) for c in comps]
+    cols = _compound_columns(d, comps)
+    hcols = [_hinge_column(d, c, hinge_knots[c]) for c in hinged]
+    sessions, evo = evolution_columns(d)
+    k, h = 2 * len(comps), len(hinged)
+    if any(n >= min_samples for n in n_race):
+        X = np.column_stack(cols + [lap] + hcols + evo)
+        beta = _evolution_fit(X, y, len(evo))
+        fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1 + h:]
+        sd, res = _posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo)))
+        hinge, hinge_sd = beta[k + 1:k + 1 + h], sd[k + 1:k + 1 + h]
+        sd = sd[:k + 1]
+    else:
+        X = np.column_stack(cols + hcols + evo)
+        beta = _evolution_fit(X, y - fuel_prior * lap, len(evo))
+        fuel, source, slopes = float(fuel_prior), "prior", beta[k + h:]
+        sd, res = _posterior_sd(X, y - fuel_prior * lap, beta, _evolution_prec(X.shape[1], len(evo)))
+        hinge, hinge_sd = beta[k:k + h], sd[k:k + h]
+        sd = np.append(sd[:k], fixed_sd)  # the fuel slope is fixed at the prior: its tau
+    weight = np.append(np.ones(k), 1.0 if source == "fitted" else 0.0)
+    evolution = {s: float(b) for s, b in zip(sessions, slopes)}
+    rep = _report(d, comps, X, source, weight, True, evolution=evolution, unmodelled=unmodelled,
+                  sd=sd, residual_s=res)
+    hinges = None
+    if hinge_knots is not None:
+        rep["hinge"] = {c: _dropped(hinge_knots[c], n_past[c]) for c in comps}
+        for c, v, s in zip(hinged, hinge, hinge_sd):
+            rep["hinge"][c] = _hinge_entry(v, s, "fitted", 1.0, hinge_knots[c], n_past[c])
+        hinges = {c: rep["hinge"][c]["value"] for c in comps}
+    return _apply_base_delta(_coefs(comps, beta), rep, base_delta), fuel, hinges, rep
+
+
+@DEGRADATION.register("linear_fuel_hinge")
+class LinearFuelHingeDegradation(LinearFuelDegradation):
+    """linear_fuel plus a per compound hinge: lap time = base_c + wear_c * age
+    + hinge_c * max(0, age - knot_c) + fuel * lap, so wear may steepen on old tyres.
+
+    Knots come from `hinge_knots` (SimConfig.hinge_knots), else `hinge_knot_default`
+    (SimConfig.hinge_knot_default, the filter's HINGE_KNOT). A compound with fewer than
+    min_samples fit rows past its knot (practice support included under to_snapshot) has
+    its hinge dropped: fixed at 0, source "dropped" in fit_report["hinge"]. Every fit path
+    is linear_fuel's with the hinge columns added: unpenalised under full and on practice
+    (so a pre_race prior carries the practice hinge), and under to_snapshot shrunk toward
+    the prior's hinge (0 when the prior has none) with tau shrinkage["hinge_s_per_lap"].
+
+    fit_report["hinge"]: {compound: {value, sd, source, weight, knot, n_past_knot}}, source
+    "fitted", "shrunk", "prior" (no race rows past the knot) or "dropped".
+    """
+
+    def __init__(self, coefs, fuel_slope, hinges, knots, fit_report=None):
+        super().__init__(coefs, fuel_slope, fit_report)
+        self.hinges = hinges  # compound -> s/lap per lap of tyre age past the knot
+        self.knots = knots    # compound -> tyre age
+
+    @classmethod
+    def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
+            fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, **_):
+        candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
+        knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
+        if shrinkage is not None:
+            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots)
+            hinges = {c: rep["hinge"][c]["value"] for c in comps}
+            return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps}, rep)
+        coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots)
+        return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep)
+
+    def lap_times(self, compound, ages, laps):
+        base, slope = self.coefs[compound]
+        a = np.asarray(ages, dtype=float)
+        return (base + slope * a + self.hinges[compound] * np.maximum(0.0, a - self.knots[compound])
+                + self.fuel_slope * np.asarray(laps, dtype=float))

@@ -13,7 +13,8 @@ Simulator.fitted_for builds the context from the snapshot and the frames, never 
 after k, and plugs the output in:
   (a) degradation: base_delta_s[c] (added to the practice base), wear_s_per_lap[c] and
       fuel_s_per_lap are the prior means, their sds the prior taus, of the to_snapshot
-      shrinkage fit on race laps up to k. When every degradation factor has sd 0 the prior
+      shrinkage fit on race laps up to k; so is hinge_s_per_lap[c] under linear_fuel_hinge
+      (the practice hinge, 0 where practice dropped it). When every degradation factor has sd 0 the prior
       is held as is: no fit, and hazard and ref_lap_s from practice, as under pre_race.
       The pre_race window always holds it.
   (b) pit_loss_s, sc_lap_factor, vsc_lap_factor, sc_pit_loss_factor, lap1_extra_s: one draw
@@ -53,7 +54,7 @@ import pandas as pd
 
 from ..contracts import (COMPOUND_FACTORS, RACE_FACTORS, CalibrationOutput, CorrectionTable, RaceParams,  # noqa: F401
                          Snapshot, factor_name, split_factor)
-from .config import ComponentSpec, SimConfig
+from .config import HINGE_TAU_S_PER_LAP, ComponentSpec, SimConfig
 from .events import Scenario
 from .race_ids import canonical_race_id, race_season
 from .registry import Registry
@@ -61,8 +62,9 @@ from .registry import Registry
 CALIBRATORS = Registry("calibrator")
 NEEDS_DATA = "needs the multi-race dataset"
 REFERENCE = ("none", "shrinkage")     # always reported beside any learned class
-DEGRADATION_FACTORS = ("base_delta_s", "wear_s_per_lap", "fuel_s_per_lap")
-TAU_KEYS = {"base_delta_s": "base_s", "wear_s_per_lap": "wear_s_per_lap", "fuel_s_per_lap": "fuel_s_per_lap"}
+DEGRADATION_FACTORS = ("base_delta_s", "wear_s_per_lap", "fuel_s_per_lap", "hinge_s_per_lap")
+TAU_KEYS = {"base_delta_s": "base_s", "wear_s_per_lap": "wear_s_per_lap", "fuel_s_per_lap": "fuel_s_per_lap",
+            "hinge_s_per_lap": "hinge_s_per_lap"}
 # factors drawn per sample, with their physical bounds
 EVENT_BOUNDS = {"pit_loss_s": (0.0, np.inf), "sc_lap_factor": (1.0, np.inf), "vsc_lap_factor": (1.0, np.inf),
                 "sc_pit_loss_factor": (0.0, 1.0), "lap1_extra_s": (0.0, np.inf)}
@@ -125,14 +127,18 @@ class Calibrator:
 
 
 def physics_means(ctx: CalibrationContext) -> dict[str, float]:
-    """The config prior: per practice compound the config base delta and the practice wear,
-    and the config fuel slope. Without practice only the fuel slope."""
+    """The config prior: per practice compound the config base delta and the practice wear
+    (and hinge, for a model with one: 0 where practice dropped it), and the config fuel
+    slope. Without practice only the fuel slope."""
     cfg, raw = ctx.config, ctx.practice_model
     out = {}
     if raw is not None:
+        hinges = getattr(raw, "hinges", None)
         for c, (_, wear) in raw.coefs.items():
             out[factor_name("base_delta_s", c)] = float(cfg.pre_race_base_delta_s)
             out[factor_name("wear_s_per_lap", c)] = float(wear)
+            if hinges is not None:
+                out[factor_name("hinge_s_per_lap", c)] = float(hinges[c])
     out["fuel_s_per_lap"] = float(cfg.pre_race_fuel_slope_s_per_lap)
     return out
 
@@ -152,14 +158,19 @@ class NoneCalibrator(Calibrator):
 @CALIBRATORS.register("shrinkage")
 class ShrinkageCalibrator(Calibrator):
     """The #13 fit: the config prior with the SimConfig.shrinkage taus as sds. The simulator
-    then fits race laps up to k toward it (plug-in (a)); there is no correction table."""
+    then fits race laps up to k toward it (plug-in (a)); there is no correction table. A
+    hinge prior (linear_fuel_hinge) takes tau shrinkage["hinge_s_per_lap"], whose key the
+    diagnostics carry only then."""
     name = "shrinkage"
 
     def calibrate(self, ctx):
-        tau = ctx.config.shrinkage
-        factors = {k: (v, float(tau[TAU_KEYS[split_factor(k)[0]]])) for k, v in physics_means(ctx).items()}
+        tau = {"hinge_s_per_lap": HINGE_TAU_S_PER_LAP, **ctx.config.shrinkage}
+        means = physics_means(ctx)
+        factors = {k: (v, float(tau[TAU_KEYS[split_factor(k)[0]]])) for k, v in means.items()}
+        hinged = any(split_factor(k)[0] == "hinge_s_per_lap" for k in means)
+        taus = {k: v for k, v in tau.items() if hinged or k != "hinge_s_per_lap"}
         return CalibrationOutput(factors=factors, valid_until_lap=ctx.valid_until_lap, source=self.name,
-                                 diagnostics={"prior": "config", "taus": dict(tau)})
+                                 diagnostics={"prior": "config", "taus": taus})
 
 
 class _LearnedStub(Calibrator):
@@ -242,8 +253,9 @@ def prior_model(raw, factors: dict, config: SimConfig):
     """The degradation prior from a practice fit with no base delta and the output factors.
 
     Practice-only compounds get base + base_delta_s[c] (config value when left out) and
-    wear_s_per_lap[c]; the fuel slope is fuel_s_per_lap. With the config values this is
-    exactly the fit with base_delta = pre_race_base_delta_s, report included."""
+    wear_s_per_lap[c]; the fuel slope is fuel_s_per_lap, and a hinge model's hinges
+    hinge_s_per_lap[c]. With the config values this is exactly the fit with base_delta =
+    pre_race_base_delta_s, report included."""
     m = copy.copy(raw)
     rep = raw.fit_report
     practice = [c for c in raw.coefs if rep["n_race_rows_per_compound"].get(c, 0) == 0]
@@ -254,6 +266,9 @@ def prior_model(raw, factors: dict, config: SimConfig):
     m.fit_report = {**rep, "base_delta_s": deltas, "base_delta_source": "prior" if practice else None}
     if hasattr(m, "fuel_slope") and "fuel_s_per_lap" in factors:
         m.fuel_slope = float(factors["fuel_s_per_lap"][0])
+    if getattr(raw, "hinges", None) is not None:
+        m.hinges = {c: float(factors.get(factor_name("hinge_s_per_lap", c), (h,))[0]) for c, h in raw.hinges.items()}
+        m.fit_report["hinge"] = {c: {**e, "value": m.hinges[c]} for c, e in rep["hinge"].items()}
     return m
 
 
@@ -350,6 +365,10 @@ def effective_factors(sim, race: RaceParams | None = None) -> dict[str, tuple[fl
         if raw is not None and c in raw.coefs:
             eff[factor_name("base_delta_s", c)] = (b - raw.coefs[c][0], sd_of(factor_name("base_delta_s", c), "base_s", c))
         eff[factor_name("wear_s_per_lap", c)] = (w, sd_of(factor_name("wear_s_per_lap", c), "wear_s_per_lap", c))
+        if getattr(deg, "hinges", None) is not None:
+            key = factor_name("hinge_s_per_lap", c)
+            sd = float(out.get(key, (0.0, 0.0))[1]) if st.held else deg.fit_report["hinge"][c]["sd"]
+            eff[key] = (float(deg.hinges[c]), sd)
     if hasattr(deg, "fuel_slope"):
         eff["fuel_s_per_lap"] = (float(deg.fuel_slope), sd_of("fuel_s_per_lap", "fuel_s_per_lap"))
     fx = sim.config.effects
@@ -451,7 +470,8 @@ def features_at(r: RaceInput, k: int, prior=None) -> dict:
 
 def hindsight_targets(r: RaceInput) -> dict[str, float]:
     """The race's factors measured with the whole race: the full-window fit (base over the
-    practice fit with no base delta, wear, fuel) and the calibration.run observations."""
+    practice fit with no base delta, wear, hinge for a model with one, fuel) and the
+    calibration.run observations."""
     from . import calibration
     from .engine import Simulator
     cfg = r.config.model_copy(update={"fit_window": "full", "exclude_snapshot_driver": False})
@@ -463,6 +483,8 @@ def hindsight_targets(r: RaceInput) -> dict[str, float]:
         if raw is not None and c in raw.coefs:
             out[factor_name("base_delta_s", c)] = b - raw.coefs[c][0]
         out[factor_name("wear_s_per_lap", c)] = w
+        if getattr(deg, "hinges", None) is not None:
+            out[factor_name("hinge_s_per_lap", c)] = float(deg.hinges[c])
     if hasattr(deg, "fuel_slope"):
         out["fuel_s_per_lap"] = float(deg.fuel_slope)
     summary = calibration.run(full, r.frame, r.race)[1]
