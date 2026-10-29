@@ -131,6 +131,9 @@ class SimConfig(_Cfg):
     # waivers and track-state factors; no wet behaviour is modelled.
     compound_classes: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_COMPOUND_CLASSES))
     track: ComponentSpec = ComponentSpec(name="dry")   # track-state transform, see track.py
+    # traffic model, see traffic.py: "none" (default) or "ghost", the recorded field replayed
+    # as ghost cars. World-model only; the agent's tools keep it off
+    traffic: ComponentSpec = ComponentSpec(name="none")
 
     @classmethod
     def from_file(cls, path):

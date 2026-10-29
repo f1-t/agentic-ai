@@ -22,6 +22,7 @@ import pandas as pd
 from ..contracts import Plan, RaceParams, Snapshot, StintRecord
 from .config import SimConfig
 from .data import race_stints
+from . import traffic
 from .engine import Simulator
 from .events import Scenario
 
@@ -39,7 +40,9 @@ def replay_driver(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver:
     g = frame[frame["driver"] == driver].sort_values("lap")
     stints = race_stints(frame, driver)
     comp0, _, age0, _ = stints[0]
-    snap = Snapshot.at_start(race.model_copy(update={"total_laps": len(g)}), driver, comp0, tyre_age=age0)
+    # elapsed_s 0.0: the race clock is known at the start, which places a traffic model's anchor
+    snap = Snapshot.at_start(race.model_copy(update={"total_laps": len(g)}), driver, comp0,
+                             tyre_age=age0).model_copy(update={"elapsed_s": 0.0})
     plan = Plan.of([[c, k, a] for c, k, a, _ in stints])
     res = sim.simulate(snap, plan, scenario=_scenario(g), rules=REPLAY_RULES, return_laps=True)
     if not res.valid:
@@ -61,8 +64,14 @@ def _finisher_ids(frame, min_laps_frac):
     return sorted(last.index[last >= min_laps_frac * last.max()])
 
 
-def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9):
-    """Returns (per driver table, summary dict, residuals by lap type)."""
+def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9, pace=None):
+    """Returns (per driver table, summary dict, residuals by lap type).
+
+    `pace` (driver -> offset_s) replays on a copy of `sim` with that pace in the engine
+    (Simulator.with_pace), green laps only; pace_offset_s is then what is left over it.
+    """
+    if pace is not None:
+        sim = sim.with_pace(pace)
     rows, laps = [], []
     for d in _finisher_ids(frame, min_laps_frac):
         g, res = replay_driver(sim, frame, race, d)
@@ -282,7 +291,8 @@ def positions(sim: Simulator, frame: pd.DataFrame, race: RaceParams, results: pd
     """Finishing order check. Returns (table, summary dict).
 
     `pace` (driver -> offset_s, see pace.py) adds offset_s per lap driven to each replayed
-    time before ranking; drivers it does not list get 0.
+    time before ranking; drivers it does not list get 0. This post hoc path differs from the
+    engine's (Simulator pace, green laps only) on SC and VSC laps, by design.
 
     Both orders rank by laps driven first. "simulated_order" (default) then ranks replayed
     times among themselves, so a bias common to every driver cancels. "vs_real" ranks each
@@ -370,11 +380,13 @@ def config_hash(config: SimConfig) -> str:
 
     Identical configs give the same value on any machine or commit; a change to any config
     field (degradation, effects, shrinkage, long_run, ...) changes it. Code changes that keep
-    the config do not; SIM_CODE_VERSION covers those.
+    the config do not; SIM_CODE_VERSION covers those. `traffic` is left out while it is the
+    default "none", so configs from before the traffic hook keep their hash.
     """
     import hashlib
     import json
-    data = config.model_dump(mode="json", exclude={"fit_window"})
+    exclude = {"fit_window"} | ({"traffic"} if config.traffic == SimConfig().traffic else set())
+    data = config.model_dump(mode="json", exclude=exclude)
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
 N_BOOT = 500             # race-cluster bootstrap draws
@@ -661,3 +673,98 @@ def midrace_pairs(rows: pd.DataFrame) -> pd.DataFrame:
                             index=pd.MultiIndex.from_tuples([], names=keys))
     return _bucketed(pd.DataFrame(pairs)).groupby(keys).agg(
         n_pairs=("tie", "size"), n_ties=("tie", "sum"), sign_agree_rate=("sign_agree", "mean"))
+
+
+# --- traffic: rejoin and placement -----------------------------------------------
+# Where a replayed car sits among the recorded field (traffic.ghost_table), against the
+# lap frame's Position. With traffic off the clock is the pure pit-loss view; with it on,
+# the ghosts' increments are in. Ranking compares end_s on the same lap number, so a car
+# that has finished that lap before us is ahead, which is laps driven first.
+REJOIN_HORIZON = 2   # the in-lap and the out-lap
+
+
+def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver: str, k: int, upto: int):
+    """The driver's real strategy over laps k + 1 to `upto` from snapshot_at(k), under the
+    real SC and VSC laps. Returns (snapshot, SimResult, our clock after lap `upto`)."""
+    g = frame[frame["driver"] == driver].sort_values("lap")
+    snap = snapshot_at(frame, race, driver, k)
+    snap = snap.model_copy(update={"race": snap.race.model_copy(update={"total_laps": upto})})
+    stints, left = [], upto - k
+    for s in remaining_plan(frame, driver, k).stints:
+        if left <= 0:
+            break
+        stints.append(s.model_copy(update={"laps": min(s.laps, left)}))
+        left -= stints[-1].laps
+    window = g[(g["lap"] > k) & (g["lap"] <= upto)]
+    res = sim.simulate(snap, Plan(stints=stints), scenario=_scenario(window), rules=REPLAY_RULES)
+    if not res.valid:
+        raise ValueError(f"{driver}: replay plan rejected at k={k}: {res.errors}")
+    return snap, res, traffic.anchor(frame, snap) + res.remaining.mean_s
+
+
+def _place(frame, driver, lap, t):
+    """(1 + ghosts that finished `lap` before t, t less the end of the car directly ahead)."""
+    G = traffic.ghost_table(frame, driver, [lap]).G[:, 0]
+    ahead = G[np.isfinite(G) & (G < t)]
+    return 1 + len(ahead), (float(t - ahead.max()) if len(ahead) else float("nan"))
+
+
+def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min_laps_frac=0.9) -> pd.DataFrame:
+    """One row per real pit stop of a finisher: the replay from the snapshot at k = in_lap - 1
+    over the in-lap and the out-lap, with the real remaining plan and SC/VSC laps.
+
+    pred_pos ranks our clock after the out-lap among the ghosts' end_s on that lap; real_pos
+    is the out-lap row's Position, clock_pos what the same ranking gives the real end_s (a
+    check on the ranking itself). The gaps are to the car directly ahead on the out-lap.
+    Stops without a lap-k or out-lap row are skipped.
+    """
+    if pace is not None:
+        sim = sim.with_pace(pace)
+    rows = []
+    for d in _finisher_ids(frame, min_laps_frac):
+        g = frame[frame["driver"] == d].sort_values("lap").set_index("lap")
+        for in_lap in g.index[g["pit_in"].astype(bool)]:
+            k, out = int(in_lap) - 1, int(in_lap) + REJOIN_HORIZON - 1
+            if out not in g.index or (k > 0 and k not in g.index):
+                continue
+            _, res, t = _replay_window(sim, frame, race, d, k, out)
+            pred_pos, pred_gap = _place(frame, d, out, t)
+            clock_pos, real_gap = _place(frame, d, out, float(g.loc[out, "end_s"]))
+            real_pos = float(g.loc[out, "position"])
+            rows.append({"driver": d, "in_lap": int(in_lap), "k": k, "out_lap": out,
+                         "pred_pos": pred_pos, "real_pos": real_pos, "pos_err": pred_pos - real_pos,
+                         "clock_pos": clock_pos, "pred_gap_ahead_s": pred_gap, "real_gap_ahead_s": real_gap,
+                         "traffic_s": res.traffic_s, "passes": res.passes_mean})
+    return pd.DataFrame(rows, columns=["driver", "in_lap", "k", "out_lap", "pred_pos", "real_pos", "pos_err",
+                                       "clock_pos", "pred_gap_ahead_s", "real_gap_ahead_s", "traffic_s", "passes"])
+
+
+def rejoin_summary(rows: pd.DataFrame) -> dict:
+    """mae_pos, within_1_rate and gap bias (predicted minus real gap to the car ahead) over the stops."""
+    err = rows["pos_err"].dropna().abs()
+    gap = (rows["pred_gap_ahead_s"] - rows["real_gap_ahead_s"]).dropna()
+    return {"n_stops": int(len(rows)),
+            "mae_pos": round(float(err.mean()), 2) if len(err) else float("nan"),
+            "within_1_rate": round(float((err <= 1).mean()), 3) if len(err) else float("nan"),
+            "gap_bias_s": round(float(gap.mean()), 2) if len(gap) else float("nan"),
+            "n_gaps": int(len(gap))}
+
+
+def placement(sim: Simulator, frame: pd.DataFrame, race: RaceParams, lap: int, pace=None,
+              min_laps_frac=0.9) -> pd.DataFrame:
+    """Each finisher's replay from the start to the end of `lap`, ranked among the ghosts on
+    that lap, against the lap row's Position. After an SC this is the bunching evidence
+    (traffic.py, limit 1)."""
+    if pace is not None:
+        sim = sim.with_pace(pace)
+    rows = []
+    for d in _finisher_ids(frame, min_laps_frac):
+        g = frame[frame["driver"] == d].set_index("lap")
+        if lap not in g.index:
+            continue
+        _, res, t = _replay_window(sim, frame, race, d, 0, lap)
+        pred_pos, _ = _place(frame, d, lap, t)
+        real_pos = float(g.loc[lap, "position"])
+        rows.append({"driver": d, "lap": lap, "pred_pos": pred_pos, "real_pos": real_pos,
+                     "abs_err": abs(pred_pos - real_pos), "traffic_s": res.traffic_s, "passes": res.passes_mean})
+    return pd.DataFrame(rows, columns=["driver", "lap", "pred_pos", "real_pos", "abs_err", "traffic_s", "passes"])

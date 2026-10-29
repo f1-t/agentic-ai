@@ -246,6 +246,8 @@ class SimResult(_Contract):
     p_dnf: float = Field(default=0.0, ge=0, le=1)             # share of samples ending the race
     p_big_loss: float = Field(default=0.0, ge=0, le=1)        # share with a hazard event the car survived
     support_warnings: list[str] = Field(default_factory=list)  # e.g. stint longer than observed tyre age
+    traffic_s: float | None = None     # mean traffic time over samples (included in remaining), None when off
+    passes_mean: float | None = None   # mean overtakes charged per sample, None when off
 
     @property
     def race_time_s(self) -> float | None:
