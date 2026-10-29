@@ -10,6 +10,9 @@ def create_backend():
     if backend in {"huggingface", "hf", "local"}:
         from .huggingface_backend import HuggingFaceBackend
         return HuggingFaceBackend()
+    if backend in {"voyager", "asu", "asu-rc"}:
+        from .voyager_backend import VoyagerBackend
+        return VoyagerBackend()
     raise ValueError(
-        f"Unknown LLM_BACKEND={backend!r}. Choose 'anthropic' or 'huggingface'."
+        f"Unknown LLM_BACKEND={backend!r}. Choose 'anthropic', 'huggingface', or 'voyager'."
     )
