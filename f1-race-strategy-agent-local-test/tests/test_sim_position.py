@@ -136,7 +136,7 @@ def test_sc_pit_laps_are_classified_as_pit_laps_not_sc():
     g = pd.DataFrame({"lap": [1, 2, 3, 4, 5], "track_status": ["1", "4", "4", "4", "1"],
                       "pit_in": [False, False, True, False, False], "pit_out": [False, False, False, True, False],
                       "clean": [True, False, False, False, True]})
-    assert calibration._lap_kind(g).tolist() == ["lap1", "sc", "in_lap", "out_lap", "clean"]
+    assert calibration._lap_kind(g).tolist() == ["lap1", "sc", "in_lap", "out_lap", "clean_free"]
 
 
 def test_single_driver_summary_emits_no_runtime_warning(sim):

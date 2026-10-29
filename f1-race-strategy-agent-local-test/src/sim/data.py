@@ -2,7 +2,8 @@
 
 The simulator itself never imports FastF1. Only `load_session` does, lazily.
 Frame columns: driver, lap, stint, compound, tyre_age, lap_time_s, track_status,
-pit_in, pit_out, start_s, end_s, team, position, pace_resid_s, driver_offset_s, clean.
+pit_in, pit_out, start_s, end_s, team, position, pace_resid_s, driver_offset_s, clean,
+gap_ahead_s, car_ahead, gap_behind_s, free_air (gap_columns).
 practice_frame adds session, stint_len, lap_in_stint, session_time_min, stint_start_min
 and run_class, with lap NaN.
 """
@@ -11,7 +12,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from .config import HINGE_KNOT, LongRun   # HINGE_KNOT lives in config, shared with linear_fuel_hinge
+from .config import FREE_AIR_GAP_S, HINGE_KNOT, LongRun   # HINGE_KNOT lives in config, shared with linear_fuel_hinge
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 LEGACY_OUTLIER_FACTOR = 1.07  # baseline rule: drop laps slower than 107% of the compound's fastest
@@ -181,7 +182,55 @@ def robust_filter(df, base, design, k_resid=2.5, n_iter=2, min_samples=5):
     return df
 
 
-def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT):
+GAP_COLUMNS = ["gap_ahead_s", "car_ahead", "gap_behind_s", "free_air"]
+
+
+def gap_columns(df, free_air_gap_s=FREE_AIR_GAP_S):
+    """Gaps at the line at the start of each lap, from end_s: sets the GAP_COLUMNS on `df`.
+
+    At the start of lap L (the end of lap L - 1), gap_ahead_s is our end_s(L - 1) minus that
+    of the car directly ahead on the same lap count: the largest end_s(L - 1) below ours
+    among the cars with a lap L - 1 row and an end_s on it. car_ahead is that driver's code.
+    gap_behind_s is the same towards the car directly behind (the smallest end_s(L - 1)
+    above ours). A gap is NaN, and car_ahead None, on lap 1, where our lap L - 1 row or its
+    end_s is missing, and for the car leading (gap_ahead_s) or last (gap_behind_s) on that
+    lap count. A car without the lap L - 1 row is skipped, never taken as the car ahead.
+    Same lap count only: a backmarker about to be lapped is not behind the leader here
+    (blue flags are out of scope). free_air is gap_ahead_s >= free_air_gap_s, or a NaN gap
+    (lap 1, the leader, missing data).
+    """
+    lap = pd.to_numeric(df["lap"], errors="coerce").to_numpy(dtype=float)
+    end = df["end_s"].to_numpy(dtype=float)
+    ok = np.isfinite(lap) & np.isfinite(end)
+    # line crossings at the end of lap L - 1, keyed by the lap L they start
+    cross = pd.DataFrame({"driver": df["driver"].to_numpy()[ok], "lap": lap[ok] + 1, "t": end[ok]})
+    cross = cross.drop_duplicates(["driver", "lap"]).sort_values(["lap", "t"], kind="mergesort")
+    parts = []
+    for _, c in cross.groupby("lap", sort=False):
+        t, d = c["t"].to_numpy(), c["driver"].to_numpy()
+        ia = np.searchsorted(t, t, side="left") - 1    # the largest crossing strictly before ours
+        ib = np.searchsorted(t, t, side="right")       # the smallest strictly after
+        has_a, has_b = ia >= 0, ib < len(t)
+        parts.append(pd.DataFrame({
+            "driver": d, "lap": c["lap"].to_numpy(),
+            "gap_ahead_s": np.where(has_a, t - t[np.maximum(ia, 0)], np.nan),
+            "car_ahead": np.where(has_a, d[np.maximum(ia, 0)], None),
+            "gap_behind_s": np.where(has_b, t[np.minimum(ib, len(t) - 1)] - t, np.nan)}))
+    cols = ["gap_ahead_s", "car_ahead", "gap_behind_s"]
+    table = (pd.concat(parts, ignore_index=True) if parts
+             else pd.DataFrame(columns=["driver", "lap", *cols])).set_index(["driver", "lap"])
+    got = table.reindex(pd.MultiIndex.from_arrays([df["driver"].to_numpy(), lap]))
+    df["gap_ahead_s"] = got["gap_ahead_s"].to_numpy(dtype=float)
+    car = got["car_ahead"].to_numpy(dtype=object)
+    df["car_ahead"] = np.where(pd.isna(car), None, car)
+    df["gap_behind_s"] = got["gap_behind_s"].to_numpy(dtype=float)
+    gap = df["gap_ahead_s"].to_numpy()
+    df["free_air"] = np.isnan(gap) | (gap >= free_air_gap_s)
+    return df
+
+
+def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT,
+              free_air_gap_s=FREE_AIR_GAP_S):
     """Convert a FastF1 Laps table into the simulator frame.
 
     Base laps are green flag, non pit laps after lap 1 with a lap time, tyre age and
@@ -196,6 +245,9 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, k
     If `outlier_factor` is given the baseline rule is applied instead: a base lap is
     clean if it is faster than `outlier_factor` times its compound's fastest base lap.
     It exists for the baseline tools and test case only.
+
+    Either way every row gets the gap columns (gap_columns, with `free_air_gap_s`). They
+    feed no fit unless SimConfig.fit_free_air_only is set.
     """
     df = _columns(laps)
     base = _green(df) & (df["lap"] > 1)
@@ -204,12 +256,13 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, k
         df["driver_offset_s"] = np.nan
         fastest = df["lap_time_s"].where(base).groupby(df["compound"]).transform("min")
         df["clean"] = base & (df["lap_time_s"] < fastest * outlier_factor)
-        return df
+        return gap_columns(df, free_air_gap_s)
 
     def design(d, comps):
         return pace_design(d, comps, knot=knot, min_samples=min_samples)
 
-    return robust_filter(df, base, design, k_resid=k_resid, n_iter=n_iter, min_samples=min_samples)
+    df = robust_filter(df, base, design, k_resid=k_resid, n_iter=n_iter, min_samples=min_samples)
+    return gap_columns(df, free_air_gap_s)
 
 
 def _weighted_median(values, weights):
@@ -259,6 +312,8 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
     session's first lap started, `stint_start_min` the same for the stint's first lap.
     `lap_in_stint` is the lap's place in its stint, out lap included. `lap` is NaN, as
     practice has no race lap; the degradation fit uses lap_in_stint for the in-stint fuel.
+    The gap columns are NaN (car_ahead None) and free_air True on every row: the long-run
+    tests above handle practice traffic, so SimConfig.fit_free_air_only passes these rows.
     """
     rule = long_run or LongRun()
     keys = ["session", "driver", "stint"]
@@ -279,6 +334,7 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
 
     df = robust_filter(df, base, design, k_resid=k_resid, n_iter=n_iter, min_samples=min_samples)
     df["lap"] = np.nan
+    df["gap_ahead_s"], df["car_ahead"], df["gap_behind_s"], df["free_air"] = np.nan, None, np.nan, True
     extra = ["session", "stint_len", "lap_in_stint", "session_time_min", "stint_start_min", "run_class"]
     return df[[c for c in df.columns if c not in extra] + extra]
 

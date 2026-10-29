@@ -48,11 +48,15 @@ def replay_driver(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver:
 
 
 def _lap_kind(g):
+    """Lap type per row. Clean laps split on data.lap_frame's free_air: clean_free, else
+    clean_pack (the traffic signature); a frame without the column counts as free air."""
     ts = g["track_status"]
+    free = g["free_air"].eq(True) if "free_air" in g else pd.Series(True, index=g.index)
+    clean = g["clean"].astype(bool)
     return np.select(
         [g["lap"] == 1, g["pit_in"], g["pit_out"], ts.str.contains("4"), ts.str.contains("[67]"),
-         g["clean"], ts.str.contains("2")],
-        ["lap1", "in_lap", "out_lap", "sc", "vsc", "clean", "yellow"], default="slow_green")
+         clean & free, clean, ts.str.contains("2")],
+        ["lap1", "in_lap", "out_lap", "sc", "vsc", "clean_free", "clean_pack", "yellow"], default="slow_green")
 
 
 def _finisher_ids(frame, min_laps_frac):
@@ -370,11 +374,13 @@ def config_hash(config: SimConfig) -> str:
 
     Identical configs give the same value on any machine or commit; a change to any config
     field (degradation, effects, shrinkage, long_run, ...) changes it. Code changes that keep
-    the config do not; SIM_CODE_VERSION covers those.
+    the config do not; SIM_CODE_VERSION covers those. `fit_free_air_only` is left out while
+    it is False (the default), so configs from before the free-air filter keep their hash.
     """
     import hashlib
     import json
-    data = config.model_dump(mode="json", exclude={"fit_window"})
+    exclude = {"fit_window"} | (set() if config.fit_free_air_only else {"fit_free_air_only"})
+    data = config.model_dump(mode="json", exclude=exclude)
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
 N_BOOT = 500             # race-cluster bootstrap draws
@@ -410,24 +416,42 @@ def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> S
 
     Stand-in for the data team's snapshot builder, kept minimal. Race length is the laps
     the driver drove, as in replay_driver. The caller skips drivers without a lap-k row.
+    At k > 0, gap_ahead_s, gap_behind_s and car_ahead are the lap frame's gap columns at
+    the start of lap k + 1 (data.gap_columns, so the lap k + 1 row), None where that row
+    is missing or the value is NaN; at k = 0 they stay None.
     """
     g = frame[frame["driver"] == driver].sort_values("lap")
     stints = race_stints(frame, driver)
     j, done = _current_stint(stints, k)
     comp, _, start_age, _ = stints[j]
-    position, status, elapsed = None, "green", 0.0
+    position, status, elapsed, gaps = None, "green", 0.0, {}
     if k > 0:
         row = g[g["lap"] == k].iloc[0]
         position = int(row["position"]) if pd.notna(row["position"]) else None
         status = _track_status(str(row["track_status"]))
         elapsed = float(row["end_s"] - g["start_s"].iloc[0])
+        gaps = _gaps(g, k + 1)
     hist = _scenario(g[g["lap"] <= k])
     return Snapshot(
         race=race.model_copy(update={"total_laps": len(g)}), driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=n, start_lap=first, start_age=a) for c, n, a, first in stints[:j]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=status, elapsed_s=elapsed,
-        position=position, sets_available=None, standing_start=k == 0)
+        position=position, sets_available=None, standing_start=k == 0, **gaps)
+
+
+def _gaps(g, lap):
+    """gap_ahead_s, gap_behind_s and car_ahead off the driver's `lap` row, None when missing."""
+    row = g[g["lap"] == lap]
+    if not len(row) or "gap_ahead_s" not in row:
+        return {}
+    row = row.iloc[0]
+
+    def num(x):
+        return float(x) if pd.notna(x) else None
+    car = row["car_ahead"]
+    return {"gap_ahead_s": num(row["gap_ahead_s"]), "gap_behind_s": num(row["gap_behind_s"]),
+            "car_ahead": car if isinstance(car, str) else None}
 
 
 def remaining_plan(frame: pd.DataFrame, driver: str, k: int) -> Plan:
