@@ -173,11 +173,30 @@ class Simulator:
         kw.update(extra)
         return DEGRADATION.get(spec.name).fit(frame, **kw)
 
+    def _free_air(self, frame):
+        """(rows the fit may use, clean rows dropped). Every row unless config.fit_free_air_only;
+        then the race rows with free_air True and every practice row (lap NaN)."""
+        if not self.config.fit_free_air_only:
+            return frame, 0
+        practice = frame["lap"].isna().to_numpy()
+        if "free_air" not in frame:
+            if not practice.all():
+                raise ValueError("fit_free_air_only needs the free_air column (data.lap_frame)")
+            return frame, 0
+        keep = practice | frame["free_air"].eq(True).to_numpy()
+        return frame[keep], int((frame["clean"].to_numpy(dtype=bool) & ~keep).sum())
+
     def _fit(self, frame, ref=None, model=None, **extra):
         """Fit the degradation model on `frame` (or use `model`); the hazard model and ref_lap_s
-        (the median clean lap) on `ref`, which adds practice to the race laps under to_snapshot."""
-        ref = frame if ref is None else ref
+        (the median clean lap) on `ref`, which adds practice to the race laps under to_snapshot.
+        Under fit_free_air_only both keep only their free-air rows (_free_air), and the
+        degradation fit_report gains n_pack_rows, the clean rows of `frame` dropped."""
+        frame, n_pack = self._free_air(frame)
+        ref = frame if ref is None else self._free_air(ref)[0]
         self.degradation = model if model is not None else self._model(frame, **extra)
+        if self.config.fit_free_air_only and getattr(self.degradation, "fit_report", None) is not None:
+            self.degradation = copy.copy(self.degradation)   # `model` may be a shared prior
+            self.degradation.fit_report = {**self.degradation.fit_report, "n_pack_rows": n_pack}
         hz = self.config.hazard
         self.hazard = HAZARD.get(hz.name).fit(ref, min_samples=self.config.min_samples, **hz.params)
         self.ref_lap_s = float(ref.loc[ref["clean"].astype(bool), "lap_time_s"].median())

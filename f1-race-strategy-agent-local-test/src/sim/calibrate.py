@@ -2,6 +2,7 @@
 
     python -m src.sim.calibrate --season 2021 --gp Spain --pit-loss 22      # a number, or observed (default)
     python -m src.sim.calibrate --degradation linear
+    python -m src.sim.calibrate --free-air       # SimConfig.fit_free_air_only, on every command
 
 Also prints the team-mate and finishing position checks and writes them to
 reports/calibration/<race_id>_pairs.csv and <race_id>_positions.csv.
@@ -51,6 +52,7 @@ DEFAULT_PIT_LOSS_S = 22.0
 REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration")
 PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
 VERSION_COLUMNS = ("config_hash", "sim_code_version")
+FREE_AIR_HELP = "fit on free-air rows only (SimConfig.fit_free_air_only)"
 PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
                  "within_2_rate_real", "mae_pos_real"]
 
@@ -63,6 +65,7 @@ def _race_args(ap):
     ap.add_argument("--min-stint", type=int, default=10)
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
+    ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the csvs go")
 
 
@@ -71,12 +74,18 @@ def _race_setup(args):
     when that is "observed"; _pit_loss then measures the observed value."""
     session = load_session(args.season, args.gp)
     frame = lap_frame(session.laps)
-    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    cfg = _config(args)
     pit_loss = DEFAULT_PIT_LOSS_S if args.pit_loss == "observed" else float(args.pit_loss)
     race = RaceParams(
         race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=pit_loss,
         min_stint_laps=args.min_stint, compounds=sorted(frame["compound"].dropna().unique()))
     return session, frame, cfg, race
+
+
+def _config(args):
+    """SimConfig from --config, else --degradation; --free-air sets fit_free_air_only."""
+    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    return cfg.model_copy(update={"fit_free_air_only": True}) if getattr(args, "free_air", False) else cfg
 
 
 def _pit_loss(args, frame, cfg, race):
@@ -241,6 +250,7 @@ def main(argv=None):
     ap.add_argument("--min-stint", type=int, default=10)
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
+    ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
     ap.add_argument("--out", help="write per driver csv here")
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the pairs and positions csvs go")
     ap.add_argument("--pace", choices=pace.PACE_KINDS, default="none", help="pace term in the position check")
@@ -251,7 +261,7 @@ def main(argv=None):
 
     session = load_session(args.season, args.gp)
     frame = lap_frame(session.laps)
-    cfg = SimConfig.from_file(args.config) if args.config else SimConfig(degradation={"name": args.degradation})
+    cfg = _config(args)
 
     def make_race(pit_loss_s):
         return RaceParams(

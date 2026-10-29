@@ -114,6 +114,8 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     supported = hazard_support(hazard)
     if supported is not None:
         flags += [f"no_hazard_support:{c}" for c, r in compounds.items() if r.modelled and c not in supported]
+    if "n_pack_rows" in rep:   # SimConfig.fit_free_air_only: clean rows the fit left out
+        flags.append(f"free_air_filter:{rep['n_pack_rows']}")
     return ModelReport(
         fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel,
         hinge=None if hinge is None else {c: dict(e) for c, e in hinge.items()},

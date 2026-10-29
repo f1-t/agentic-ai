@@ -12,6 +12,10 @@ log = logging.getLogger(__name__)
 # the linear_fuel_hinge degradation model bend here unless SimConfig.hinge_knots says otherwise
 HINGE_KNOT = 25
 HINGE_TAU_S_PER_LAP = 0.05   # to_snapshot prior sd of a hinge slope, SimConfig.shrinkage["hinge_s_per_lap"]
+# a lap is in free air when the car ahead on the same lap count crossed the line at least this
+# long before us at the lap's start (data.lap_frame free_air). Set a priori, between the DRS
+# detection gap (1 s) and the dirty-air window; Spain only, selected across races by LORO later.
+FREE_AIR_GAP_S = 1.5
 
 DEFAULT_COMPOUND_CLASSES = {
     **dict.fromkeys(["HYPERSOFT", "ULTRASOFT", "SUPERSOFT", "SOFT", "MEDIUM", "HARD", "SUPERHARD"], "SLICK"),
@@ -108,6 +112,11 @@ class SimConfig(_Cfg):
     #   pre_race     practice long runs only
     fit_window: Literal["full", "to_snapshot", "pre_race"] = "full"
     exclude_snapshot_driver: bool = False   # leave the snapshot driver's laps out of the fit
+    # fit on free-air rows only: every degradation fit (all windows), the hazard fit and
+    # ref_lap_s use the clean rows with data.lap_frame's free_air True; practice rows pass
+    # (Simulator._fit). ref_lap_s becomes the free-air median, while sc_lap_factor (1.36) was
+    # measured against the unfiltered one; the cross-race factor fit measures both.
+    fit_free_air_only: bool = False
     # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit
     # it, and shrinks toward it under to_snapshot
     pre_race_fuel_slope_s_per_lap: float = -0.045
