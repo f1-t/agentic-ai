@@ -160,8 +160,11 @@ def test_safety_car_laps_and_pit_loss(sim):
     base = sim.simulate(start(), plan, return_laps=True)
     sc = sim.simulate(start(), plan, scenario=Scenario(sc_laps=[20, 21]), return_laps=True)
     delta = fx.sc_lap_factor * sim.ref_lap_s
+    # lap 21, the MEDIUM set's first, is under SC: laps 22-50 run on a set younger by
+    # 1 - sc_age_increment
+    younger = 29 * (1 - fx.sc_age_increment) * TRUE["MEDIUM"][1]
     expected = base.race_time_s - sum(base.lap_times_s[19:21]) + 2 * delta \
-        - (1 - fx.sc_pit_loss_factor) * RACE.pit_loss_s
+        - (1 - fx.sc_pit_loss_factor) * RACE.pit_loss_s - younger
     assert sc.race_time_s == pytest.approx(expected)
 
 
@@ -169,7 +172,10 @@ def test_vsc_scales_green_lap(sim):
     plan = [["SOFT", 20], ["MEDIUM", 30]]
     base = sim.simulate(start(), plan, return_laps=True)
     vsc = sim.simulate(start(), plan, scenario=Scenario(vsc_laps=[5]), return_laps=True)
-    assert vsc.lap_times_s[4] == pytest.approx(EventEffects().vsc_lap_factor * base.lap_times_s[4])
+    fx, (b, slope) = EventEffects(), TRUE["SOFT"]
+    # the VSC lap itself ages the set by vsc_age_increment, not 1
+    assert vsc.lap_times_s[4] == pytest.approx(fx.vsc_lap_factor * (b + slope * (4 + fx.vsc_age_increment)))
+    assert base.lap_times_s[4] == pytest.approx(b + slope * 5)
 
 
 def test_fixed_event_model_from_config():
