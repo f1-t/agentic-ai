@@ -72,10 +72,23 @@ def main():
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=[0])
     parser.add_argument("--max-stops", type=int, choices=(0, 1, 2), default=2)
+    # added for the simulator bridge (src/sim/optimizer_bridge.py, docs/rules.md)
+    parser.add_argument(
+        "--scorer",
+        choices=("callback", "batch"),
+        default="callback",
+        help="callback: the legacy simulator per plan and seed; "
+        "batch: every plan in one Simulator.simulate_batch call (seeds must be 0..n-1).",
+    )
     args = parser.parse_args()
     try:
         context = load_legacy_context(args.driver, args.lap)
-        result = comparison(context, tuple(args.seeds), args.max_stops)
+        if args.scorer == "batch":
+            from ..sim.optimizer_bridge import batch_comparison
+
+            result = batch_comparison(context, tuple(args.seeds), args.max_stops)
+        else:
+            result = comparison(context, tuple(args.seeds), args.max_stops)
     except (ValueError, RuntimeError) as error:
         parser.exit(2, f"Baseline comparison failed: {error}\n")
     print(json.dumps(result, indent=2, allow_nan=False))
