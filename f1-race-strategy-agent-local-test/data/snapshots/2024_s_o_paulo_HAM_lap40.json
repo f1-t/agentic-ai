@@ -1,0 +1,58 @@
+{
+    "race": "2024 Sao Paulo Grand Prix",
+    "driver": "HAM",
+    "lap_completed": 40,
+    "total_laps": 69,
+    "remaining_laps": 29,
+    "current_compound": "INTERMEDIATE",
+    "tyre_age": 8,
+    "current_stint": 3,
+    "stint_history": [
+        {
+            "stint": 1,
+            "compound": "INTERMEDIATE",
+            "start_lap": 1,
+            "end_lap": 27,
+            "laps_completed": 27
+        },
+        {
+            "stint": 2,
+            "compound": "INTERMEDIATE",
+            "start_lap": 28,
+            "end_lap": 32,
+            "laps_completed": 5
+        },
+        {
+            "stint": 3,
+            "compound": "INTERMEDIATE",
+            "start_lap": 33,
+            "end_lap": 40,
+            "laps_completed": 8
+        }
+    ],
+    "safety_car_history": [
+        {
+            "type": "VSC",
+            "lap": 28,
+            "message": "VIRTUAL SAFETY CAR DEPLOYED"
+        },
+        {
+            "type": "SC",
+            "lap": 30,
+            "message": "SAFETY CAR DEPLOYED"
+        },
+        {
+            "type": "RED_FLAG",
+            "lap": 32,
+            "message": "RED FLAG"
+        },
+        {
+            "type": "SC",
+            "lap": 39,
+            "message": "SAFETY CAR DEPLOYED"
+        }
+    ],
+    "compounds_used": [
+        "INTERMEDIATE"
+    ]
+}

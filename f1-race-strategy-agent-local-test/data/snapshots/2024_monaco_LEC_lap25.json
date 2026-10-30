@@ -1,0 +1,37 @@
+{
+    "race": "2024 Monaco Grand Prix",
+    "driver": "LEC",
+    "lap_completed": 25,
+    "total_laps": 78,
+    "remaining_laps": 53,
+    "current_compound": "HARD",
+    "tyre_age": 24,
+    "current_stint": 2,
+    "stint_history": [
+        {
+            "stint": 1,
+            "compound": "MEDIUM",
+            "start_lap": 1,
+            "end_lap": 1,
+            "laps_completed": 1
+        },
+        {
+            "stint": 2,
+            "compound": "HARD",
+            "start_lap": 2,
+            "end_lap": 25,
+            "laps_completed": 24
+        }
+    ],
+    "safety_car_history": [
+        {
+            "type": "RED_FLAG",
+            "lap": 1,
+            "message": "RED FLAG"
+        }
+    ],
+    "compounds_used": [
+        "MEDIUM",
+        "HARD"
+    ]
+}
