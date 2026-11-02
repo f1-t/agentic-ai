@@ -727,6 +727,11 @@ def _metrics(t):
         out["coverage_68"] = float(((q["pred_p16_s"] <= r) & (r <= q["pred_p84_s"])).mean()) if ok.any() else np.nan
         out["coverage_90"] = float(((q["pred_p05_s"] <= r) & (r <= q["pred_p95_s"])).mean()) if ok.any() else np.nan
         out["mean_width_90_s"] = float((q["pred_p95_s"] - q["pred_p05_s"]).mean()) if ok.any() else np.nan
+        # the raw target: real_remaining_s itself, every row with a prediction (an offset not needed)
+        raw = t["real_remaining_s"].notna() & t["pred_p05_s"].notna()
+        r, q = t.loc[raw, "real_remaining_s"], t[raw]
+        out["coverage_raw_68"] = float(((q["pred_p16_s"] <= r) & (r <= q["pred_p84_s"])).mean()) if raw.any() else np.nan
+        out["coverage_raw_90"] = float(((q["pred_p05_s"] <= r) & (r <= q["pred_p95_s"])).mean()) if raw.any() else np.nan
     return out
 
 
@@ -750,7 +755,8 @@ def _bootstrap_ci(t, n_boot=N_BOOT, seed=0):
 
 SUMMARY_COLUMNS = ["n", "n_nan", "n_races", "mae_s", "bias_s", "mae_offset_s", "mae_offset_ci_lo",
                    "mae_offset_ci_hi", "within_2_rate_sim", "mae_pos_sim", "within_2_rate_real", "mae_pos_real"]
-COVERAGE_COLUMNS = ["coverage_68", "coverage_90", "mean_width_90_s"]   # rows with INTERVAL_COLUMNS only
+# rows with INTERVAL_COLUMNS only
+COVERAGE_COLUMNS = ["coverage_68", "coverage_90", "coverage_raw_68", "coverage_raw_90", "mean_width_90_s"]
 
 
 def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
@@ -773,7 +779,11 @@ def aggregate(rows: pd.DataFrame, n_boot=N_BOOT, seed=0) -> pd.DataFrame:
     Rows from midrace(n_samples > 1) add coverage_68 and coverage_90, the share of rows whose
     pace-corrected real remaining time, real_remaining_s - pace_offset_s * horizon, falls
     inside [pred_p16_s, pred_p84_s] and [pred_p05_s, pred_p95_s] (rows with a NaN offset or
-    prediction skipped), and mean_width_90_s, the mean of pred_p95_s - pred_p05_s on those rows.
+    prediction skipped), coverage_raw_68 and coverage_raw_90, the same against real_remaining_s
+    itself on every row with a prediction (the target for a window whose driver term is in the
+    engine, Simulator(pace=...), such as pre_race with practice offsets: the pace-corrected
+    target would also remove the common error the interval carries), and mean_width_90_s,
+    the mean of pred_p95_s - pred_p05_s on the pace-corrected rows.
     """
     return _table(rows, ["window", "horizon_bucket"], ci=True, n_boot=n_boot, seed=seed)
 

@@ -138,11 +138,22 @@ TRAFFIC_DRAWN_EVENTS = "traffic_recorded_with_drawn_events"
 FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
 # events draw from their own substream, default_rng([seed, k, EVENT_STREAM]), so the main
 # stream never sees an event draw: with events on, every other draw matches the run without.
-# So do the degradation parameter draw (DEGRADATION_STREAM) and the residual lap noise
-# (LAP_NOISE_STREAM): turning either on leaves the hazard and track draws as they were.
+# The degradation parameter draw and the residual lap noise come from one generator per
+# stream per batch call, default_rng([seed, STREAM_KEY, stream]), sample k taking row k
+# (batch_normals). Turning either on leaves the hazard, track and event draws as they were.
 EVENT_STREAM = 1
 DEGRADATION_STREAM = 2
 LAP_NOISE_STREAM = 3
+# never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
+# [seed, k, 1] key
+STREAM_KEY = 2 ** 32 - 1
+
+
+def batch_normals(seed: int, stream: int, n: int, width: int, sd: float = 1.0) -> np.ndarray:
+    """(n, width) normals N(0, sd^2) for `stream`, row k for sample k. Rows are drawn in order,
+    so row k depends on (seed, k, width) only, never on n: sample k is the same in a batch of
+    10 or 200 (R6)."""
+    return np.random.default_rng([seed, STREAM_KEY, stream]).normal(0.0, sd, (n, width))
 
 
 class Simulator:
@@ -456,8 +467,13 @@ class Simulator:
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         noise_sd = self._lap_noise_sd()
-        # a model whose draw is "none" returns itself and draws nothing, so skip building its substream
+        # parameter draws: the linear models take row k of one (n, n_params) normal matrix
+        # (draw_z); another model's draw(rng) gets the per-sample substream [seed, k, 2]. A
+        # model whose draw is "none" returns itself and draws nothing, so nothing is built.
         param_draw = getattr(self.degradation, "param_draw", None) != "none"
+        z_par = (batch_normals(seed, DEGRADATION_STREAM, n, self.degradation.n_params)
+                 if param_draw and hasattr(self.degradation, "draw_z") else None)
+        eps = batch_normals(seed, LAP_NOISE_STREAM, n, n_laps, noise_sd) if noise_sd > 0 else None
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
@@ -465,14 +481,18 @@ class Simulator:
             # reorder, seeds depend on it (the hazard uniform is drawn here, ahead of the track
             # state; its use comes later). The factor and z draws happen only when the
             # calibrator gives a factor sd or a correction sd above 0. Events, the degradation
-            # parameters and the lap noise draw from their own substreams (EVENT_STREAM,
-            # DEGRADATION_STREAM, LAP_NOISE_STREAM), never from rng.
+            # parameters and the lap noise draw from their own streams (EVENT_STREAM per
+            # sample, DEGRADATION_STREAM and LAP_NOISE_STREAM per batch), never from rng.
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
-            model = (self.degradation.draw(np.random.default_rng([seed, k, DEGRADATION_STREAM])) if param_draw
-                     else self.degradation)
+            if z_par is not None:
+                model = self.degradation.draw_z(z_par[k])
+            elif param_draw:
+                model = self.degradation.draw(np.random.default_rng([seed, k, DEGRADATION_STREAM]))
+            else:
+                model = self.degradation
             u = rng.uniform(size=(2, n_laps)) if self.hazard.draws else None
             # u is shared by every plan (common random numbers)
             track = self.track.draw(snapshot, rng)
@@ -500,9 +520,8 @@ class Simulator:
                              np.where(vsc, v["vsc_lap_factor"] * green, green))
             if offset:   # green laps only; skipped at 0 so a run without pace is bit for bit unchanged
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
-            if noise_sd > 0:   # one vector per sample on the green laps, shared by every plan
-                eps = np.random.default_rng([seed, k, LAP_NOISE_STREAM]).normal(0.0, noise_sd, n_laps)
-                lap_s += np.where(sc | vsc, 0.0, eps)
+            if eps is not None:   # one vector per sample on the green laps, shared by every plan
+                lap_s += np.where(sc | vsc, 0.0, eps[k])
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
             scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))

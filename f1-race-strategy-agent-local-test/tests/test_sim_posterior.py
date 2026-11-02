@@ -8,7 +8,7 @@ from src.contracts import Snapshot
 from src.sim import SimConfig, Simulator, calibration
 from src.sim.config import EventEffects
 from src.sim.degradation import DEGRADATION, NaNCovarianceWarning
-from src.sim.engine import DEGRADATION_STREAM, EVENT_STREAM, LAP_NOISE_STREAM
+from src.sim.engine import DEGRADATION_STREAM, EVENT_STREAM, LAP_NOISE_STREAM, STREAM_KEY, batch_normals
 from test_sim import FUEL, RACE, TRUE, synthetic_frame, synthetic_practice
 from test_sim_position import race_frame
 
@@ -286,3 +286,29 @@ def test_midrace_intervals_and_aggregate_coverage():
         rr = real[part.index]
         assert r["coverage_90"] == pytest.approx(((part["pred_p05_s"] <= rr) & (rr <= part["pred_p95_s"])).mean())
         assert r["mean_width_90_s"] == pytest.approx((part["pred_p95_s"] - part["pred_p05_s"]).mean())
+        whole = rows[rows["horizon"] // 10 * 10 == b]
+        rw = whole["real_remaining_s"]
+        assert r["coverage_raw_90"] == pytest.approx(((whole["pred_p05_s"] <= rw) & (rw <= whole["pred_p95_s"])).mean())
+        assert r["coverage_raw_68"] == pytest.approx(((whole["pred_p16_s"] <= rw) & (rw <= whole["pred_p84_s"])).mean())
+
+
+# --- R6: one generator per stream per batch, row k for sample k ---------------------------
+@pytest.mark.parametrize("stream", [DEGRADATION_STREAM, LAP_NOISE_STREAM])
+def test_batch_rows_do_not_depend_on_the_batch_size(stream):
+    small, large = batch_normals(7, stream, 10, 6, 0.5), batch_normals(7, stream, 200, 6, 0.5)
+    assert np.array_equal(small, large[:10])
+    # and so the simulator's sample k is the same in a batch of 10 or 200
+    s = Simulator(noisy_frame(), SimConfig(degradation=POST, lap_noise="residual"))
+    snap = Snapshot.at_start(RACE, "X", "SOFT")
+    a, b = (s.simulate_batch(snap, [ONE, TWO], seed=7, n_samples=n).times for n in (10, 200))
+    assert np.array_equal(a, b[:, :10])
+
+
+@pytest.mark.parametrize("stream", [DEGRADATION_STREAM, LAP_NOISE_STREAM])
+def test_batch_streams_never_repeat_the_main_or_event_streams(stream):
+    assert STREAM_KEY == 2 ** 32 - 1
+    z = batch_normals(0, stream, 200, 8)
+    for k in range(200):
+        main = np.random.default_rng([0, k]).standard_normal(8)
+        event = np.random.default_rng([0, k, EVENT_STREAM]).standard_normal(8)
+        assert not np.isin(z[k], main).any() and not np.isin(z[k], event).any()

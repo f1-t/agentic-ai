@@ -357,10 +357,11 @@ class _ParameterDraws:
 
     "none" (the default) returns the model itself and consumes nothing. "posterior" returns
     a shallow copy whose coefs, fuel_slope and hinges are beta_hat + L z, z standard normal
-    from `rng`, L the Cholesky factor of fit_report["cov"] (eigh with eigenvalues clipped at
-    0 when it is not positive definite; a parameter whose row has a NaN gets 0 variance,
-    with one NaNCovarianceWarning per fitted model). clip_wear_at_zero floors drawn wear
-    slopes at 0. The engine passes its own substream (engine.DEGRADATION_STREAM).
+    from `rng` (draw) or given (draw_z), L the Cholesky factor of fit_report["cov"] (eigh
+    with eigenvalues clipped at 0 when it is not positive definite; a parameter whose row
+    has a NaN gets 0 variance, with one NaNCovarianceWarning per fitted model).
+    clip_wear_at_zero floors drawn wear slopes at 0. The engine passes row k of its
+    per-batch DEGRADATION_STREAM normals to draw_z.
     """
 
     param_draw = "none"
@@ -414,11 +415,23 @@ class _ParameterDraws:
         self._draw_plan = (cov, id(self), plan)
         return plan
 
+    @property
+    def n_params(self):
+        """Length of the parameter vector a posterior draw takes (fit_report["cov"] names)."""
+        return len(self.fit_report["cov"]["names"])
+
     def draw(self, rng):
         if self.param_draw == "none":
             return self
+        return self.draw_z(rng.standard_normal(self.n_params))
+
+    def draw_z(self, z):
+        """The posterior draw for standard normals `z` (n_params of them): beta_hat + L z.
+        The engine passes row k of engine.batch_normals for sample k."""
+        if self.param_draw == "none":
+            return self
         L, mean, wear, coefs, fuel, hinges = self._plan()
-        x = (mean + L @ rng.standard_normal(len(mean))).tolist()
+        x = (mean + L @ np.asarray(z, dtype=float)).tolist()
         if self.clip_wear_at_zero:
             x = [max(v, 0.0) if w else v for v, w in zip(x, wear)]
         out = copy.copy(self)
