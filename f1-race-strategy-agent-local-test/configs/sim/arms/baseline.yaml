@@ -1,0 +1,5 @@
+# SPEC 0016 C arm "baseline": linear_fuel, the free-air filter off, the shrinkage calibrator.
+# The SimConfig defaults. Every arm file is an overlay on the race's config (SimConfig()
+# for a cached race); this one changes nothing. Frozen before the cross-race run:
+# src/sim/cross_race.py records each arm's file hash and config hash.
+{}

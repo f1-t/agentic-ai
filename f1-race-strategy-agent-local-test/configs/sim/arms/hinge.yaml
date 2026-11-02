@@ -1,0 +1,3 @@
+# SPEC 0016 C arm "hinge": linear_fuel_hinge, the hinge at the default knot.
+degradation:
+  name: linear_fuel_hinge
