@@ -624,7 +624,8 @@ def _probe_driver(frame, k, min_laps_frac=0.9):
     return None
 
 
-def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, wandb_profile, calibrator_params):
+def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, wandb_profile, calibrator_params,
+               midrace_samples=1):
     from . import calibration
     from .engine import Simulator
     rows, errs, fold_rows = [], [], []
@@ -653,12 +654,15 @@ def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, 
                                      weather=getattr(r, "weather", None), race_features=getattr(r, "features", None),
                                      calibrator=cal)
 
-                g = calibration.midrace(factory, r.frame, race, laps_k=ks, windows=list(windows), results=r.results)
+                g = calibration.midrace(factory, r.frame, race, laps_k=ks, windows=list(windows), results=r.results,
+                                        **({"n_samples": midrace_samples} if midrace_samples > 1 else {}))
                 rows.append(g.assign(calibrator=name, calibration_every=cadence_label(n), fold=fold))
                 targets = {c.split(":", 1)[1]: v for c, v in
                            dataset.rows.loc[dataset.rows["race_id"] == rid, dataset.target_columns].iloc[0].items()
                            if pd.notna(v)}
                 for window in windows:
+                    if window == "full":   # the world: no calibrator, nothing held out to score
+                        continue
                     sim = factory(window)
                     for k in ks:
                         d = _probe_driver(r.frame, k)
@@ -677,7 +681,8 @@ def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, 
 
 
 def loro(dataset: CalibrationDataset, name: str, fold: str | None = None, *, cadences=(1,),
-         windows=("pre_race", "to_snapshot"), n_samples=None, wandb_profile=None, calibrator_params=None):
+         windows=("pre_race", "to_snapshot"), n_samples=None, wandb_profile=None, calibrator_params=None,
+         midrace_samples=1):
     """Leave-one-race-out and leave-one-season-out validation of calibrator `name` on SPEC G.
 
     With `fold` None, returns {"loro": LoroResult, "loso": LoroResult}. With a fold (a race
@@ -686,8 +691,13 @@ def loro(dataset: CalibrationDataset, name: str, fold: str | None = None, *, cad
     compute profile, logs learned fits with the fold assignment), then each held-out race
     is replayed at every cadence in `cadences`. With one race the training set is empty and
     the CIs are NaN: none and shrinkage need no training, learned classes raise.
+
+    `midrace_samples` above 1 replays each G row at that many samples, so the rows carry the
+    interval columns (calibration.midrace); 1, the default, keeps the one-run replay. A
+    "full" entry in `windows` replays the full window too (the world, which never calls the
+    calibrator), with no factor errors.
     """
-    args = (cadences, windows, n_samples, wandb_profile, calibrator_params)
+    args = (cadences, windows, n_samples, wandb_profile, calibrator_params, midrace_samples)
     if fold is not None:
         protocol = "season" if fold.startswith("season:") else "race"
         key = fold if protocol == "season" else canonical_race_id(fold)

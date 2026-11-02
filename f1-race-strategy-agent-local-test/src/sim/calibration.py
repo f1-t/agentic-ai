@@ -204,6 +204,83 @@ def observed_periods(frame: pd.DataFrame | None = None, messages: pd.DataFrame |
     return periods
 
 
+# --- cross-race eligibility (SPEC 0016 A) --------------------------------------------
+MIN_FINISHERS = 12        # classified finishers with full laps
+MIN_DRY_COMPOUNDS = 2     # dry compounds raced
+MIN_COMPOUND_DRIVERS = 3  # a compound this many drivers used needs MIN_CLEAN_LAPS clean laps
+MIN_CLEAN_LAPS = 5
+WET_COMPOUNDS = ("INTERMEDIATE", "WET")
+
+
+def _red_flag_laps(frame, messages):
+    """Laps with a red flag: track status 5 on any car's lap, or a race control Flag message
+    RED (its lap, when it has one)."""
+    laps = set(frame.loc[frame["track_status"].astype(str).str.contains("5"), "lap"].astype(int))
+    if messages is not None and len(messages) and "Flag" in messages:
+        red = messages[(messages["Category"].astype(str) == "Flag") & (messages["Flag"].astype(str) == "RED")]
+        laps |= {int(x) for x in red["Lap"].dropna()}
+    return sorted(laps)
+
+
+def _full_lap_finishers(frame, min_laps_frac=0.9):
+    """G's finishers (_finisher_ids) whose rows cover every lap from 1 to their last."""
+    out = []
+    for d in _finisher_ids(frame, min_laps_frac):
+        laps = frame.loc[frame["driver"] == d, "lap"].astype(int)
+        if laps.nunique() == laps.max() and laps.min() == 1:
+            out.append(d)
+    return out
+
+
+def eligibility(frame: pd.DataFrame, race: RaceParams, messages: pd.DataFrame | None = None) -> dict:
+    """Whether a race enters the cross-race calibration (SPEC 0016 A), and why not.
+
+    Eligible when: no lap on an INTERMEDIATE or WET tyre; no red flag (a red flag lets every
+    car change tyres, which resets the strategy; a lap-1 red flag, a restart, is excluded
+    too and named as such); at least MIN_FINISHERS classified finishers with full laps (G's
+    finishers, 90 percent of the leader's laps, with a row on every lap they drove); at least
+    MIN_DRY_COMPOUNDS dry compounds raced; and at least MIN_CLEAN_LAPS clean laps on every
+    compound MIN_COMPOUND_DRIVERS or more drivers used. `messages` (race control) adds red
+    flags and cross-checks the SC and VSC periods (observed_periods).
+
+    Returns {eligible, reasons, n_finishers, wet_laps_share, red_flags, sc_periods,
+    vsc_periods, dry_compounds}: periods as [[start, end]], laps inclusive.
+    """
+    from .config import compound_class
+    comp = frame["compound"].astype(str)
+    wet = comp.isin(WET_COMPOUNDS)
+    reasons = []
+    if wet.any():
+        reasons.append(f"wet: {int(wet.sum())} laps on {', '.join(sorted(set(comp[wet])))}")
+    red = _red_flag_laps(frame, messages)
+    if red:
+        lap1 = [x for x in red if x <= 1]
+        reasons.append(f"red flag on lap {', '.join(map(str, red))}"
+                       + (" (lap 1: a restart, excluded too)" if lap1 else ""))
+    finishers = _full_lap_finishers(frame)
+    if len(finishers) < MIN_FINISHERS:
+        reasons.append(f"{len(finishers)} classified finishers with full laps, under {MIN_FINISHERS}")
+    dry = sorted(c for c in set(frame["compound"].dropna()) if c not in WET_COMPOUNDS
+                 and compound_class(None, c) == "SLICK")
+    if len(dry) < MIN_DRY_COMPOUNDS:
+        reasons.append(f"{len(dry)} dry compound(s) raced ({', '.join(dry) or 'none'}), under {MIN_DRY_COMPOUNDS}")
+    drivers = frame.groupby("compound")["driver"].nunique()
+    clean = frame[frame["clean"].astype(bool)].groupby("compound").size()
+    for c in sorted(drivers.index):
+        if drivers[c] >= MIN_COMPOUND_DRIVERS and int(clean.get(c, 0)) < MIN_CLEAN_LAPS:
+            reasons.append(f"{c}: used by {int(drivers[c])} drivers, {int(clean.get(c, 0))} clean laps, "
+                           f"under {MIN_CLEAN_LAPS}")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        periods = observed_periods(frame, messages if messages is not None and len(messages) else None)
+    notes = [str(w.message) for w in caught]
+    return {"race_id": race.race_id, "eligible": not reasons, "reasons": reasons,
+            "n_finishers": len(finishers), "wet_laps_share": float(wet.mean()) if len(frame) else 0.0,
+            "red_flags": red, "sc_periods": [[a, b] for k, a, b in periods if k == "sc"],
+            "vsc_periods": [[a, b] for k, a, b in periods if k == "vsc"], "dry_compounds": dry,
+            "notes": notes}
+
+
 def _sc_pit_factor(laps, green_pit_loss_s):
     """In plus out lap residual on stops whose in lap is under SC, over the green observed pit loss."""
     ins = laps[(laps["kind"] == "in_lap") & laps["track_status"].str.contains("4")]
@@ -700,6 +777,94 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     # n_samples > 1, so default rows keep their columns
     return out[MIDRACE_COLUMNS + (["pace_offset_flag"] if "pace_offset_flag" in out else [])
                + (INTERVAL_COLUMNS if n_samples > 1 else [])]
+
+
+# --- predicted gain at real pit stops (the #40 check, SPEC 0016 amendment 2) -------------
+STOP_GAIN_TERMS = ["t_base_old", "t_base_new", "t_wear_old", "t_wear_new", "t_hinge_old", "t_hinge_new",
+                   "t_fuel", "t_floor"]
+STOP_GAIN_COLUMNS = ["race_id", "window", "k", "k_bucket", "stop", "from", "to", "real_gain_s", "pred_gain_s",
+                     "err_s", *STOP_GAIN_TERMS, "age_before", "age_after"]
+
+
+def _stops(g):
+    """(in lap, last two clean laps of the stint before, first two clean laps of the next) per
+    stop of one driver, where both pairs exist."""
+    out = []
+    g = g.sort_values("lap")
+    for _, r in g[g["pit_in"].astype(bool)].iterrows():
+        in_lap, stint = int(r["lap"]), r["stint"]
+        before = g[(g["lap"] < in_lap) & (g["stint"] == stint) & g["clean"].astype(bool)].tail(2)
+        outl = g[(g["lap"] > in_lap) & g["pit_out"].astype(bool)]
+        if outl.empty:
+            continue
+        out_lap = int(outl["lap"].iloc[0])
+        nxt = g.loc[g["lap"] == out_lap, "stint"].iloc[0]
+        after = g[(g["lap"] > out_lap) & (g["stint"] == nxt) & g["clean"].astype(bool)].head(2)
+        if len(before) == 2 and len(after) == 2:
+            out.append((in_lap, before, after))
+    return out
+
+
+def _mean_pred(model, rows):
+    return float(np.mean([float(model.lap_times(c, np.array([a], dtype=float), np.array([lap], dtype=float))[0])
+                          for c, a, lap in zip(rows["compound"], rows["tyre_age"], rows["lap"])]))
+
+
+def _hinge_age(model, compound, ages):
+    knot = (getattr(model, "knots", None) or {}).get(compound)
+    return 0.0 if knot is None else float(np.mean(np.maximum(0.0, np.asarray(ages, dtype=float) - knot)))
+
+
+def stop_gain(sim: Simulator, frame: pd.DataFrame, race: RaceParams, hindsight, laps_k=None,
+              min_laps_frac=0.9) -> pd.DataFrame:
+    """Predicted against real lap-time gain at every later real pit stop, from each snapshot k.
+
+    gain = mean lap time of the last two clean laps before the stop less that of the first two
+    clean laps after it, real and under the model sim.fitted_for(snapshot at k) (its point
+    estimate), for each finisher's stops after lap k. err_s = pred - real splits into terms
+    against `hindsight` (the same config's full-window degradation model): with d = fitted
+    less hindsight, t_base_old = d base_old, t_base_new = -d base_new, t_wear_old = d wear_old
+    x mean age before, t_wear_new = -d wear_new x mean age after, the hinge likewise on the
+    ages past the knot, t_fuel = d fuel x (mean lap before - mean lap after), and t_floor the
+    hindsight model's own error. The terms sum to err_s. laps_k defaults to default_laps_k.
+    """
+    laps_k = default_laps_k(frame, race.total_laps) if laps_k is None else laps_k
+    groups = {d: frame[frame["driver"] == d].sort_values("lap") for d in _finisher_ids(frame, min_laps_frac)}
+    stops = {d: _stops(g) for d, g in groups.items()}
+    window = sim.config.fit_window
+    hs = getattr(hindsight, "hinges", None)
+    rows = []
+    for k in laps_k:
+        for d, g in groups.items():
+            if k >= len(g) or (k > 0 and not (g["lap"] == k).any()):
+                continue
+            m = sim.fitted_for(snapshot_at(frame, race, d, k)).degradation
+            ms = getattr(m, "hinges", None)
+            for in_lap, before, after in stops[d]:
+                if in_lap <= k:
+                    continue
+                old, new = before["compound"].iloc[-1], after["compound"].iloc[0]
+                if not {old, new} <= set(m.coefs) & set(hindsight.coefs):
+                    continue
+                real = float(before["lap_time_s"].mean() - after["lap_time_s"].mean())
+                pred = _mean_pred(m, before) - _mean_pred(m, after)
+                ab, aa = float(before["tyre_age"].mean()), float(after["tyre_age"].mean())
+                dl = float(before["lap"].mean() - after["lap"].mean())
+                (bo, wo), (bn, wn) = m.coefs[old], m.coefs[new]
+                (ho, hwo), (hn, hwn) = hindsight.coefs[old], hindsight.coefs[new]
+                ho_h = hn_h = 0.0
+                if ms is not None and hs is not None:
+                    ho_h = (ms[old] - hs[old]) * _hinge_age(m, old, before["tyre_age"])
+                    hn_h = -(ms[new] - hs[new]) * _hinge_age(m, new, after["tyre_age"])
+                fuel = getattr(m, "fuel_slope", 0.0) - getattr(hindsight, "fuel_slope", 0.0)
+                rows.append({"race_id": race.race_id, "window": window, "k": k, "k_bucket": k // 10 * 10,
+                             "stop": f"{d}:{in_lap}", "from": old, "to": new, "real_gain_s": real,
+                             "pred_gain_s": pred, "err_s": pred - real, "t_base_old": bo - ho,
+                             "t_base_new": -(bn - hn), "t_wear_old": (wo - hwo) * ab, "t_wear_new": -(wn - hwn) * aa,
+                             "t_hinge_old": ho_h, "t_hinge_new": hn_h, "t_fuel": fuel * dl,
+                             "t_floor": _mean_pred(hindsight, before) - _mean_pred(hindsight, after) - real,
+                             "age_before": ab, "age_after": aa})
+    return pd.DataFrame(rows, columns=STOP_GAIN_COLUMNS)
 
 
 def _bucketed(rows):

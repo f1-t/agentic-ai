@@ -99,6 +99,17 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
                     session_results(session), cfg)
 
 
+def race_loader(args=None) -> Callable:
+    """load_race, or the fn(race_id, profile) -> RaceData named by args.race_loader
+    ("module:function", a plain string so run-all's workers resolve it too). The cross-race
+    run (cross_race.load_race) adds synthetic races this way."""
+    spec = getattr(args, "race_loader", None)
+    if not spec:
+        return load_race
+    module, _, name = spec.partition(":")
+    return getattr(importlib.import_module(module), name)
+
+
 # --- eval runner (the eval harness plugs in here) --------------------------------------
 EvalRunner = Callable[[str, ComputeProfile], pd.DataFrame]
 _EVAL_RUNNER: list[EvalRunner | None] = [None]
@@ -265,10 +276,36 @@ def _wandb_config(update: dict):
         wandb.run.config.update(update, allow_val_change=True)
 
 
+class CrossRace(Job):
+    """SPEC 0016 B: one race's cross-race tables (cross_race.race_tables) as one parquet,
+    <out>/races/<race_id>/<race_id>.parquet. The race comes from race_loader(args)."""
+    name, subdir = "cross_race", "races"
+
+    def units(self, args):
+        return _race_ids(args.races)
+
+    def output(self, out, unit, args=None):
+        stem = self.stem(unit)
+        return Path(out) / self.subdir / stem / f"{stem}{self.suffix}"
+
+    def run(self, unit, profile, out, args=None):
+        from . import cross_race
+        return cross_race.race_job(unit, profile, race_loader(args))
+
+    def summarize(self, tables, profile, out, args=None):
+        from . import cross_race
+        return [cross_race.write_factors({u: cross_race.unpack(t) for u, t in tables.items()}, out)]
+
+
 class HFold(Job):
+    """With args.arm (SPEC 0016 C) a fold is the held-out race under a cross-race arm
+    (cross_race.fold_job), written to <out>/h/arms/<arm>/<race_id>.parquet; without it, a
+    calibrator's fold as below."""
     name, subdir = "h_fold", "h"
 
     def output(self, out, unit, args=None):
+        if getattr(args, "arm", None):
+            return Path(out) / self.subdir / "arms" / args.arm / f"{self.stem(unit)}{self.suffix}"
         return Path(out) / self.subdir / args.calibrator / f"{self.stem(unit)}{self.suffix}"
 
     def units(self, args):
@@ -286,6 +323,9 @@ class HFold(Job):
         """One fold through calibrators.loro, which owns the protocol: fit on the pool outside
         the fold, replay the held-out races on G's pre_race and to_snapshot windows at the
         profile's cadences (SimConfig.calibration_every). Writes <unit>.rmse.json beside the rows."""
+        if getattr(args, "arm", None):
+            from . import cross_race
+            return cross_race.fold_job(unit, args.arm, profile, race_loader(args), _race_ids(args.pool or args.races))
         pool = _race_ids(args.pool or args.races)
         data = [replace(load_race(r, profile), race_id=r) for r in pool]
         dataset = calibrators.build_dataset(data, laps_k=lambda d: laps_k_for(d.frame, d.race.total_laps, profile))
@@ -306,6 +346,12 @@ class HFold(Job):
         return res.rows
 
     def summarize(self, tables, profile, out, args=None):
+        if getattr(args, "arm", None):   # the arm's G summary; the selection is cross_race.report's
+            from . import cross_race
+            rows = pd.concat([cross_race.unpack(t)["g"] for t in tables.values()], ignore_index=True)
+            path = Path(out) / "h" / "arms" / args.arm / "summary.csv"
+            calibration.aggregate(rows, n_boot=profile.g.n_boot).to_csv(path)
+            return [path]
         rows = pd.concat(tables.values(), ignore_index=True)
         paths = []
         base = Path(out) / "h" / (args.calibrator if args else "all")
@@ -359,7 +405,7 @@ class BuildWeekend(Job):
         raise NotImplementedError("owned by the data pipeline")
 
 
-JOBS: dict[str, Job] = {j.name: j for j in (GRace(), HFold(), EvalChunk(), BuildWeekend())}
+JOBS: dict[str, Job] = {j.name: j for j in (GRace(), HFold(), EvalChunk(), BuildWeekend(), CrossRace())}
 
 
 # --- runner ---------------------------------------------------------------------------
@@ -420,7 +466,8 @@ def aggregate(job: Job, units: list[str], profile: ComputeProfile, out, args=Non
               "missing": missing, "files": []}
     if present:
         status["files"] = [str(p) for p in job.summarize(present, profile, out, args)]
-    path = Path(out) / job.subdir / ("status.json" if not isinstance(job, HFold) else f"{args.calibrator}/status.json")
+    sub = (f"arms/{args.arm}" if getattr(args, "arm", None) else args.calibrator) if isinstance(job, HFold) else ""
+    path = Path(out) / job.subdir / sub / "status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(status, indent=1))
     return status
@@ -443,6 +490,9 @@ def build_parser():
         p.add_argument("--races", nargs="+", help="race ids such as 2021_04_spain, aliases accepted (manifest, h_fold pool, aggregate)")
         p.add_argument("--pool", nargs="+", help="h_fold: training pool, default --races")
         p.add_argument("--calibrator", default="shrinkage", help="h_fold: a calibrators.CALIBRATORS name")
+        p.add_argument("--arm", help="h_fold: a cross-race arm (cross_race.ARMS, or a derived __s2 / __tau_ name)")
+        p.add_argument("--race-loader", help="module:function loading a race id, default jobs.load_race "
+                                             "(src.sim.cross_race:load_race adds synthetic races)")
         p.add_argument("--n-items", type=int, default=0, help="eval_chunk manifest: number of scenario items")
         p.add_argument("--wandb", action="store_true", help="log to wandb as the profile's wandb section says")
         if task:

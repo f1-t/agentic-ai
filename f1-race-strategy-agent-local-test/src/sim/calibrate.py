@@ -46,6 +46,12 @@ Calibrators side by side (calibrators.py), per cadence N:
 writes reports/calibration/<race_id>_calibrators.csv, <race_id>_calibrator_factors.csv and
 <race_id>_selection.csv (calibrators.selection_table per cadence, with --note on every row),
 named by the canonical race id (2021_04_spain).
+
+Across races (SPEC 0016, cross_race.py): eligibility, per-race tables, leave-one-race-out
+per arm, then factors.csv and summary.md under reports/calibration/cross_race/:
+
+    python -m src.sim.calibrate cross run --races 2021_04_spain [--synthetic 2]
+    python -m src.sim.calibrate cross report
 """
 import argparse
 import json
@@ -444,6 +450,9 @@ def traffic_main(argv):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "cross":
+        from . import cross_race
+        return cross_race.main(argv[1:])
     if argv and argv[0] == "traffic":
         return traffic_main(argv[1:])
     if argv and argv[0] == "calibrators":

@@ -99,6 +99,12 @@ above the bound for a mean 2 sd below), so the drawn wear is low by up to about 
 draw_stats reports how often it happens; an exact one-dimensional truncated-normal draw is
 the refinement if it matters.
 
+Two to_snapshot options (SimConfig.degradation.params, both off by default; cross-race arms,
+SPEC 0016): `divide_data_by_s2` (the prior-sd fix of SPEC 0017 G) divides the data term by
+the fit's residual variance, so each tau is a prior sd in seconds; `collinear_hold` (a
+threshold, e.g. 0.5) holds a compound's wear at the prior while |corr(fuel, wear[c])| of
+the shrinkage fit is above it. See _shrunk.
+
 `fit(..., base_delta=x)` adds x seconds per lap to the base of every compound fitted on
 practice rows only (no race rows): the practice-to-race level difference (practice runs
 start on less fuel than the race, plus evolution and temperature). It is a config prior
@@ -390,9 +396,54 @@ def _dropped(knot, n_past):
     return _hinge_entry(0.0, float("nan"), "dropped", 0.0, knot, n_past)
 
 
-def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None):
+def _fuel_wear_corr(cov, n_comps, fuel_col):
+    """corr(fuel, wear[c]) per compound index from a fit's cov, NaN where a variance is not
+    above 0 or a value is NaN (model_report.fuel_wear_corr's rule, on the fit's columns)."""
+    out = np.full(n_comps, np.nan)
+    vf = cov[fuel_col, fuel_col]
+    for i in range(n_comps):
+        j = 2 * i + 1
+        vw, c = cov[j, j], cov[fuel_col, j]
+        if not np.isnan([vf, vw, c]).any() and vf > 0 and vw > 0:
+            out[i] = c / np.sqrt(vf * vw)
+    return out
+
+
+def _hold_columns(X, y, prec, beta0, hold, fallback_s2):
+    """The shrinkage fit with the `hold` columns fixed at their prior means beta0: those columns
+    times beta0 move to the right-hand side and the rest are solved as _shrunk solves them.
+    Returns (beta, sd, residual sd, cov) over every column, the held ones at beta0 with sd 0
+    and no covariance (the caller reports their prior tau)."""
+    free = ~hold
+    Xu, pu = X[:, free], prec[free]
+    yu = y - X[:, hold] @ beta0[hold]
+    bu = np.linalg.lstsq(Xu.T @ Xu + np.diag(pu), Xu.T @ yu + pu * beta0[free], rcond=None)[0]
+    sd_u, res, cov_u = _posterior_sd(Xu, yu, bu, pu, fallback_s2)
+    beta, sd, cov = beta0.copy(), np.zeros(len(beta0)), np.zeros((len(beta0), len(beta0)))
+    idx = np.flatnonzero(free)
+    beta[idx], sd[idx] = bu, sd_u
+    cov[np.ix_(idx, idx)] = cov_u
+    return beta, sd, res, cov
+
+
+def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None,
+            collinear_hold=None, divide_data_by_s2=False):
     """Penalised fit of the race rows toward `prior`. Returns (comps, beta, report).
     `wear_lower_bound`: see the module docstring.
+
+    `divide_data_by_s2` (default False; SPEC 0017 G, the prior-sd fix): minimise
+    ||y - X b||^2 / s2 + sum_j ((b_j - b0_j) / tau_j)^2 instead, so each tau is a prior sd in
+    seconds whatever the residual variance. s2 is the residual variance of the ordinary fit
+    (its fallback, the prior's, when it has no residual degrees of freedom); the penalty is
+    multiplied by it and the fit solved once more. fit_report gains "data_term_s2".
+
+    `collinear_hold` (default None: off; a threshold such as 0.5, SPEC 0016 amendment): a
+    compound's wear is held at the prior mean, shrinkage weight 0 on wear only, while
+    |corr(fuel, wear[c])| of the ordinary fit's cov is above the threshold; the fit is then
+    solved again with those wear coefficients fixed, base and fuel shrunk as usual. A held
+    wear reports its prior tau as sd and variance, no covariance. Needs a fuel term and a
+    prior; not combined with wear_lower_bound. fit_report gains "collinear_hold":
+    {threshold, corr: {compound: corr of the ordinary fit}, held: {compound: bool}}.
 
     Modelled: every compound of the prior, plus race compounds with min_samples clean
     race rows. The fuel column is added when fuel_prior is not None. With `knots`
@@ -434,22 +485,47 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
             prec.append(tau_hinge ** -2)
     X = np.column_stack(cols) if cols else np.empty((len(d), 0))
     beta0, prec = np.asarray(beta0, dtype=float), np.asarray(prec, dtype=float)
+    tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
     xtx = X.T @ X
     y = d["lap_time_s"].to_numpy(dtype=float)
-    if cols:
-        rhs = X.T @ y + prec * beta0
-        beta = np.linalg.lstsq(xtx + np.diag(prec), rhs, rcond=None)[0]
-    else:
-        beta = beta0
-    dj = np.diag(xtx)
-    weight = np.divide(dj, dj + prec, out=np.ones_like(dj), where=prec > 0)
+
+    def solve(p):
+        if not cols:
+            return beta0
+        return np.linalg.lstsq(xtx + np.diag(p), X.T @ y + p * beta0, rcond=None)[0]
+
+    beta = solve(prec)
     source = None if fuel_prior is None else ("shrunk" if len(d) else "prior")
     prior_res = ((support or {}).get("sd") or {}).get("residual_s", float("nan"))
     sd, res, cov = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
+    data_s2 = None
+    if divide_data_by_s2:
+        # the data term over s2 is the penalty times s2: the same minimiser, solved again
+        data_s2 = float(res ** 2)
+        if np.isfinite(data_s2) and data_s2 > 0:
+            prec = prec * data_s2
+            beta = solve(prec)
+            sd, res, cov = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
+    dj = np.diag(xtx)
+    weight = np.divide(dj, dj + prec, out=np.ones_like(dj), where=prec > 0)
+    hold_rep = None
+    if collinear_hold is not None:
+        if fuel_prior is None or not pc:
+            raise ValueError("collinear_hold needs a fuel term and a practice prior")
+        if wear_lower_bound is not None:
+            raise NotImplementedError("collinear_hold with wear_lower_bound")
+        corr = _fuel_wear_corr(cov, len(comps), 2 * len(comps))
+        hold_c = np.abs(np.nan_to_num(corr)) > float(collinear_hold)
+        hold_rep = {"threshold": float(collinear_hold), "corr": {c: float(r) for c, r in zip(comps, corr)},
+                    "held": {c: bool(h) for c, h in zip(comps, hold_c)}}
+        if hold_c.any():
+            hold = np.zeros(len(beta0), dtype=bool)
+            hold[2 * np.flatnonzero(hold_c) + 1] = True
+            beta, sd, res, cov = _hold_columns(X, y, prec, beta0, hold, prior_res ** 2)
+            weight = np.where(hold, 0.0, weight)
     if wear_lower_bound is not None:
         beta, fixed, (sd, res, cov), unconstrained = _bound_fit(
             X, y, prec, beta0, beta, (sd, res, cov), len(comps), wear_lower_bound, False, fallback_s2=prior_res ** 2)
-    tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
     held = (weight <= 0) & (prec > 0)
     sd = np.where(held, tau, sd)  # held at the prior: its tau
     rep = _report(d, comps, X, source, weight[:n_main], fuel_prior is not None, support,
@@ -464,6 +540,10 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
         for j, c in enumerate(hinged, start=n_main):
             rep["hinge"][c] = _hinge_entry(beta[j], sd[j], "shrunk" if dj[j] > 0 else "prior", weight[j],
                                            knots[c], n_past[c])
+    if divide_data_by_s2:
+        rep["data_term_s2"] = data_s2
+    if hold_rep is not None:
+        rep["collinear_hold"] = hold_rep
     return comps, beta, rep
 
 
@@ -645,9 +725,10 @@ class LinearDegradation(_ParameterDraws):
 
     @classmethod
     def fit(cls, data, min_samples=5, prior=None, shrinkage=None, base_delta=0.0, draw="none",
-            clip_wear_at_zero=False, wear_lower_bound=None, **_):
+            clip_wear_at_zero=False, wear_lower_bound=None, divide_data_by_s2=False, **_):
         if shrinkage is not None:
-            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, wear_lower_bound=wear_lower_bound)
+            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, wear_lower_bound=wear_lower_bound,
+                                       divide_data_by_s2=divide_data_by_s2)
             return cls(_coefs(comps, beta), rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs = {}
         for comp in sorted(data["compound"].unique()):
@@ -716,10 +797,12 @@ class LinearFuelDegradation(_ParameterDraws):
 
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
-            fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None, **_):
+            fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None,
+            collinear_hold=None, divide_data_by_s2=False, **_):
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
-                                       wear_lower_bound=wear_lower_bound)
+                                       wear_lower_bound=wear_lower_bound, collinear_hold=collinear_hold,
+                                       divide_data_by_s2=divide_data_by_s2)
             return cls(_coefs(comps, beta), float(beta[-1]), rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
                                         wear_lower_bound=wear_lower_bound)
@@ -831,11 +914,12 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
-            clip_wear_at_zero=False, wear_lower_bound=None, **_):
+            clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False, **_):
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
         if shrinkage is not None:
-            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound)
+            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound,
+                                       collinear_hold, divide_data_by_s2)
             hinges = {c: rep["hinge"][c]["value"] for c in comps}
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
                        rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
