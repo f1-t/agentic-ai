@@ -13,6 +13,15 @@ A plan with more stops than the optimizer may search (an actual three-stop, say)
 below the reference, so regret can be negative; it is reported as it is. One row per
 (scenario, policy); `summarize` turns rows into the per-race and overall tables.
 
+The reference comes from eval.reference (cached, or computed the same way). Its per-draw
+times give the Monte Carlo precision of each regret under the shared draws:
+
+    regret_se_s = sd(policy_times - reference_times) / sqrt(N)
+    within_mc   = |regret_s| <= 2 * regret_se_s
+
+At N = 1 regret_se_s is 0, so within_mc is the tie rule (regret_s 0). summarize reports
+share_within_mc, the share of scored rows the draws cannot tell from the reference.
+
 A policy may return an agent decision (Decision.submission, PIT or STAY_OUT) instead of a
 plan. eval.decisions.to_plan expands it on the belief into the action plus an optimizer
 continuation, and the world scores that plan. Such rows also carry `decision` and `p_pit`
@@ -53,6 +62,7 @@ from ..sim import calibration, traffic
 from ..sim.optimizer_bridge import optimize_batch
 from . import decisions
 from .policies import Decision
+from .reference import Reference, ReferenceStore, compute_reference, paired_se
 
 STATUSES = ("ok", "invalid", "unavailable", "error", "no_reference")
 REGRET_TOL_S = 1e-6
@@ -106,24 +116,26 @@ def references_agree(plan, other, snapshot, within: int = REF_AGREE_LAPS) -> boo
 
 
 def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 0,
-                   n_samples: int | None = None, max_stops: int = 2, ref_worlds=()) -> list[dict]:
+                   n_samples: int | None = None, max_stops: int = 2, ref_worlds=(),
+                   reference: Reference | None = None) -> list[dict]:
     """One row per policy for one scenario. Policies plan on `belief` (`world` when None, one
-    simulator in both roles); the reference and the scoring use `world`. With `ref_worlds`
-    (E, optional) each of those world models plans its own reference too, and the rows gain
-    ref_models_agree: every one of them agrees with the world's reference (references_agree).
-    They score nothing."""
+    simulator in both roles); the reference and the scoring use `world`. `reference` is a
+    cached eval.reference.Reference for these inputs; None computes it (compute_reference),
+    the same record either way. With `ref_worlds` (E, optional) each of those world models
+    plans its own reference too, and the rows gain ref_models_agree: every one of them agrees
+    with the world's reference (references_agree). They score nothing."""
     belief = world if belief is None else belief
     snap = scenario.snapshot
     base = {"scenario_id": scenario.scenario_id, "race_id": scenario.race_id, "driver": scenario.driver,
             "lap": scenario.lap, "compound": snap.compound, "tyre_age": snap.tyre_age,
             "remaining_laps": snap.remaining_laps, "seed": seed, "max_stops": max_stops}
-    try:
-        opt = optimize_batch(snap, world, seed=seed, n_samples=n_samples, max_stops=max_stops)
-    except NoFeasiblePlan as exc:
-        return [{**base, "policy": name, "status": "no_reference", "reason": str(exc)} for name in policies]
-    ref = opt.evaluation.mean_time_s
+    opt = reference if reference is not None else compute_reference(scenario, world, seed=seed,
+                                                                    n_samples=n_samples, max_stops=max_stops)
+    if opt.status == "no_reference":
+        return [{**base, "policy": name, "status": "no_reference", "reason": opt.reason} for name in policies]
+    ref = opt.mean_s
     ref_pits = opt.plan.pit_laps(snap)
-    n = opt.diagnostics["n_samples"]
+    n = len(opt.times)
     if ref_worlds:
         agree = True
         for other in ref_worlds:
@@ -139,7 +151,7 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
         ref_pos = _positions(world, snap, world.simulate_batch(snap, [opt.plan], seed=seed, n_samples=n), 0)
     base.update(n_samples=n, opt_plan=json.dumps(opt.plan.as_pairs()), opt_num_stops=opt.plan.num_stops,
                 opt_first_pit_lap=ref_pits[0] if ref_pits else None, opt_time_s=ref,
-                pit_now_opt=bool(ref_pits) and ref_pits[0] == snap.laps_completed + 1,
+                pit_now_opt=opt.pit_now_opt,
                 opt_final_position_mean=float(ref_pos.mean()) if ref_pos is not None else np.nan)
     rows = []
     for name, policy in policies.items():
@@ -182,9 +194,11 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
         final_pos = float(pos.mean()) if pos is not None else np.nan
         # the same plan summed in another order differs by ~1e-12 s; call that no regret
         regret = 0.0 if abs(mean - ref) < REGRET_TOL_S else mean - ref
+        se = paired_se(batch.times[0], opt.times)
         rows.append({**row, "status": "ok", "plan": json.dumps(batch.plans[0].as_pairs()),
                      "num_stops": res.num_stops, "first_pit_lap": res.pit_laps[0] if res.pit_laps else None,
                      "time_s": mean, "std_s": res.remaining.std_s, "regret_s": regret,
+                     "regret_se_s": se, "within_mc": bool(abs(regret) <= 2 * se),
                      "regret_pct": 100.0 * regret / ref, "stop_agree": res.num_stops == opt.plan.num_stops,
                      "first_pit_error": _first_pit_error(res.pit_laps, ref_pits),
                      "support_warnings": len(res.support_warnings),
@@ -207,7 +221,8 @@ def warn_no_stop_reference(policies: dict, max_stops: int) -> bool:
 
 
 def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples: int | None = None,
-              max_stops: int = 2, items=None, ref_sims=(), warn: bool = True) -> pd.DataFrame:
+              max_stops: int = 2, items=None, ref_sims=(), warn: bool = True,
+              references: ReferenceStore | None = None) -> pd.DataFrame:
     """Rows for every scenario (or `items`), stamped with the set's version and digest, both
     simulators' config hashes, the belief's fit window and the code version.
     `sim_for(race_id, role)` returns the race's Simulator for role "belief" or "world"
@@ -215,7 +230,9 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
     window the policies planned on. `ref_sims` are more sim_for (E, optional): their world
     simulators plan the alternative references behind ref_models_agree, and their hashes
     are stamped as ref_world_config_hashes. `warn` runs warn_no_stop_reference first; the
-    jobs runner turns it off, as a profile's max_stops is at least 1."""
+    jobs runner turns it off, as a profile's max_stops is at least 1. `references` (an
+    eval.reference.ReferenceStore, as `score` passes) supplies cached references; None
+    computes every one, which gives the same rows."""
     if warn:
         warn_no_stop_reference(policies, max_stops)
     rows = []
@@ -229,9 +246,11 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
                  "sim_code_version": calibration.SIM_CODE_VERSION}
         if alts:
             stamp["ref_world_config_hashes"] = ";".join(calibration.config_hash(a.config) for a in alts)
+        ref = None if references is None else references.get(scenario_set, scenario, world, seed=seed,
+                                                              n_samples=n_samples, max_stops=max_stops)
         rows += [{**r, **stamp} for r in score_scenario(scenario, world, policies, belief=belief, seed=seed,
                                                          n_samples=n_samples, max_stops=max_stops,
-                                                         ref_worlds=alts)]
+                                                         ref_worlds=alts, reference=ref)]
     return pd.DataFrame(rows)
 
 
@@ -285,6 +304,8 @@ def _summary(g: pd.DataFrame) -> dict:
         "max_regret_s": float(regret.max()) if len(ok) else np.nan,
         "mean_regret_pct": mean("regret_pct"),
         "stop_agreement": float(ok["stop_agree"].astype(float).mean()) if len(ok) else np.nan,
+        "share_within_mc": (float(ok["within_mc"].astype(float).mean())
+                            if "within_mc" in ok and ok["within_mc"].notna().any() else np.nan),
         "mean_first_pit_error": mean("first_pit_error"),
         "mean_latency_s": g_mean("latency_s"),
         "mean_tool_calls": g_mean("tool_calls"),
