@@ -7,7 +7,7 @@ traffic off, SC and VSC periods from the rate model, the config's calibrator, po
 parameter draws, residual lap noise, the wear lower bound). The tools never build their
 own config.
 
-    race_state(snapshot)                       the snapshot, legal_compounds, remaining_laps
+    race_state(snapshot)                       the snapshot, legal_compounds, remaining_laps, event_rates
     model_report(snapshot, ages)               the fit's coefficients with intervals and flags
     pit_loss(snapshot)                         pit loss low / median / high, SC and VSC factors
     simulate_plan(snapshot, stints)            SimResult of one plan
@@ -58,6 +58,9 @@ SEED = 0 + BELIEF_SEED_OFFSET
 Z90 = 1.64              # a 90 percent normal band, mean -+ Z90 sd
 PIT_LOSS_BAND = 0.10    # the band around a pit loss with no calibrated sd, source "config"
 PROBABILITY_COVERS = "parameter and lap-noise uncertainty under this model; does not include model error"
+# event_rates source: the EventModel defaults, or the race's own (circuit) rates
+EVENT_RATES_PROVISIONAL = "provisional: SC from 2021 Spain, VSC placeholder"
+EVENT_RATES_CIRCUIT = "circuit"
 TRAFFIC_NOTE = "traffic is not modelled belief-side: the gaps and probabilities ignore cars on track"
 CALIBRATION_NOTE = ("mean absolute error of the remaining race time for this fit window and horizon; "
                     "a conservative tolerance for a gap between plans, since the fuel error cancels between them")
@@ -251,6 +254,25 @@ def legal_compounds(snapshot: Snapshot, config: SimConfig | None = None) -> list
     return list(snapshot.race.compounds) or list(DEFAULT_COMPOUNDS)
 
 
+def event_rates(snapshot: Snapshot, config: SimConfig | None = None) -> dict:
+    """{p_sc, d_sc, p_vsc, d_vsc, source}: the SC and VSC rates the belief draws periods
+    with for this race (events.RateEvents.rates). source is "circuit" when RaceParams carries
+    circuit rates (sc_rate_per_lap and the others), else EVENT_RATES_PROVISIONAL, the
+    EventModel defaults. An events model other than "rate" draws no periods: the rates are
+    None and source names the model."""
+    from .events import RateEvents
+
+    spec = (config or belief_config()).events
+    if spec.name != "rate":
+        return {"p_sc": None, "d_sc": None, "p_vsc": None, "d_vsc": None, "source": f"events model {spec.name!r}"}
+    race = snapshot.race
+    p_sc, d_sc, p_vsc, d_vsc = RateEvents(**spec.params).rates(race)
+    circuit = any(v is not None for v in (race.sc_rate_per_lap, race.sc_mean_laps, race.vsc_rate_per_lap,
+                                          race.vsc_mean_laps))
+    return {"p_sc": p_sc, "d_sc": d_sc, "p_vsc": p_vsc, "d_vsc": d_vsc,
+            "source": EVENT_RATES_CIRCUIT if circuit else EVENT_RATES_PROVISIONAL}
+
+
 def calibration_error_s(sim: Simulator, snapshot: Snapshot) -> float:
     """The tools' tolerance for a gap between plans: the offset-adjusted mean absolute error
     of the remaining race time for the belief's fit window at the snapshot's horizon bucket,
@@ -262,9 +284,9 @@ def calibration_error_s(sim: Simulator, snapshot: Snapshot) -> float:
 
 # --- the functions --------------------------------------------------------------------------
 def race_state(snapshot: Snapshot, *, config: SimConfig | None = None) -> dict:
-    """The snapshot dump plus legal_compounds and remaining_laps."""
+    """The snapshot dump plus legal_compounds, remaining_laps and event_rates."""
     return _jsonable({**snapshot.model_dump(mode="json"), "legal_compounds": legal_compounds(snapshot, config),
-                      "remaining_laps": snapshot.remaining_laps})
+                      "remaining_laps": snapshot.remaining_laps, "event_rates": event_rates(snapshot, config)})
 
 
 def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, profile=None) -> dict:
@@ -322,6 +344,7 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
         if basis == BASIS_NO_SD:
             out["flags"] = [*out["flags"], "no_sd:fuel_s_per_lap_interval"]
     out["calibration_error_note"] = CALIBRATION_NOTE
+    out["event_rates"] = event_rates(snapshot, sim.config)
     return _jsonable(out)
 
 
@@ -412,7 +435,8 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
            "probability_covers": PROBABILITY_COVERS, "within_sim_error": None, "confidence_basis": None,
            "calibration_error_s": calibration_error_s(sim, snapshot), "calibration_error_note": CALIBRATION_NOTE,
            "dominated": res.dominated[0], "support_warnings": res.support_warnings[0],
-           "traffic": TRAFFIC_NOTE, "alternative": None, "n_samples": res.n_samples, "seed": res.seed}
+           "traffic": TRAFFIC_NOTE, "alternative": None, "n_samples": res.n_samples, "seed": res.seed,
+           "assumptions": [f"SC and VSC rates: {event_rates(snapshot, sim.config)['source']}"]}
     if j is None:
         return _jsonable(out)
     alt = alts[j - 1]

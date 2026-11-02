@@ -119,7 +119,8 @@ def evaluate_strategy(action):
     return {
         **out,
         "action": clean,
-        "assumptions": ["no safety car or other incident is drawn after the snapshot",
+        "assumptions": [*out.get("assumptions", []),
+                        "no incident other than the drawn SC and VSC periods changes the race",
                         "the plan after the action is the optimizer's best continuation on the same model",
                         "traffic is not modelled"],
         "warning": "Compare this distribution with alternatives; do not treat the median as ground truth.",
