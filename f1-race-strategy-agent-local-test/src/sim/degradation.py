@@ -92,7 +92,12 @@ Gaussian (fit_report["unconstrained"], else the cov around the point estimate) t
 to wear >= the bound: proposals are drawn jointly and a draw with any wear below the
 bound is rejected, up to DRAW_TRIES per sample, the last one clipped at the bound (and
 counted) when all fail. Rejection keeps the joint correlation: a rejected negative wear
-takes its fuel partner with it.
+takes its fuel partner with it. The clip fallback biases the bounded wear draws low: where
+the unconstrained mean sits far below the bound most samples clip to it (Spain to_snapshot
+k 6-11: up to 122 of 200), while the truncated normal's mean is above it (about 0.37 sd
+above the bound for a mean 2 sd below), so the drawn wear is low by up to about 0.4 sd.
+draw_stats reports how often it happens; an exact one-dimensional truncated-normal draw is
+the refinement if it matters.
 
 `fit(..., base_delta=x)` adds x seconds per lap to the base of every compound fitted on
 practice rows only (no race rows): the practice-to-race level difference (practice runs
@@ -609,7 +614,8 @@ class _ParameterDraws:
 
     def _truncated(self, L, mean, wear, z):
         """One draw from N(mean, L L') truncated to wear >= the bound, by rejection over the
-        proposals in `z`; the clipped last proposal when every one is rejected."""
+        proposals in `z`; the clipped last proposal when every one is rejected (biased low by
+        up to about 0.4 sd where that is common, see the module docstring)."""
         bound = self.wear_lower_bound
         rows = z.reshape(-1, len(mean))
         clipped = True

@@ -3,8 +3,9 @@
 # snapshot, shrunk toward the practice prior, with traffic off. Its samples carry the
 # fit's own uncertainty: posterior parameter draws and residual lap noise (SPEC 0017).
 # Wear is bounded below at 0 in every fit (SPEC 0017b): a tyre does not get faster with
-# age, so the tools never show it. Physics, set a priori; the cross-race run reports belief
-# with and without it, and it comes off if it loses there.
+# age, so the tools never show it. Physics, set a priori, and no worse on Spain's predicted
+# gain at real pit stops (stop-gain mae 0.99 s against 1.15 s without); the cross-race run
+# (0016 wear_nonneg) reports belief with and without it, and it comes off if it loses there.
 fit_window: to_snapshot
 traffic:
   name: none
