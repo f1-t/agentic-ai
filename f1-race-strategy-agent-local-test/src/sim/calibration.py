@@ -609,8 +609,12 @@ def _rank(laps, totals, against):
     return np.where(np.isnan(totals), np.nan, 1 + ahead.sum(axis=1))
 
 
+INTERVAL_COLUMNS = ["pred_p05_s", "pred_p16_s", "pred_p50_s", "pred_p84_s", "pred_p95_s"]
+INTERVAL_PERCENTILES = [5, 16, 50, 84, 95]
+
+
 def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, windows=MIDRACE_WINDOWS,
-            practice=None, min_laps_frac=0.9, results: pd.DataFrame | None = None) -> pd.DataFrame:
+            practice=None, min_laps_frac=0.9, results: pd.DataFrame | None = None, n_samples=1) -> pd.DataFrame:
     """One row per (window, finisher, k): predicted against real remaining race time.
 
     sim_factory(window) returns the Simulator for this race with that fit window. None
@@ -624,6 +628,11 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     covers every finisher, otherwise the last-lap Position. A window fitted with
     fit_free_air_only, or a config with traffic on (free_air_offset), adds pace_offset_flag
     ("pace_offset_all_laps" where _pace_offset fell back to every green lap, else empty).
+
+    n_samples 1 (the default) simulates each row at the config's n_samples, as before. With
+    n_samples > 1 each row runs that many samples, pred_remaining_s is their mean, and the
+    rows gain the percentiles INTERVAL_COLUMNS (pred_p05_s ... pred_p95_s) of the remaining
+    time, which aggregate() turns into interval coverage.
     """
     if sim_factory is None:
         def sim_factory(window):
@@ -647,10 +656,19 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
                     continue
                 snap = snapshot_at(frame, race, d, k)
                 s = sim.fitted_for(snap)
-                res = s.simulate(snap, remaining_plan(frame, d, k), scenario=_scenario(g[g["lap"] > k]),
-                                 rules=REPLAY_RULES, return_laps=True)
+                interval = {}
+                if n_samples > 1:
+                    b = s.simulate_batch(snap, [remaining_plan(frame, d, k)], n_samples=n_samples,
+                                         scenario=_scenario(g[g["lap"] > k]), rules=REPLAY_RULES)
+                    ok = bool(b.valid[0])
+                    pred_rem = float(b.times[0].mean()) if ok else float("nan")
+                    q = np.percentile(b.times[0], INTERVAL_PERCENTILES) if ok else [np.nan] * len(INTERVAL_COLUMNS)
+                    interval = {c: float(v) for c, v in zip(INTERVAL_COLUMNS, q)}
+                else:
+                    res = s.simulate(snap, remaining_plan(frame, d, k), scenario=_scenario(g[g["lap"] > k]),
+                                     rules=REPLAY_RULES, return_laps=True)
+                    pred_rem = res.remaining.mean_s if res.valid else float("nan")
                 real_rem = fin.loc[d, "real_s"] - snap.elapsed_s
-                pred_rem = res.remaining.mean_s if res.valid else float("nan")
                 flags = []
                 err, offset, horizon = pred_rem - real_rem, _pace_offset(s, g, k, flags), snap.remaining_laps
                 at_k.append({**({"pace_offset_flag": ";".join(flags)} if free_air_offset(s.config) else {}),
@@ -658,7 +676,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
                     "k": k, "laps": len(g), "horizon": horizon, "elapsed_s": snap.elapsed_s,
                     "real_remaining_s": real_rem, "pred_remaining_s": pred_rem, "err_s": err,
                     "pace_offset_s": offset, "err_offset_s": err + offset * horizon,
-                    "real_pos": fin.loc[d, "real_pos"]})
+                    "real_pos": fin.loc[d, "real_pos"], **interval})
             if not at_k:
                 continue
             t = pd.DataFrame(at_k)
@@ -678,8 +696,10 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     if not rows:
         return pd.DataFrame(columns=MIDRACE_COLUMNS)
     out = pd.concat(rows, ignore_index=True)
-    # pace_offset_flag only on free-air offset runs (free_air_offset), so default rows keep their columns
-    return out[MIDRACE_COLUMNS + (["pace_offset_flag"] if "pace_offset_flag" in out else [])]
+    # pace_offset_flag only on free-air offset runs (free_air_offset), the intervals only with
+    # n_samples > 1, so default rows keep their columns
+    return out[MIDRACE_COLUMNS + (["pace_offset_flag"] if "pace_offset_flag" in out else [])
+               + (INTERVAL_COLUMNS if n_samples > 1 else [])]
 
 
 def _bucketed(rows):
@@ -700,6 +720,13 @@ def _metrics(t):
         pos = t[f"abs_pos_err_{mode}"].dropna()
         out[f"within_2_rate_{mode}"] = float((pos <= 2).mean())
         out[f"mae_pos_{mode}"] = float(pos.mean())
+    if "pred_p05_s" in t:   # midrace(n_samples > 1): interval coverage of the pace-corrected real time
+        real = t["real_remaining_s"] - t["pace_offset_s"] * t["horizon"]
+        ok = real.notna() & t["pred_p05_s"].notna()
+        r, q = real[ok], t[ok]
+        out["coverage_68"] = float(((q["pred_p16_s"] <= r) & (r <= q["pred_p84_s"])).mean()) if ok.any() else np.nan
+        out["coverage_90"] = float(((q["pred_p05_s"] <= r) & (r <= q["pred_p95_s"])).mean()) if ok.any() else np.nan
+        out["mean_width_90_s"] = float((q["pred_p95_s"] - q["pred_p05_s"]).mean()) if ok.any() else np.nan
     return out
 
 
@@ -723,6 +750,7 @@ def _bootstrap_ci(t, n_boot=N_BOOT, seed=0):
 
 SUMMARY_COLUMNS = ["n", "n_nan", "n_races", "mae_s", "bias_s", "mae_offset_s", "mae_offset_ci_lo",
                    "mae_offset_ci_hi", "within_2_rate_sim", "mae_pos_sim", "within_2_rate_real", "mae_pos_real"]
+COVERAGE_COLUMNS = ["coverage_68", "coverage_90", "mean_width_90_s"]   # rows with INTERVAL_COLUMNS only
 
 
 def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
@@ -733,6 +761,7 @@ def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
         out.append(m)
         index.append(key)
     cols = SUMMARY_COLUMNS if ci else [c for c in SUMMARY_COLUMNS if not c.startswith("mae_offset_ci")]
+    cols = cols + (COVERAGE_COLUMNS if "pred_p05_s" in rows else [])
     table = pd.DataFrame(out, columns=cols, index=pd.MultiIndex.from_tuples(index, names=keys))
     return table.astype({"n": int, "n_nan": int, "n_races": int})
 
@@ -741,6 +770,10 @@ def aggregate(rows: pd.DataFrame, n_boot=N_BOOT, seed=0) -> pd.DataFrame:
     """Summary indexed by (window, horizon_bucket); bucket b holds horizons b to b + 9.
 
     mae_offset_ci_lo and _hi are a race-cluster bootstrap 95 percent CI, NaN with one race.
+    Rows from midrace(n_samples > 1) add coverage_68 and coverage_90, the share of rows whose
+    pace-corrected real remaining time, real_remaining_s - pace_offset_s * horizon, falls
+    inside [pred_p16_s, pred_p84_s] and [pred_p05_s, pred_p95_s] (rows with a NaN offset or
+    prediction skipped), and mean_width_90_s, the mean of pred_p95_s - pred_p05_s on those rows.
     """
     return _table(rows, ["window", "horizon_bucket"], ci=True, n_boot=n_boot, seed=seed)
 

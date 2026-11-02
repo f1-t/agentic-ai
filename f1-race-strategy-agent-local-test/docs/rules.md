@@ -35,7 +35,11 @@ uses the `pre_race` window.
 
 **R6 Randomness.** Sample `i` of seed `s` is `numpy.random.default_rng([s, i])` (the main
 stream) for every candidate; its SC/VSC scenario comes from the events substream
-`default_rng([s, i, 1])`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
+`default_rng([s, i, 1])`, its degradation parameter draw (`degradation.params.draw:
+posterior`) from the degradation substream `default_rng([s, i, 2])`, and its residual lap
+noise (`lap_noise: residual`) from the lap noise substream `default_rng([s, i, 3])`
+(`engine.EVENT_STREAM`, `DEGRADATION_STREAM`, `LAP_NOISE_STREAM`). Each is shared by every
+candidate, and turning one on leaves the other streams' draws as they were. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
 `(seed=0, n_samples=n)` describe the same draws. Seed mapping in the bridge:
 `optimize_batch(seed=s, n_samples=n)` reports `Evaluation.seeds = (0, ..., n-1)`, the
 sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;

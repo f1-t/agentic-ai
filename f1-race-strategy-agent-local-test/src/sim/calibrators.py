@@ -272,6 +272,31 @@ def prior_model(raw, factors: dict, config: SimConfig):
     return m
 
 
+_COV_FACTOR = {"base_s": "base_delta_s", "wear_s_per_lap": "wear_s_per_lap", "fuel_s_per_lap": "fuel_s_per_lap",
+               "hinge_s_per_lap": "hinge_s_per_lap"}
+
+
+def held_prior(prior, out: CalibrationOutput):
+    """A copy of a held prior (pre_race, or a calibrator holding it) whose fit_report["cov"]
+    is the calibrator's: each parameter's factor sd squared on the diagonal (0 for a factor
+    the output leaves out), no covariance, except the common base delta: every pair of
+    practice-derived bases shares it, covariance sd_c1 * sd_c2 (tau_base^2 for shrinkage),
+    so a draw moves those bases together. The posterior draws read this."""
+    m = copy.copy(prior)
+    names = prior.fit_report["cov"]["names"]
+    practice = set(prior.fit_report.get("base_delta_s") or {})
+    sd = np.zeros(len(names))
+    for i, n in enumerate(names):
+        p, c = split_factor(n)
+        sd[i] = float(out.factors.get(factor_name(_COV_FACTOR[p], c), (0.0, 0.0))[1])
+    cov = np.diag(sd ** 2)
+    bases = [i for i, n in enumerate(names) if split_factor(n)[0] == "base_s" and split_factor(n)[1] in practice]
+    cov[np.ix_(bases, bases)] = np.outer(sd[bases], sd[bases])
+    m.fit_report = {**prior.fit_report,
+                    "cov": {"names": list(names), "matrix": [[float(v) for v in row] for row in cov]}}
+    return m
+
+
 def degradation_prior(out: CalibrationOutput, raw, config: SimConfig):
     """(prior model or None, shrinkage taus, fuel prior, held) for plug-in (a)."""
     sds = {k: sd for k, (_, sd) in out.factors.items() if split_factor(k)[0] in DEGRADATION_FACTORS}

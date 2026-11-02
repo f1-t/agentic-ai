@@ -164,7 +164,8 @@ def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None
         return Simulator(data.frame, cfg.model_copy(update={"fit_window": window}), data.practice)
 
     rows = calibration.midrace(factory, data.frame, data.race, laps_k=laps_k,
-                               windows=windows or profile.g.windows, results=data.results)
+                               windows=windows or profile.g.windows, results=data.results,
+                               n_samples=profile.sim.n_samples)
     parts = []
     for n in profile.g.cadences:
         keep = rows["k"] == 0 if n is None else rows["k"] % n == 0

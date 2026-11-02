@@ -149,7 +149,10 @@ def test_none_holds_the_pre_race_fit_at_every_k():
         assert fit.calibration.held and fit.calibration.output.source == "none"
         assert fit.degradation.coefs == pre.degradation.coefs and fit.degradation.fuel_slope == pre.degradation.fuel_slope
         assert fit.ref_lap_s == pre.ref_lap_s
-        assert report_json(fit.degradation.fit_report) == report_json(pre.degradation.fit_report)
+        # the held prior's cov is its calibrator's: sd 0 under none, the taus under shrinkage
+        assert report_json({**fit.degradation.fit_report, "cov": None}) == report_json(
+            {**pre.degradation.fit_report, "cov": None})
+        assert not np.any(fit.degradation.fit_report["cov"]["matrix"])
     # the race moves shrinkage toward the truth and leaves none where practice put it
     assert shrink.fitted_for(at(40)).degradation.coefs["SOFT"][1] == pytest.approx(TRUE["SOFT"][1], abs=0.01)
     assert none.fitted_for(at(40)).degradation.coefs["SOFT"][1] == pytest.approx(OFF["SOFT"][1])
