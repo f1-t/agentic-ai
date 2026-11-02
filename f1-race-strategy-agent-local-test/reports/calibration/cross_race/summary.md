@@ -1,6 +1,6 @@
 # Cross-race calibration report (SPEC 0016)
 
-sim_code_version `fc491e8f3d69`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
+sim_code_version `1745c1881ba4`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
 
 **PROVISIONAL: 1 eligible race(s), fewer than 8. The selection below is provisional and the defaults stay** (belief.yaml, world.yaml and the SimConfig defaults are unchanged).
 
@@ -32,11 +32,22 @@ Drivers: eval.scenarios.eligible_drivers (laps 1..n with no gap, at most two lap
 | collinear_hold_nonneg_hinge | configs/sim/arms/collinear_hold_nonneg_hinge.yaml | 3b25f5df12ff | ad2158a91ab3 | candidate |
 
 
+## Current defaults
+
+Each window's incumbent: the arm its config carries now. Every comparison is incumbent-first, so a change in either direction has to pass the window's rule.
+
+| window | incumbent | config_hash | source | set by | matches the config |
+|---|---|---|---|---|---|
+| to_snapshot | wear_nonneg | e7c0d34bdef9 | a priori | configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the stop-gain check) | yes |
+| full | baseline | 07dc9587709d | default | SimConfig defaults (configs/sim/world.yaml adds traffic only) | yes |
+| pre_race | baseline | 07dc9587709d | default | SimConfig defaults | yes |
+
+
 ## Selection
 
-G: mae_offset_s at horizons 10-49; SG: stop-gain mae_s at real pit stops. mae and diff are race-weighted (the mean over races of each race's value, the statistic the race-cluster 95% CI in brackets resamples); diff is the per-race paired difference against the stage's comparator; 'pooled' is the row-pooled difference, secondary. Belief rule (to_snapshot): SG diff CI below 0 and G diff CI upper end under +2 s, in two stages: the bound (wear_nonneg against the baseline), then every other candidate against the stage-1 winner. World (full) and pre_race: G diff below 0 with its CI excluding 0. Ties to the simpler arm. n/a: the same as the comparator in that window by construction (in the full window there is no calibrator and no shrinkage fit).
+G: mae_offset_s at horizons 10-49; SG: stop-gain mae_s at real pit stops. mae and diff are race-weighted (the mean over races of each race's value, the statistic the race-cluster 95% CI in brackets resamples); diff is the per-race paired difference, challenger less the stage's comparator (the incumbent); 'pooled' is the row-pooled difference, secondary. Belief rule (to_snapshot): SG diff CI below 0 and G diff CI upper end under +2 s, in two stages: the bound (the baseline, no bound, challenging the incumbent wear_nonneg; the bound stays unless removing it passes), then every other candidate against the stage-1 result. World (full) and pre_race: G diff below 0 with its CI excluding 0, against the SimConfig default. Ties to the simpler arm. n/a: the same as the comparator in that window by construction (in the full window there is no calibrator and no shrinkage fit).
 
-### full (G mae_offset 10-49)
+### full (G mae_offset 10-49; incumbent baseline)
 
 | arm | role | races | G mae | G bias | G diff | G diff pooled | SG mae | SG diff | SG diff pooled | passes |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -55,37 +66,37 @@ G: mae_offset_s at horizons 10-49; SG: stop-gain mae_s at real pit stops. mae an
 
 Decision for full: **provisional choice baseline; the defaults stay**.
 
-### to_snapshot (belief: stop-gain, G non-inferiority)
+### to_snapshot (belief: stop-gain, G non-inferiority; incumbent wear_nonneg)
 
-Stage 1, the bound:
-
-| arm | role | races | G mae | G bias | G diff | G diff pooled | SG mae | SG diff | SG diff pooled | passes |
-|---|---|---|---|---|---|---|---|---|---|---|
-| baseline | comparator | 1 | 20.08 [-, -] | 2.50 | 0.00 [-, -] | 0.00 | 1.15 [-, -] | 0.00 [-, -] | 0.00 | no |
-| wear_nonneg | candidate | 1 | 19.12 [-, -] | 1.37 | -0.95 [-, -] | -0.95 | 0.99 [-, -] | -0.16 [-, -] | -0.16 | no |
-
-
-Stage 2, against baseline:
+Stage 1, the bound: baseline (no bound) challenging the incumbent wear_nonneg:
 
 | arm | role | races | G mae | G bias | G diff | G diff pooled | SG mae | SG diff | SG diff pooled | passes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| baseline | comparator | 1 | 20.08 [-, -] | 2.50 | 0.00 [-, -] | 0.00 | 1.15 [-, -] | 0.00 [-, -] | 0.00 | no |
-| none | candidate | 1 | 10.18 [-, -] | -0.27 | -9.89 [-, -] | -9.89 | 0.83 [-, -] | -0.33 [-, -] | -0.33 | no |
-| hinge | candidate | 1 | 19.37 [-, -] | 3.14 | -0.71 [-, -] | -0.71 | 1.14 [-, -] | -0.02 [-, -] | -0.02 | no |
-| free_air | candidate | 1 | 19.03 [-, -] | 0.74 | -1.05 [-, -] | -1.05 | 1.03 [-, -] | -0.13 [-, -] | -0.13 | no |
-| hinge_free | candidate | 1 | 18.23 [-, -] | 1.48 | -1.84 [-, -] | -1.84 | 1.01 [-, -] | -0.14 [-, -] | -0.14 | no |
-| posterior | coverage only | 1 | 19.82 [-, -] | 1.85 | -0.26 [-, -] | -0.26 | - [-, -] | - [-, -] | - | no |
-| collinear_hold | candidate | 1 | 16.70 [-, -] | -8.31 | -3.38 [-, -] | -3.38 | 1.10 [-, -] | -0.05 [-, -] | -0.05 | no |
-| collinear_hold_hinge | candidate | 1 | 15.90 [-, -] | -7.44 | -4.17 [-, -] | -4.17 | 1.09 [-, -] | -0.07 [-, -] | -0.07 | no |
-| collinear_hold_nonneg | candidate | 1 | 16.65 [-, -] | -8.36 | -3.43 [-, -] | -3.43 | 0.96 [-, -] | -0.19 [-, -] | -0.19 | no |
-| collinear_hold_nonneg_hinge | candidate | 1 | 15.85 [-, -] | -7.49 | -4.22 [-, -] | -4.22 | 0.94 [-, -] | -0.21 [-, -] | -0.21 | no |
+| wear_nonneg | comparator | 1 | 19.12 [-, -] | 1.37 | 0.00 [-, -] | 0.00 | 0.99 [-, -] | 0.00 [-, -] | 0.00 | no |
+| baseline | candidate | 1 | 20.08 [-, -] | 2.50 | 0.95 [-, -] | 0.95 | 1.15 [-, -] | 0.16 [-, -] | 0.16 | no |
 
 
-Stage 1 (the bound): baseline (provisional).
+Stage 2, against the stage-1 result wear_nonneg:
 
-Decision for to_snapshot: **provisional choice baseline; the defaults stay**.
+| arm | role | races | G mae | G bias | G diff | G diff pooled | SG mae | SG diff | SG diff pooled | passes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| wear_nonneg | comparator | 1 | 19.12 [-, -] | 1.37 | 0.00 [-, -] | 0.00 | 0.99 [-, -] | 0.00 [-, -] | 0.00 | no |
+| none | candidate | 1 | 10.18 [-, -] | -0.27 | -8.94 [-, -] | -8.94 | 0.83 [-, -] | -0.17 [-, -] | -0.17 | no |
+| hinge | candidate | 1 | 19.37 [-, -] | 3.14 | 0.24 [-, -] | 0.24 | 1.14 [-, -] | 0.14 [-, -] | 0.14 | no |
+| free_air | candidate | 1 | 19.03 [-, -] | 0.74 | -0.10 [-, -] | -0.10 | 1.03 [-, -] | 0.03 [-, -] | 0.03 | no |
+| hinge_free | candidate | 1 | 18.23 [-, -] | 1.48 | -0.89 [-, -] | -0.89 | 1.01 [-, -] | 0.02 [-, -] | 0.02 | no |
+| posterior | coverage only | 1 | 19.82 [-, -] | 1.85 | 0.69 [-, -] | 0.69 | - [-, -] | - [-, -] | - | no |
+| collinear_hold | candidate | 1 | 16.70 [-, -] | -8.31 | -2.42 [-, -] | -2.42 | 1.10 [-, -] | 0.11 [-, -] | 0.11 | no |
+| collinear_hold_hinge | candidate | 1 | 15.90 [-, -] | -7.44 | -3.22 [-, -] | -3.22 | 1.09 [-, -] | 0.09 [-, -] | 0.09 | no |
+| collinear_hold_nonneg | candidate | 1 | 16.65 [-, -] | -8.36 | -2.48 [-, -] | -2.48 | 0.96 [-, -] | -0.03 [-, -] | -0.03 | no |
+| collinear_hold_nonneg_hinge | candidate | 1 | 15.85 [-, -] | -7.49 | -3.27 [-, -] | -3.27 | 0.94 [-, -] | -0.05 [-, -] | -0.05 | no |
 
-### pre_race (G mae_offset 10-49)
+
+Stage 1 result: wear_nonneg (the incumbent stays, provisional).
+
+Decision for to_snapshot: **provisional choice wear_nonneg; the defaults stay**.
+
+### pre_race (G mae_offset 10-49; incumbent baseline)
 
 | arm | role | races | G mae | G bias | G diff | G diff pooled | SG mae | SG diff | SG diff pooled | passes |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -106,19 +117,19 @@ Decision for pre_race: **provisional choice baseline; the defaults stay**.
 
 ### Prior-sd fix (SPEC 0017 G), measured alone
 
-baseline__s2 against baseline under the belief rule: G diff 0.13 [-, -], SG diff -0.02 [-, -]; passes: no (provisional).
+wear_nonneg__s2 against wear_nonneg under the belief rule: G diff 0.10 [-, -], SG diff -0.00 [-, -]; passes: no (provisional).
 
-### Tau grid on baseline (belief rule against the x1 taus: stop-gain mae primary, G at horizons 20-40 non-inferior within +2 s)
+### Tau grid on wear_nonneg (belief rule against the x1 taus: stop-gain mae primary, G at horizons 20-40 non-inferior within +2 s)
 
 | arm | x_base_s | x_wear_s_per_lap | x_fuel_s_per_lap | x_hinge_s_per_lap | SG mae | SG diff | G mae 20-40 | G diff | non_inferior | passes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| baseline__tau_0.5_0.5_1_1 | 0.50 | 0.50 | 1.00 | 1.00 | 0.90 | -0.25 [-, -] | 15.87 | 0.07 [-, -] | no | no |
-| baseline__tau_0.5_0.5_2_1 | 0.50 | 0.50 | 2.00 | 1.00 | 0.91 | -0.24 [-, -] | 18.91 | 3.11 [-, -] | no | no |
-| baseline__tau_1_0.5_1_1 | 1.00 | 0.50 | 1.00 | 1.00 | 0.92 | -0.24 [-, -] | 15.30 | -0.50 [-, -] | no | no |
-| baseline__tau_0.5_0.5_0.5_1 | 0.50 | 0.50 | 0.50 | 1.00 | 0.92 | -0.23 [-, -] | 12.60 | -3.21 [-, -] | no | no |
-| baseline__tau_1_0.5_2_1 | 1.00 | 0.50 | 2.00 | 1.00 | 0.92 | -0.23 [-, -] | 18.85 | 3.05 [-, -] | no | no |
+| wear_nonneg__tau_0.5_0.5_1_1 | 0.50 | 0.50 | 1.00 | 1.00 | 0.90 | -0.09 [-, -] | 15.87 | 0.37 [-, -] | no | no |
+| wear_nonneg__tau_0.5_0.5_2_1 | 0.50 | 0.50 | 2.00 | 1.00 | 0.91 | -0.08 [-, -] | 18.91 | 3.41 [-, -] | no | no |
+| wear_nonneg__tau_1_0.5_1_1 | 1.00 | 0.50 | 1.00 | 1.00 | 0.92 | -0.08 [-, -] | 15.30 | -0.20 [-, -] | no | no |
+| wear_nonneg__tau_0.5_0.5_0.5_1 | 0.50 | 0.50 | 0.50 | 1.00 | 0.92 | -0.07 [-, -] | 12.60 | -2.91 [-, -] | no | no |
+| wear_nonneg__tau_1_0.5_2_1 | 1.00 | 0.50 | 2.00 | 1.00 | 0.92 | -0.07 [-, -] | 18.85 | 3.35 [-, -] | no | no |
 
-27 combinations; the current taus (x1) rank 13; provisional, nothing adopted.
+27 combinations; the current taus (x1) rank 14; provisional, nothing adopted.
 
 ## Coverage (intervals at the profile's n_samples; only the posterior arm has a width)
 

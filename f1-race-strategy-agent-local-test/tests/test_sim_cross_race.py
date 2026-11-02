@@ -322,19 +322,36 @@ def all_arms(**over):
     return {a: over.get(a, arm(each(10.0), each(1.0))) for a in ARMS}
 
 
-def test_the_belief_runs_in_two_stages_the_bound_first():
-    # the bound wins stage 1; collinear_hold beats the baseline but not the bound, so it is not chosen
+def test_the_belief_is_incumbent_first_the_bound_stays_unless_removing_it_passes():
+    # the baseline (no bound) is no better than the incumbent wear_nonneg: the bound stays, even
+    # where the bound itself would not have passed against the baseline (a tie)
+    t, bound, pick = cross_race.belief_selection(all_arms(), n_boot=200)
+    s1 = t[t["stage"] == "bound"]
+    assert list(s1["arm"]) == ["wear_nonneg", BASELINE] and s1["role"].tolist() == ["comparator", "candidate"]
+    assert (bound, pick) == ("wear_nonneg", "wear_nonneg") and not s1["passes"].any()
+    # stage 2 runs against the stage-1 result: collinear_hold beats the baseline's numbers but
+    # not the bound's, collinear_hold_nonneg beats the bound
     data = all_arms(wear_nonneg=arm(each(10.0), each(0.6)), collinear_hold=arm(each(10.0), each(0.8)),
                     collinear_hold_nonneg=arm(each(10.0), each(0.4)))
     t, bound, pick = cross_race.belief_selection(data, n_boot=200)
     assert bound == "wear_nonneg" and pick == "collinear_hold_nonneg"
-    s1, s2 = t[t["stage"] == "bound"], t[t["stage"] == "candidates"].set_index("arm")
-    assert list(s1["arm"]) == [BASELINE, "wear_nonneg"] and s1["passes"].tolist() == [False, True]
+    s2 = t[t["stage"] == "candidates"].set_index("arm")
     assert (s2["comparator"] == "wear_nonneg").all() and BASELINE not in s2.index
     assert not s2.loc["collinear_hold", "passes"] and s2.loc["collinear_hold", "sg_diff"] > 0
-    # without the bound winning, stage 2 runs against the baseline
-    t, bound, pick = cross_race.belief_selection(all_arms(collinear_hold=arm(each(10.0), each(0.8))), n_boot=200)
+    # removing the bound passes the rule: stage 2 then runs against the baseline
+    data = all_arms(wear_nonneg=arm(each(10.0), each(1.4)), collinear_hold=arm(each(10.0), each(0.8)))
+    t, bound, pick = cross_race.belief_selection(data, n_boot=200)
+    assert t[t["stage"] == "bound"].set_index("arm").loc[BASELINE, "passes"]
     assert (bound, pick) == (BASELINE, "collinear_hold")
+
+
+def test_current_defaults_name_each_windows_incumbent_and_match_the_config():
+    t = cross_race.current_defaults().set_index("window")
+    assert t.loc["to_snapshot", "incumbent"] == "wear_nonneg" and t.loc["to_snapshot", "source"] == "a priori"
+    assert "belief.yaml" in t.loc["to_snapshot", "set by"]
+    assert (t.loc[["full", "pre_race"], "incumbent"] == BASELINE).all()
+    assert (t.loc[["full", "pre_race"], "source"] == "default").all() and t["matches the config"].all()
+    assert t.loc["to_snapshot", "config_hash"] == calibration.config_hash(cross_race.arm_config("wear_nonneg"))
 
 
 def test_calibrator_arms_are_na_in_the_full_window():
@@ -413,7 +430,7 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     for w in ("full", "pre_race"):
         assert set(sel.loc[(sel["stage"] == "arms") & (sel["window"] == w), "arm"]) == set(ARMS)
     s1 = sel[sel["stage"] == "bound"]
-    assert list(s1["arm"]) == [BASELINE, "wear_nonneg"] and (s1["window"] == "to_snapshot").all()
+    assert list(s1["arm"]) == ["wear_nonneg", BASELINE] and (s1["window"] == "to_snapshot").all()
     s2 = sel[sel["stage"] == "candidates"]
     assert len(s2) == len(ARMS) - 1 and (s2["comparator"] == record["belief_bound"]).all()
     na = sel.loc[(sel["window"] == "full") & sel["arm"].isin(["none", "collinear_hold"]), "role"]
@@ -425,7 +442,7 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     assert set(gfold["stop_gain"]["window"]) == {"to_snapshot"} and set(gfold["g"]["window"]) == {"to_snapshot"}
     md = (out / "summary.md").read_text()
     for heading in ("## Eligibility", "## Selection", "### Prior-sd fix", "### Tau grid", "## Coverage",
-                    "## Gate and pairs", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):
+                    "## Gate and pairs", "## Current defaults", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):
         assert heading in md
     assert "PROVISIONAL: 3 eligible race(s), fewer than 8" in md and "the defaults stay" in md
     assert "Synthetic races in this run" in md and "No race features file" in md
