@@ -130,6 +130,12 @@ Known limits, not solved here:
 (3) Ghosts do not react: no undercut defence, no rival strategist.
 (4) Our clock drifts from the real one by the model error (0.1 to 0.3 s/lap), so positions
     far from the snapshot are noisy; the rejoin a few laps on is the trustworthy use.
+(5) Recorded ghosts are valid only under the recorded events. Under a drawn SC the field ran
+    green, so any field-time rule prices that SC at nothing. With an event model other than
+    "none", or a fixed scenario other than the record over the remaining laps, the engine
+    adds "traffic_recorded_with_drawn_events" to every plan's support warnings (positions
+    and traffic approximate). The optimizer with rate events keeps traffic off; the ghost
+    model is for replay, calibration and hindsight ground truth under the real events.
 """
 from dataclasses import dataclass, field
 from typing import Literal
@@ -222,6 +228,17 @@ def ghost_table(frame, driver, laps) -> GhostTable:
     G, G_prev = start[:, laps + 1], start[:, laps]   # no lap-0 row, so lap 1's G_prev is NaN
     return GhostTable(ghosts=ghosts, laps=laps, G=G, G_prev=G_prev, g=G - G_prev, in_lap=pit_in[:, laps],
                       out_lap=pit_out[:, laps])
+
+
+def place(frame, driver, lap, t):
+    """(position, gap): our position at the end of `lap` if we cross the line at session time
+    t, 1 + the ghosts (every other driver in `frame`) that finished `lap` before t, and t less
+    the end of lap `lap` of the car directly ahead (NaN when none is). A ghost without a lap
+    `lap` (retired, or laps down) is not ahead. calibration.rejoin and placement rank our
+    clock with it, the eval's position regret our finishing time (SPEC 0014 D)."""
+    G = ghost_table(frame, driver, [lap]).G[:, 0]
+    ahead = G[np.isfinite(G) & (G < t)]
+    return 1 + len(ahead), (float(t - ahead.max()) if len(ahead) else float("nan"))
 
 
 def race_start(frame, driver):

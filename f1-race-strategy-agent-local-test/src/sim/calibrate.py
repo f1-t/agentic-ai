@@ -67,6 +67,7 @@ PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
 VERSION_COLUMNS = ("config_hash", "sim_code_version")
 PROVENANCE_COLUMNS = ("pit_loss_s", "pit_loss_source", *VERSION_COLUMNS)
 FREE_AIR_HELP = "fit on free-air rows only (SimConfig.fit_free_air_only)"
+MIN_STINT_DEFAULT = RaceParams.model_fields["min_stint_laps"].default   # R2, docs/rules.md
 PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
                  "within_2_rate_real", "mae_pos_real"]
 
@@ -76,7 +77,7 @@ def _race_args(ap):
     ap.add_argument("--gp", default="Spain")
     ap.add_argument("--pit-loss", default="observed",
                     help=f'seconds, or "observed" to measure it from a first pass at {DEFAULT_PIT_LOSS_S}')
-    ap.add_argument("--min-stint", type=int, default=10)
+    ap.add_argument("--min-stint", type=int, default=MIN_STINT_DEFAULT, help="R2, default RaceParams.min_stint_laps")
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
@@ -456,7 +457,7 @@ def main(argv=None):
     ap.add_argument("--gp", default="Spain")
     ap.add_argument("--pit-loss", default="observed",
                     help='seconds, or "observed" to measure it from a first pass at 22.0 and rerun with it')
-    ap.add_argument("--min-stint", type=int, default=10)
+    ap.add_argument("--min-stint", type=int, default=MIN_STINT_DEFAULT, help="R2, default RaceParams.min_stint_laps")
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)

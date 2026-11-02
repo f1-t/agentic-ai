@@ -6,8 +6,13 @@
 known at the snapshot. Policies plan on it; the world simulator that scores them and plans
 the reference is not passed in. The four baselines are Quan's reference policies
 (src/baselines) run through the optimizer bridge on the belief's fit. `recorded_policy`
-replays plans saved from earlier agent runs, and `agent_policy` asks the live agent loop
-(src/agent.py) through whatever LLM_BACKEND is configured.
+replays plans saved from earlier agent runs, and `agent_policy` (an AgentPolicy) asks the
+live agent loop (src/agent.py) through whatever LLM_BACKEND is configured, at any lap of any
+race: it sees the scenario's snapshot through RaceSnapshot.from_contract, and its
+submission (PIT or STAY_OUT) is scored as an action plus a continuation (eval.decisions).
+
+Policies whose rows are decisions rather than baseline plans (the agent, recorded runs)
+carry `agent_decisions = True`; score_set warns when they meet a no-stop reference.
 """
 from __future__ import annotations
 
@@ -18,9 +23,9 @@ from pathlib import Path
 from ..baselines import domain, policies
 from ..baselines.domain import PolicyUnavailable
 from ..sim.optimizer_bridge import from_contract, pace_for_crossover, to_contract
-from ..sim.race_ids import canonical_race_id
 
 BASELINES = ("actual_strategy", "fixed_one_stop", "fixed_two_stop", "greedy_crossover")
+TRAJECTORY_DIR = Path(__file__).resolve().parents[2] / "reports" / "eval" / "trajectories"
 
 
 @dataclass
@@ -79,48 +84,64 @@ def recorded_policy(path):
             raise PolicyUnavailable(f"no recorded decision for {scenario.scenario_id}")
         return Decision(rec.get("stint_plan"), tool_calls=rec.get("tool_calls"),
                         input_tokens=rec.get("input_tokens"), output_tokens=rec.get("output_tokens"))
+    policy.agent_decisions = True
     return data["name"], policy
 
 
-AGENT_QUESTION = ("{driver} starts the {season} {race} on the {compound} tyre. Should they run a one-stop "
-                  "or a two-stop strategy, and how should the stints be split, to minimise total race "
-                  "time? Justify it with simulated times.")
+class AgentPolicy:
+    """The live agent on the snapshot loop, as an eval policy.
+
+    The agent's view is RaceSnapshot.from_contract(scenario.snapshot); run_agent gets
+    max_steps (profile.agent.max_steps unless given) and logs its trajectory to
+    <log_dir>/<set_name>/<scenario_id>.jsonl, ":" in the id written "_" (a rerun replaces
+    the file). The submission goes back as Decision.submission, which the scorer expands on
+    the belief (eval.decisions.to_plan). tool_calls is the trajectory's length, tokens are
+    the backend's reported usage (None when it reports none), and a backend exception is a
+    status "error" row, not a crash. `backend` is for tests; None takes LLM_BACKEND."""
+
+    agent_decisions = True
+
+    def __init__(self, *, set_name: str = "adhoc", max_steps: int | None = None, profile=None,
+                 log_dir=TRAJECTORY_DIR, backend=None):
+        self.set_name, self.max_steps, self.profile = set_name, max_steps, profile
+        self.log_dir, self.backend = Path(log_dir), backend
+
+    def log_path(self, scenario) -> Path:
+        return self.log_dir / self.set_name / f"{scenario.scenario_id.replace(':', '_')}.jsonl"
+
+    def __call__(self, scenario, belief, max_stops):
+        from ..agent import run_agent
+        from ..sim.compute import load_profile
+        from ..snapshot import RaceSnapshot
+
+        max_steps = self.max_steps or (self.profile or load_profile()).agent.max_steps
+        path = self.log_path(scenario)
+        path.unlink(missing_ok=True)
+        stats = {}
+        try:
+            rec, trajectory = run_agent(RaceSnapshot.from_contract(scenario.snapshot), verbose=False,
+                                        backend=self.backend, max_steps=max_steps, log_path=path, stats=stats)
+        except Exception as exc:  # noqa: BLE001  a backend failure must not end an overnight run
+            return Decision(None, error=f"{type(exc).__name__}: {exc}", input_tokens=stats.get("input_tokens"),
+                            output_tokens=stats.get("output_tokens"))
+        return Decision(None, submission=rec, tool_calls=len(trajectory), input_tokens=stats.get("input_tokens"),
+                        output_tokens=stats.get("output_tokens"),
+                        meta={"submitted": rec is not None, "steps": stats.get("steps"), "trajectory": str(path)})
 
 
-def agent_policy(scenario, sim, max_stops):
-    """The live agent. Its tools are fixed to one race and plan whole races from the start,
-    so only lap-0 scenarios of that race with the full race length are available until the
-    loop takes a snapshot."""
-    # temporary: the lap-0 same-race guard reads the legacy race until the agent policy runs
-    # the snapshot loop (SPEC 0014 H)
-    from .. import legacy_tools as tools
-
-    if (scenario.lap != 0 or scenario.race_id != canonical_race_id(tools._race_params().race_id)
-            or scenario.snapshot.race.total_laps != tools.race_laps()):
-        raise PolicyUnavailable("the agent loop plans full races of the tools' race only; mid-race "
-                                "scenarios wait for the snapshot-driven loop")
-    from ..agent import run_agent
-
-    info = tools.get_race_info()
-    question = AGENT_QUESTION.format(driver=scenario.driver, season=info["season"], race=info["race"],
-                                     compound=scenario.snapshot.compound)
-    try:
-        rec, trajectory = run_agent(question, verbose=False)
-    except Exception as exc:  # noqa: BLE001  a backend failure must not end an overnight run
-        return Decision(None, error=f"{type(exc).__name__}: {exc}")
-    plan = (rec or {}).get("stint_plan")
-    return Decision(plan, tool_calls=len(trajectory), meta={"submitted": rec is not None})
+agent_policy = AgentPolicy()
 
 
-def resolve(names, recorded=()) -> dict:
+def resolve(names, recorded=(), *, set_name: str | None = None, profile=None) -> dict:
     """Policies by name. "baselines" expands to the four reference policies, "agent" is the
-    live agent, and each recorded file adds the policy it names."""
+    live agent (an AgentPolicy logging under `set_name`, with `profile`'s agent budget),
+    and each recorded file adds the policy it names."""
     out = {}
     for name in names:
         if name == "baselines":
             out.update(BASELINE_POLICIES)
         elif name == "agent":
-            out["agent"] = agent_policy
+            out["agent"] = AgentPolicy(set_name=set_name or "adhoc", profile=profile)
         elif name in BASELINE_POLICIES:
             out[name] = BASELINE_POLICIES[name]
         else:

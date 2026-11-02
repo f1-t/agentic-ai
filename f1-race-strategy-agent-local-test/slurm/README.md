@@ -36,6 +36,10 @@ fixed by submitting it again.
 | `h_fold` | `h_fold.sbatch` | held-out race id or `season:YYYY` | `$OUT/h/<calibrator>/<race_id>.parquet` and `.rmse.json` |
 | `eval_chunk` | `eval_chunk.sbatch` | `chunk_NNNN` | `$OUT/eval/<chunk>.parquet` |
 
+`eval_chunk.sbatch` runs `python -m src.eval jobs --scenarios $EVAL_SCENARIOS ... -- eval_chunk ...`,
+so the eval installs its runner before sim.jobs runs the task; set `EVAL_SCENARIOS` (and
+optionally `EVAL_POLICIES`, `EVAL_WORLD_CONFIG`, `EVAL_BELIEF_CONFIG`) when submitting.
+
 `build_weekend` has no template: the bulk build needs network and the F1 TV login, so it never
 runs on Sol.
 

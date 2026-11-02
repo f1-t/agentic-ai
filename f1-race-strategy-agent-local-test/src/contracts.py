@@ -41,7 +41,9 @@ class RaceParams(_Contract):
     race_id: str
     total_laps: int = Field(gt=0)
     pit_loss_s: float = Field(ge=0)
-    min_stint_laps: int = Field(default=10, ge=1)
+    # R2 (docs/rules.md): the race registry sets it per race; 3 when it does not. Real stints
+    # run as short as 3 laps and the simulator prices them. src/legacy_tools.py pins 10.
+    min_stint_laps: int = Field(default=3, ge=1)
     compounds: list[Compound] = Field(default_factory=list)  # available to run
     # circuit SC/VSC rates for the "rate" event model: chance per green lap that a period
     # starts, and its mean length in laps. None takes the SimConfig events params.
@@ -88,6 +90,16 @@ class Weather(_Contract):
     wind_kph: float | None = None
     rain_laps: list[int] = Field(default_factory=list)   # laps with rain so far
     wetness_estimate: float | None = Field(default=None, ge=0, le=1)
+    rain_probability: float | None = Field(default=None, ge=0, le=1)   # forecast, None = unknown
+
+
+class NearbyCar(_Contract):
+    """A car near the snapshot driver on the timing screens. gap_s is the time gap at the
+    line at the start of the next lap: negative ahead of us, positive behind."""
+
+    driver: str
+    position: int | None = None
+    gap_s: float
 
 
 class FieldState(_Contract):
@@ -95,6 +107,7 @@ class FieldState(_Contract):
 
     class_counts: dict[str, int] = Field(default_factory=dict)    # SLICK / INTERMEDIATE / WET
     class_pace_s: dict[str, float] = Field(default_factory=dict)  # median last-lap time per class
+    nearby: list[NearbyCar] = Field(default_factory=list)          # closest cars, ahead first
 
 
 class Snapshot(_Contract):
@@ -123,6 +136,8 @@ class Snapshot(_Contract):
     field: FieldState = Field(default_factory=FieldState)
     red_flag_laps: list[int] = Field(default_factory=list)   # history
     standing_start: bool = True
+    recent_lap_times_s: list[float] = Field(default_factory=list)   # own last laps, oldest first
+    context: dict[str, str] = Field(default_factory=dict)          # free-form notes for the agent
 
     @model_validator(mode="after")
     def _check(self):

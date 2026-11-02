@@ -19,7 +19,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from ..contracts import Plan, RaceParams, Snapshot, StintRecord
+from ..contracts import FieldState, NearbyCar, Plan, RaceParams, Snapshot, StintRecord
 from .config import SimConfig
 from .data import race_stints
 from . import traffic
@@ -419,6 +419,7 @@ def config_hash(config: SimConfig) -> str:
     data = config.model_dump(mode="json", exclude={"fit_window"})
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
+RECENT_LAPS = 5          # snapshot_at: own lap times kept in recent_lap_times_s
 N_BOOT = 500             # race-cluster bootstrap draws
 
 
@@ -454,26 +455,54 @@ def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> S
     the driver drove, as in replay_driver. The caller skips drivers without a lap-k row.
     At k > 0, gap_ahead_s, gap_behind_s and car_ahead are the lap frame's gap columns at
     the start of lap k + 1 (data.gap_columns, so the lap k + 1 row), None where that row
-    is missing or the value is NaN; at k = 0 they stay None.
+    is missing or the value is NaN; at k = 0 they stay None. field.nearby comes from the
+    same lap k + 1 rows: the car ahead (gap_s = -gap_ahead_s) and the car whose car_ahead
+    is us (gap_s = our gap_behind_s), each with its position after lap k.
+    recent_lap_times_s is the driver's last RECENT_LAPS lap times up to lap k, oldest
+    first, laps without a time left out. Nothing after the end of lap k is read.
     """
     g = frame[frame["driver"] == driver].sort_values("lap")
     stints = race_stints(frame, driver)
     j, done = _current_stint(stints, k)
     comp, _, start_age, _ = stints[j]
-    position, status, elapsed, gaps = None, "green", 0.0, {}
+    position, status, elapsed, gaps, nearby, recent = None, "green", 0.0, {}, [], []
     if k > 0:
         row = g[g["lap"] == k].iloc[0]
         position = int(row["position"]) if pd.notna(row["position"]) else None
         status = _track_status(str(row["track_status"]))
         elapsed = float(row["end_s"] - g["start_s"].iloc[0])
         gaps = _gaps(g, k + 1)
+        nearby = _nearby(frame, driver, k, gaps)
+        last = g[(g["lap"] <= k) & (g["lap"] > k - RECENT_LAPS)]["lap_time_s"]
+        recent = [float(x) for x in last if pd.notna(x)]
     hist = _scenario(g[g["lap"] <= k])
     return Snapshot(
         race=race.model_copy(update={"total_laps": len(g)}), driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=n, start_lap=first, start_age=a) for c, n, a, first in stints[:j]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=status, elapsed_s=elapsed,
-        position=position, sets_available=None, standing_start=k == 0, **gaps)
+        position=position, sets_available=None, standing_start=k == 0, field=FieldState(nearby=nearby),
+        recent_lap_times_s=recent, **gaps)
+
+
+def _nearby(frame, driver, k, gaps):
+    """NearbyCar for the car ahead and the car behind at the start of lap k + 1 (the gap columns)."""
+    out = []
+    nxt = frame[frame["lap"] == k + 1]
+    pos = frame[frame["lap"] == k].set_index("driver")["position"]
+
+    def position(d):
+        p = pos.get(d)
+        return int(p) if p is not None and pd.notna(p) else None
+    if gaps.get("car_ahead") is not None and gaps.get("gap_ahead_s") is not None:
+        out.append(NearbyCar(driver=gaps["car_ahead"], position=position(gaps["car_ahead"]),
+                             gap_s=-gaps["gap_ahead_s"]))
+    if "car_ahead" in nxt and gaps.get("gap_behind_s") is not None:
+        behind = nxt.loc[nxt["car_ahead"] == driver, "driver"]
+        if len(behind):
+            out.append(NearbyCar(driver=str(behind.iloc[0]), position=position(behind.iloc[0]),
+                                 gap_s=gaps["gap_behind_s"]))
+    return out
 
 
 def _gaps(g, lap):
@@ -781,13 +810,6 @@ def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver
     return snap, res, traffic.anchor(frame, snap) + res.remaining.mean_s
 
 
-def _place(frame, driver, lap, t):
-    """(1 + ghosts that finished `lap` before t, t less the end of the car directly ahead)."""
-    G = traffic.ghost_table(frame, driver, [lap]).G[:, 0]
-    ahead = G[np.isfinite(G) & (G < t)]
-    return 1 + len(ahead), (float(t - ahead.max()) if len(ahead) else float("nan"))
-
-
 def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min_laps_frac=0.9) -> pd.DataFrame:
     """One row per real pit stop of a finisher: the replay from the snapshot at k = in_lap - 1
     over the in-lap and the out-lap, with the real remaining plan and SC/VSC laps.
@@ -807,8 +829,8 @@ def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min
             if out not in g.index or (k > 0 and k not in g.index):
                 continue
             _, res, t = _replay_window(sim, frame, race, d, k, out)
-            pred_pos, pred_gap = _place(frame, d, out, t)
-            clock_pos, real_gap = _place(frame, d, out, float(g.loc[out, "end_s"]))
+            pred_pos, pred_gap = traffic.place(frame, d, out, t)
+            clock_pos, real_gap = traffic.place(frame, d, out, float(g.loc[out, "end_s"]))
             real_pos = float(g.loc[out, "position"])
             rows.append({"driver": d, "in_lap": int(in_lap), "k": k, "out_lap": out,
                          "pred_pos": pred_pos, "real_pos": real_pos, "pos_err": pred_pos - real_pos,
@@ -842,7 +864,7 @@ def placement(sim: Simulator, frame: pd.DataFrame, race: RaceParams, lap: int, p
         if lap not in g.index:
             continue
         _, res, t = _replay_window(sim, frame, race, d, 0, lap)
-        pred_pos, _ = _place(frame, d, lap, t)
+        pred_pos, _ = traffic.place(frame, d, lap, t)
         real_pos = float(g.loc[lap, "position"])
         rows.append({"driver": d, "lap": lap, "pred_pos": pred_pos, "real_pos": real_pos,
                      "abs_err": abs(pred_pos - real_pos), "traffic_s": res.traffic_s, "passes": res.passes_mean})
