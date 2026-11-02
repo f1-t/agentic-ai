@@ -2,6 +2,7 @@
 rules, the collinear-hold and prior-sd fit options, the arms, and the end-to-end run on Spain
 plus two synthetic races. Offline: synthetic races and the committed Spain cache."""
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -62,7 +63,7 @@ def test_too_few_finishers_and_too_few_dry_compounds_or_clean_laps():
     small = cross_race.synthetic_race("2099_03_synthetic", n_drivers=10)
     e = calibration.eligibility(small.frame, small.race)
     assert not e["eligible"] and e["n_finishers"] == 10
-    assert any("10 classified finishers with full laps, under 12" in r for r in e["reasons"])
+    assert any("10 eligible drivers (laps 1..n, at most 2 down), under 12" in r for r in e["reasons"])
     f = small.frame.copy()
     f["compound"] = "SOFT"
     e = calibration.eligibility(f, small.race)
@@ -73,19 +74,25 @@ def test_too_few_finishers_and_too_few_dry_compounds_or_clean_laps():
     assert any(r.startswith("MEDIUM: used by") and "0 clean laps" in r for r in e["reasons"])
 
 
-def test_a_retired_driver_or_a_gap_in_the_laps_is_not_a_full_lap_finisher(syn):
-    f = syn.frame[~((syn.frame["driver"] == "D00") & (syn.frame["lap"] == 20))]
-    f = f[~((f["driver"] == "D01") & (f["lap"] > 30))]
-    assert calibration.eligibility(f, syn.race)["n_finishers"] == 14
+def test_drivers_are_the_eval_samplers_a_gap_or_three_laps_down_is_out(syn):
+    f = syn.frame[~((syn.frame["driver"] == "D00") & (syn.frame["lap"] == 20))]   # a gap
+    f = f[~((f["driver"] == "D01") & (f["lap"] > 48))]   # two laps down: in
+    f = f[~((f["driver"] == "D02") & (f["lap"] > 47))]   # three laps down: out
+    e = calibration.eligibility(f, syn.race)
+    assert e["n_finishers"] == 14 and "D01" in e["drivers"] and not {"D00", "D02"} & set(e["drivers"])
+    from src.eval.scenarios import eligible_drivers
+    assert e["drivers"] == eligible_drivers(f, syn.race.total_laps)
 
 
-def test_spain_is_eligible():
+def test_spain_is_eligible_with_v1s_drivers():
     data = cross_race.load_race("2021_04_spain", load_profile("local"))
     messages, note = cross_race.race_messages("2021_04_spain")
     e = calibration.eligibility(data.frame, data.race, messages)
     assert e["eligible"], e["reasons"]
     assert (e["n_finishers"], e["red_flags"], e["sc_periods"], e["vsc_periods"]) == (19, [], [[8, 10]], [])
     assert e["dry_compounds"] == ["MEDIUM", "SOFT"] and e["notes"] == []
+    v1 = json.loads((Path(__file__).parent.parent / "data" / "scenarios" / "v1.json").read_text())
+    assert e["drivers"] == sorted({i["driver"] for i in v1["items"] if i["race_id"] == "2021_04_spain"})
 
 
 # --- the fit options (off by default) ---------------------------------------------------------
@@ -142,8 +149,38 @@ def test_collinear_hold_above_every_correlation_is_the_ordinary_fit():
     plain, off = fitted({}), fitted({"collinear_hold": 0.999})
     assert off.fit_report["collinear_hold"]["held"] == {"MEDIUM": False, "SOFT": False}
     assert off.coefs == plain.coefs and off.fuel_slope == plain.fuel_slope
-    with pytest.raises(NotImplementedError, match="wear_lower_bound"):
-        fitted({"collinear_hold": 0.5, "wear_lower_bound": 0.0})
+    bound_off = fitted({"collinear_hold": 0.999, "wear_lower_bound": 0.0})
+    assert bound_off.coefs == fitted({"wear_lower_bound": 0.0}).coefs
+
+
+def held_and_released(seed=1):
+    """SOFT in first stints (collinear, held) and MEDIUM on staggered later stints whose wear
+    is negative in the data (released, so the bound binds)."""
+    rng = np.random.default_rng(seed)
+    soft = first_stints()
+    rows = [{"driver": f"M{d}", "compound": "MEDIUM", "tyre_age": float(lap - 2 - 3 * d + 1), "lap": float(lap),
+             "clean": True, "lap_time_s": 82.0 - 0.08 * (lap - 2 - 3 * d + 1) - 0.05 * lap + rng.normal(0, 0.3)}
+            for d in range(10) for lap in range(2 + 3 * d, 17 + 3 * d)]
+    return pd.concat([soft[soft["compound"] == "SOFT"], pd.DataFrame(rows)], ignore_index=True)
+
+
+def test_collinear_hold_with_the_bound_holds_while_collinear_and_bounds_once_released():
+    f = held_and_released()
+    held = fitted({"collinear_hold": 0.5}, k=45, frame=f)
+    both = fitted({"collinear_hold": 0.5, "wear_lower_bound": 0.0}, k=45, frame=f)
+    assert both.fit_report["collinear_hold"]["held"] == {"MEDIUM": False, "SOFT": True}
+    assert held.coefs["MEDIUM"][1] < 0 and both.coefs["MEDIUM"][1] == 0.0
+    assert both.fit_report["bounded"] == {"MEDIUM": True, "SOFT": False}
+    assert both.coefs["SOFT"][1] == pytest.approx(held.coefs["SOFT"][1], abs=1e-12)   # the prior's wear
+    names = both.fit_report["cov"]["names"]
+    m = np.array(both.fit_report["cov"]["matrix"])
+    j = names.index("wear_s_per_lap[SOFT]")
+    assert m[j, j] == pytest.approx(SimConfig().shrinkage["wear_s_per_lap"] ** 2) and np.count_nonzero(m[j]) == 1
+    unc = both.fit_report["unconstrained"]
+    assert unc["names"] == names and np.array(unc["matrix"])[j, j] == pytest.approx(m[j, j])
+    draws = both.with_draw("posterior", wear_lower_bound=0.0)
+    rng = np.random.default_rng(0)
+    assert all(draws.draw(rng).coefs["MEDIUM"][1] >= 0.0 for _ in range(50))
 
 
 def test_prior_sd_fix_is_the_fit_with_taus_over_the_residual_sd():
@@ -224,52 +261,92 @@ def sg_rows(race_errs: dict, window="to_snapshot"):
 RACES = [f"2099_{i:02d}_synthetic" for i in range(1, 9)]
 
 
-def arm(g, sg):
-    return {"g": g_rows(g), "stop_gain": sg_rows(sg), "factors": pd.DataFrame()}
+def arm(g, sg, window="to_snapshot"):
+    return {"g": g_rows(g, window), "stop_gain": sg_rows(sg, window), "factors": pd.DataFrame()}
+
+
+def each(v, n=1):
+    return {r: [v] * n for r in RACES}
 
 
 def test_an_arm_better_on_average_with_a_ci_crossing_0_is_not_selected():
-    base = {r: [10.0, 10.0] for r in RACES}
     # better by 6 s on one race, worse by 0.5 s on the seven others: lower on average, CI crosses 0
     lucky = {r: ([4.0, 4.0] if i == 0 else [10.5, 10.5]) for i, r in enumerate(RACES)}
-    steady = {r: [9.0, 9.0] for r in RACES}
-    data = {BASELINE: arm(base, {r: [1.0] for r in RACES}),
+    data = {BASELINE: arm(each(10.0, 2), each(1.0)),
             "hinge": arm(lucky, {r: ([0.2] if i == 0 else [1.05]) for i, r in enumerate(RACES)}),
-            "free_air": arm(steady, {r: [0.8] for r in RACES})}
-    t = cross_race.compare_arms(data, BASELINE, ["to_snapshot", "full"], n_boot=500)
-    for w in ("to_snapshot",):
-        row = t[(t["window"] == w) & (t["arm"] == "hinge")].iloc[0]
-        assert row["g_mae"] < row["g_mae_base"] and row["sg_mae"] < row["sg_mae_base"]
-        assert row["sg_diff_lo"] < 0 < row["sg_diff_hi"] and not row["passes"]
-        assert t[(t["window"] == w) & (t["arm"] == "free_air")].iloc[0]["passes"]
-    assert cross_race.choose(t, "to_snapshot") == "free_air"
+            "free_air": arm(each(9.0, 2), each(0.8))}
+    t = cross_race.compare_arms(data, BASELINE, ["to_snapshot"], n_boot=500).set_index("arm")
+    row = t.loc["hinge"]
+    assert row["g_diff"] < 0 and row["sg_diff"] < 0 and row["sg_mae"] < row["sg_mae_base"]
+    assert row["sg_diff_lo"] < 0 < row["sg_diff_hi"] and not row["passes"]
+    assert t.loc["free_air", "passes"] and t.loc[BASELINE, "role"] == "comparator"
+    assert cross_race.choose(t.reset_index(), "to_snapshot") == "free_air"
 
 
 def test_the_world_rule_needs_the_g_ci_to_exclude_0():
-    base = {r: [10.0, 10.0] for r in RACES}
     lucky = {r: ([4.0, 4.0] if i == 0 else [10.5, 10.5]) for i, r in enumerate(RACES)}
-    data = {BASELINE: {"g": g_rows(base, "full"), "stop_gain": sg_rows({}, "full"), "factors": pd.DataFrame()},
-            "hinge": {"g": g_rows(lucky, "full"), "stop_gain": sg_rows({}, "full"), "factors": pd.DataFrame()}}
+    data = {BASELINE: arm(each(10.0, 2), {}, "full"), "hinge": arm(lucky, {}, "full")}
     t = cross_race.compare_arms(data, BASELINE, ["full"], n_boot=500)
     row = t[t["arm"] == "hinge"].iloc[0]
-    assert row["g_mae"] < row["g_mae_base"] and row["g_diff_lo"] < 0 < row["g_diff_hi"]
+    assert row["g_diff"] < 0 and row["g_diff_lo"] < 0 < row["g_diff_hi"]
     assert not row["passes"] and cross_race.choose(t, "full") == BASELINE
 
 
+def test_the_point_estimate_is_race_weighted_not_row_pooled():
+    # one race with 20 rows 1 s better, seven races with one row 0.5 s worse: pooled lower, race-weighted higher
+    base = {r: ([10.0] * 20 if i == 0 else [10.0]) for i, r in enumerate(RACES)}
+    heavy = {r: ([9.0] * 20 if i == 0 else [10.5]) for i, r in enumerate(RACES)}
+    t = cross_race.compare_arms({BASELINE: arm(base, {}, "full"), "hinge": arm(heavy, {}, "full")}, BASELINE,
+                                ["full"], n_boot=200).set_index("arm")
+    r = t.loc["hinge"]
+    assert r["g_diff_pooled"] < 0 < r["g_diff"]
+    assert r["g_diff"] == pytest.approx((-1.0 + 7 * 0.5) / 8)
+    assert r["g_mae"] == pytest.approx((9.0 + 7 * 10.5) / 8) and not r["passes"]
+
+
 def test_belief_non_inferiority_margin_and_ties_to_the_simpler_arm():
-    base = {r: [10.0] for r in RACES}
-    data = {BASELINE: arm(base, {r: [1.0] for r in RACES}),
-            # better stop gain, G worse by 3 s on every race: fails the +2 s margin
-            "hinge": arm({r: [13.0] for r in RACES}, {r: [0.5] for r in RACES}),
-            # the same improvement, two arms: the simpler one wins the tie
-            "hinge_free": arm({r: [10.5] for r in RACES}, {r: [0.7] for r in RACES}),
-            "wear_nonneg": arm({r: [10.5] for r in RACES}, {r: [0.7] for r in RACES}),
-            "posterior": arm({r: [5.0] for r in RACES}, {r: [0.1] for r in RACES})}
+    data = {BASELINE: arm(each(10.0), each(1.0)),
+            "hinge": arm(each(13.0), each(0.5)),          # better stop gain, G worse by 3 s: fails the margin
+            "hinge_free": arm(each(10.5), each(0.7)),     # the same improvement twice: the simpler wins
+            "collinear_hold": arm(each(10.5), each(0.7)),
+            "posterior": arm(each(5.0), each(0.1))}       # coverage only
     t = cross_race.compare_arms(data, BASELINE, ["to_snapshot"], n_boot=500).set_index("arm")
     assert not t.loc["hinge", "passes"] and t.loc["hinge", "sg_diff_hi"] < 0
-    assert t.loc["hinge_free", "passes"] and t.loc["wear_nonneg", "passes"]
-    assert not t.loc["posterior", "passes"]            # coverage only
-    assert cross_race.choose(t.reset_index(), "to_snapshot") == "wear_nonneg"
+    assert t.loc["hinge_free", "passes"] and t.loc["collinear_hold", "passes"]
+    assert not t.loc["posterior", "passes"]
+    assert cross_race.choose(t.reset_index(), "to_snapshot") == "collinear_hold"
+
+
+def all_arms(**over):
+    """Every committed arm at the baseline's numbers, with `over` replacing some."""
+    return {a: over.get(a, arm(each(10.0), each(1.0))) for a in ARMS}
+
+
+def test_the_belief_runs_in_two_stages_the_bound_first():
+    # the bound wins stage 1; collinear_hold beats the baseline but not the bound, so it is not chosen
+    data = all_arms(wear_nonneg=arm(each(10.0), each(0.6)), collinear_hold=arm(each(10.0), each(0.8)),
+                    collinear_hold_nonneg=arm(each(10.0), each(0.4)))
+    t, bound, pick = cross_race.belief_selection(data, n_boot=200)
+    assert bound == "wear_nonneg" and pick == "collinear_hold_nonneg"
+    s1, s2 = t[t["stage"] == "bound"], t[t["stage"] == "candidates"].set_index("arm")
+    assert list(s1["arm"]) == [BASELINE, "wear_nonneg"] and s1["passes"].tolist() == [False, True]
+    assert (s2["comparator"] == "wear_nonneg").all() and BASELINE not in s2.index
+    assert not s2.loc["collinear_hold", "passes"] and s2.loc["collinear_hold", "sg_diff"] > 0
+    # without the bound winning, stage 2 runs against the baseline
+    t, bound, pick = cross_race.belief_selection(all_arms(collinear_hold=arm(each(10.0), each(0.8))), n_boot=200)
+    assert (bound, pick) == (BASELINE, "collinear_hold")
+
+
+def test_calibrator_arms_are_na_in_the_full_window():
+    assert cross_race.same_by_construction("none", BASELINE, "full")
+    assert cross_race.same_by_construction("collinear_hold", BASELINE, "full")
+    assert not cross_race.same_by_construction("hinge", BASELINE, "full")
+    assert not cross_race.same_by_construction("wear_nonneg", BASELINE, "full")
+    assert not cross_race.same_by_construction("none", BASELINE, "to_snapshot")
+    data = {BASELINE: arm(each(10.0), {}, "full"), "none": arm(each(9.0), {}, "full")}
+    t = cross_race.compare_arms(data, BASELINE, ["full"], n_boot=100).set_index("arm")
+    assert t.loc["none", "role"] == cross_race.NA_ROLE and not t.loc["none", "passes"]
+    assert "| none | n/a (same by construction) | 8 | n/a |" in cross_race._selection_md(t.reset_index())
 
 
 def test_one_race_never_selects():
@@ -277,6 +354,17 @@ def test_one_race_never_selects():
             "hinge": arm({RACES[0]: [1.0]}, {RACES[0]: [0.1]})}
     t = cross_race.compare_arms(data, BASELINE, ["to_snapshot", "full"], n_boot=100)
     assert not t["passes"].any() and t["g_diff_lo"].isna().all()
+
+
+def test_synthetic_races_never_go_into_the_committed_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(cross_race, "CROSS_DIR", tmp_path)
+    (tmp_path / "run.json").write_text(json.dumps({"races": ["2021_04_spain", SYN]}))
+    with pytest.raises(ValueError, match="committed report"):
+        cross_race.report(tmp_path)
+    with pytest.raises(ValueError, match="committed report"):
+        cross_race.run([SYN], load_profile("local"), tmp_path)
+    cross_race.guard_committed(tmp_path / "elsewhere", [SYN])   # anywhere else is fine
+    cross_race.guard_committed(tmp_path, ["2021_04_spain"])
 
 
 # --- end to end and resumability ------------------------------------------------------------------
@@ -321,8 +409,20 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     assert spain["sc_count"] == 1 and str(spain["sc_start_laps"]) == "8"
     assert {"observed_pack_penalty_s", "free_air_share", "hindsight_fuel_s_per_lap", "base_delta_s[SOFT]"} <= set(factors)
     sel = pd.read_csv(out / "selection.csv")
-    assert set(sel.loc[sel["stage"] == "arms", "arm"]) == set(ARMS) and sel["provisional"].all()
-    assert (sel.loc[sel["stage"] == "arms"].groupby("window").size() == len(ARMS)).all()
+    assert sel["provisional"].all()
+    for w in ("full", "pre_race"):
+        assert set(sel.loc[(sel["stage"] == "arms") & (sel["window"] == w), "arm"]) == set(ARMS)
+    s1 = sel[sel["stage"] == "bound"]
+    assert list(s1["arm"]) == [BASELINE, "wear_nonneg"] and (s1["window"] == "to_snapshot").all()
+    s2 = sel[sel["stage"] == "candidates"]
+    assert len(s2) == len(ARMS) - 1 and (s2["comparator"] == record["belief_bound"]).all()
+    na = sel.loc[(sel["window"] == "full") & sel["arm"].isin(["none", "collinear_hold"]), "role"]
+    assert set(na) == {cross_race.NA_ROLE}
+    assert set(sel.loc[sel["stage"] == "prior-sd fix", "arm"]) == {record["s2_arm"]}
+    grid = pd.read_csv(out / "tau_grid.csv")
+    assert len(grid) == 1 and grid["sg_n"].iloc[0] > 0 and {"non_inferior", "passes", "g_diff_hi"} <= set(grid)
+    gfold = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / record["grid"][0] / "2021_04_spain.parquet"))
+    assert set(gfold["stop_gain"]["window"]) == {"to_snapshot"} and set(gfold["g"]["window"]) == {"to_snapshot"}
     md = (out / "summary.md").read_text()
     for heading in ("## Eligibility", "## Selection", "### Prior-sd fix", "### Tau grid", "## Coverage",
                     "## Gate and pairs", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):

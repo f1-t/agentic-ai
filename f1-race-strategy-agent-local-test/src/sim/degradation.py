@@ -246,9 +246,10 @@ def _active_set(X, y, prec, b0, beta, wear, bound, ridge):
     return best[1], best[2]
 
 
-def _bound_fit(X, y, prec, b0, beta, posterior, n_comps, bound, ridge, fallback_s2=float("nan")):
+def _bound_fit(X, y, prec, b0, beta, posterior, n_comps, bound, ridge, fallback_s2=float("nan"), wear=None):
     """wear_lower_bound on one fit. `posterior` is _posterior_sd's (sd, residual sd, cov) at
-    the unconstrained `beta`; the wear columns are 1, 3, ... 2 n_comps - 1.
+    the unconstrained `beta`; the wear columns are 1, 3, ... 2 n_comps - 1, or the `wear`
+    mask when given (a fit with some columns held, collinear_hold).
 
     Returns (beta, fixed, (sd, residual sd, cov), unconstrained): with nothing at the bound,
     `beta` and `posterior` as given and unconstrained None. Otherwise the constrained mode;
@@ -256,8 +257,9 @@ def _bound_fit(X, y, prec, b0, beta, posterior, n_comps, bound, ridge, fallback_
     dropped before inverting, s2 from the constrained residuals), the bounded wear keeping
     its unconstrained variance with no covariance; and unconstrained = (unconstrained beta
     less the constrained one, unconstrained cov), the Gaussian the posterior draws truncate."""
-    wear = np.zeros(X.shape[1], dtype=bool)
-    wear[1:2 * n_comps:2] = True
+    if wear is None:
+        wear = np.zeros(X.shape[1], dtype=bool)
+        wear[1:2 * n_comps:2] = True
     b, fixed = _active_set(X, y, prec, b0, beta, wear, bound, ridge)
     if not fixed.any():
         return beta, fixed, posterior, None
@@ -409,21 +411,39 @@ def _fuel_wear_corr(cov, n_comps, fuel_col):
     return out
 
 
-def _hold_columns(X, y, prec, beta0, hold, fallback_s2):
+def _hold_columns(X, y, prec, beta0, hold, fallback_s2, n_comps, bound=None):
     """The shrinkage fit with the `hold` columns fixed at their prior means beta0: those columns
-    times beta0 move to the right-hand side and the rest are solved as _shrunk solves them.
-    Returns (beta, sd, residual sd, cov) over every column, the held ones at beta0 with sd 0
-    and no covariance (the caller reports their prior tau)."""
+    times beta0 move to the right-hand side and the rest are solved as _shrunk solves them,
+    under wear >= `bound` on the wear columns left free when a bound is given (_bound_fit; a
+    held wear is the prior's, the bound only applies once a compound is released).
+
+    Returns (beta, sd, residual sd, cov, fixed, unconstrained) over every column: the held
+    ones at beta0 with sd 0 and no covariance (the caller reports their prior tau); fixed,
+    the wear columns on the bound (all False without one); unconstrained, None or
+    (shift, cov) in full columns as _bound_fit gives it, 0 on the held columns."""
     free = ~hold
     Xu, pu = X[:, free], prec[free]
     yu = y - X[:, hold] @ beta0[hold]
     bu = np.linalg.lstsq(Xu.T @ Xu + np.diag(pu), Xu.T @ yu + pu * beta0[free], rcond=None)[0]
     sd_u, res, cov_u = _posterior_sd(Xu, yu, bu, pu, fallback_s2)
-    beta, sd, cov = beta0.copy(), np.zeros(len(beta0)), np.zeros((len(beta0), len(beta0)))
+    k = len(beta0)
+    fixed, unconstrained = np.zeros(k, dtype=bool), None
     idx = np.flatnonzero(free)
+    if bound is not None:
+        wear = np.zeros(k, dtype=bool)
+        wear[1:2 * n_comps:2] = True
+        bu, fixed_u, (sd_u, res, cov_u), unc = _bound_fit(Xu, yu, pu, beta0[free], bu, (sd_u, res, cov_u), n_comps,
+                                                          bound, False, fallback_s2, wear=wear[free])
+        fixed[idx] = fixed_u
+        if unc is not None:
+            shift, cov0 = np.zeros(k), np.zeros((k, k))
+            shift[idx] = unc[0]
+            cov0[np.ix_(idx, idx)] = unc[1]
+            unconstrained = (shift, cov0)
+    beta, sd, cov = beta0.copy(), np.zeros(k), np.zeros((k, k))
     beta[idx], sd[idx] = bu, sd_u
     cov[np.ix_(idx, idx)] = cov_u
-    return beta, sd, res, cov
+    return beta, sd, res, cov, fixed, unconstrained
 
 
 def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None,
@@ -442,7 +462,8 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
     |corr(fuel, wear[c])| of the ordinary fit's cov is above the threshold; the fit is then
     solved again with those wear coefficients fixed, base and fuel shrunk as usual. A held
     wear reports its prior tau as sd and variance, no covariance. Needs a fuel term and a
-    prior; not combined with wear_lower_bound. fit_report gains "collinear_hold":
+    prior. With wear_lower_bound the bound applies to the wear left free, so a compound is
+    held while collinear and bounded once released. fit_report gains "collinear_hold":
     {threshold, corr: {compound: corr of the ordinary fit}, held: {compound: bool}}.
 
     Modelled: every compound of the prior, plus race compounds with min_samples clean
@@ -508,12 +529,10 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
             sd, res, cov = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
     dj = np.diag(xtx)
     weight = np.divide(dj, dj + prec, out=np.ones_like(dj), where=prec > 0)
-    hold_rep = None
+    hold_rep, bounded = None, False
     if collinear_hold is not None:
         if fuel_prior is None or not pc:
             raise ValueError("collinear_hold needs a fuel term and a practice prior")
-        if wear_lower_bound is not None:
-            raise NotImplementedError("collinear_hold with wear_lower_bound")
         corr = _fuel_wear_corr(cov, len(comps), 2 * len(comps))
         hold_c = np.abs(np.nan_to_num(corr)) > float(collinear_hold)
         hold_rep = {"threshold": float(collinear_hold), "corr": {c: float(r) for c, r in zip(comps, corr)},
@@ -521,9 +540,11 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
         if hold_c.any():
             hold = np.zeros(len(beta0), dtype=bool)
             hold[2 * np.flatnonzero(hold_c) + 1] = True
-            beta, sd, res, cov = _hold_columns(X, y, prec, beta0, hold, prior_res ** 2)
+            beta, sd, res, cov, fixed, unconstrained = _hold_columns(X, y, prec, beta0, hold, prior_res ** 2,
+                                                                     len(comps), wear_lower_bound)
             weight = np.where(hold, 0.0, weight)
-    if wear_lower_bound is not None:
+            bounded = wear_lower_bound is not None
+    if wear_lower_bound is not None and not bounded:
         beta, fixed, (sd, res, cov), unconstrained = _bound_fit(
             X, y, prec, beta0, beta, (sd, res, cov), len(comps), wear_lower_bound, False, fallback_s2=prior_res ** 2)
     held = (weight <= 0) & (prec > 0)

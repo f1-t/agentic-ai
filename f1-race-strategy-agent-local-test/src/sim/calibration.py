@@ -205,7 +205,7 @@ def observed_periods(frame: pd.DataFrame | None = None, messages: pd.DataFrame |
 
 
 # --- cross-race eligibility (SPEC 0016 A) --------------------------------------------
-MIN_FINISHERS = 12        # classified finishers with full laps
+MIN_FINISHERS = 12        # eligible drivers (eval.scenarios.eligible_drivers)
 MIN_DRY_COMPOUNDS = 2     # dry compounds raced
 MIN_COMPOUND_DRIVERS = 3  # a compound this many drivers used needs MIN_CLEAN_LAPS clean laps
 MIN_CLEAN_LAPS = 5
@@ -222,14 +222,7 @@ def _red_flag_laps(frame, messages):
     return sorted(laps)
 
 
-def _full_lap_finishers(frame, min_laps_frac=0.9):
-    """G's finishers (_finisher_ids) whose rows cover every lap from 1 to their last."""
-    out = []
-    for d in _finisher_ids(frame, min_laps_frac):
-        laps = frame.loc[frame["driver"] == d, "lap"].astype(int)
-        if laps.nunique() == laps.max() and laps.min() == 1:
-            out.append(d)
-    return out
+MAX_LAPS_DOWN = 2          # eval.scenarios.eligible_drivers' default
 
 
 def eligibility(frame: pd.DataFrame, race: RaceParams, messages: pd.DataFrame | None = None) -> dict:
@@ -237,15 +230,21 @@ def eligibility(frame: pd.DataFrame, race: RaceParams, messages: pd.DataFrame | 
 
     Eligible when: no lap on an INTERMEDIATE or WET tyre; no red flag (a red flag lets every
     car change tyres, which resets the strategy; a lap-1 red flag, a restart, is excluded
-    too and named as such); at least MIN_FINISHERS classified finishers with full laps (G's
-    finishers, 90 percent of the leader's laps, with a row on every lap they drove); at least
+    too and named as such); at least MIN_FINISHERS eligible drivers; at least
     MIN_DRY_COMPOUNDS dry compounds raced; and at least MIN_CLEAN_LAPS clean laps on every
     compound MIN_COMPOUND_DRIVERS or more drivers used. `messages` (race control) adds red
     flags and cross-checks the SC and VSC periods (observed_periods).
 
-    Returns {eligible, reasons, n_finishers, wet_laps_share, red_flags, sc_periods,
-    vsc_periods, dry_compounds}: periods as [[start, end]], laps inclusive.
+    The drivers are the eval sampler's (eval.scenarios.eligible_drivers): laps 1..n with no
+    gap, at most MAX_LAPS_DOWN laps down, so a race eligible here also gives an eval set from
+    the same drivers. Lapped finishers within two laps are in, as they made real strategy
+    decisions; blue flags further down are not modelled, so those cars are out. G keeps its
+    own rows (90 percent of the leader's laps, _finisher_ids).
+
+    Returns {eligible, reasons, n_finishers, drivers, wet_laps_share, red_flags,
+    sc_periods, vsc_periods, dry_compounds, notes}: periods as [[start, end]], laps inclusive.
     """
+    from ..eval.scenarios import eligible_drivers   # here: src.eval imports this module
     from .config import compound_class
     comp = frame["compound"].astype(str)
     wet = comp.isin(WET_COMPOUNDS)
@@ -257,9 +256,10 @@ def eligibility(frame: pd.DataFrame, race: RaceParams, messages: pd.DataFrame | 
         lap1 = [x for x in red if x <= 1]
         reasons.append(f"red flag on lap {', '.join(map(str, red))}"
                        + (" (lap 1: a restart, excluded too)" if lap1 else ""))
-    finishers = _full_lap_finishers(frame)
+    finishers = eligible_drivers(frame, race.total_laps, MAX_LAPS_DOWN)
     if len(finishers) < MIN_FINISHERS:
-        reasons.append(f"{len(finishers)} classified finishers with full laps, under {MIN_FINISHERS}")
+        reasons.append(f"{len(finishers)} eligible drivers (laps 1..n, at most {MAX_LAPS_DOWN} down), "
+                       f"under {MIN_FINISHERS}")
     dry = sorted(c for c in set(frame["compound"].dropna()) if c not in WET_COMPOUNDS
                  and compound_class(None, c) == "SLICK")
     if len(dry) < MIN_DRY_COMPOUNDS:
@@ -275,7 +275,7 @@ def eligibility(frame: pd.DataFrame, race: RaceParams, messages: pd.DataFrame | 
         periods = observed_periods(frame, messages if messages is not None and len(messages) else None)
     notes = [str(w.message) for w in caught]
     return {"race_id": race.race_id, "eligible": not reasons, "reasons": reasons,
-            "n_finishers": len(finishers), "wet_laps_share": float(wet.mean()) if len(frame) else 0.0,
+            "n_finishers": len(finishers), "drivers": finishers, "wet_laps_share": float(wet.mean()) if len(frame) else 0.0,
             "red_flags": red, "sc_periods": [[a, b] for k, a, b in periods if k == "sc"],
             "vsc_periods": [[a, b] for k, a, b in periods if k == "vsc"], "dry_compounds": dry,
             "notes": notes}

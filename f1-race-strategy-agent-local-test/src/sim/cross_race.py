@@ -24,16 +24,24 @@ Arms are overlays on each race's config, frozen before the run; arms.csv records
 file hash and its config hash on SimConfig() (a cached race's config). A derived arm is named
 <arm>__s2 (the prior-sd fix) or <arm>[__s2]__tau_<b>_<w>_<f>_<h> (tau multipliers).
 
-Selection, stated before any cross-race data (SPEC 0016 C, amendment 3), per window:
-  to_snapshot (the BELIEF): an arm replaces the baseline when the 95 percent race-cluster CI
-      of the paired stop-gain mae difference (arm less baseline) is below 0 AND the upper end
-      of the paired G mae_offset CI at horizons 10-49 is under +NONINFERIORITY_S.
-  full (the WORLD) and pre_race: when pooled G mae_offset at horizons 10-49 is lower AND the
-      95 percent CI of the per-race paired difference excludes 0.
-Among arms that pass, the lowest pooled primary metric wins; ties go to the simpler arm
-(SIMPLICITY). "posterior" is reported for coverage only. With fewer than MIN_RACES eligible
-races the report says the selection is provisional and the defaults stay. All G and
-stop-gain numbers are held out: each race's rows come from its own fold.
+Selection, stated before any cross-race data (SPEC 0016 C, amendment 3, review of #44), per
+window, every point estimate race-weighted (the mean over races of the per-race value, the
+statistic the race-cluster CIs resample; the row-pooled value is reported beside it):
+  to_snapshot (the BELIEF), in two stages: first the bound, wear_nonneg against the baseline;
+      then every other candidate against the stage-1 winner. An arm replaces its comparator
+      when the 95 percent CI of the paired stop-gain mae difference (arm less comparator) is
+      below 0 AND the upper end of the paired G mae_offset CI at horizons 10-49 is under
+      +NONINFERIORITY_S.
+  full (the WORLD) and pre_race: when the paired G mae_offset difference at horizons 10-49
+      is below 0 AND its 95 percent CI excludes 0. In the full window an arm that differs only
+      in its calibrator or a to_snapshot-only option is the baseline by construction: n/a.
+Among arms that pass, the lowest primary metric wins; ties go to the simpler arm
+(SIMPLICITY). "posterior" is reported for coverage only. The tau grid is ranked by the belief
+rule against its x1 taus. With fewer than MIN_RACES eligible races the report says the
+selection is provisional and the defaults stay. All G and stop-gain numbers are held out:
+each race's rows come from its own fold. The pace gate's practice comes from
+pace.load_practice (wet sessions left out). A run or report with a synthetic race refuses
+to write into CROSS_DIR (guard_committed).
 
 Synthetic races (synthetic_race, ids <season>_<round>_synthetic...) are generated from the
 id, so a worker process rebuilds the same race; they exist to build and test the pipeline.
@@ -68,12 +76,12 @@ RACE_FEATURES = ROOT / "data" / "race_features.csv"   # the data team's per-race
 LOADER = "src.sim.cross_race:load_race"
 
 ARMS = ("baseline", "none", "hinge", "free_air", "hinge_free", "posterior", "wear_nonneg", "collinear_hold",
-        "collinear_hold_hinge")
+        "collinear_hold_hinge", "collinear_hold_nonneg", "collinear_hold_nonneg_hinge")
 BASELINE = "baseline"
 COVERAGE_ONLY = ("posterior",)
 # simplest first: the tie-break among arms that pass
-SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "free_air", "hinge", "collinear_hold_hinge",
-              "hinge_free")
+SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air", "hinge",
+              "collinear_hold_hinge", "collinear_hold_nonneg_hinge", "hinge_free")
 MIN_RACES = 8               # below this the selection is provisional and the defaults stay
 G_HORIZONS = (10, 49)       # selection horizons, inclusive
 TAU_HORIZONS = (20, 40)     # tau grid horizons, inclusive
@@ -324,16 +332,26 @@ def free_air_share(frame) -> float:
     return float(clean["free_air"].eq(True).mean()) if len(clean) else float("nan")
 
 
-def race_tables(data: jobs.RaceData, profile, messages=None) -> dict[str, pd.DataFrame]:
+def pace_practice(data: jobs.RaceData):
+    """(practice frame or None, notes) for the pace gate: pace.load_practice for a cached race,
+    which leaves out a wet FP2 or FP3; a synthetic race's own FP2 and FP3 (always dry)."""
+    if not is_synthetic(data.race_id):
+        season, rnd, _ = parse_race_id(data.race_id)
+        return pace.load_practice(season, rnd, long_run=data.config.long_run)
+    p = data.practice
+    if p is not None and "session" in p:
+        p = p[p["session"].isin(pace.PRACTICE_SESSIONS)]
+    return (p if p is not None and len(p) else None), []
+
+
+def race_tables(data: jobs.RaceData, profile, messages=None, practice=None, notes=()) -> dict[str, pd.DataFrame]:
     """SPEC 0016 B for one race under its own config: replay, summary, by_kind, periods, gate, g,
-    hindsight and eligibility tables."""
+    hindsight and eligibility tables. `practice` feeds the pace gate (pace_practice); its notes
+    go in the summary row."""
     frame, race, cfg = data.frame, data.race, data.config
     full = Simulator(frame, cfg, data.practice)
     table, summary, by_kind = calibration.run(full, frame, race)
-    practice = data.practice
-    if practice is not None and "session" in practice:   # pace.load_practice's sessions
-        practice = practice[practice["session"].isin(pace.PRACTICE_SESSIONS)]
-    paces, _ = pace.offsets(full, frame, race, practice if practice is not None and len(practice) else None)
+    paces, _ = pace.offsets(full, frame, race, practice)
     gate = pace.gate_table(full, frame, race, data.results, paces)
     gate = gate[gate["mode"] == "simulated_order"].reset_index(drop=True)
     g = jobs.g_rows(data, cfg.model_copy(update={"n_samples": profile.sim.n_samples}), profile)
@@ -343,7 +361,7 @@ def race_tables(data: jobs.RaceData, profile, messages=None) -> dict[str, pd.Dat
     return {
         "replay": table.reset_index(),
         "summary": pd.DataFrame([{**summary, "free_air_share": free_air_share(frame),
-                                  "total_laps": race.total_laps}]),
+                                  "total_laps": race.total_laps, "pace_practice_notes": "; ".join(notes)}]),
         "by_kind": by_kind.reset_index(),
         "periods": pd.DataFrame(periods, columns=["kind", "start_lap", "end_lap"]),
         "gate": gate,
@@ -358,7 +376,8 @@ def race_job(unit: str, profile, loader=load_race) -> pd.DataFrame:
     """jobs cross_race: the packed race_tables of one race, stamped."""
     data = loader(unit, profile)
     messages, _ = race_messages(data.race_id)
-    return _stamped(pack(race_tables(data, profile, messages)), data, data.config, profile)
+    practice, notes = pace_practice(data)
+    return _stamped(pack(race_tables(data, profile, messages, practice, notes)), data, data.config, profile)
 
 
 # --- C: one fold of one arm ---------------------------------------------------------------
@@ -373,14 +392,15 @@ def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=N
     """The held-out race `data` under `arm`: G rows (calibrators.loro on the profile's windows,
     intervals at the profile's n_samples), factor errors, and stop-gain rows per window
     against the arm's own full-window fit. A tau-grid arm runs to_snapshot only, one replay
-    per row, on the laps whose horizons reach TAU_HORIZONS, and no stop-gain. `loader` and
+    per row, on the laps whose horizons reach TAU_HORIZONS (its stop-gain rows on every
+    profile lap: a fit per k, no sampling). `loader` and
     `pool` give the training races of a learned calibrator."""
     base, _, tau = parse_arm(arm)
     grid = tau is not None
     unit = data.race_id
     cfg = arm_config(arm, data.config)
     data = replace(data, config=cfg)
-    ks = jobs.laps_k_for(data.frame, data.race.total_laps, profile)
+    all_ks = ks = jobs.laps_k_for(data.frame, data.race.total_laps, profile)
     if grid:
         ks = _grid_laps(data.frame, ks)
     races = [data]
@@ -395,11 +415,11 @@ def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=N
                            n_samples=None if grid else n, calibrator_params=cfg.calibrator.params or None,
                            midrace_samples=n)
     stops = []
-    if not grid and base not in COVERAGE_ONLY:
+    if base not in COVERAGE_ONLY:   # a grid arm too: a fit at each k, no sampling
         hind = Simulator(data.frame, cfg.model_copy(update={"fit_window": "full"}), data.practice).degradation
         for w in windows:
             sim = Simulator(data.frame, cfg.model_copy(update={"fit_window": w}), data.practice)
-            stops.append(calibration.stop_gain(sim, data.frame, data.race, hind, ks))
+            stops.append(calibration.stop_gain(sim, data.frame, data.race, hind, all_ks))
     stop = pd.concat(stops, ignore_index=True) if stops else pd.DataFrame(columns=calibration.STOP_GAIN_COLUMNS)
     return {"g": res.rows.drop(columns=["calibration_every"], errors="ignore"), "factors": res.factor_errors,
             "stop_gain": stop}
@@ -433,10 +453,21 @@ def _fold_items(arms, races, profile, out):
     return [("h_fold", r, profile, str(out), _args(races, arm=a, profile=profile.name)) for a in arms for r in races]
 
 
+def guard_committed(out, races):
+    """Refuse a run or report with a synthetic race id that would write into the committed
+    report directory (CROSS_DIR): synthetic races belong in a scratch or tmp directory."""
+    synthetic = [r for r in races if is_synthetic(canonical_race_id(r))]
+    if synthetic and Path(out).resolve() == Path(CROSS_DIR).resolve():
+        raise ValueError(f"synthetic races {synthetic} would go into the committed report {CROSS_DIR}; "
+                         "pass --out a scratch directory")
+
+
 def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid=True, n_jobs=None,
         log=print) -> dict:
     """A, B and the three C stages over `races` (canonical ids or aliases; synthetic ids
-    allowed). Writes eligibility.json and run.json under `out`; returns the run record."""
+    allowed outside CROSS_DIR, guard_committed). Writes eligibility.json and run.json under
+    `out`; returns the run record."""
+    guard_committed(out, races)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     n_jobs = profile.parallel.n_jobs if n_jobs is None else n_jobs
@@ -459,7 +490,8 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     chosen = sel["chosen"].get(BELIEF_WINDOW, BASELINE)
     record = {"races": races, "eligible": eligible, "arms": list(ARMS), "profile": profile.name,
               "profile_hash": profile.hash, "sim_code_version": calibration.SIM_CODE_VERSION,
-              "belief_choice": chosen, "s2_arm": None, "grid_arm": None, "grid": [], "notes": []}
+              "belief_bound": sel["bound"], "belief_choice": chosen, "s2_arm": None, "grid_arm": None, "grid": [],
+              "notes": []}
     if _holds_prior(chosen):
         record["notes"].append(f"{chosen} holds the prior: no shrinkage fit, so no prior-sd fix and no tau grid")
     else:
@@ -511,34 +543,32 @@ def _boot_mean(values: pd.Series, n_boot=N_BOOT, seed=0) -> tuple[float, float]:
     return float(lo), float(hi)
 
 
-def _boot_pooled(by_race: dict, n_boot=N_BOOT, seed=0) -> tuple[float, float]:
-    """95 percent race-cluster CI of the pooled mean of {race: abs errors}. NaN with fewer than 2."""
-    races = [r for r, v in by_race.items() if len(v)]
-    if len(races) < 2:
-        return float("nan"), float("nan")
-    rng = np.random.default_rng(seed)
-    stats = [np.concatenate([by_race[r] for r in rng.choice(races, len(races))]).mean() for _ in range(n_boot)]
-    lo, hi = np.percentile(stats, [2.5, 97.5])
-    return float(lo), float(hi)
+PAIRED_KEYS = ("mae", "mae_base", "mae_lo", "mae_hi", "bias", "diff", "diff_lo", "diff_hi", "mae_pooled",
+               "mae_base_pooled", "diff_pooled")
 
 
 def paired(arm_rows: pd.DataFrame, base_rows: pd.DataFrame, keys, value, n_boot=N_BOOT, seed=0) -> dict:
-    """Arm against baseline on the rows both have (matched on `keys`, race_id among them):
-    pooled mean |value| of each, the per-race paired difference (arm less baseline, each
-    race's mean |value|), its mean over races and its 95 percent race-cluster CI."""
+    """Arm against its comparator on the rows both have (matched on `keys`, race_id among them).
+
+    The point estimates are race-weighted, the statistic the race-cluster CIs bootstrap, so a
+    race with many rows does not dominate: mae and mae_base, the mean over races of each
+    race's mean |value|, with mae's 95 percent CI; diff, the mean over races of the per-race
+    paired difference (arm less comparator), with its CI; bias, the mean of per-race signed
+    means. The row-pooled values (mae_pooled, mae_base_pooled, diff_pooled) are secondary."""
     a = arm_rows[keys + [value]].dropna(subset=[value])
     b = base_rows[keys + [value]].dropna(subset=[value])
     m = a.merge(b, on=keys, suffixes=("_arm", "_base"))
     out = {"n_rows": int(len(m)), "n_races": int(m["race_id"].nunique()) if len(m) else 0}
     if not len(m):
-        return {**out, "mae": np.nan, "mae_base": np.nan, "bias": np.nan, "mae_lo": np.nan, "mae_hi": np.nan,
-                "diff": np.nan, "diff_lo": np.nan, "diff_hi": np.nan}
-    ea, eb = m[f"{value}_arm"].abs(), m[f"{value}_base"].abs()
-    per_race = (ea - eb).groupby(m["race_id"]).mean()
-    lo, hi = _boot_mean(per_race, n_boot, seed)
-    mlo, mhi = _boot_pooled({r: g.to_numpy() for r, g in ea.groupby(m["race_id"])}, n_boot, seed)
-    return {**out, "mae": float(ea.mean()), "mae_base": float(eb.mean()), "bias": float(m[f"{value}_arm"].mean()),
-            "mae_lo": mlo, "mae_hi": mhi, "diff": float(per_race.mean()), "diff_lo": lo, "diff_hi": hi}
+        return {**out, **dict.fromkeys(PAIRED_KEYS, np.nan)}
+    ea, eb, race = m[f"{value}_arm"].abs(), m[f"{value}_base"].abs(), m["race_id"]
+    ra, rb = ea.groupby(race).mean(), eb.groupby(race).mean()
+    lo, hi = _boot_mean(ra - rb, n_boot, seed)
+    mlo, mhi = _boot_mean(ra, n_boot, seed)
+    return {**out, "mae": float(ra.mean()), "mae_base": float(rb.mean()), "mae_lo": mlo, "mae_hi": mhi,
+            "bias": float(m[f"{value}_arm"].groupby(race).mean().mean()), "diff": float((ra - rb).mean()),
+            "diff_lo": lo, "diff_hi": hi, "mae_pooled": float(ea.mean()), "mae_base_pooled": float(eb.mean()),
+            "diff_pooled": float(ea.mean() - eb.mean())}
 
 
 G_KEYS = ["race_id", "window", "driver", "k"]
@@ -550,8 +580,9 @@ def _g_window(rows, window, horizons=G_HORIZONS):
 
 
 def passes_g(row) -> bool:
-    """WORLD and pre_race rule: pooled G mae lower AND the paired CI excludes 0 (NaN fails)."""
-    return bool(row["g_mae"] < row["g_mae_base"] and (row["g_diff_hi"] < 0 or row["g_diff_lo"] > 0))
+    """WORLD and pre_race rule: G mae lower (race-weighted paired difference below 0) AND its
+    95 percent CI excludes 0 (NaN fails)."""
+    return bool(row["g_diff"] < 0 and (row["g_diff_hi"] < 0 or row["g_diff_lo"] > 0))
 
 
 def passes_belief(row) -> bool:
@@ -563,71 +594,119 @@ def rule_for(window: str) -> str:
     return "belief: stop-gain, G non-inferiority" if window == BELIEF_WINDOW else "G mae_offset 10-49"
 
 
-def choose(table: pd.DataFrame, window: str, baseline=BASELINE) -> str:
-    """The window's arm: among those that pass its rule, the lowest pooled primary metric
-    (stop-gain mae for the belief, G mae_offset otherwise); ties to the simpler; else baseline."""
+def choose(table: pd.DataFrame, window: str, comparator=BASELINE) -> str:
+    """The window's arm: among those that pass its rule, the lowest race-weighted primary metric
+    (stop-gain mae for the belief, G mae_offset otherwise); ties to the simpler; else the comparator."""
     t = table[(table["window"] == window) & table["passes"]]
     if t.empty:
-        return baseline
+        return comparator
     metric = "sg_mae" if window == BELIEF_WINDOW else "g_mae"
     rank = {a: i for i, a in enumerate(SIMPLICITY)}
     t = t.assign(_m=t[metric].round(6), _s=[rank.get(parse_arm(a)[0], len(rank)) for a in t["arm"]])
     return str(t.sort_values(["_m", "_s"]).iloc[0]["arm"])
 
 
-def compare_arms(arm_data: dict[str, dict], baseline: str, windows, n_boot=N_BOOT) -> pd.DataFrame:
-    """One row per (window, arm) against `baseline`: G and stop-gain pooled mae with CIs, the
-    paired differences with CIs, and whether the window's rule passes."""
+# the full window fits every race lap with no calibrator and no shrinkage fit, so these do nothing there
+NA_ROLE = "n/a (same by construction)"
+_TO_SNAPSHOT_ONLY_PARAMS = ("collinear_hold", "divide_data_by_s2")
+
+
+def same_by_construction(arm: str, comparator: str, window: str) -> bool:
+    """Whether `arm` is `comparator` in `window` by construction: in the full window an arm that
+    differs only in its calibrator (none), its taus or a to_snapshot-only degradation option."""
+    if window != "full" or arm == comparator:
+        return False
+
+    def world(name):
+        cfg = arm_config(name)
+        params = {k: v for k, v in cfg.degradation.params.items() if k not in _TO_SNAPSHOT_ONLY_PARAMS}
+        default = SimConfig()
+        return cfg.model_copy(update={"calibrator": default.calibrator, "shrinkage": default.shrinkage,
+                                      "degradation": cfg.degradation.model_copy(update={"params": params})})
+    return world(arm) == world(comparator)
+
+
+def compare_arms(arm_data: dict[str, dict], comparator: str, windows, n_boot=N_BOOT, stage="arms",
+                 horizons=G_HORIZONS) -> pd.DataFrame:
+    """One row per (window, arm) against `comparator`: G (at `horizons`) and stop-gain mae with
+    CIs, the paired differences with CIs (paired), and whether the window's rule passes. An arm
+    the same as the comparator by construction (same_by_construction) has role NA_ROLE (shown as n/a)."""
     rows = []
-    base = arm_data[baseline]
+    base = arm_data[comparator]
     for window in windows:
         for arm, d in arm_data.items():
-            g = paired(_g_window(d["g"], window), _g_window(base["g"], window), G_KEYS, "err_offset_s", n_boot)
+            g = paired(_g_window(d["g"], window, horizons), _g_window(base["g"], window, horizons), G_KEYS,
+                       "err_offset_s", n_boot)
             sw = d["stop_gain"][d["stop_gain"]["window"] == window] if len(d["stop_gain"]) else d["stop_gain"]
             bw = base["stop_gain"][base["stop_gain"]["window"] == window] if len(base["stop_gain"]) else base["stop_gain"]
             sg = paired(sw, bw, SG_KEYS, "err_s", n_boot)
-            row = {"window": window, "arm": arm, "baseline": baseline, "rule": rule_for(window),
-                   "role": ("coverage only" if parse_arm(arm)[0] in COVERAGE_ONLY else
-                            "baseline" if arm == baseline else "candidate"),
-                   "n_races": g["n_races"], "g_n": g["n_rows"],
+            role = ("comparator" if arm == comparator else "coverage only" if parse_arm(arm)[0] in COVERAGE_ONLY
+                    else NA_ROLE if same_by_construction(arm, comparator, window) else "candidate")
+            row = {"stage": stage, "window": window, "arm": arm, "comparator": comparator, "rule": rule_for(window),
+                   "role": role, "n_races": g["n_races"], "g_n": g["n_rows"],
                    **{f"g_{k}": v for k, v in g.items() if k not in ("n_rows", "n_races")},
                    "sg_n": sg["n_rows"], **{f"sg_{k}": v for k, v in sg.items() if k not in ("n_rows", "n_races")}}
-            ok = row["role"] == "candidate"
-            row["passes"] = ok and (passes_belief(row) if window == BELIEF_WINDOW else passes_g(row))
+            row["passes"] = role == "candidate" and (passes_belief(row) if window == BELIEF_WINDOW else passes_g(row))
             rows.append(row)
     return pd.DataFrame(rows)
 
 
+BOUND_ARM = "wear_nonneg"
+
+
+def belief_selection(arm_data, n_boot=N_BOOT) -> tuple[pd.DataFrame, str, str]:
+    """The belief (to_snapshot) in two stages. Stage 1 decides the bound: wear_nonneg against the
+    baseline under the belief rule. Stage 2 compares every other candidate against the stage-1
+    winner, the belief default a candidate would replace. Returns (both stages' rows, the
+    stage-1 winner, the choice)."""
+    s1 = compare_arms({a: arm_data[a] for a in (BASELINE, BOUND_ARM)}, BASELINE, [BELIEF_WINDOW], n_boot, "bound")
+    bound = choose(s1, BELIEF_WINDOW, BASELINE)
+    others = [a for a in arm_data if a not in (BASELINE, BOUND_ARM)]
+    s2 = compare_arms({bound: arm_data[bound], **{a: arm_data[a] for a in others}}, bound, [BELIEF_WINDOW], n_boot,
+                      "candidates")
+    return pd.concat([s1, s2], ignore_index=True), bound, choose(s2, BELIEF_WINDOW, bound)
+
+
 def selection_tables(out, races, profile, n_boot=N_BOOT) -> dict:
-    """The stage-1 selection over the committed arms: {"table", "chosen": {window: arm}, "arm_data"}."""
+    """The selection over the committed arms: {"table", "chosen": {window: arm}, "bound", "arm_data"}.
+    The belief window in two stages (belief_selection), the others against the baseline."""
     arm_data = {a: arm_outputs(out, a, races, profile) for a in ARMS}
     windows = list(profile.g.windows)
-    table = compare_arms(arm_data, BASELINE, windows, n_boot)
-    return {"table": table, "chosen": {w: choose(table, w) for w in windows}, "arm_data": arm_data}
+    parts, chosen, bound = [], {}, BASELINE
+    for w in windows:
+        if w == BELIEF_WINDOW:
+            t, bound, chosen[w] = belief_selection(arm_data, n_boot)
+        else:
+            t = compare_arms(arm_data, BASELINE, [w], n_boot)
+            chosen[w] = choose(t, w)
+        parts.append(t)
+    return {"table": pd.concat(parts, ignore_index=True), "chosen": chosen, "bound": bound, "arm_data": arm_data}
 
 
 def s2_table(out, races, profile, chosen, n_boot=N_BOOT) -> pd.DataFrame:
     """The prior-sd fix alone: <chosen>__s2 against <chosen> under the belief rule."""
     data = {chosen: arm_outputs(out, chosen, races, profile), f"{chosen}__{S2}": arm_outputs(out, f"{chosen}__{S2}",
                                                                                            races, profile)}
-    t = compare_arms(data, chosen, [BELIEF_WINDOW], n_boot)
-    t = t[t["arm"] != chosen].copy()
+    t = compare_arms(data, chosen, [BELIEF_WINDOW], n_boot, "prior-sd fix")
+    return t[t["arm"] != chosen].reset_index(drop=True)
+
+
+def tau_table(out, races, profile, arms, n_boot=N_BOOT) -> pd.DataFrame:
+    """The tau grid ranked by the belief rule against its x1 combination (the current taus):
+    rows that pass it first, then those non-inferior on G at TAU_HORIZONS (paired CI upper end
+    under +NONINFERIORITY_S), each by race-weighted stop-gain mae."""
+    if not arms:
+        return pd.DataFrame()
+    base_arm = parse_arm(arms[0])
+    ones = tau_arm(base_arm[0] + (f"__{S2}" if base_arm[1] else ""), (1.0,) * len(TAU_KEYS))
+    data = {a: arm_outputs(out, a, races, profile) for a in arms}
+    t = compare_arms(data, ones, [BELIEF_WINDOW], n_boot, "tau grid", TAU_HORIZONS)
     t["passes"] = [passes_belief(r) for _, r in t.iterrows()]
+    t["non_inferior"] = t["g_diff_hi"] < NONINFERIORITY_S
+    for k, i in zip(TAU_KEYS, range(len(TAU_KEYS))):
+        t[f"x_{k}"] = [parse_arm(a)[2][i] for a in t["arm"]]
+    t = t.sort_values(["passes", "non_inferior", "sg_mae"], ascending=[False, False, True], kind="stable")
     return t.reset_index(drop=True)
-
-
-def tau_table(out, races, profile, arms) -> pd.DataFrame:
-    """Pooled LORO mae_offset at TAU_HORIZONS under to_snapshot per tau-grid arm, best first."""
-    rows = []
-    for arm in arms:
-        g = _g_window(arm_outputs(out, arm, races, profile)["g"], BELIEF_WINDOW, TAU_HORIZONS)
-        tau = parse_arm(arm)[2]
-        e = g["err_offset_s"].abs().dropna() if len(g) else pd.Series(dtype=float)
-        rows.append({"arm": arm, **{f"x_{k}": m for k, m in zip(TAU_KEYS, tau)}, "n": int(len(e)),
-                     "n_races": int(g["race_id"].nunique()) if len(g) else 0,
-                     "mae_offset_s": float(e.mean()) if len(e) else np.nan})
-    t = pd.DataFrame(rows)
-    return t.sort_values("mae_offset_s", kind="stable").reset_index(drop=True) if len(t) else t
 
 
 # --- D: factors ------------------------------------------------------------------------------
@@ -777,10 +856,31 @@ def changed_from_spain(factors: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _selection_md(t: pd.DataFrame) -> str:
+    """One stage's rows: race-weighted G and SG mae and paired differences [95% CIs], the
+    row-pooled differences beside them; an arm the same by construction shows n/a."""
+    na = t["role"] == NA_ROLE
+
+    def col(f):
+        return ["n/a" if n else f(r) for n, (_, r) in zip(na, t.iterrows())]
+    return md_table(pd.DataFrame({
+        "arm": t["arm"].to_numpy(), "role": t["role"].to_numpy(), "races": t["n_races"].to_numpy(),
+        "G mae": col(lambda r: _ci(r["g_mae"], r["g_mae_lo"], r["g_mae_hi"])),
+        "G bias": col(lambda r: _fmt(r["g_bias"])),
+        "G diff": col(lambda r: _ci(r["g_diff"], r["g_diff_lo"], r["g_diff_hi"])),
+        "G diff pooled": col(lambda r: _fmt(r["g_diff_pooled"])),
+        "SG mae": col(lambda r: _ci(r["sg_mae"], r["sg_mae_lo"], r["sg_mae_hi"])),
+        "SG diff": col(lambda r: _ci(r["sg_diff"], r["sg_diff_lo"], r["sg_diff_hi"])),
+        "SG diff pooled": col(lambda r: _fmt(r["sg_diff_pooled"])),
+        "passes": col(lambda r: _fmt(bool(r["passes"])))}))
+
+
 def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BOOT) -> Path:
-    """D and E from a run's outputs under `out` (run.json names the races and the profile)."""
+    """D and E from a run's outputs under `out` (run.json names the races and the profile).
+    Refuses a run with a synthetic race when `out` is CROSS_DIR (guard_committed)."""
     out = Path(out)
     record = json.loads((out / "run.json").read_text())
+    guard_committed(out, record["races"])
     elig = json.loads((out / "eligibility.json").read_text())
     profile = load_profile(record["profile"]) if profile is None else profile
     eligible = record["eligible"]
@@ -791,13 +891,10 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     sel = selection_tables(out, eligible, profile, n_boot)
     table, chosen = sel["table"], sel["chosen"]
     s2 = s2_table(out, eligible, profile, record["belief_choice"], n_boot) if record.get("s2_arm") else pd.DataFrame()
-    selection = pd.concat([table, s2.assign(stage="prior-sd fix")], ignore_index=True) if len(s2) else table
     provisional = len(eligible) < MIN_RACES
-    if "stage" not in selection:
-        selection["stage"] = "arms"
-    selection = selection.assign(stage=selection["stage"].fillna("arms"), provisional=provisional)
+    selection = pd.concat([table, s2], ignore_index=True).assign(provisional=provisional)
     selection.to_csv(out / "selection.csv", index=False)
-    grid = tau_table(out, eligible, profile, record.get("grid") or [])
+    grid = tau_table(out, eligible, profile, record.get("grid") or [], n_boot)
     grid.to_csv(out / "tau_grid.csv", index=False)
     g_parts = [calibration.aggregate(d["g"], n_boot=min(n_boot, 500)).reset_index().assign(arm=a)
                for a, d in sel["arm_data"].items() if len(d["g"])]
@@ -822,8 +919,9 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     md += ["All G and stop-gain numbers are held out: each race's rows come from its own leave-one-race-out "
            "fold, and Spain is one race among the rest.", ""]
 
-    md += ["## Eligibility", ""]
-    et = pd.DataFrame([{"race": e["race_id"], "eligible": e["eligible"], "finishers": e["n_finishers"],
+    md += ["## Eligibility", "", "Drivers: eval.scenarios.eligible_drivers (laps 1..n with no gap, at most two laps "
+           "down), the eval sampler's set.", ""]
+    et = pd.DataFrame([{"race": e["race_id"], "eligible": e["eligible"], "drivers": e["n_finishers"],
                         "wet share": e["wet_laps_share"], "red flags": " ".join(map(str, e["red_flags"])) or "-",
                         "SC": " ".join(f"{a}-{b}" for a, b in e["sc_periods"]) or "-",
                         "VSC": " ".join(f"{a}-{b}" for a, b in e["vsc_periods"]) or "-",
@@ -837,38 +935,52 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     md += ["## Arms", "", md_table(arms_table(ARMS)[["arm", "file", "file_sha256", "config_hash", "role"]]), ""]
 
     md += ["## Selection", "",
-           f"G: pooled mae_offset_s at horizons {G_HORIZONS[0]}-{G_HORIZONS[1]} [race-cluster 95% CI]; "
-           "diff: per-race paired difference against the baseline, mean over races [95% CI]. "
-           "SG: stop-gain mae_s at real pit stops. "
-           f"Belief rule (to_snapshot): SG diff CI below 0 and G diff CI upper end under +{NONINFERIORITY_S:g} s. "
-           "World (full) and pre_race: G lower and G diff CI excluding 0. Ties to the simpler arm.", ""]
+           f"G: mae_offset_s at horizons {G_HORIZONS[0]}-{G_HORIZONS[1]}; SG: stop-gain mae_s at real pit stops. "
+           "mae and diff are race-weighted (the mean over races of each race's value, the statistic the "
+           "race-cluster 95% CI in brackets resamples); diff is the per-race paired difference against the "
+           "stage's comparator; 'pooled' is the row-pooled difference, secondary. "
+           f"Belief rule (to_snapshot): SG diff CI below 0 and G diff CI upper end under +{NONINFERIORITY_S:g} s, "
+           "in two stages: the bound (wear_nonneg against the baseline), then every other candidate against "
+           "the stage-1 winner. World (full) and pre_race: G diff below 0 with its CI excluding 0. Ties to the "
+           "simpler arm. n/a: the same as the comparator in that window by construction (in the full window "
+           "there is no calibrator and no shrinkage fit).", ""]
     for w in windows:
         t = table[table["window"] == w]
-        st = pd.DataFrame({"arm": t["arm"], "role": t["role"], "races": t["n_races"],
-                           "G mae": [_ci(a, b, c) for a, b, c in zip(t["g_mae"], t["g_mae_lo"], t["g_mae_hi"])],
-                           "G bias": t["g_bias"],
-                           "G diff": [_ci(a, b, c) for a, b, c in zip(t["g_diff"], t["g_diff_lo"], t["g_diff_hi"])],
-                           "SG mae": [_ci(a, b, c) for a, b, c in zip(t["sg_mae"], t["sg_mae_lo"], t["sg_mae_hi"])],
-                           "SG diff": [_ci(a, b, c) for a, b, c in zip(t["sg_diff"], t["sg_diff_lo"], t["sg_diff_hi"])],
-                           "passes": t["passes"]})
+        md += [f"### {w} ({rule_for(w)})", ""]
+        for stage, part in t.groupby("stage", sort=False):
+            if w == BELIEF_WINDOW:
+                md += [f"Stage {'1, the bound' if stage == 'bound' else '2, against ' + part['comparator'].iloc[0]}:",
+                       ""]
+            md += [_selection_md(part), ""]
         pick = chosen[w]
+        if w == BELIEF_WINDOW:
+            md += [f"Stage 1 (the bound): {sel['bound']}" + (" (provisional)." if provisional else "."), ""]
         verdict = (f"provisional choice {pick}; the defaults stay" if provisional else
                    f"{pick} replaces the baseline" if pick != BASELINE else "the baseline stays")
-        md += [f"### {w} ({rule_for(w)})", "", md_table(st), f"Decision for {w}: **{verdict}**.", ""]
+        md += [f"Decision for {w}: **{verdict}**.", ""]
     md += ["### Prior-sd fix (SPEC 0017 G), measured alone", ""]
     if len(s2):
         r = s2.iloc[0]
-        md += [f"{r['arm']} against {r['baseline']} under the belief rule: G diff {_ci(r['g_diff'], r['g_diff_lo'], r['g_diff_hi'])}, "
-               f"SG diff {_ci(r['sg_diff'], r['sg_diff_lo'], r['sg_diff_hi'])}; passes: {_fmt(bool(r['passes']))}"
+        md += [f"{r['arm']} against {r['comparator']} under the belief rule: G diff "
+               f"{_ci(r['g_diff'], r['g_diff_lo'], r['g_diff_hi'])}, SG diff "
+               f"{_ci(r['sg_diff'], r['sg_diff_lo'], r['sg_diff_hi'])}; passes: {_fmt(bool(r['passes']))}"
                + (" (provisional)." if provisional else "."), ""]
     else:
         md += ["Not run. " + " ".join(record.get("notes", [])), ""]
-    md += [f"### Tau grid on {record.get('grid_arm') or '-'} (pooled LORO mae_offset_s, to_snapshot, horizons "
-           f"{TAU_HORIZONS[0]}-{TAU_HORIZONS[1]})", ""]
+    md += [f"### Tau grid on {record.get('grid_arm') or '-'} (belief rule against the x1 taus: stop-gain mae "
+           f"primary, G at horizons {TAU_HORIZONS[0]}-{TAU_HORIZONS[1]} non-inferior within +{NONINFERIORITY_S:g} s)",
+           ""]
     if len(grid):
+        show = grid.assign(**{
+            "SG mae": [_fmt(v) for v in grid["sg_mae"]],
+            "SG diff": [_ci(a, b, c) for a, b, c in zip(grid["sg_diff"], grid["sg_diff_lo"], grid["sg_diff_hi"])],
+            "G mae 20-40": [_fmt(v) for v in grid["g_mae"]],
+            "G diff": [_ci(a, b, c) for a, b, c in zip(grid["g_diff"], grid["g_diff_lo"], grid["g_diff_hi"])]})
+        cols = ["arm", *[f"x_{k}" for k in TAU_KEYS], "SG mae", "SG diff", "G mae 20-40", "G diff", "non_inferior",
+                "passes"]
         one = grid[grid[[f"x_{k}" for k in TAU_KEYS]].eq(1.0).all(axis=1)]
         rank = int(one.index[0]) + 1 if len(one) else None
-        md += [md_table(grid.head(5)), f"{len(grid)} combinations; the current taus (x1) rank {rank or '-'}"
+        md += [md_table(show[cols].head(5)), f"{len(grid)} combinations; the current taus (x1) rank {rank or '-'}"
                + ("; provisional, nothing adopted." if provisional else "."), ""]
     else:
         md += ["Not run.", ""]
