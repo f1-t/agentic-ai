@@ -1,0 +1,2 @@
+race_id,total_laps,pit_loss_s,observed_pit_loss_s,observed_sc_factor,observed_sc_factor_median,observed_vsc_factor,observed_lap1_extra_s,observed_sc_pit_loss_factor,n_sc_stops,observed_pack_penalty_s,observed_pack_penalty_median_s,free_air_share,sc_count,sc_laps,vsc_count,vsc_laps,sc_start_laps,vsc_start_laps,hindsight_fuel_s_per_lap,base_delta_s[MEDIUM],base_delta_s[SOFT]
+2021_04_spain,66,23.85,23.85,1.361,1.398,,9.51,0.632,3.0,0.24,0.114,0.6762295081967213,1.0,3.0,0.0,0.0,8,,-0.05785336219997917,0.36701818186210744,1.0053851933902251

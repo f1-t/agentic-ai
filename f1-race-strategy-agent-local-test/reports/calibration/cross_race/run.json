@@ -1,0 +1,55 @@
+{
+ "races": [
+  "2021_04_spain"
+ ],
+ "eligible": [
+  "2021_04_spain"
+ ],
+ "arms": [
+  "baseline",
+  "none",
+  "hinge",
+  "free_air",
+  "hinge_free",
+  "posterior",
+  "wear_nonneg",
+  "collinear_hold",
+  "collinear_hold_hinge"
+ ],
+ "profile": "local",
+ "profile_hash": "a0d0d34f2faa",
+ "sim_code_version": "c75564a9d137",
+ "belief_choice": "baseline",
+ "s2_arm": "baseline__s2",
+ "grid_arm": "baseline",
+ "grid": [
+  "baseline__tau_0.5_0.5_0.5_1",
+  "baseline__tau_0.5_0.5_1_1",
+  "baseline__tau_0.5_0.5_2_1",
+  "baseline__tau_0.5_1_0.5_1",
+  "baseline__tau_0.5_1_1_1",
+  "baseline__tau_0.5_1_2_1",
+  "baseline__tau_0.5_2_0.5_1",
+  "baseline__tau_0.5_2_1_1",
+  "baseline__tau_0.5_2_2_1",
+  "baseline__tau_1_0.5_0.5_1",
+  "baseline__tau_1_0.5_1_1",
+  "baseline__tau_1_0.5_2_1",
+  "baseline__tau_1_1_0.5_1",
+  "baseline__tau_1_1_1_1",
+  "baseline__tau_1_1_2_1",
+  "baseline__tau_1_2_0.5_1",
+  "baseline__tau_1_2_1_1",
+  "baseline__tau_1_2_2_1",
+  "baseline__tau_2_0.5_0.5_1",
+  "baseline__tau_2_0.5_1_1",
+  "baseline__tau_2_0.5_2_1",
+  "baseline__tau_2_1_0.5_1",
+  "baseline__tau_2_1_1_1",
+  "baseline__tau_2_1_2_1",
+  "baseline__tau_2_2_0.5_1",
+  "baseline__tau_2_2_1_1",
+  "baseline__tau_2_2_2_1"
+ ],
+ "notes": []
+}
