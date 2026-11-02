@@ -59,6 +59,13 @@ leave-one-race-out selection and as-of rates per race, under reports/calibration
 
     python -m src.sim.calibrate rates [--periods data/derived/neutralised_periods.csv]
     python -m src.sim.calibrate rates --synthetic --out /tmp/rates
+
+The per-circuit race-pace prior for the fuel term (SPEC 0020, fuel_prior.py): targets, the
+fuel_* calibrators' leave-one-race-out selection and the F table, under
+reports/calibration/fuel_prior/ (a synthetic run goes to a scratch directory):
+
+    python -m src.sim.calibrate fuel --races 2021_04_spain ... [--race-features data/race_features.csv]
+    python -m src.sim.calibrate fuel --synthetic --out /tmp/fuel
 """
 import argparse
 import json
@@ -463,6 +470,9 @@ def main(argv=None):
     if argv and argv[0] == "rates":
         from . import event_rates
         return event_rates.main(argv[1:])
+    if argv and argv[0] == "fuel":
+        from . import fuel_prior
+        return fuel_prior.main(argv[1:])
     if argv and argv[0] == "traffic":
         return traffic_main(argv[1:])
     if argv and argv[0] == "calibrators":
