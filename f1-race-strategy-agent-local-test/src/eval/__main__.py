@@ -99,6 +99,10 @@ def main(argv=None):
     p.add_argument("--policies", nargs="*", default=["baselines"])
     p.add_argument("--recorded", nargs="*", default=[])
     _sim_configs(p)
+    p.add_argument("--reference-dir", default=str(REFERENCE_DIR),
+                   help="where the runner looks up cached references (default data/references)")
+    p.add_argument("--require-reference", action="store_true",
+                   help="a scenario without a cached reference fails its chunk (report runs)")
 
     argv = list(sys.argv[1:] if argv is None else argv)
     rest = []
@@ -186,7 +190,8 @@ def main(argv=None):
     from ..sim import jobs
     world, alts = _worlds(ap, args)
     install_job_runner(args.scenarios, args.policies, args.recorded, belief_config=args.belief_config,
-                       world_config=world, ref_world_configs=alts)
+                       world_config=world, ref_world_configs=alts, reference_dir=args.reference_dir,
+                       require_reference=args.require_reference)
     return jobs.main(rest)
 
 

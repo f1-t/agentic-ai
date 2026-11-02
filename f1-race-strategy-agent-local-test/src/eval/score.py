@@ -62,7 +62,7 @@ from ..sim import calibration, traffic
 from ..sim.optimizer_bridge import optimize_batch
 from . import decisions
 from .policies import Decision
-from .reference import Reference, ReferenceStore, compute_reference, paired_se
+from .reference import REFERENCE_DIR, Reference, ReferenceStore, compute_reference, paired_se
 
 STATUSES = ("ok", "invalid", "unavailable", "error", "no_reference")
 REGRET_TOL_S = 1e-6
@@ -396,13 +396,17 @@ def _spec_value(value):
 
 
 def install_job_runner(scenarios_path, policy_names=("baselines",), recorded=(), seed=0,
-                       belief_config=None, world_config=None, ref_world_configs=()):
+                       belief_config=None, world_config=None, ref_world_configs=(), reference_dir=None,
+                       require_reference=False):
     """Register the eval with sim.jobs so `eval_chunk` tasks score slices of a scenario set.
     Chunk i is items[i * size:(i + 1) * size], size = profile.parallel.eval_chunk_size.
-    The configs (SimConfig, dict or file path) go to race_simulators. The runner's spec
-    (scenarios path, policy names, recorded files, configs) is registered with it, so
-    run-all carries it in each task's payload and every worker installs the same runner.
-    Returns the number of scenario items."""
+    The configs (SimConfig, dict or file path) go to race_simulators. The runner reads the
+    reference cache under `reference_dir` (default data/references) whenever a reference
+    matches its inputs and computes it otherwise; `require_reference` makes a miss an error
+    (eval.reference.ReferenceMissing), so a report run fails on its first chunk. The
+    runner's spec (scenarios path, policy names, recorded files, configs, reference_dir,
+    require_reference) is registered with it, so run-all carries it in each task's payload
+    and every worker installs the same runner. Returns the number of scenario items."""
     from ..sim import jobs
     from .policies import resolve
     from .scenarios import ScenarioSet
@@ -411,6 +415,8 @@ def install_job_runner(scenarios_path, policy_names=("baselines",), recorded=(),
     pols = resolve(policy_names, recorded, set_name=scenario_set.version)
     belief, world = _sim_config(belief_config), _sim_config(world_config)
     alts = [_sim_config(c) for c in ref_world_configs]
+    reference_dir = Path(reference_dir or REFERENCE_DIR).resolve()
+    store = ReferenceStore(reference_dir, require=require_reference)
 
     def runner(chunk_id, profile):
         index = int(chunk_id.rsplit("_", 1)[1])
@@ -418,10 +424,11 @@ def install_job_runner(scenarios_path, policy_names=("baselines",), recorded=(),
         refs = [race_simulators(profile, belief, a) for a in alts]
         return score_set(scenario_set, race_simulators(profile, belief, world), pols, seed=seed,
                          n_samples=profile.sim.n_samples, max_stops=profile.sim.max_stops, items=items,
-                         ref_sims=refs, warn=False)
+                         ref_sims=refs, warn=False, references=store)
     spec = {"installer": f"{__name__}:install_job_runner", "scenarios_path": str(Path(scenarios_path).resolve()),
             "policy_names": list(policy_names), "recorded": [str(Path(r).resolve()) for r in recorded],
             "seed": seed, "belief_config": _spec_value(belief_config), "world_config": _spec_value(world_config),
-            "ref_world_configs": [_spec_value(c) for c in ref_world_configs]}
+            "ref_world_configs": [_spec_value(c) for c in ref_world_configs],
+            "reference_dir": str(reference_dir), "require_reference": bool(require_reference)}
     jobs.set_eval_runner(runner, spec=spec)
     return len(scenario_set.items)

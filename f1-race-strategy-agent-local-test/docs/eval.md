@@ -187,17 +187,28 @@ is within 2 standard errors.
 `data/references`). A hit is used as it is; a miss computes the reference the same way and
 prints `reference computed, not cached` once per run. Cached and computed references give
 identical rows. With `--require-reference` a miss is an error: report runs use it. The
-`jobs` runner does not read the cache. `--hindsight` fixes every draw's SC and VSC laps to
+`jobs` runner reads the cache the same way (`python -m src.eval jobs --reference-dir D
+--require-reference ...`); both travel in the runner spec, so on Sol a report run's
+workers fail their first chunk on a miss instead of computing. `--hindsight` fixes every draw's SC and VSC laps to
 the ones the driver recorded over the remaining laps; `score` never reads a hindsight
 reference, since a regret needs both plans under the same draws.
 
-The key carries `sim_code_version`, so any change under `src/sim` (or `src/contracts.py`)
-orphans the cache: `reference --check` lists what is stale, and `reference` rebuilds it.
+The key carries `sim_code_version`, a physics version: a hash of the modules listed in
+`calibration.PHYSICS_MODULES` (engine, degradation, events, hazard, track, traffic, rules,
+config, data, tyre_sets, weather, pace, calibrators, optimizer_bridge, registry) plus
+`src/contracts.py`. Every other module of `src/sim` is on `calibration.NON_PHYSICS` (the
+package `__init__`, agent_tools, jobs, compute, calibrate, calibration, model_report,
+race_ids), and a test fails on a module on neither list, so a new module is classified on
+purpose. calibration is non-physics because the scenario sets it builds are frozen by their
+digest. A change to a physics module orphans the cache: `reference --check` lists what is
+stale, and `reference` rebuilds it; a change to the tooling (agent tools, jobs) does not.
+Moving to the allowlist moved every `sim_code_version` stamp once; the committed reports
+keep their old stamps (stamp-only drift, reports/calibration/README.md).
 `optimizer_bridge.optimize_batch(..., return_times=True)` (off by default) is how the cache
 gets the per-draw times: `diagnostics["times"]` and `diagnostics["runner_up"]`.
 
-Committed: `data/references/v1/5258b7b181d9.parquet` (16 KB), v1 under the default world
-(local profile: seed 0, 50 samples, two stops) at sim_code_version `a09ad8589aa8`. From
+Committed: `data/references/v1/49f3bd020512.parquet` (16 KB), v1 under the default world
+(local profile: seed 0, 50 samples, two stops) at sim_code_version `521bdb48e96a`. From
 it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
 row (every column but `latency_s` and `sim_code_version`); the rows gain `regret_se_s` and
 `within_mc`. That world draws no events, so every `regret_se_s` is 0 and `within_mc` is
@@ -233,12 +244,13 @@ number cannot come from another simulator version without failing.
 
 | tag | sim_code_version | commit |
 | --- | --- | --- |
-| physics-v1 | `a09ad8589aa8` (planned; current at this writing) | not tagged yet |
+| physics-v1 | `521bdb48e96a` (planned; current at this writing) | not tagged yet |
 
 TODO (end of sprint 2, the user): apply the tag with `git tag physics-v1 <commit>` on the
 commit that freezes the simulator, put the commit here, and replace the sim_code_version
 above with `python -c "from src.sim.calibration import SIM_CODE_VERSION as v; print(v)"` at
-that commit if anything under `src/sim` or `src/contracts.py` has changed since. Then
+that commit if a physics module (`calibration.PHYSICS_MODULES`) or `src/contracts.py` has
+changed since. Then
 rebuild the report references (`python -m src.eval reference ...`) and check
 `python -m src.eval reference --check` lists nothing.
 
@@ -347,6 +359,10 @@ method:
 python -m src.eval jobs --scenarios data/scenarios/v1.json --policies baselines \
     --world-config configs/sim/world.yaml -- run-all eval_chunk --manifest M --out O
 ```
+
+The runner reads cached references under `--reference-dir` (default `data/references`)
+when they match the seed (0) and the profile's `n_samples` and `max_stops`; a report run adds
+`--require-reference` so a missing reference fails the task (see "Reference cache").
 
 LLM policies stay on the desktop.
 

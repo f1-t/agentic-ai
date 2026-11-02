@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
-from test_eval import RACE, SC_LAPS, race_frame
+from test_eval import HAS_CACHE, RACE, SC_LAPS, SCENARIOS_V1, race_frame
 
 from src.eval import Decision, ScenarioSet, resolve, sample_race, score_scenario, summarize
 from src.eval.__main__ import main
@@ -202,3 +202,35 @@ def test_reports_without_within_mc_still_summarize():
     rows = pd.DataFrame([{"race_id": "r", "policy": "p", "status": "ok", "regret_s": 1.0, "regret_pct": 0.1,
                           "stop_agree": True, "first_pit_error": 0}])
     assert np.isnan(summarize(rows)["share_within_mc"]).all()
+
+
+# --- the jobs runner reads the cache -------------------------------------------------------
+@pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
+def test_eval_jobs_runner_reads_the_cache_and_carries_require_reference(tmp_path):
+    from src.eval.score import install_job_runner, race_simulators
+    from src.sim import jobs
+    from src.sim.compute import load_profile
+
+    profile = load_profile("local")
+    small = ScenarioSet(version="tjobs", items=ScenarioSet.load(SCENARIOS_V1).items[:3])
+    path = small.save(tmp_path / "tjobs.json")
+    refs, empty = tmp_path / "refs", tmp_path / "empty"
+    build_references(small, race_simulators(profile), n_samples=profile.sim.n_samples,
+                     max_stops=profile.sim.max_stops, root=refs)
+    try:
+        install_job_runner(path, ["fixed_one_stop"], reference_dir=refs, require_reference=True)
+        spec = jobs._EVAL_SPEC[0]
+        assert spec["require_reference"] is True and spec["reference_dir"] == str(refs.resolve())
+        assert jobs.run_task(jobs.JOBS["eval_chunk"], "chunk_0000", profile, tmp_path / "a") == jobs.DONE
+        got = pd.read_parquet(tmp_path / "a" / "eval" / "chunk_0000.parquet")
+        want = score_set(small, race_simulators(profile), resolve(["fixed_one_stop"]),
+                         n_samples=profile.sim.n_samples, max_stops=profile.sim.max_stops, warn=False)
+        assert len(got) == 3 and "regret_se_s" in got
+        pd.testing.assert_frame_equal(_drop_latency(got), _drop_latency(want), check_dtype=False)
+
+        jobs.set_eval_runner(None)
+        jobs.install_eval_runner({**spec, "reference_dir": str(empty)})   # as a run-all worker does
+        with pytest.raises(ReferenceMissing):
+            jobs.run_task(jobs.JOBS["eval_chunk"], "chunk_0000", profile, tmp_path / "b")
+    finally:
+        jobs.set_eval_runner(None)
