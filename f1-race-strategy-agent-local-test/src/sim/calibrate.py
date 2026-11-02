@@ -52,6 +52,13 @@ per arm, then factors.csv and summary.md under reports/calibration/cross_race/:
 
     python -m src.sim.calibrate cross run --races 2021_04_spain [--synthetic 2]
     python -m src.sim.calibrate cross report
+
+SC and VSC rates by circuit and era (SPEC 0011b, event_rates.py): shrunk rates, their
+leave-one-race-out selection and as-of rates per race, under reports/calibration/event_rates/
+(a synthetic run goes to a scratch directory):
+
+    python -m src.sim.calibrate rates [--periods data/derived/neutralised_periods.csv]
+    python -m src.sim.calibrate rates --synthetic --out /tmp/rates
 """
 import argparse
 import json
@@ -453,6 +460,9 @@ def main(argv=None):
     if argv and argv[0] == "cross":
         from . import cross_race
         return cross_race.main(argv[1:])
+    if argv and argv[0] == "rates":
+        from . import event_rates
+        return event_rates.main(argv[1:])
     if argv and argv[0] == "traffic":
         return traffic_main(argv[1:])
     if argv and argv[0] == "calibrators":

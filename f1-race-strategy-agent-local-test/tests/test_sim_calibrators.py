@@ -49,7 +49,7 @@ class Fixed(calibrators.Calibrator):
 
 # --- registry and contract -------------------------------------------------------------
 def test_registry_and_defaults():
-    assert CALIBRATORS.keys() == ["gbm", "mlp", "none", "ridge", "shrinkage"]
+    assert CALIBRATORS.keys() == ["event_rates", "gbm", "mlp", "none", "ridge", "shrinkage"]
     cfg = SimConfig()
     assert (cfg.calibrator.name, cfg.calibration_every, cfg.recalibrate_temp_delta_c) == ("shrinkage", 1, 3.0)
     assert calibration.config_hash(SimConfig(calibrator={"name": "none"})) != calibration.config_hash(cfg)

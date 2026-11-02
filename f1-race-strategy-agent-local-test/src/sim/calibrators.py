@@ -737,3 +737,7 @@ def selection_table(results: dict, window="to_snapshot", horizons=(20, 40), cali
         "reference" if k == "reference" else ("adopt" if hi < ref_lo else "keep shrinkage")
         for k, hi in zip(table["kind"], table["mae_offset_ci_hi"])]
     return table
+
+
+# "event_rates" (SPEC 0011b) registers itself; imported last, as it builds on Calibrator
+from . import event_rates  # noqa: E402,F401
