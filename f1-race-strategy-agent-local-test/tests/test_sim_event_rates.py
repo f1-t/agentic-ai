@@ -111,17 +111,21 @@ def test_stats_from_periods_counts_and_laps_at_risk():
         "2021_04_spain": (66, [("sc", 8, 10), ("vsc", 1, 2), ("red_flag", 30, 31)], False),
         "2021_05_monaco": (78, [], False),
         "2022_03_australia": (58, [("sc", 1, 3), ("sc", 20, 21)], True),
+        "2022_04_bahrain": (57, [("vsc", 10, 11), ("sc", 55, 57)], False),
     })
     s = er.stats_from_periods(t).set_index("race_id")
     sp = s.loc["2021_04_spain"]
     assert (sp["n_sc"], sp["laps_sc"], sp["lap1_sc"], sp["n_vsc"], sp["laps_vsc"], sp["lap1_vsc"]) == (1, 3, 0, 1, 2, 1)
+    assert (sp["cens_sc"], sp["cens_vsc"]) == (0, 0)
+    bh = s.loc["2022_04_bahrain"]
+    assert (bh["cens_sc"], bh["cens_vsc"]) == (1, 0)   # the SC ends on the last lap
     assert (sp["n_red_flag"], sp["neutralised_laps"], sp["at_risk"]) == (1, 7, 59)
     assert (sp["era"], sp["circuit"], sp["circuit_type"]) == ("2018-2021", "catalunya", "permanent")
     mo = s.loc["2021_05_monaco"]
     assert (mo["n_sc"], mo["n_vsc"], mo["at_risk"], mo["circuit_type"]) == (0, 0, 78, "street")
     au = s.loc["2022_03_australia"]
     assert bool(au["wet"]) and au["era"] == "2022+" and (au["n_sc"], au["laps_sc"], au["lap1_sc"]) == (2, 5, 1)
-    assert list(s.index) == ["2021_04_spain", "2021_05_monaco", "2022_03_australia"]   # date order
+    assert list(s.index) == ["2021_04_spain", "2021_05_monaco", "2022_03_australia", "2022_04_bahrain"]   # date order
     with pytest.raises(ValueError, match="unknown period kinds"):
         er.stats_from_periods(periods_table({"2021_04_spain": (66, [("yellow", 3, 4)], False)}))
 
@@ -238,6 +242,26 @@ def test_nll_pieces():
     assert er.durations_nll(3, 3, 1.0) == 0.0
     assert er.lap1_nll(1, 0.2) == pytest.approx(-math.log(0.2))
     assert er.lap1_nll(0, 0.2) == pytest.approx(-math.log(0.8))
+    # lengths 2 and 4, the 4 still running at the flag: log q + log(1-q) for the 2, P(D >= 4) for the 4
+    q = 1 / 3
+    assert er.durations_nll(2, 6, 3.0, censored=1) == pytest.approx(-(math.log(q) + 4 * math.log(1 - q)))
+
+
+def test_durations_enter_the_race_nll_and_censoring_lengthens_d():
+    row = {"at_risk": 50, **{f"{c}_vsc": 0 for c in ("n", "laps", "lap1", "cens")},
+           "n_sc": 1, "laps_sc": 4, "lap1_sc": 0, "cens_sc": 0}
+    rates = {"p_sc": 0.02, "d_sc": 3.0, "p_vsc": 0.02, "d_vsc": 2.0, "p_sc_lap1": None, "p_vsc_lap1": None}
+    base = er.race_nll(row, rates)
+    assert er.race_nll(row, {**rates, "d_sc": 4.0}) < base            # length 4 is likelier under d 4
+    assert er.race_nll({**row, "cens_sc": 1}, rates) < base            # censored: P(D >= 4) > P(D = 4)
+    races = {"2022_01_bahrain": (57, [("sc", 10, 12)], False), "2022_02_saudi_arabia": (50, [("sc", 46, 50)], False)}
+    s = er.stats_from_periods(periods_table(races))
+    f = er.fit(s).plain["sc"]
+    assert f.d_era["2022+"] == pytest.approx(1 + (8 - 2) / 1)         # 8 laps, 2 periods, 1 complete
+    assert f.d_era["2022+"] > s["laps_sc"].sum() / s["n_sc"].sum()     # longer than the naive mean
+    late = periods_table({"2022_02_saudi_arabia": races["2022_02_saudi_arabia"]})
+    only_censored = er.fit(er.stats_from_periods(late))
+    assert only_censored.plain["sc"].d_global == EventModel().d_sc     # no complete period: the prior
 
 
 def test_selection_rule():
@@ -250,22 +274,43 @@ def test_selection_rule():
     nll.loc[(nll["candidate"] == "circuit") & (nll["race_id"] == "r0"), "nll"] = math.inf
     t, chosen = er.selection(nll, n_boot=200)
     assert chosen == "circuit_lap1" and not t.set_index("candidate").loc["circuit", "passes"]
+    # a race infinite under every candidate cannot tell them apart: dropped and counted
+    void = pd.DataFrame([{"race_id": "r_void", "candidate": c, "nll": math.inf} for c in er.CANDIDATES])
+    t2, chosen2 = er.selection(pd.concat([nll, void]), n_boot=200)
+    assert chosen2 == chosen and (t2["n_dropped"] == 1).all() and (t2["n_races"] == 30).all()
 
 
-def test_loro_selects_circuit_effects_on_the_rich_world(rich):
-    nll = er.loro(rich)
-    assert set(nll["race_id"]) == set(rich.loc[~rich["wet"], "race_id"])   # wet races are not scored
-    t, chosen = er.selection(nll)
+def test_forward_folds_select_circuit_effects_on_the_rich_world(rich):
+    t, chosen, fw, lo = er.both_schemes(rich)
+    dry = rich[~rich["wet"]]
+    assert set(lo["race_id"]) == set(dry["race_id"])                          # wet races are not scored
+    assert set(fw["race_id"]) == set(dry.loc[dry["season"] >= er.FORWARD_FROM_SEASON, "race_id"])
     assert chosen == "circuit_lap1"
-    assert t.set_index("candidate").loc["circuit", "passes"]
+    t = t.set_index(["scheme", "candidate"])
+    assert t.loc[("forward", "circuit"), "passes"] and t.loc[("loro", "circuit"), "passes"]
+    assert t.loc[("forward", "circuit_lap1"), "chosen"]
 
 
-def test_loro_keeps_global_without_effects():
+def test_forward_folds_fit_on_earlier_races_only(rich):
+    dry = rich[~rich["wet"]].reset_index(drop=True)
+    fw = er.forward(rich).set_index(["race_id", "candidate"])["nll"]
+    cut = len(dry) // 2
+    target = dry.iloc[cut]
+    changed = dry.assign(n_sc=np.where(dry.index >= cut, dry["n_sc"] + 3, dry["n_sc"]))
+    again = er.forward(changed).set_index(["race_id", "candidate"])["nll"]
+    f = er.fit(dry.iloc[:cut])   # the races dated before the target
+    for c in er.CANDIDATES:
+        assert fw[(target["race_id"], c)] == er.race_nll(target, f.rates(target, c))
+        assert again[(dry.iloc[cut - 1]["race_id"], c)] == fw[(dry.iloc[cut - 1]["race_id"], c)]
+
+
+def test_folds_keep_global_without_effects():
     flat = {f"c{i}": (er.PERMANENT, 1.0, 1.0) for i in range(6)}
     periods, feats = er.synthetic_periods(range(2022, 2026), circuits=flat, repeats=2, lap1={}, wet_share=0.0)
     s = er.stats_from_periods(periods, feats)
-    t, chosen = er.selection(er.loro(s))
+    t, chosen, _, _ = er.both_schemes(s, n_boot=500)
     assert chosen == "global"
+    assert not t[(t["candidate"] != "global")]["passes"].any()
 
 
 # --- as-of and the calibrator ---------------------------------------------------------------------
@@ -306,6 +351,14 @@ def test_calibrator_fills_race_params_and_the_tools_read_circuit(rich):
     lap1 = er.EventRatesCalibrator(level="circuit_lap1").fit(rich).event_params(race.race_id)
     assert set(lap1) == {"p_sc_lap1", "p_vsc_lap1"}
     EventModel(**lap1)
+    assert "p_sc_lap1" not in out and "p_vsc_lap1" not in out          # None: the block is unchanged
+    shown = agent_tools.event_rates(Snapshot(race=filled, driver="X", compound="SOFT"),
+                                    SimConfig(events={"name": "rate", "params": lap1}))
+    assert (shown["p_sc_lap1"], shown["p_vsc_lap1"]) == (lap1["p_sc_lap1"], lap1["p_vsc_lap1"])
+    assert shown["p_sc_lap1"] > shown["p_sc"]                          # first-lap risk above the per-lap rate
+    one = agent_tools.event_rates(Snapshot(race=filled, driver="X", compound="SOFT"),
+                                  SimConfig(events={"name": "rate", "params": {"p_sc_lap1": 0.1}}))
+    assert one["p_sc_lap1"] == 0.1 and "p_vsc_lap1" not in out and "p_vsc_lap1" not in one
     with pytest.raises(TypeError, match="not a lap-time calibrator"):
         cal.calibrate(None)
     with pytest.raises(ValueError, match="unknown event_rates level"):
@@ -333,8 +386,10 @@ def test_synthetic_report_goes_to_tmp_only(tmp_path):
     assert not er.OUT_DIR.exists()
     path = er.report(stats, tmp_path / "rates", "synthetic", n_boot=50, truth=er.synthetic_truth())
     names = {p.name for p in path.parent.iterdir()}
-    assert names == {"summary.md", "selection.csv", "loro_nll.csv", "rates.csv", "strengths.csv", "recovery.csv"}
-    assert "Chosen:" in path.read_text()
+    assert names == {"summary.md", "selection.csv", "forward_nll.csv", "loro_nll.csv", "rates.csv", "strengths.csv",
+                     "recovery.csv"}
+    assert set(pd.read_csv(path.parent / "selection.csv")["scheme"]) == {"forward", "loro"}
+    assert "Chosen (forward):" in path.read_text()
 
 
 def test_cli_synthetic(tmp_path, capsys):

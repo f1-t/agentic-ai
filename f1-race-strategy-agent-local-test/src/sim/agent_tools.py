@@ -258,19 +258,25 @@ def event_rates(snapshot: Snapshot, config: SimConfig | None = None) -> dict:
     """{p_sc, d_sc, p_vsc, d_vsc, source}: the SC and VSC rates the belief draws periods
     with for this race (events.RateEvents.rates). source is "circuit" when RaceParams carries
     circuit rates (sc_rate_per_lap and the others), else EVENT_RATES_PROVISIONAL, the
-    EventModel defaults. An events model other than "rate" draws no periods: the rates are
-    None and source names the model."""
+    EventModel defaults. p_sc_lap1 / p_vsc_lap1 (the chance a period starts on lap 1 of a
+    race walked from lap 0) appear only when the events params set them. An events model other
+    than "rate" draws no periods: the rates are None and source names the model."""
     from .events import RateEvents
 
     spec = (config or belief_config()).events
     if spec.name != "rate":
         return {"p_sc": None, "d_sc": None, "p_vsc": None, "d_vsc": None, "source": f"events model {spec.name!r}"}
     race = snapshot.race
-    p_sc, d_sc, p_vsc, d_vsc = RateEvents(**spec.params).rates(race)
+    model = RateEvents(**spec.params)
+    p_sc, d_sc, p_vsc, d_vsc = model.rates(race)
     circuit = any(v is not None for v in (race.sc_rate_per_lap, race.sc_mean_laps, race.vsc_rate_per_lap,
                                           race.vsc_mean_laps))
-    return {"p_sc": p_sc, "d_sc": d_sc, "p_vsc": p_vsc, "d_vsc": d_vsc,
-            "source": EVENT_RATES_CIRCUIT if circuit else EVENT_RATES_PROVISIONAL}
+    out = {"p_sc": p_sc, "d_sc": d_sc, "p_vsc": p_vsc, "d_vsc": d_vsc}
+    # the lap-1 rates (SPEC 0011b), only when set: lap 1 from a standing start carries its own risk
+    for key in ("p_sc_lap1", "p_vsc_lap1"):
+        if getattr(model.params, key) is not None:
+            out[key] = getattr(model.params, key)
+    return {**out, "source": EVENT_RATES_CIRCUIT if circuit else EVENT_RATES_PROVISIONAL}
 
 
 def calibration_error_s(sim: Simulator, snapshot: Snapshot) -> float:
