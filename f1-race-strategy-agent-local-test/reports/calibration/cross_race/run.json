@@ -14,11 +14,14 @@
   "posterior",
   "wear_nonneg",
   "collinear_hold",
-  "collinear_hold_hinge"
+  "collinear_hold_hinge",
+  "collinear_hold_nonneg",
+  "collinear_hold_nonneg_hinge"
  ],
  "profile": "local",
  "profile_hash": "a0d0d34f2faa",
- "sim_code_version": "c75564a9d137",
+ "sim_code_version": "fc491e8f3d69",
+ "belief_bound": "baseline",
  "belief_choice": "baseline",
  "s2_arm": "baseline__s2",
  "grid_arm": "baseline",

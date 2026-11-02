@@ -8,3 +8,5 @@ posterior,configs/sim/arms/posterior.yaml,c3d0f8d509a6,cd7e99df6e50,linear_fuel,
 wear_nonneg,configs/sim/arms/wear_nonneg.yaml,3bfbe0f44583,e7c0d34bdef9,linear_fuel,shrinkage,candidate
 collinear_hold,configs/sim/arms/collinear_hold.yaml,7d4bd15481f1,2fc84b635d2e,linear_fuel,shrinkage,candidate
 collinear_hold_hinge,configs/sim/arms/collinear_hold_hinge.yaml,9df26c36bcde,ca1c878f0c90,linear_fuel_hinge,shrinkage,candidate
+collinear_hold_nonneg,configs/sim/arms/collinear_hold_nonneg.yaml,3a9c5a90f3ee,ca9375a538eb,linear_fuel,shrinkage,candidate
+collinear_hold_nonneg_hinge,configs/sim/arms/collinear_hold_nonneg_hinge.yaml,3b25f5df12ff,ad2158a91ab3,linear_fuel_hinge,shrinkage,candidate
