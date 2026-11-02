@@ -456,6 +456,8 @@ class Simulator:
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         noise_sd = self._lap_noise_sd()
+        # a model whose draw is "none" returns itself and draws nothing, so skip building its substream
+        param_draw = getattr(self.degradation, "param_draw", None) != "none"
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
@@ -469,7 +471,8 @@ class Simulator:
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
-            model = self.degradation.draw(np.random.default_rng([seed, k, DEGRADATION_STREAM]))
+            model = (self.degradation.draw(np.random.default_rng([seed, k, DEGRADATION_STREAM])) if param_draw
+                     else self.degradation)
             u = rng.uniform(size=(2, n_laps)) if self.hazard.draws else None
             # u is shared by every plan (common random numbers)
             track = self.track.draw(snapshot, rng)
@@ -499,7 +502,7 @@ class Simulator:
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
             if noise_sd > 0:   # one vector per sample on the green laps, shared by every plan
                 eps = np.random.default_rng([seed, k, LAP_NOISE_STREAM]).normal(0.0, noise_sd, n_laps)
-                lap_s = np.where(sc | vsc, lap_s, lap_s + eps)
+                lap_s += np.where(sc | vsc, 0.0, eps)
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
             scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))

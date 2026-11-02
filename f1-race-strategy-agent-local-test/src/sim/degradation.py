@@ -385,35 +385,19 @@ class _ParameterDraws:
         names = self.fit_report["cov"]["names"]
         return names, np.array([self._value(n) for n in names], dtype=float)
 
-    def with_params(self, names, values):
-        """A shallow copy with the parameters `names` set to `values`."""
-        out = copy.copy(self)
-        coefs = {c: list(bw) for c, bw in self.coefs.items()}
-        hinges = dict(getattr(self, "hinges", None) or {})
-        for n, v in zip(names, values):
-            p, c = _split_name(n)
-            if p == "fuel_s_per_lap":
-                out.fuel_slope = float(v)
-            elif p == "hinge_s_per_lap":
-                hinges[c] = float(v)
-            else:
-                coefs[c][0 if p == "base_s" else 1] = float(v)
-        out.coefs = {c: (b, w) for c, (b, w) in coefs.items()}
-        if getattr(self, "hinges", None) is not None:
-            out.hinges = hinges
-        return out
-
-    def _factor(self):
-        """L with L L' = fit_report["cov"], cached against the cov entry it came from."""
+    def _plan(self):
+        """(L, mean, wear mask, layout), cached on this instance against its cov entry: L with
+        L L' = fit_report["cov"], the point estimate in cov order, and where each name goes."""
         cov = self.fit_report["cov"]
-        cached = getattr(self, "_draw_factor", None)
-        if cached is not None and cached[0] is cov:
-            return cached[1]
-        m = np.array(cov["matrix"], dtype=float).reshape(len(cov["names"]), len(cov["names"]))
+        cached = getattr(self, "_draw_plan", None)
+        if cached is not None and cached[0] is cov and cached[1] == id(self):
+            return cached[2]
+        names = cov["names"]
+        m = np.array(cov["matrix"], dtype=float).reshape(len(names), len(names))
         bad = np.isnan(m).any(axis=1) | np.isnan(m).any(axis=0)
         if bad.any():
-            warnings.warn(f"NaN posterior covariance for {[n for n, b in zip(cov['names'], bad) if b]}: "
-                          "drawn at their estimate", NaNCovarianceWarning, stacklevel=3)
+            warnings.warn(f"NaN posterior covariance for {[n for n, b in zip(names, bad) if b]}: "
+                          "drawn at their estimate", NaNCovarianceWarning, stacklevel=4)
             m[bad, :] = 0.0
             m[:, bad] = 0.0
         try:
@@ -421,18 +405,29 @@ class _ParameterDraws:
         except np.linalg.LinAlgError:
             w, v = np.linalg.eigh((m + m.T) / 2)
             L = v * np.sqrt(np.clip(w, 0.0, None))
-        self._draw_factor = (cov, L)
-        return L
+        at = {n: i for i, n in enumerate(names)}
+        coefs = [(c, at.get(f"base_s[{c}]"), at.get(f"wear_s_per_lap[{c}]"), b, w) for c, (b, w) in self.coefs.items()]
+        hinges = getattr(self, "hinges", None)
+        hinges = None if hinges is None else [(c, at.get(f"hinge_s_per_lap[{c}]"), h) for c, h in hinges.items()]
+        plan = (L, self.param_vector()[1], np.array([n.startswith("wear_s_per_lap[") for n in names], dtype=bool),
+                coefs, at.get("fuel_s_per_lap"), hinges)
+        self._draw_plan = (cov, id(self), plan)
+        return plan
 
     def draw(self, rng):
         if self.param_draw == "none":
             return self
-        names, mean = self.param_vector()
-        values = mean + self._factor() @ rng.standard_normal(len(names))
+        L, mean, wear, coefs, fuel, hinges = self._plan()
+        x = (mean + L @ rng.standard_normal(len(mean))).tolist()
         if self.clip_wear_at_zero:
-            wear = np.array([n.startswith("wear_s_per_lap[") for n in names])
-            values[wear] = np.maximum(values[wear], 0.0)
-        return self.with_params(names, values)
+            x = [max(v, 0.0) if w else v for v, w in zip(x, wear)]
+        out = copy.copy(self)
+        out.coefs = {c: (b if i is None else x[i], w if j is None else x[j]) for c, i, j, b, w in coefs}
+        if fuel is not None:
+            out.fuel_slope = x[fuel]
+        if hinges is not None:
+            out.hinges = {c: h if i is None else x[i] for c, i, h in hinges}
+        return out
 
 
 @DEGRADATION.register("linear")
