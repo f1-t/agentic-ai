@@ -144,6 +144,10 @@ FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
 EVENT_STREAM = 1
 DEGRADATION_STREAM = 2
 LAP_NOISE_STREAM = 3
+# a posterior draw under a wear bound takes further proposals from this batch stream when
+# its first (DEGRADATION_STREAM's row) is rejected, so an accepted first proposal is the
+# unbounded run's draw
+DEGRADATION_RETRY_STREAM = 4
 # never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
 # [seed, k, 1] key
 STREAM_KEY = 2 ** 32 - 1
@@ -470,9 +474,14 @@ class Simulator:
         # parameter draws: the linear models take row k of one (n, n_params) normal matrix
         # (draw_z); another model's draw(rng) gets the per-sample substream [seed, k, 2]. A
         # model whose draw is "none" returns itself and draws nothing, so nothing is built.
+        # Under a wear bound row k of an (n, (draw_tries - 1) n_params) DEGRADATION_RETRY_STREAM
+        # matrix follows, the rejection proposals after the first.
         param_draw = getattr(self.degradation, "param_draw", None) != "none"
         z_par = (batch_normals(seed, DEGRADATION_STREAM, n, self.degradation.n_params)
                  if param_draw and hasattr(self.degradation, "draw_z") else None)
+        tries = getattr(self.degradation, "draw_tries", 1) if z_par is not None else 1
+        z_retry = (batch_normals(seed, DEGRADATION_RETRY_STREAM, n, (tries - 1) * self.degradation.n_params)
+                   if tries > 1 else None)
         eps = batch_normals(seed, LAP_NOISE_STREAM, n, n_laps, noise_sd) if noise_sd > 0 else None
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
@@ -488,7 +497,7 @@ class Simulator:
             v = factors.sample(rng)
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
             if z_par is not None:
-                model = self.degradation.draw_z(z_par[k])
+                model = self.degradation.draw_z(z_par[k] if z_retry is None else np.concatenate([z_par[k], z_retry[k]]))
             elif param_draw:
                 model = self.degradation.draw(np.random.default_rng([seed, k, DEGRADATION_STREAM]))
             else:

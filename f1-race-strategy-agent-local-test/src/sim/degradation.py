@@ -71,6 +71,29 @@ practice) only the fuel slope is penalised; base and wear are plain least square
 nothing drawn) or "posterior" (beta_hat + L z from fit_report["cov"], _ParameterDraws);
 `clip_wear_at_zero` (default false) floors drawn wear slopes at 0.
 
+`wear_lower_bound` (SimConfig.degradation.params, default None: no bound): a tyre does not
+get faster with age. With a value, every fit (full, practice, to_snapshot; linear,
+linear_fuel, linear_fuel_hinge) solves its least squares or penalised least squares with
+wear_s_per_lap[c] >= the bound for every compound, by an active-set loop over the wear
+coordinates (_active_set; hinges and the other parameters are not constrained). A fit
+whose unconstrained wear is all at or above the bound is the unbounded fit, bit for bit.
+fit_report then gains:
+  bounded                     {compound: True when its wear sits on the bound}
+  unconstrained               only when a wear sits on the bound: {"names", "mean", "matrix"},
+                              the unconstrained fit's mean and cov, in cov order. sd and
+                              cov are then the free parameters' conditional posterior given
+                              the bounded ones (their rows and columns dropped from X'X + D
+                              before inverting, s2 from the constrained residuals); a bounded
+                              wear keeps its unconstrained variance, with no covariance.
+  draw_stats                  with draw "posterior": {n_samples, n_proposals, n_clipped,
+                              acceptance_rate}, counted over this fit's draws
+The point estimate is the constrained mode. The posterior draw is the unconstrained
+Gaussian (fit_report["unconstrained"], else the cov around the point estimate) truncated
+to wear >= the bound: proposals are drawn jointly and a draw with any wear below the
+bound is rejected, up to DRAW_TRIES per sample, the last one clipped at the bound (and
+counted) when all fail. Rejection keeps the joint correlation: a rejected negative wear
+takes its fuel partner with it.
+
 `fit(..., base_delta=x)` adds x seconds per lap to the base of every compound fitted on
 practice rows only (no race rows): the practice-to-race level difference (practice runs
 start on less fuel than the race, plus evolution and temperature). It is a config prior
@@ -152,6 +175,105 @@ def _posterior_sd(X, y, beta, prec, fallback_s2=float("nan")):
     except np.linalg.LinAlgError:
         return np.full(k, np.nan), float(np.sqrt(s2)), np.full((k, k), np.nan)
     return np.sqrt(np.clip(s2 * np.diag(inv), 0.0, None)), float(np.sqrt(s2)), s2 * inv
+
+
+def _solve_fixed(X, y, prec, b0, fixed, bound, ridge):
+    """The minimiser of ||y - X b||^2 + sum_j prec_j (b_j - b0_j)^2 with b_j = bound on the
+    `fixed` columns: their columns times the bound move to the right-hand side and the rest
+    are solved as the unconstrained fit solves them (`ridge`: ridge_lstsq, b0 0; else the
+    normal equations). Returns (b, the reduced X, y, prec)."""
+    free = ~fixed
+    Xu, yu, pu = X[:, free], y - X[:, fixed] @ np.full(int(fixed.sum()), float(bound)), prec[free]
+    if ridge:
+        bu = ridge_lstsq(Xu, yu, pu)
+    else:
+        bu = np.linalg.lstsq(Xu.T @ Xu + np.diag(pu), Xu.T @ yu + pu * b0[free], rcond=None)[0]
+    b = np.full(X.shape[1], float(bound))
+    b[free] = bu
+    return b, Xu, yu, pu
+
+
+def _objective(X, y, prec, b0, b):
+    r = y - X @ b
+    return float(r @ r + np.sum(prec * (b - b0) ** 2))
+
+
+def _active_set(X, y, prec, b0, beta, wear, bound, ridge):
+    """(b, fixed): min ||y - X b||^2 + sum_j prec_j (b_j - b0_j)^2 subject to b_j >= bound on
+    the `wear` columns, from the unconstrained solution `beta`. Fix every wear coordinate
+    below the bound at it and re-solve; release a fixed one whose gradient says the objective
+    falls inside the bound, re-solve; at most 2^n_wear passes. A loop that has not settled
+    by then (it does not happen on these problems) takes the best feasible fixed set by
+    brute force. `beta` is returned as it is when it is feasible."""
+    fixed = np.zeros(len(beta), dtype=bool)
+    if not np.any(beta[wear] < bound):
+        return beta, fixed
+    H = X.T @ X + np.diag(prec)
+    rhs = X.T @ y + prec * b0
+    b = beta
+    for _ in range(2 ** int(wear.sum())):
+        low = wear & ~fixed & (b < bound)
+        if low.any():
+            fixed |= low
+        else:
+            grad = H @ b - rhs   # half the gradient; < 0 means the objective falls as b_j rises
+            release = fixed & (grad < -1e-9 * (1.0 + np.abs(rhs)))
+            if not release.any():
+                return b, fixed
+            fixed &= ~release
+        b = _solve_fixed(X, y, prec, b0, fixed, bound, ridge)[0]
+    best = None
+    idx = np.flatnonzero(wear)
+    for mask in range(2 ** len(idx)):
+        f = np.zeros(len(beta), dtype=bool)
+        f[idx[[bool(mask >> i & 1) for i in range(len(idx))]]] = True
+        bb = _solve_fixed(X, y, prec, b0, f, bound, ridge)[0]
+        if np.all(bb[wear] >= bound):
+            obj = _objective(X, y, prec, b0, bb)
+            if best is None or obj < best[0]:
+                best = (obj, bb, f)
+    return best[1], best[2]
+
+
+def _bound_fit(X, y, prec, b0, beta, posterior, n_comps, bound, ridge, fallback_s2=float("nan")):
+    """wear_lower_bound on one fit. `posterior` is _posterior_sd's (sd, residual sd, cov) at
+    the unconstrained `beta`; the wear columns are 1, 3, ... 2 n_comps - 1.
+
+    Returns (beta, fixed, (sd, residual sd, cov), unconstrained): with nothing at the bound,
+    `beta` and `posterior` as given and unconstrained None. Otherwise the constrained mode;
+    the free parameters' conditional posterior given the bounded ones (the bounded columns
+    dropped before inverting, s2 from the constrained residuals), the bounded wear keeping
+    its unconstrained variance with no covariance; and unconstrained = (unconstrained beta
+    less the constrained one, unconstrained cov), the Gaussian the posterior draws truncate."""
+    wear = np.zeros(X.shape[1], dtype=bool)
+    wear[1:2 * n_comps:2] = True
+    b, fixed = _active_set(X, y, prec, b0, beta, wear, bound, ridge)
+    if not fixed.any():
+        return beta, fixed, posterior, None
+    _, Xu, yu, pu = _solve_fixed(X, y, prec, b0, fixed, bound, ridge)
+    sd_u, res, cov_u = _posterior_sd(Xu, yu, b[~fixed], pu, fallback_s2)
+    sd0, _, cov0 = posterior
+    sd, cov = np.array(sd0, dtype=float), np.zeros_like(cov0)
+    free = np.flatnonzero(~fixed)
+    sd[free] = sd_u
+    cov[np.ix_(free, free)] = cov_u
+    for j in np.flatnonzero(fixed):
+        cov[j, j] = cov0[j, j]
+    return b, fixed, (sd, res, cov), (beta - b, cov0)
+
+
+def _bound_report(rep, comps, fixed, names, cols, unconstrained, fixed_var=None):
+    """fit_report["bounded"] = {compound: wear on the bound}; with a wear on it, also
+    fit_report["unconstrained"] = {"names", "shift", "matrix"}: the unconstrained posterior
+    over `names` (cov order), its mean the point estimate plus `shift` (with_draw turns it
+    into "mean"). `cols` names the fit's columns, `fixed_var` as _place_cov's `fixed`."""
+    rep["bounded"] = {c: bool(fixed[2 * i + 1]) for i, c in enumerate(comps)}
+    if unconstrained is not None:
+        shift, cov = unconstrained
+        at = {n: j for j, n in enumerate(cols)}
+        rep["unconstrained"] = {"names": list(names),
+                                "shift": [float(shift[at[n]]) if n in at else 0.0 for n in names],
+                                "matrix": _place_cov(names, cols, cov, fixed_var)["matrix"]}
 
 
 def _param_names(comps, has_fuel, hinged=None):
@@ -263,8 +385,9 @@ def _dropped(knot, n_past):
     return _hinge_entry(0.0, float("nan"), "dropped", 0.0, knot, n_past)
 
 
-def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None):
+def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None):
     """Penalised fit of the race rows toward `prior`. Returns (comps, beta, report).
+    `wear_lower_bound`: see the module docstring.
 
     Modelled: every compound of the prior, plus race compounds with min_samples clean
     race rows. The fuel column is added when fuel_prior is not None. With `knots`
@@ -318,6 +441,9 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None):
     source = None if fuel_prior is None else ("shrunk" if len(d) else "prior")
     prior_res = ((support or {}).get("sd") or {}).get("residual_s", float("nan"))
     sd, res, cov = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
+    if wear_lower_bound is not None:
+        beta, fixed, (sd, res, cov), unconstrained = _bound_fit(
+            X, y, prec, beta0, beta, (sd, res, cov), len(comps), wear_lower_bound, False, fallback_s2=prior_res ** 2)
     tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
     held = (weight <= 0) & (prec > 0)
     sd = np.where(held, tau, sd)  # held at the prior: its tau
@@ -325,6 +451,9 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None):
                   unmodelled=_unmodelled(data, comps, min_samples, support), sd=sd[:n_main], residual_s=res)
     names = _param_names(comps, fuel_prior is not None, hinged if knots is not None else None)
     rep["cov"] = _place_cov(names, names, cov, {names[j]: tau[j] ** 2 for j in np.flatnonzero(held)})
+    if wear_lower_bound is not None:
+        _bound_report(rep, comps, fixed, names, names, unconstrained,
+                      {names[j]: tau[j] ** 2 for j in np.flatnonzero(held)})
     if knots is not None:
         rep["hinge"] = {c: _dropped(knots[c], n_past[c]) for c in comps}
         for j, c in enumerate(hinged, start=n_main):
@@ -338,6 +467,14 @@ def _coefs(comps, beta):
 
 
 PARAM_DRAWS = ("none", "posterior")
+DRAW_TRIES = 50   # proposals per sample for a posterior draw under a wear bound
+
+
+def new_draw_stats():
+    """fit_report["draw_stats"] at the start: samples drawn, proposals made, samples that
+    fell back to the clipped last proposal, and the acceptance rate, accepted samples over
+    proposals (NaN before the first draw)."""
+    return {"n_samples": 0, "n_proposals": 0, "n_clipped": 0, "acceptance_rate": float("nan")}
 
 
 def _split_name(name):
@@ -366,12 +503,30 @@ class _ParameterDraws:
 
     param_draw = "none"
     clip_wear_at_zero = False
+    wear_lower_bound = None
 
-    def with_draw(self, draw="none", clip_wear_at_zero=False):
+    def with_draw(self, draw="none", clip_wear_at_zero=False, wear_lower_bound=None):
+        """Set the draw; with wear_lower_bound, finish fit_report["unconstrained"] (its mean,
+        the point estimate plus the fit's shift) and, for the posterior draw, start
+        fit_report["draw_stats"]."""
         if draw not in PARAM_DRAWS:
             raise ValueError(f"degradation draw must be one of {PARAM_DRAWS}, got {draw!r}")
         self.param_draw, self.clip_wear_at_zero = draw, bool(clip_wear_at_zero)
+        if wear_lower_bound is not None:
+            self.wear_lower_bound = float(wear_lower_bound)
+            unc = self.fit_report.get("unconstrained")
+            if unc is not None and "shift" in unc:
+                mean = self.param_vector()[1] + np.asarray(unc["shift"], dtype=float)
+                self.fit_report["unconstrained"] = {"names": unc["names"], "mean": mean.tolist(),
+                                                    "matrix": unc["matrix"]}
+            if draw == "posterior":
+                self.fit_report["draw_stats"] = new_draw_stats()
         return self
+
+    @property
+    def draw_tries(self):
+        """Proposals per sample a posterior draw may take: DRAW_TRIES under a wear bound, else 1."""
+        return DRAW_TRIES if self.wear_lower_bound is not None and self.param_draw == "posterior" else 1
 
     def _value(self, name):
         p, c = _split_name(name)
@@ -388,8 +543,9 @@ class _ParameterDraws:
 
     def _plan(self):
         """(L, mean, wear mask, layout), cached on this instance against its cov entry: L with
-        L L' = fit_report["cov"], the point estimate in cov order, and where each name goes."""
-        cov = self.fit_report["cov"]
+        L L' = fit_report["cov"], the point estimate in cov order, and where each name goes.
+        With fit_report["unconstrained"] (a wear on its bound) its matrix and mean instead."""
+        cov = self.fit_report.get("unconstrained") or self.fit_report["cov"]
         cached = getattr(self, "_draw_plan", None)
         if cached is not None and cached[0] is cov and cached[1] == id(self):
             return cached[2]
@@ -410,7 +566,8 @@ class _ParameterDraws:
         coefs = [(c, at.get(f"base_s[{c}]"), at.get(f"wear_s_per_lap[{c}]"), b, w) for c, (b, w) in self.coefs.items()]
         hinges = getattr(self, "hinges", None)
         hinges = None if hinges is None else [(c, at.get(f"hinge_s_per_lap[{c}]"), h) for c, h in hinges.items()]
-        plan = (L, self.param_vector()[1], np.array([n.startswith("wear_s_per_lap[") for n in names], dtype=bool),
+        mean = np.array(cov["mean"], dtype=float) if "mean" in cov else self.param_vector()[1]
+        plan = (L, mean, np.array([n.startswith("wear_s_per_lap[") for n in names], dtype=bool),
                 coefs, at.get("fuel_s_per_lap"), hinges)
         self._draw_plan = (cov, id(self), plan)
         return plan
@@ -423,15 +580,23 @@ class _ParameterDraws:
     def draw(self, rng):
         if self.param_draw == "none":
             return self
-        return self.draw_z(rng.standard_normal(self.n_params))
+        return self.draw_z(rng.standard_normal(self.n_params * self.draw_tries))
 
     def draw_z(self, z):
         """The posterior draw for standard normals `z` (n_params of them): beta_hat + L z.
-        The engine passes row k of engine.batch_normals for sample k."""
+        The engine passes row k of engine.batch_normals for sample k.
+
+        Under a wear bound `z` holds up to draw_tries proposals of n_params each (the engine
+        appends DEGRADATION_RETRY_STREAM's row): the first whose wear slopes are all at or
+        above the bound is taken, else the last one with its wear clipped at the bound,
+        counted in fit_report["draw_stats"]."""
         if self.param_draw == "none":
             return self
         L, mean, wear, coefs, fuel, hinges = self._plan()
-        x = (mean + L @ np.asarray(z, dtype=float)).tolist()
+        if self.wear_lower_bound is None:
+            x = (mean + L @ np.asarray(z, dtype=float)).tolist()
+        else:
+            x = self._truncated(L, mean, wear, np.asarray(z, dtype=float))
         if self.clip_wear_at_zero:
             x = [max(v, 0.0) if w else v for v, w in zip(x, wear)]
         out = copy.copy(self)
@@ -441,6 +606,27 @@ class _ParameterDraws:
         if hinges is not None:
             out.hinges = {c: h if i is None else x[i] for c, i, h in hinges}
         return out
+
+    def _truncated(self, L, mean, wear, z):
+        """One draw from N(mean, L L') truncated to wear >= the bound, by rejection over the
+        proposals in `z`; the clipped last proposal when every one is rejected."""
+        bound = self.wear_lower_bound
+        rows = z.reshape(-1, len(mean))
+        clipped = True
+        for tries, zi in enumerate(rows, start=1):
+            x = mean + L @ zi   # as the unbounded draw computes it, so an accepted first one matches it
+            if np.all(x[wear] >= bound):
+                clipped = False
+                break
+        if clipped:
+            x = np.where(wear, np.maximum(x, bound), x)
+        stats = self.fit_report.get("draw_stats")
+        if stats is not None:
+            stats["n_samples"] += 1
+            stats["n_proposals"] += tries
+            stats["n_clipped"] += int(clipped)
+            stats["acceptance_rate"] = (stats["n_samples"] - stats["n_clipped"]) / stats["n_proposals"]
+        return x.tolist()
 
 
 @DEGRADATION.register("linear")
@@ -453,10 +639,10 @@ class LinearDegradation(_ParameterDraws):
 
     @classmethod
     def fit(cls, data, min_samples=5, prior=None, shrinkage=None, base_delta=0.0, draw="none",
-            clip_wear_at_zero=False, **_):
+            clip_wear_at_zero=False, wear_lower_bound=None, **_):
         if shrinkage is not None:
-            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage)
-            return cls(_coefs(comps, beta), rep).with_draw(draw, clip_wear_at_zero)
+            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, wear_lower_bound=wear_lower_bound)
+            return cls(_coefs(comps, beta), rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs = {}
         for comp in sorted(data["compound"].unique()):
             d = _usable(data, comp, min_samples)
@@ -477,11 +663,21 @@ class LinearDegradation(_ParameterDraws):
             beta = np.array([v for c in comps for v in coefs[c]], dtype=float)
         sd, res, cov = (_posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo))) if comps
                         else (np.empty(0), float("nan"), np.empty((0, 0))))
+        fixed, unconstrained = np.zeros(len(beta), dtype=bool), None
+        if wear_lower_bound is not None and comps:
+            prec = _evolution_prec(X.shape[1], len(evo))
+            beta, fixed, (sd, res, cov), unconstrained = _bound_fit(
+                X, y, prec, np.zeros(len(prec)), beta, (sd, res, cov), len(comps), wear_lower_bound, True)
+            if fixed.any():
+                coefs = _coefs(comps, beta)
+                evolution = {s: float(b) for s, b in zip(sessions, beta[2 * len(comps):])} if evo else {}
         rep = _report(d, comps, X, None, np.ones(2 * len(comps)), False, evolution=evolution,
                       unmodelled=_unmodelled(data, comps, min_samples), sd=sd[:2 * len(comps)], residual_s=res)
         names = _param_names(comps, False)
         rep["cov"] = _place_cov(names, names, cov)
-        return cls(_apply_base_delta(coefs, rep, base_delta), rep).with_draw(draw, clip_wear_at_zero)
+        if wear_lower_bound is not None:
+            _bound_report(rep, comps, fixed, names, names, unconstrained)
+        return cls(_apply_base_delta(coefs, rep, base_delta), rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
 
     @property
     def compounds(self):
@@ -514,12 +710,14 @@ class LinearFuelDegradation(_ParameterDraws):
 
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
-            fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, **_):
+            fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None, **_):
         if shrinkage is not None:
-            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior)
-            return cls(_coefs(comps, beta), float(beta[-1]), rep).with_draw(draw, clip_wear_at_zero)
-        coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd)
-        return cls(coefs, fuel, rep).with_draw(draw, clip_wear_at_zero)
+            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
+                                       wear_lower_bound=wear_lower_bound)
+            return cls(_coefs(comps, beta), float(beta[-1]), rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
+        coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
+                                        wear_lower_bound=wear_lower_bound)
+        return cls(coefs, fuel, rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
 
     @property
     def compounds(self):
@@ -530,13 +728,14 @@ class LinearFuelDegradation(_ParameterDraws):
         return base + slope * np.asarray(ages, dtype=float) + self.fuel_slope * np.asarray(laps, dtype=float)
 
 
-def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None):
+def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None, wear_lower_bound=None):
     """The unpenalised linear_fuel fit. Returns (coefs, fuel slope, hinges, report).
 
     With `hinge_knots` ({compound: knot}, linear_fuel_hinge) a hinge column follows the
     fuel column for each compound with min_samples fit rows past its knot; the others are
     dropped (hinge 0). hinges is {compound: s/lap} and the report gains "hinge"; without
-    knots hinges is None and the fit is exactly linear_fuel's.
+    knots hinges is None and the fit is exactly linear_fuel's. `wear_lower_bound`: see the
+    module docstring.
     """
     fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
     comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
@@ -548,6 +747,8 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         rep = _report(d, comps, np.empty((0, 0)), "prior", np.zeros(1), True,
                       unmodelled=unmodelled, sd=np.array([fixed_sd]))
         rep["cov"] = _cov_entry(["fuel_s_per_lap"], [[fixed_sd ** 2]])
+        if wear_lower_bound is not None:
+            rep["bounded"] = {}
         if hinge_knots is not None:
             rep["hinge"] = {}
         return {}, fuel_prior, None if hinge_knots is None else {}, rep
@@ -563,19 +764,23 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     hcols = [_hinge_column(d, c, hinge_knots[c]) for c in hinged]
     sessions, evo = evolution_columns(d)
     k, h = 2 * len(comps), len(hinged)
-    if any(n >= min_samples for n in n_race):
-        X = np.column_stack(cols + [lap] + hcols + evo)
-        beta = _evolution_fit(X, y, len(evo))
+    fitted = any(n >= min_samples for n in n_race)
+    X = np.column_stack(cols + [lap] + hcols + evo) if fitted else np.column_stack(cols + hcols + evo)
+    target = y if fitted else y - fuel_prior * lap
+    beta = _evolution_fit(X, target, len(evo))
+    sd, res, cov = _posterior_sd(X, target, beta, _evolution_prec(X.shape[1], len(evo)))
+    bound_fixed, unconstrained = np.zeros(len(beta), dtype=bool), None
+    if wear_lower_bound is not None:
+        prec = _evolution_prec(X.shape[1], len(evo))
+        beta, bound_fixed, (sd, res, cov), unconstrained = _bound_fit(
+            X, target, prec, np.zeros(len(prec)), beta, (sd, res, cov), len(comps), wear_lower_bound, True)
+    if fitted:
         fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1 + h:]
-        sd, res, cov = _posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo)))
         hinge, hinge_sd = beta[k + 1:k + 1 + h], sd[k + 1:k + 1 + h]
         sd = sd[:k + 1]
         colnames, fixed = _param_names(comps, True, hinged), {}
     else:
-        X = np.column_stack(cols + hcols + evo)
-        beta = _evolution_fit(X, y - fuel_prior * lap, len(evo))
         fuel, source, slopes = float(fuel_prior), "prior", beta[k + h:]
-        sd, res, cov = _posterior_sd(X, y - fuel_prior * lap, beta, _evolution_prec(X.shape[1], len(evo)))
         hinge, hinge_sd = beta[k:k + h], sd[k:k + h]
         sd = np.append(sd[:k], fixed_sd)  # the fuel slope is fixed at the prior: its tau
         colnames, fixed = _param_names(comps, False, hinged), {"fuel_s_per_lap": fixed_sd ** 2}
@@ -584,6 +789,8 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     rep = _report(d, comps, X, source, weight, True, evolution=evolution, unmodelled=unmodelled,
                   sd=sd, residual_s=res)
     rep["cov"] = _place_cov(_param_names(comps, True, hinged), colnames, cov, fixed)
+    if wear_lower_bound is not None:
+        _bound_report(rep, comps, bound_fixed, _param_names(comps, True, hinged), colnames, unconstrained, fixed)
     hinges = None
     if hinge_knots is not None:
         rep["hinge"] = {c: _dropped(hinge_knots[c], n_past[c]) for c in comps}
@@ -618,16 +825,18 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
-            clip_wear_at_zero=False, **_):
+            clip_wear_at_zero=False, wear_lower_bound=None, **_):
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
         if shrinkage is not None:
-            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots)
+            comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound)
             hinges = {c: rep["hinge"][c]["value"] for c in comps}
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
-                       rep).with_draw(draw, clip_wear_at_zero)
-        coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots)
-        return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep).with_draw(draw, clip_wear_at_zero)
+                       rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
+        coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots,
+                                             wear_lower_bound)
+        return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep).with_draw(draw, clip_wear_at_zero,
+                                                                                     wear_lower_bound)
 
     def lap_times(self, compound, ages, laps):
         base, slope = self.coefs[compound]
