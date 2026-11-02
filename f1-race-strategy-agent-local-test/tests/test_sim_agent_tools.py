@@ -447,3 +447,20 @@ def test_eval_rows_unchanged_with_world_events_off(monkeypatch):
     def strip(rs):   # latency is wall time
         return json.dumps([{k: v for k, v in r.items() if k != "latency_s"} for r in rs], sort_keys=True, default=str)
     assert strip(new) == strip(old)
+
+
+def test_event_rates_block_and_its_source(syn):
+    sim, snap = syn
+    kw = {"sim": sim, "profile": PROFILE}
+    want = {"p_sc": 0.015, "d_sc": 3.0, "p_vsc": 0.02, "d_vsc": 2.0,
+            "source": "provisional: SC from 2021 Spain, VSC placeholder"}
+    assert agent_tools.race_state(snap, config=sim.config)["event_rates"] == want
+    assert agent_tools.model_report(snap, **kw)["event_rates"] == want
+    act = {"action": "pit", "compound": "MEDIUM"}
+    assert f"SC and VSC rates: {want['source']}" in agent_tools.evaluate_action(snap, act, **kw)["assumptions"]
+    circuit = snap.model_copy(update={"race": snap.race.model_copy(update={"sc_rate_per_lap": 0.03,
+                                                                           "sc_mean_laps": 4.0})})
+    got = agent_tools.race_state(circuit, config=sim.config)["event_rates"]
+    assert got == {**want, "p_sc": 0.03, "d_sc": 4.0, "source": "circuit"}
+    assert agent_tools.model_report(circuit, **kw)["event_rates"]["source"] == "circuit"
+    assert "SC and VSC rates: circuit" in agent_tools.evaluate_action(circuit, act, **kw)["assumptions"]
