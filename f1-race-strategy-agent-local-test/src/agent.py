@@ -10,9 +10,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from . import tools
-from .contracts import Snapshot
 from .llm import create_backend
-from .snapshot import RaceSnapshot
 
 load_dotenv()
 
@@ -121,14 +119,13 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
               max_tool_calls=None, log_path=None, stats=None):
     """Run one decision episode. Returns ``(recommendation, trajectory)``.
 
-    ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot
-    (converted with RaceSnapshot.from_contract). Every attempted tool call, including
+    ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot.
+    tools.set_snapshot keeps a contract for the tools and shows the model its
+    RaceSnapshot.from_contract view. Every attempted tool call, including
     invalid calls and submission attempts, is logged. When ``stats`` is a dict it receives
     ``steps`` and, if the backend reports usage, the summed ``input_tokens`` and
     ``output_tokens`` (None when it does not).
     """
-    if isinstance(snapshot, Snapshot):
-        snapshot = RaceSnapshot.from_contract(snapshot)
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
     stats.update(steps=0, input_tokens=None, output_tokens=None)

@@ -74,7 +74,12 @@ any scenario of any race (the lap-0 same-race guard is gone):
 - the agent's view is `RaceSnapshot.from_contract(scenario.snapshot)` (`src/snapshot.py`):
   lap, tyre, gaps, `field.nearby`, `recent_lap_times_s`, weather, `race.min_stint_laps`
   and the inventory-legal compounds; the stint history and the sets stay out of it;
-- `run_agent(view, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
+- the tools keep the contract itself (`tools.set_snapshot`) and answer from the belief
+  simulator at the snapshot (`src/sim/agent_tools.py`, SPEC 0015): degradation and pit
+  loss ranges, the model report, plan comparisons, and an action against its alternative,
+  with `within_sim_error` judged against the calibration error; traffic is not modelled
+  there;
+- `run_agent(scenario.snapshot, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
 - the submission is scored as a decision (above); `tool_calls` is the trajectory length,

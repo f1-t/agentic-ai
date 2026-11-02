@@ -91,10 +91,11 @@ def recorded_policy(path):
 class AgentPolicy:
     """The live agent on the snapshot loop, as an eval policy.
 
-    The agent's view is RaceSnapshot.from_contract(scenario.snapshot); run_agent gets
-    max_steps (profile.agent.max_steps unless given) and logs its trajectory to
-    <log_dir>/<set_name>/<scenario_id>.jsonl, ":" in the id written "_" (a rerun replaces
-    the file). The submission goes back as Decision.submission, which the scorer expands on
+    run_agent gets the scenario's contracts.Snapshot, which the tools keep (their belief
+    simulator reads the stint history and the sets); the model sees its
+    RaceSnapshot.from_contract view. run_agent gets max_steps (profile.agent.max_steps
+    unless given) and logs its trajectory to <log_dir>/<set_name>/<scenario_id>.jsonl, ":"
+    in the id written "_" (a rerun replaces the file). The submission goes back as Decision.submission, which the scorer expands on
     the belief (eval.decisions.to_plan). tool_calls is the trajectory's length, tokens are
     the backend's reported usage (None when it reports none), and a backend exception is a
     status "error" row, not a crash. `backend` is for tests; None takes LLM_BACKEND."""
@@ -112,15 +113,14 @@ class AgentPolicy:
     def __call__(self, scenario, belief, max_stops):
         from ..agent import run_agent
         from ..sim.compute import load_profile
-        from ..snapshot import RaceSnapshot
 
         max_steps = self.max_steps or (self.profile or load_profile()).agent.max_steps
         path = self.log_path(scenario)
         path.unlink(missing_ok=True)
         stats = {}
         try:
-            rec, trajectory = run_agent(RaceSnapshot.from_contract(scenario.snapshot), verbose=False,
-                                        backend=self.backend, max_steps=max_steps, log_path=path, stats=stats)
+            rec, trajectory = run_agent(scenario.snapshot, verbose=False, backend=self.backend,
+                                        max_steps=max_steps, log_path=path, stats=stats)
         except Exception as exc:  # noqa: BLE001  a backend failure must not end an overnight run
             return Decision(None, error=f"{type(exc).__name__}: {exc}", input_tokens=stats.get("input_tokens"),
                             output_tokens=stats.get("output_tokens"))

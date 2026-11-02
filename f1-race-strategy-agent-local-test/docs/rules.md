@@ -17,7 +17,7 @@ by the race registry (the profile's `sim.min_stint` overrides it for a whole run
 races have 3-lap stints, and the simulator prices short stints honestly, so the rule no
 longer needs a 10-lap floor to keep plans sensible. The agent's tools read it from the
 snapshot (`race.min_stint_laps`, shown to the agent as `RaceSnapshot.min_stint_laps`),
-not from a tool-layer constant (SPEC 0015 points the tools at it). `src/legacy_tools.py`,
+not from a tool-layer constant (src/sim/agent_tools.py, SPEC 0015). `src/legacy_tools.py`,
 the frozen baseline, pins 10. A scenario set keeps the value inside its snapshots: v1
 carries 10 and keeps scoring under 10; sets sampled from now on carry 3.
 
