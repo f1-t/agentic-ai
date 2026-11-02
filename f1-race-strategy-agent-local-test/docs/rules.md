@@ -53,7 +53,10 @@ its `draw(rng)`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the sim
 sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;
 sample `i` of those times was drawn from `default_rng([s, i])`, its events from
 `default_rng([s, i, 1])`. With `s = 0` the
-evaluation's seeds are exactly the baseline optimizer's seed tuple.
+evaluation's seeds are exactly the baseline optimizer's seed tuple. Belief-side simulations
+(the agent's tools, the continuation of a decision in `eval.decisions.to_plan`) run at
+`s + agent_tools.BELIEF_SEED_OFFSET` (1 000 003), so the belief never plans on the samples
+the world scores with seed `s`.
 
 **R7 Ties.** Ties on mean time break by fewer stops, then earlier pit laps, then the
 compound tuple (Quan's key). The additive model scores stint orders identically (on

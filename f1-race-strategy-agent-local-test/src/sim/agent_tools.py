@@ -3,8 +3,9 @@
 Every function takes a contracts.Snapshot and returns a JSON-ready dict: NaN and infinite
 values come back as None, and every number carries an interval, a source or a flag. They
 run on the belief simulator, configs/sim/belief.yaml as it stands (to_snapshot window,
-traffic off, the config's calibrator, posterior parameter draws, residual lap noise, the
-wear lower bound). The tools never build their own config.
+traffic off, SC and VSC periods from the rate model, the config's calibrator, posterior
+parameter draws, residual lap noise, the wear lower bound). The tools never build their
+own config.
 
     race_state(snapshot)                       the snapshot, legal_compounds, remaining_laps
     model_report(snapshot, ages)               the fit's coefficients with intervals and flags
@@ -19,7 +20,10 @@ belief_simulator(snapshot) is the Simulator for snapshot.race.race_id, built onc
 cuts the fit window at the snapshot, so no lap after the snapshot reaches any output (the
 information-boundary canary in tests/test_sim_agent_tools.py checks it).
 
-Every call uses seed 0 (docs/rules.md R6). n_samples None takes the compute profile's
+Every call uses seed SEED = 0 + BELIEF_SEED_OFFSET (docs/rules.md R6): every belief-side
+simulation draws from seed + BELIEF_SEED_OFFSET (eval.decisions.to_plan's continuation
+too), so with events on in both simulators the belief never plans on the event, parameter
+or lap-noise samples the world scores on (seed s, samples 0..n-1). n_samples None takes the compute profile's
 sim.n_samples (compare_n_samples for compare_plans and evaluate_action), and the
 continuations are optimizer_bridge.optimize_batch on the belief fit at the snapshot, with
 the profile's sim.max_stops counted from the snapshot as eval.decisions counts them: a pit
@@ -47,7 +51,10 @@ from .optimizer_bridge import as_continuation
 from .race_ids import RACE_ID_ALIASES, canonical_race_id, parse_race_id, slug
 
 BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
-SEED = 0
+# added to the seed of every belief-side simulation, so the belief's samples are never the
+# world's (a prime, far from any seed a run uses)
+BELIEF_SEED_OFFSET = 1_000_003
+SEED = 0 + BELIEF_SEED_OFFSET
 Z90 = 1.64              # a 90 percent normal band, mean -+ Z90 sd
 PIT_LOSS_BAND = 0.10    # the band around a pit loss with no calibrated sd, source "config"
 PROBABILITY_COVERS = "parameter and lap-noise uncertainty under this model; does not include model error"
@@ -152,17 +159,24 @@ def _nan(x) -> bool:
     return x is None or not math.isfinite(float(x))
 
 
+BASIS_DRAWS = "posterior_draws_p05_p50_p95"   # low, median, high: the draws' percentiles
+BASIS_SD = "point_estimate_-+1.64_sd"          # median: the point estimate
+BASIS_NO_SD = "no_sd"                          # low = median = high = the point estimate
+
+
 def _interval(value, sd, draws=None):
-    """({low, median, high}, basis): median the point estimate; low and high the 5th and 95th
-    percentiles of `draws` when given (basis "posterior_draws_p05_p95"), else value -+ Z90 sd
-    ("mean_-+1.64_sd"); low = high = median, basis "no_sd", when sd is NaN."""
+    """({low, median, high}, basis), always ordered low <= median <= high. With `draws` the
+    5th, 50th and 95th percentiles of the draws (BASIS_DRAWS; under a wear bound the point
+    estimate, the constrained mode, can sit below the draws' median); else value -+ Z90 sd
+    around the point estimate (BASIS_SD); low = median = high = value when sd is NaN
+    (BASIS_NO_SD)."""
     value = float(value)
     if _nan(sd):
-        return {"low": value, "median": value, "high": value}, "no_sd"
+        return {"low": value, "median": value, "high": value}, BASIS_NO_SD
     if draws is not None:
-        lo, hi = np.percentile(draws, [5, 95])
-        return {"low": float(lo), "median": value, "high": float(hi)}, "posterior_draws_p05_p95"
-    return {"low": value - Z90 * float(sd), "median": value, "high": value + Z90 * float(sd)}, "mean_-+1.64_sd"
+        lo, med, hi = np.percentile(draws, [5, 50, 95])
+        return {"low": float(lo), "median": float(med), "high": float(hi)}, BASIS_DRAWS
+    return {"low": value - Z90 * float(sd), "median": value, "high": value + Z90 * float(sd)}, BASIS_SD
 
 
 def _wear_draws(model, n, seed=SEED):
@@ -256,20 +270,22 @@ def race_state(snapshot: Snapshot, *, config: SimConfig | None = None) -> dict:
 def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, profile=None) -> dict:
     """Simulator.model_report's dump plus, per modelled compound:
 
-      deg_per_lap_s             {low, median, high}: median the fitted wear; low and high
-                                the 5th and 95th percentiles of the posterior draws the
-                                simulator takes (seed 0, n_samples, the wear bound respected)
-                                when draws are on, else wear -+ 1.64 sd; sd NaN gives
-                                low = high = median and a no_sd flag
-      base_s_interval           the same for the base lap time, always -+ 1.64 sd
-      hinge_s_per_lap_interval  the same for the hinge slope, where the model has one
-      interval_basis            {interval name: "posterior_draws_p05_p95", "mean_-+1.64_sd"
-                                or "no_sd"}
+      deg_per_lap_s             {low, median, high}, ordered: the 5th, 50th and 95th
+                                percentiles of the posterior draws the simulator takes (SEED,
+                                n_samples, the wear bound respected) when draws are on, else
+                                the fitted wear -+ 1.64 sd; sd NaN gives low = median = high =
+                                the fitted wear and a no_sd flag
+      base_s_interval           the base lap time, always -+ 1.64 sd
+      hinge_s_per_lap_interval  the hinge slope -+ 1.64 sd, where the model has one
+      point_estimate            {interval name: the fitted value}, the constrained mode for a
+                                bounded wear (the fit the simulator runs without draws)
+      interval_basis            {interval name: BASIS_DRAWS, BASIS_SD or BASIS_NO_SD}
       wear_at_bound             the fit put the wear on its lower bound
       fuel_wear_corr            corr(fuel slope, wear slope), None without a fuel term
       flags                     the report's flags for this compound, plus no_sd:<name>
 
-    and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis) for models with a
+    and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis and
+    fuel_point_estimate) for models with a
     fuel term, a no_sd:fuel_s_per_lap_interval flag when its sd is NaN. flags and
     calibration_error_s are the report's; calibration_error_s is a conservative tolerance
     for gaps between plans (calibration_error_s()). This is estimate_tyre_degradation's body."""
@@ -291,15 +307,19 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
         hinge = (rep.hinge or {}).get(c)
         if hinge is not None:
             pairs["hinge_s_per_lap_interval"] = _interval(hinge["value"], hinge["sd"])
-        flags += [f"no_sd:{name}" for name, (_, basis) in pairs.items() if basis == "no_sd"]
-        entry.update({name: iv for name, (iv, _) in pairs.items()},
+        flags += [f"no_sd:{name}" for name, (_, basis) in pairs.items() if basis == BASIS_NO_SD]
+        point = {"deg_per_lap_s": wear.value, "base_s_interval": r.base_s.value}
+        if hinge is not None:
+            point["hinge_s_per_lap_interval"] = hinge["value"]
+        entry.update({name: iv for name, (iv, _) in pairs.items()}, point_estimate=point,
                      interval_basis={name: basis for name, (_, basis) in pairs.items()},
                      wear_at_bound=bool(bounded.get(c, False)),
                      fuel_wear_corr=(rep.fuel_wear_corr or {}).get(c), flags=flags)
     if rep.fuel_s_per_lap is not None:
         iv, basis = _interval(rep.fuel_s_per_lap.value, rep.fuel_s_per_lap.sd)
         out["fuel_s_per_lap_interval"], out["fuel_interval_basis"] = iv, basis
-        if basis == "no_sd":
+        out["fuel_point_estimate"] = rep.fuel_s_per_lap.value
+        if basis == BASIS_NO_SD:
             out["flags"] = [*out["flags"], "no_sd:fuel_s_per_lap_interval"]
     out["calibration_error_note"] = CALIBRATION_NOTE
     return _jsonable(out)
@@ -309,7 +329,9 @@ def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
     """pit_loss_s {low, median, high}: race.pit_loss_s, or the calibrator's value, with the
     calibrator's sd (calibrators.effective_factors) as -+ 1.64 sd, source "calibrator";
     when the calibrator gives no sd, the value with a fixed 10 percent band, source
-    "config". The SC and VSC pit loss factors are config.effects'. estimate_pit_loss's body."""
+    "config". pit_loss_now_s is that interval times pit_loss_now_factor, the factor for the
+    current track status: sc_pit_loss_factor under SC, vsc_pit_loss_factor under VSC, 1 when
+    green. The SC and VSC factors are config.effects'. estimate_pit_loss's body."""
     sim, _ = _setup(snapshot, sim, profile)
     fit = sim.fitted_for(snapshot)
     mean, sd = float(snapshot.race.pit_loss_s), 0.0
@@ -320,8 +342,11 @@ def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
     else:
         band, source, sd = PIT_LOSS_BAND * mean, "config", None
     fx = sim.config.effects
+    green = {"low": mean - band, "median": mean, "high": mean + band}
+    factor = {"sc": fx.sc_pit_loss_factor, "vsc": fx.vsc_pit_loss_factor}.get(snapshot.track_status, 1.0)
     return _jsonable({
-        "pit_loss_s": {"low": mean - band, "median": mean, "high": mean + band}, "source": source, "sd_s": sd,
+        "pit_loss_s": green, "source": source, "sd_s": sd,
+        "pit_loss_now_s": {k: v * factor for k, v in green.items()}, "pit_loss_now_factor": factor,
         "sc_pit_loss_factor": fx.sc_pit_loss_factor, "vsc_pit_loss_factor": fx.vsc_pit_loss_factor,
         "factor_source": "config", "track_status": snapshot.track_status})
 

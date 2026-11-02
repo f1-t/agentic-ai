@@ -15,6 +15,7 @@ from src.contracts import StintRecord, TyreSet
 from src.llm.base import ModelBackend, ModelTurn, ToolCall
 from src.sim import SimConfig, Simulator, agent_tools, calibration
 from src.sim.compute import load_profile
+from src.sim.config import ComponentSpec
 from src.sim.data import CACHE_DIR, gap_columns
 from src.snapshot import RaceSnapshot
 from test_sim import RACE as SYN_RACE
@@ -126,9 +127,10 @@ def test_model_report_adds_intervals_bound_and_correlation(syn):
     for c in report.modelled:
         e = out["compounds"][c]
         wear = report.compounds[c].wear_s_per_lap
-        assert e["deg_per_lap_s"]["median"] == wear.value
-        assert e["deg_per_lap_s"]["low"] <= e["deg_per_lap_s"]["high"]
-        assert e["interval_basis"]["deg_per_lap_s"] == "posterior_draws_p05_p95"   # belief draws on
+        assert e["point_estimate"]["deg_per_lap_s"] == wear.value
+        d = e["deg_per_lap_s"]
+        assert d["low"] <= d["median"] <= d["high"]                                   # always ordered
+        assert e["interval_basis"]["deg_per_lap_s"] == agent_tools.BASIS_DRAWS     # belief draws on
         assert e["deg_per_lap_s"]["low"] >= 0.0                                     # the draws keep the bound
         base = report.compounds[c].base_s
         assert e["base_s_interval"] == pytest.approx(
@@ -153,14 +155,16 @@ def test_model_report_without_draws_uses_the_sd(syn):
     for c, e in out["compounds"].items():
         if e["modelled"]:
             wear = e["wear_s_per_lap"]
-            assert e["interval_basis"]["deg_per_lap_s"] == "mean_-+1.64_sd"
+            assert e["interval_basis"]["deg_per_lap_s"] == agent_tools.BASIS_SD
+            assert e["deg_per_lap_s"]["median"] == e["point_estimate"]["deg_per_lap_s"] == wear["value"]
             assert e["deg_per_lap_s"]["low"] == pytest.approx(wear["value"] - 1.64 * wear["sd"])
 
 
 def test_interval_without_sd_is_flagged():
     assert agent_tools._interval(0.05, float("nan")) == ({"low": 0.05, "median": 0.05, "high": 0.05}, "no_sd")
-    iv, basis = agent_tools._interval(0.05, 0.01, draws=np.linspace(0.0, 0.1, 101))
-    assert basis == "posterior_draws_p05_p95" and iv == pytest.approx({"low": 0.005, "median": 0.05, "high": 0.095})
+    iv, basis = agent_tools._interval(0.0, 0.01, draws=np.linspace(0.0, 0.1, 101))
+    # the median is the draws': a point estimate on the bound (0) never sits below low
+    assert basis == agent_tools.BASIS_DRAWS and iv == pytest.approx({"low": 0.005, "median": 0.05, "high": 0.095})
 
 
 def test_pit_loss_config_band_and_calibrator_sd(syn, monkeypatch):
@@ -170,6 +174,11 @@ def test_pit_loss_config_band_and_calibrator_sd(syn, monkeypatch):
     assert out["pit_loss_s"] == pytest.approx({"low": 18.0, "median": 20.0, "high": 22.0})
     assert (out["sc_pit_loss_factor"], out["vsc_pit_loss_factor"]) == (0.5, 0.6)
     assert out["track_status"] == "green"
+    assert out["pit_loss_now_factor"] == 1.0 and out["pit_loss_now_s"] == out["pit_loss_s"]
+    for status, factor in (("sc", 0.5), ("vsc", 0.6)):
+        now = agent_tools.pit_loss(snap.model_copy(update={"track_status": status}), sim=sim, profile=PROFILE)
+        assert now["pit_loss_s"] == out["pit_loss_s"] and now["pit_loss_now_factor"] == factor
+        assert now["pit_loss_now_s"] == pytest.approx({k: v * factor for k, v in out["pit_loss_s"].items()})
     monkeypatch.setattr(agent_tools.calibrators, "effective_factors", lambda s, race: {"pit_loss_s": (21.0, 1.0)})
     cal = agent_tools.pit_loss(snap, sim=sim, profile=PROFILE)
     assert cal["source"] == "calibrator" and cal["sd_s"] == 1.0
@@ -180,7 +189,7 @@ def test_simulate_plan_is_the_simresult(syn):
     sim, snap = syn
     plan = [["SOFT", 5], ["MEDIUM", snap.remaining_laps - 5]]
     out = agent_tools.simulate_plan(snap, plan, sim=sim, profile=PROFILE)
-    ref = sim.simulate(snap, plan, n_samples=20).model_dump(mode="json")
+    ref = sim.simulate(snap, plan, seed=agent_tools.SEED, n_samples=20).model_dump(mode="json")
     assert out == json.loads(json.dumps(ref).replace("NaN", "null"))
     assert out["remaining"]["n_samples"] == 20
     bad = agent_tools.simulate_plan(snap, [["SOFT", 5]], sim=sim, profile=PROFILE)
@@ -192,7 +201,7 @@ def test_compare_plans_expands_actions_with_the_optimizer(syn):
     out = agent_tools.compare_plans(snap, [{"action": "stay_out", "laps": 2}, {"action": "pit", "compound": "MEDIUM"},
                                            [["SOFT", 1]]], sim=sim, profile=PROFILE)
     json.dumps(out, allow_nan=False)
-    assert out["valid"] == [True, True, False] and out["n_samples"] == 20 and out["seed"] == 0
+    assert out["valid"] == [True, True, False] and out["n_samples"] == 20 and out["seed"] == agent_tools.SEED
     stay, pit = out["candidates"][0]["stints"], out["candidates"][1]["stints"]
     assert stay[0]["compound"] == "SOFT" and stay[0]["laps"] >= 2
     assert (pit[0]["laps"], pit[1]["compound"]) == (1, "MEDIUM")
@@ -360,3 +369,81 @@ def test_run_agent_end_to_end_through_the_belief(spain):
     assert ev["action"] == {"action": "stay_out", "laps": 3} and ev["within_sim_error"] is True
     for t in traj:
         json.dumps(t["output"], allow_nan=False)
+
+
+# --- the belief's seed offset ---------------------------------------------------------------
+def _recording(sim):
+    """`sim` with its events model's draws recorded, in sample order."""
+    seen = []
+    draw = sim.events.draw
+
+    def record(snapshot, rng):
+        out = draw(snapshot, rng)
+        seen.append((tuple(out.sc_laps), tuple(out.vsc_laps)))
+        return out
+    sim.events.draw = record
+    return seen
+
+
+def test_belief_never_draws_the_worlds_event_samples():
+    """With events on in both, the belief's scenario for (seed 0, sample k) is never the
+    world's: the tools draw from seed 0 + BELIEF_SEED_OFFSET. High rates, so every sample has
+    a period and an equal pair would mean a shared stream."""
+    assert agent_tools.SEED == agent_tools.BELIEF_SEED_OFFSET == 1_000_003
+    events = ComponentSpec(name="rate", params={"p_sc": 0.2, "p_vsc": 0.2})
+    df = syn_frame()
+    belief = syn_sim(df, BELIEF.model_copy(update={"events": events}))
+    world = Simulator(df, SimConfig(events=events))
+    snap = syn_snap(df, k=0)
+    plan = [["SOFT", 20], ["MEDIUM", 30]]
+    b_seen, w_seen = _recording(belief.fitted_for(snap)), _recording(world)
+    agent_tools.simulate_plan(snap, plan, n_samples=200, sim=belief, profile=PROFILE)
+    world.simulate_batch(snap, [plan], seed=0, n_samples=200)
+    assert len(b_seen) == len(w_seen) == 200
+    assert all(b != w for b, w in zip(b_seen, w_seen))
+    assert all(sc or vsc for sc, vsc in b_seen + w_seen)
+
+
+def test_decision_continuations_draw_with_the_offset(monkeypatch):
+    from src.eval import decisions
+
+    seeds = []
+    real = decisions.as_continuation
+
+    def spy(fit, **kw):
+        seeds.append(kw["seed"])
+        return real(fit, **kw)
+    monkeypatch.setattr(decisions, "as_continuation", spy)
+    df = syn_frame()
+    decisions.to_plan(syn_snap(df), {"decision": "STAY_OUT", "reassess_after_laps": 2, "confidence": 0.5},
+                      syn_sim(df), 2, seed=7, n_samples=5)
+    assert seeds == [7 + agent_tools.BELIEF_SEED_OFFSET]
+
+
+def test_eval_rows_unchanged_with_world_events_off(monkeypatch):
+    """The baselines plan on the belief's fit, never on its samples, so with the world's
+    events off their rows are the rows of a belief without events and without the offset."""
+    from src.eval.policies import BASELINE_POLICIES
+    from src.eval.scenarios import Scenario
+    from src.eval.score import score_scenario
+
+    df = syn_frame()
+    world = Simulator(df, SimConfig(), synthetic_practice())
+    snaps = [syn_snap(df, k) for k in (0, 10, 20)]
+    items = [Scenario(scenario_id=f"syn:{DRIVER}:{s.laps_completed}", race_id="syn", driver=DRIVER,
+                      lap=s.laps_completed, snapshot=s, actual_stints=[["SOFT", 25], ["MEDIUM", 25]])
+             for s in snaps]
+    no_events = BELIEF.model_copy(update={"events": SimConfig().events})
+
+    def rows(belief_config):
+        belief = syn_sim(df, belief_config)
+        return [r for sc in items for r in score_scenario(sc, world, BASELINE_POLICIES, belief=belief,
+                                                           n_samples=10)]
+    new = rows(BELIEF)
+    monkeypatch.setattr(agent_tools, "BELIEF_SEED_OFFSET", 0)
+    old = rows(no_events)
+    assert BELIEF.events.name == "rate" and len(new) == 12
+    assert any(r["status"] == "ok" for r in new)
+    def strip(rs):   # latency is wall time
+        return json.dumps([{k: v for k, v in r.items() if k != "latency_s"} for r in rs], sort_keys=True, default=str)
+    assert strip(new) == strip(old)
