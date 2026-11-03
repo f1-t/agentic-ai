@@ -475,7 +475,6 @@ NON_PHYSICS = (
     "__init__",       # re-exports only
     "agent_tools",    # the agent's tools over the simulator (lands with #41)
     "jobs", "compute", "calibrate", "model_report", "race_ids",
-    "cross_race",     # the cross-race report runner (#44): arms are config overlays, stamped by config_hash
     # calibration builds the snapshots of the eval scenario sets (snapshot_at) and the
     # calibration reports; the sets are frozen by their digest once sampled, so a change here
     # cannot move a scored number through them.
