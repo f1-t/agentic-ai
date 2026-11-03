@@ -41,7 +41,9 @@ the same command again.
    - `ls cache/*/` should show the new weekends.
    - `python -c "from src.sim.real_run import cached_races; print(cached_races())"` should
      list every race you expect. Ids are `<season>_<round>_<slug>` from the season's schedule
-     (`race_ids.make_race_id_from_schedule`): the country, or the event name for every race of a
+     (`race_ids.make_race_id_from_schedule`): the country, under one name whatever the season's
+     spelling (`COUNTRY_ALIASES`: `2018_21_united_arab_emirates`, `2019_10_united_kingdom`), or
+     the event name for every race of a
      country that hosts more than one that season (`2021_08_styrian`, `2021_09_austrian`,
      `2022_05_miami`). A note means an event directory the schedule does not name, or a season
      whose schedule is not cached.

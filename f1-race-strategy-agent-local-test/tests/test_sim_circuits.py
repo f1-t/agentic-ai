@@ -83,12 +83,33 @@ def test_race_ids_take_the_event_name_when_a_country_hosts_more_than_one_race():
                              (2021, 14, "2021_14_italian"), (2020, 9, "2020_09_tuscan"),
                              (2020, 5, "2020_05_70th_anniversary"), (2020, 16, "2020_16_sakhir"),
                              (2023, 14, "2023_14_italy"), (2023, 6, "2023_06_monaco"),
-                             (2019, 10, "2019_10_great_britain"), (2021, 19, "2021_19_brazil"),
+                             (2019, 10, "2019_10_united_kingdom"), (2024, 12, "2024_12_united_kingdom"),
+                             (2021, 19, "2021_19_brazil"), (2018, 21, "2018_21_united_arab_emirates"),
+                             (2021, 22, "2021_22_united_arab_emirates"),
                              (2024, 24, "2024_24_united_arab_emirates")]:
         assert got[season][rnd] == rid
     for season, by_round in got.items():
         slugs = [r.split("_", 2)[2] for r in by_round.values()]
         assert len(set(slugs)) == len(slugs), season   # no two races of a season share a slug
+
+
+def test_a_circuit_that_is_its_countrys_only_race_keeps_one_slug_in_every_season():
+    """Country spellings drift between seasons (COUNTRY_ALIASES): per circuit, the seasons in
+    which it is its country's only race all give it the same slug."""
+    from src.sim.race_ids import country_name
+    slugs = {}
+    for season in SEASONS:
+        s = schedule(season)
+        by_round = ids(season)
+        hosts = s["Country"].map(country_name).value_counts()
+        for _, r in s.iterrows():
+            if hosts[country_name(r["Country"])] == 1:
+                circuit = er.CIRCUITS[er.location_key(r["Location"])][0]
+                slugs.setdefault(circuit, set()).add(by_round[int(r["RoundNumber"])].split("_", 2)[2])
+    drift = {c: v for c, v in slugs.items() if len(v) > 1}
+    assert not drift and len(slugs) == 27
+    assert slugs["yas_marina"] == {"united_arab_emirates"} and slugs["silverstone"] == {"united_kingdom"}
+    assert slugs["catalunya"] == {"spain"} and slugs["cota"] == {"united_states"}
 
 
 def test_v1s_frozen_scenario_ids_are_unchanged():

@@ -1,8 +1,9 @@
 """Race ids follow the data layout: <season>_<round:02d>_<gp_slug>, e.g. 2021_04_spain.
 
 The gp slug comes from the season's event schedule (make_race_id_from_schedule): the
-country, unless that country hosts more than one race that season, in which case every one of
-its races takes its event name instead (2021_08_styrian, 2021_09_austrian, 2022_05_miami).
+country, under one name across seasons (COUNTRY_ALIASES), unless that country hosts more than
+one race that season, in which case every one of its races takes its event name instead
+(2021_08_styrian, 2021_09_austrian, 2022_05_miami).
 A race id names a race; it never says which circuit the race was on (event_rates.circuit_info).
 
 Until a race registry exists, RACE_ID_ALIASES maps the older <season>_<GP> ids (the
@@ -12,6 +13,14 @@ import re
 import unicodedata
 
 RACE_ID_ALIASES = {"2021_Spain": "2021_04_spain"}
+# The schedules spell some countries differently from season to season (FastF1 2018-2025:
+# Abu Dhabi and United Arab Emirates, Great Britain and United Kingdom); every spelling maps to
+# one name before slugging, so a circuit's race keeps one slug across seasons.
+COUNTRY_ALIASES = {
+    "Abu Dhabi": "United Arab Emirates", "UAE": "United Arab Emirates",
+    "Great Britain": "United Kingdom", "UK": "United Kingdom", "Britain": "United Kingdom",
+    "USA": "United States", "US": "United States", "United States of America": "United States",
+}
 _CANONICAL = re.compile(r"^(\d{4})_(\d{2})_([a-z0-9]+(?:_[a-z0-9]+)*)$")
 
 
@@ -34,10 +43,16 @@ def event_slug(event_name: str) -> str:
     return slug(re.sub(r"\bgrand\s+prix\b", " ", _ascii(event_name), flags=re.IGNORECASE))
 
 
+def country_name(country) -> str:
+    """The one name of a country however a schedule spells it (COUNTRY_ALIASES)."""
+    name = str(country).strip()
+    return COUNTRY_ALIASES.get(name, name)
+
+
 def make_race_id_from_schedule(row, season_schedule, season: int | None = None) -> str:
     """The race id of one event of a season's schedule (columns RoundNumber, EventName,
-    Country; a FastF1 EventSchedule or any frame with them): slug(Country) when that country
-    hosts one race in `season_schedule`, else the event name without "Grand Prix" for every race
+    Country; a FastF1 EventSchedule or any frame with them): slug(country_name(Country)) when
+    that country hosts one race in `season_schedule`, else the event name without "Grand Prix" for every race
     of that country that season (2021_02_emilia_romagna and 2021_14_italian; 2022_05_miami
     and 2022_19_united_states). `season` defaults to the schedule's year (FastF1's
     EventSchedule.year), else the row's Season or EventDate."""
@@ -45,8 +60,8 @@ def make_race_id_from_schedule(row, season_schedule, season: int | None = None) 
         season = getattr(season_schedule, "year", None)
     if season is None:
         season = row["Season"] if "Season" in row else row["EventDate"].year
-    country = str(row["Country"])
-    hosts = int((season_schedule["Country"].astype(str) == country).sum())
+    country = country_name(row["Country"])
+    hosts = int((season_schedule["Country"].map(country_name) == country).sum())
     gp = _ascii(country) if hosts <= 1 else event_slug(row["EventName"])
     return make_race_id(season, int(row["RoundNumber"]), gp)
 
