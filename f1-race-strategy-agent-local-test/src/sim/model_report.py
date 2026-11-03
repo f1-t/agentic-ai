@@ -114,6 +114,9 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     supported = hazard_support(hazard)
     if supported is not None:
         flags += [f"no_hazard_support:{c}" for c, r in compounds.items() if r.modelled and c not in supported]
+    # degradation.params wear_lower_bound: the fit put this compound's wear on the bound
+    flags += [f"wear_at_bound:{c}" for c, b in sorted((rep.get("bounded") or {}).items())
+              if b and c in compounds and compounds[c].modelled]
     if "n_pack_rows" in rep:   # SimConfig.fit_free_air_only: clean rows the fit left out
         flags.append(f"free_air_filter:{rep['n_pack_rows']}")
     return ModelReport(

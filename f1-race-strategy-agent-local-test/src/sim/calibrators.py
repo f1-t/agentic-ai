@@ -55,6 +55,7 @@ import pandas as pd
 from ..contracts import (COMPOUND_FACTORS, RACE_FACTORS, CalibrationOutput, CorrectionTable, RaceParams,  # noqa: F401
                          Snapshot, factor_name, split_factor)
 from .config import HINGE_TAU_S_PER_LAP, ComponentSpec, SimConfig
+from .degradation import new_draw_stats
 from .events import Scenario
 from .race_ids import canonical_race_id, race_season
 from .registry import Registry
@@ -292,8 +293,12 @@ def held_prior(prior, out: CalibrationOutput):
     cov = np.diag(sd ** 2)
     bases = [i for i, n in enumerate(names) if split_factor(n)[0] == "base_s" and split_factor(n)[1] in practice]
     cov[np.ix_(bases, bases)] = np.outer(sd[bases], sd[bases])
-    m.fit_report = {**prior.fit_report,
-                    "cov": {"names": list(names), "matrix": [[float(v) for v in row] for row in cov]}}
+    # under a wear bound the draws truncate this cov around the held point estimate, not the
+    # practice fit's unconstrained posterior, and count their own draw_stats
+    rep = {k: v for k, v in prior.fit_report.items() if k != "unconstrained"}
+    m.fit_report = {**rep, "cov": {"names": list(names), "matrix": [[float(v) for v in row] for row in cov]}}
+    if "draw_stats" in rep:
+        m.fit_report["draw_stats"] = new_draw_stats()
     return m
 
 

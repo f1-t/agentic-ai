@@ -42,8 +42,11 @@ per batch call, `default_rng([s, K, 2])` and `default_rng([s, K, 3])` with K = 2
 an (n, d) matrix of normals, d the parameter count or the remaining laps, whose row `i` is
 sample `i`'s draw. Rows are drawn in order, so row `i` depends on (s, i, d) only and sample
 `i` is the same in a batch of 10 or 200 (`engine.batch_normals`). Every draw is shared by
-every candidate, and turning one on leaves the other streams' draws as they were. A
-degradation model without a parameter vector gets `default_rng([s, i, 2])` per sample in
+every candidate, and turning one on leaves the other streams' draws as they were. Under a
+wear bound (`degradation.params.wear_lower_bound`) a rejected parameter proposal is
+followed by the next one from `default_rng([s, K, 4])`, row `i` holding sample `i`'s 49
+further proposals, so a sample whose first proposal is accepted draws what it draws
+without the bound. A degradation model without a parameter vector gets `default_rng([s, i, 2])` per sample in
 its `draw(rng)`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
 `(seed=0, n_samples=n)` describe the same draws. Seed mapping in the bridge:
 `optimize_batch(seed=s, n_samples=n)` reports `Evaluation.seeds = (0, ..., n-1)`, the

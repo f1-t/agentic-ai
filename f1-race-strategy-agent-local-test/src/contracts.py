@@ -337,6 +337,9 @@ class ModelReport(_Contract):
       no_hazard_support:<compound> the hazard model has no observed support for this modelled
                                    compound, so its tyre risk is not known (only with a hazard
                                    model that has per compound support)
+      wear_at_bound:<compound>     the fit put this compound's wear on its lower bound
+                                   (degradation.params wear_lower_bound), so the data alone
+                                   would have it below the bound
     calibration_error_s is the offset-adjusted mean absolute error of the remaining race
     time for this fit window at the snapshot's horizon bucket, from the mid-race
     calibration summary; NaN when there is no table or no row for it.
