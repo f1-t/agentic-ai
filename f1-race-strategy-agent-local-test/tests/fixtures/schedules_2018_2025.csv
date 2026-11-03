@@ -1,0 +1,174 @@
+season,round,event_name,country,location,circuit
+2018,1,Australian Grand Prix,Australia,Melbourne,albert_park
+2018,2,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2018,3,Chinese Grand Prix,China,Shanghai,shanghai
+2018,4,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2018,5,Spanish Grand Prix,Spain,Barcelona,catalunya
+2018,6,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2018,7,Canadian Grand Prix,Canada,Montréal,villeneuve
+2018,8,French Grand Prix,France,Le Castellet,paul_ricard
+2018,9,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2018,10,British Grand Prix,Great Britain,Silverstone,silverstone
+2018,11,German Grand Prix,Germany,Hockenheim,hockenheim
+2018,12,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2018,13,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2018,14,Italian Grand Prix,Italy,Monza,monza
+2018,15,Singapore Grand Prix,Singapore,Marina Bay,marina_bay
+2018,16,Russian Grand Prix,Russia,Sochi,sochi
+2018,17,Japanese Grand Prix,Japan,Suzuka,suzuka
+2018,18,United States Grand Prix,United States,Austin,cota
+2018,19,Mexican Grand Prix,Mexico,Mexico City,rodriguez
+2018,20,Brazilian Grand Prix,Brazil,São Paulo,interlagos
+2018,21,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2019,1,Australian Grand Prix,Australia,Melbourne,albert_park
+2019,2,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2019,3,Chinese Grand Prix,China,Shanghai,shanghai
+2019,4,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2019,5,Spanish Grand Prix,Spain,Barcelona,catalunya
+2019,6,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2019,7,Canadian Grand Prix,Canada,Montréal,villeneuve
+2019,8,French Grand Prix,France,Le Castellet,paul_ricard
+2019,9,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2019,10,British Grand Prix,Great Britain,Silverstone,silverstone
+2019,11,German Grand Prix,Germany,Hockenheim,hockenheim
+2019,12,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2019,13,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2019,14,Italian Grand Prix,Italy,Monza,monza
+2019,15,Singapore Grand Prix,Singapore,Marina Bay,marina_bay
+2019,16,Russian Grand Prix,Russia,Sochi,sochi
+2019,17,Japanese Grand Prix,Japan,Suzuka,suzuka
+2019,18,Mexican Grand Prix,Mexico,Mexico City,rodriguez
+2019,19,United States Grand Prix,United States,Austin,cota
+2019,20,Brazilian Grand Prix,Brazil,São Paulo,interlagos
+2019,21,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2020,1,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2020,2,Styrian Grand Prix,Austria,Spielberg,red_bull_ring
+2020,3,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2020,4,British Grand Prix,Great Britain,Silverstone,silverstone
+2020,5,70th Anniversary Grand Prix,Great Britain,Silverstone,silverstone
+2020,6,Spanish Grand Prix,Spain,Barcelona,catalunya
+2020,7,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2020,8,Italian Grand Prix,Italy,Monza,monza
+2020,9,Tuscan Grand Prix,Italy,Mugello,mugello
+2020,10,Russian Grand Prix,Russia,Sochi,sochi
+2020,11,Eifel Grand Prix,Germany,Nürburgring,nurburgring
+2020,12,Portuguese Grand Prix,Portugal,Portimão,portimao
+2020,13,Emilia Romagna Grand Prix,Italy,Imola,imola
+2020,14,Turkish Grand Prix,Turkey,Istanbul,istanbul_park
+2020,15,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2020,16,Sakhir Grand Prix,Bahrain,Sakhir,sakhir_outer
+2020,17,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2021,1,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2021,2,Emilia Romagna Grand Prix,Italy,Imola,imola
+2021,3,Portuguese Grand Prix,Portugal,Portimão,portimao
+2021,4,Spanish Grand Prix,Spain,Barcelona,catalunya
+2021,5,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2021,6,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2021,7,French Grand Prix,France,Le Castellet,paul_ricard
+2021,8,Styrian Grand Prix,Austria,Spielberg,red_bull_ring
+2021,9,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2021,10,British Grand Prix,Great Britain,Silverstone,silverstone
+2021,11,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2021,12,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2021,13,Dutch Grand Prix,Netherlands,Zandvoort,zandvoort
+2021,14,Italian Grand Prix,Italy,Monza,monza
+2021,15,Russian Grand Prix,Russia,Sochi,sochi
+2021,16,Turkish Grand Prix,Turkey,Istanbul,istanbul_park
+2021,17,United States Grand Prix,United States,Austin,cota
+2021,18,Mexico City Grand Prix,Mexico,Mexico City,rodriguez
+2021,19,São Paulo Grand Prix,Brazil,São Paulo,interlagos
+2021,20,Qatar Grand Prix,Qatar,Lusail,lusail
+2021,21,Saudi Arabian Grand Prix,Saudi Arabia,Jeddah,jeddah
+2021,22,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2022,1,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2022,2,Saudi Arabian Grand Prix,Saudi Arabia,Jeddah,jeddah
+2022,3,Australian Grand Prix,Australia,Melbourne,albert_park
+2022,4,Emilia Romagna Grand Prix,Italy,Imola,imola
+2022,5,Miami Grand Prix,United States,Miami,miami
+2022,6,Spanish Grand Prix,Spain,Barcelona,catalunya
+2022,7,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2022,8,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2022,9,Canadian Grand Prix,Canada,Montréal,villeneuve
+2022,10,British Grand Prix,Great Britain,Silverstone,silverstone
+2022,11,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2022,12,French Grand Prix,France,Le Castellet,paul_ricard
+2022,13,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2022,14,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2022,15,Dutch Grand Prix,Netherlands,Zandvoort,zandvoort
+2022,16,Italian Grand Prix,Italy,Monza,monza
+2022,17,Singapore Grand Prix,Singapore,Marina Bay,marina_bay
+2022,18,Japanese Grand Prix,Japan,Suzuka,suzuka
+2022,19,United States Grand Prix,United States,Austin,cota
+2022,20,Mexico City Grand Prix,Mexico,Mexico City,rodriguez
+2022,21,São Paulo Grand Prix,Brazil,São Paulo,interlagos
+2022,22,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2023,1,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2023,2,Saudi Arabian Grand Prix,Saudi Arabia,Jeddah,jeddah
+2023,3,Australian Grand Prix,Australia,Melbourne,albert_park
+2023,4,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2023,5,Miami Grand Prix,United States,Miami,miami
+2023,7,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2023,8,Spanish Grand Prix,Spain,Barcelona,catalunya
+2023,9,Canadian Grand Prix,Canada,Montréal,villeneuve
+2023,10,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2023,11,British Grand Prix,Great Britain,Silverstone,silverstone
+2023,12,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2023,13,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2023,14,Dutch Grand Prix,Netherlands,Zandvoort,zandvoort
+2023,15,Italian Grand Prix,Italy,Monza,monza
+2023,16,Singapore Grand Prix,Singapore,Marina Bay,marina_bay
+2023,17,Japanese Grand Prix,Japan,Suzuka,suzuka
+2023,18,Qatar Grand Prix,Qatar,Lusail,lusail
+2023,19,United States Grand Prix,United States,Austin,cota
+2023,20,Mexico City Grand Prix,Mexico,Mexico City,rodriguez
+2023,21,São Paulo Grand Prix,Brazil,São Paulo,interlagos
+2023,22,Las Vegas Grand Prix,United States,Las Vegas,las_vegas
+2023,23,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2024,1,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2024,2,Saudi Arabian Grand Prix,Saudi Arabia,Jeddah,jeddah
+2024,3,Australian Grand Prix,Australia,Melbourne,albert_park
+2024,4,Japanese Grand Prix,Japan,Suzuka,suzuka
+2024,5,Chinese Grand Prix,China,Shanghai,shanghai
+2024,6,Miami Grand Prix,United States,Miami,miami
+2024,7,Emilia Romagna Grand Prix,Italy,Imola,imola
+2024,8,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2024,9,Canadian Grand Prix,Canada,Montréal,villeneuve
+2024,10,Spanish Grand Prix,Spain,Barcelona,catalunya
+2024,11,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2024,12,British Grand Prix,Great Britain,Silverstone,silverstone
+2024,13,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2024,14,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2024,15,Dutch Grand Prix,Netherlands,Zandvoort,zandvoort
+2024,16,Italian Grand Prix,Italy,Monza,monza
+2024,17,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2024,18,Singapore Grand Prix,Singapore,Marina Bay,marina_bay
+2024,19,United States Grand Prix,United States,Austin,cota
+2024,20,Mexico City Grand Prix,Mexico,Mexico City,rodriguez
+2024,21,São Paulo Grand Prix,Brazil,São Paulo,interlagos
+2024,22,Las Vegas Grand Prix,United States,Las Vegas,las_vegas
+2024,23,Qatar Grand Prix,Qatar,Lusail,lusail
+2024,24,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina
+2025,1,Australian Grand Prix,Australia,Melbourne,albert_park
+2025,2,Chinese Grand Prix,China,Shanghai,shanghai
+2025,3,Japanese Grand Prix,Japan,Suzuka,suzuka
+2025,4,Bahrain Grand Prix,Bahrain,Sakhir,sakhir
+2025,5,Saudi Arabian Grand Prix,Saudi Arabia,Jeddah,jeddah
+2025,6,Miami Grand Prix,United States,Miami,miami
+2025,7,Emilia Romagna Grand Prix,Italy,Imola,imola
+2025,8,Monaco Grand Prix,Monaco,Monte Carlo,monaco
+2025,9,Spanish Grand Prix,Spain,Barcelona,catalunya
+2025,10,Canadian Grand Prix,Canada,Montréal,villeneuve
+2025,11,Austrian Grand Prix,Austria,Spielberg,red_bull_ring
+2025,12,British Grand Prix,Great Britain,Silverstone,silverstone
+2025,13,Belgian Grand Prix,Belgium,Spa-Francorchamps,spa
+2025,14,Hungarian Grand Prix,Hungary,Budapest,hungaroring
+2025,15,Dutch Grand Prix,Netherlands,Zandvoort,zandvoort
+2025,16,Italian Grand Prix,Italy,Monza,monza
+2025,17,Azerbaijan Grand Prix,Azerbaijan,Baku,baku
+2025,18,Singapore Grand Prix,Singapore,Marina Bay,marina_bay
+2025,19,United States Grand Prix,United States,Austin,cota
+2025,20,Mexico City Grand Prix,Mexico,Mexico City,rodriguez
+2025,21,São Paulo Grand Prix,Brazil,São Paulo,interlagos
+2025,22,Las Vegas Grand Prix,United States,Las Vegas,las_vegas
+2025,23,Qatar Grand Prix,Qatar,Lusail,lusail
+2025,24,Abu Dhabi Grand Prix,Abu Dhabi,Yas Island,yas_marina

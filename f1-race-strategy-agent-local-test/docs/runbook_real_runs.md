@@ -4,8 +4,8 @@ From "Sarah's PR merged" to "report regenerated". One command runs every stage (
 `src/sim/real_run.py`):
 
 ```bash
-python -m src.sim.calibrate real-run --profile local          # desktop: everything in-process
-python -m src.sim.calibrate real-run --profile sol            # Sol: emits Slurm arrays, submits nothing
+python -m src.sim.calibrate real-run --profile local          # scheduler local: everything in-process
+python -m src.sim.calibrate real-run --profile sol            # scheduler slurm: emits arrays, submits nothing
 ```
 
 Run every command here from `f1-race-strategy-agent-local-test/` with the venv active.
@@ -16,7 +16,7 @@ Run every command here from `f1-race-strategy-agent-local-test/` with the venv a
 | --- | --- | --- | --- |
 | `eligibility` | `calibration.eligibility` per race | at least one race | `real_run/eligibility.json`, and the table printed |
 | `cross_race` | the cross-race pass and leave-one-race-out per arm (SPEC 0016) | at least one eligible race | `cross_race/` (`run.json`, parquets) |
-| `event_rates` | SC and VSC rates by circuit and era (SPEC 0011b) | `data/derived/neutralised_periods.csv` exists | `event_rates/` |
+| `event_rates` | SC and VSC rates by circuit and era (SPEC 0011b) | `data/derived/neutralised_periods.csv` exists, else the run's cross-race `factors.csv` holds at least 8 eligible races (source "cached races only (n)") | `event_rates/` |
 | `fuel_prior` | the per-circuit race-pace prior (SPEC 0020) | at least 8 eligible races | `fuel_prior/` |
 | `references` | `python -m src.eval reference --check`, then each stale reference rebuilt with its own inputs | `data/references/` exists | `data/references/<set>/<key>.parquet` |
 | `report` | the cross-race report | the cross-race pass finished | `cross_race/summary.md`, `factors.csv`, ... |
@@ -40,15 +40,20 @@ the same command again.
 2. **Check the cache.**
    - `ls cache/*/` should show the new weekends.
    - `python -c "from src.sim.real_run import cached_races; print(cached_races())"` should
-     list every race you expect, as `<season>_<round>_<country>` ids. A note means an event
-     directory the schedule does not name.
+     list every race you expect. Ids are `<season>_<round>_<slug>` from the season's schedule
+     (`race_ids.make_race_id_from_schedule`): the country, or the event name for every race of a
+     country that hosts more than one that season (`2021_08_styrian`, `2021_09_austrian`,
+     `2022_05_miami`). A note means an event directory the schedule does not name, or a season
+     whose schedule is not cached.
    - Check whether `data/derived/neutralised_periods.csv` and `data/race_features.csv` arrived
-     with the PR. Without the first, the event rates are skipped. Without the second, the
-     reports have no circuit covariates.
+     with the PR. Without the first, the event rates come from the cross-race factors (at
+     least 8 eligible races) or are skipped. Without the second, the reports have no circuit
+     covariates, and each race's circuit comes from the cached schedule's location.
 3. **Run.**
-   - **Local:** `python -m src.sim.calibrate real-run --profile local`. The cross-race units use
-     the profile's `parallel.n_jobs` workers.
-   - **Sol:** run `python -m src.sim.calibrate real-run --profile sol` inside an interactive
+   - **Local:** `python -m src.sim.calibrate real-run --profile local`. The profile's
+     `scheduler: local` runs the cross-race units on its `parallel.n_jobs` workers.
+   - **Sol:** the profile's `scheduler: slurm` selects this mode. Run
+     `python -m src.sim.calibrate real-run --profile sol` inside an interactive
      allocation (`salloc`), not on the login node. The eligibility, event-rate, fuel-prior and
      reference stages run in that process. The per-race and per-fold units of the cross-race
      pass are written as array scripts under `reports/calibration/real_run/slurm/`. They are
@@ -92,7 +97,8 @@ the same command again.
 
 ## What not to do
 
-- **No tuning after seeing held-out numbers (plan section 18).** The arms, the selection rules
+- **Selection rules and thresholds are fixed before a run; nothing is chosen or tuned after
+  seeing held-out numbers.** The arms, the selection rules
   and margins (`NONINFERIORITY_S`, `MIN_RACES`, the horizons), the tau multipliers, the
   eligibility rule, the candidate lists and the priors were all fixed before any cross-race
   data. Once you have seen the held-out tables, do not change any of them. Do not drop or add

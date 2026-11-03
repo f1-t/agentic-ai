@@ -9,10 +9,11 @@ cached_races):
   cross_race   the cross-race pass and leave-one-race-out per arm (SPEC 0016, cross_race.run)
                on the eligible races, under cross_race/.
   event_rates  SC and VSC rates by circuit and era (SPEC 0011b, event_rates.report) from
-               data/derived/neutralised_periods.csv, under event_rates/. Skipped without
-               that file (the 0016 factors fallback is not used here).
+               data/derived/neutralised_periods.csv, under event_rates/; without that file,
+               from the cross-race factors.csv when it holds MIN_HISTORY_RACES eligible races
+               (source "cached races only (n)").
   fuel_prior   the race-pace prior for the fuel term (SPEC 0020, fuel_prior.run) on the
-               eligible races, under fuel_prior/, when at least FUEL_MIN_RACES are eligible.
+               eligible races, under fuel_prior/, when MIN_HISTORY_RACES are eligible.
   references   `python -m src.eval reference --check`, then every stale cached reference
                rebuilt at the current code with its own inputs (rebuild_reference).
   report       the cross-race report (cross_race.report): factors.csv, summary.md and the
@@ -29,8 +30,8 @@ those of its last completed entry in the manifest, with its outputs present, is 
 status (ran, current, skipped, pending or failed), reason, inputs (each with `present`),
 outputs, code version and wall time.
 
-Locally the cross-race units run in-process on the profile's parallel.n_jobs workers. With
-the sol profile (a profile named "sol") they are not run here: SlurmEmitter writes one array
+With a profile whose scheduler is local the cross-race units run in-process on its
+parallel.n_jobs workers. With scheduler slurm (the sol profile) they are not run here: SlurmEmitter writes one array
 script per phase from the committed templates (slurm/g_race.sbatch for the per-race units,
 slurm/h_fold.sbatch for the per-fold units), prints the sbatch commands and leaves the pass
 pending. Nothing here submits anything. Rerun the same command once the arrays finish: the
@@ -49,9 +50,11 @@ import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 from . import calibration, cross_race, event_rates, fuel_prior, jobs
 from .compute import load_profile
-from .race_ids import canonical_race_id, make_race_id, parse_race_id
+from .race_ids import canonical_race_id, make_race_id_from_schedule, parse_race_id
 
 ROOT = cross_race.ROOT
 REPORTS_DIR = ROOT / "reports" / "calibration"
@@ -61,8 +64,7 @@ SCENARIO_DIR = ROOT / "data" / "scenarios"
 SIM_CONFIG_DIR = ROOT / "configs" / "sim"
 STAGES = ("eligibility", "cross_race", "event_rates", "fuel_prior", "references", "report")
 RAN, CURRENT, SKIPPED, PENDING, FAILED = "ran", "current", "skipped", cross_race.PENDING, "failed"
-FUEL_MIN_RACES = 8          # SPEC 0021: the race-pace prior runs from this many eligible races
-SLURM_PROFILE = "sol"       # the profile whose cross-race units go to Slurm arrays
+MIN_HISTORY_RACES = 8       # SPEC 0021: the fuel prior, and the event rates from factors.csv, need this many
 ARRAY_MAX = 1000            # tasks per sbatch line; a longer phase gets several, with an offset
 ARRAY_CONCURRENT = 50       # %K on the array: tasks running at once, as slurm/README.md
 TEMPLATES = {"cross_race": "g_race.sbatch", "h_fold": "h_fold.sbatch"}
@@ -71,31 +73,30 @@ TEMPLATES = {"cross_race": "g_race.sbatch", "h_fold": "h_fold.sbatch"}
 # --- races ----------------------------------------------------------------------------
 def cached_races(cache_dir=None) -> tuple[list[str], list[str]]:
     """(canonical ids, notes) of every race in the FastF1 cache: an event directory
-    <cache>/<season>/<date>_<Event_Name>/ holding a *_Race session directory. Round and
-    country (the gp slug, as 2021_04_spain) come from the cached event schedule, offline.
-    Sorted by season and round; an event the schedule does not name is left out with a note."""
-    import fastf1
-    from .data import CACHE_DIR
+    <cache>/<season>/<date>_<Event_Name>/ holding a *_Race session directory, named by
+    race_ids.make_race_id_from_schedule from the cached season schedule (data.season_schedule),
+    offline. Sorted by season and round; an event the schedule does not name, or a season
+    without a cached schedule, is left out with a note."""
+    from .data import CACHE_DIR, season_schedule
     cache = Path(cache_dir or CACHE_DIR)
     ids, notes = [], []
     if not cache.is_dir():
         return [], [f"no cache directory {cache}"]
-    fastf1.set_log_level("ERROR")
-    fastf1.Cache.configure(cache_dir=str(cache))
-    fastf1.Cache.offline_mode(True)
     for season_dir in sorted(p for p in cache.iterdir() if p.is_dir() and p.name.isdigit()):
         events = [d for d in sorted(season_dir.iterdir())
                   if d.is_dir() and any(s.is_dir() and s.name.endswith("_Race") for s in d.iterdir())]
         if not events:
             continue
         season = int(season_dir.name)
-        schedule = fastf1.get_event_schedule(season, include_testing=False)
-        by_name = {str(n).replace(" ", "_"): (int(r), str(c))
-                   for n, r, c in zip(schedule["EventName"], schedule["RoundNumber"], schedule["Country"])}
+        schedule = season_schedule(season, str(cache))
+        if schedule is None:
+            notes.append(f"{season_dir.name}: no cached event schedule, its {len(events)} race(s) left out")
+            continue
+        by_name = {str(r["EventName"]).replace(" ", "_"): r for _, r in schedule.iterrows()}
         for d in events:
             name = d.name.split("_", 1)[1] if "_" in d.name else d.name
             if name in by_name:
-                ids.append(make_race_id(season, *by_name[name]))
+                ids.append(make_race_id_from_schedule(by_name[name], schedule, season))
             else:
                 notes.append(f"{season_dir.name}/{d.name}: not in the {season} event schedule, left out")
     return sorted(set(ids), key=lambda r: parse_race_id(r)[:2]), notes
@@ -152,7 +153,7 @@ class RealRun:
         self.periods, self.race_features = Path(periods), Path(race_features)
         self.reference_dir = Path(reference_dir or REFERENCE_DIR)
         self.tau_multipliers, self.tau_grid, self.n_boot = tuple(tau_multipliers), tau_grid, n_boot
-        self.slurm = profile.name == SLURM_PROFILE
+        self.slurm = profile.scheduler == "slurm"
         self.slurm_dir = Path(slurm_dir)
         self.run_dir = self.out / RUN_SUBDIR
         self.manifest_path = self.run_dir / "manifest.json"
@@ -235,7 +236,6 @@ class RealRun:
 
 # --- stages -------------------------------------------------------------------------------
 def _eligibility_table(elig) -> str:
-    import pandas as pd
     return cross_race.md_table(pd.DataFrame([
         {"race": e["race_id"], "eligible": e["eligible"], "drivers": e["n_finishers"],
          "reasons": "; ".join(e["reasons"]) or "-", "notes": "; ".join(e.get("notes", [])) or "-"} for e in elig]))
@@ -280,7 +280,9 @@ def stage_cross_race(run: RealRun):
                            f"{len(record['pending'])} unit(s) of phase {record['phase']} left to Slurm: submit the "
                            "printed sbatch commands, then rerun real-run", emitter.scripts, t0,
                            {"phase": record["phase"], "pending": len(record["pending"]), "sbatch": emitter.commands})
-    return run.done(stage, inputs, [out / "run.json", out / "eligibility.json"], t0,
+    factors = cross_race.write_factors(cross_race.race_outputs(out, record["eligible"], run.profile), out,
+                                       run.race_features)
+    return run.done(stage, inputs, [out / "run.json", out / "eligibility.json", factors], t0,
                     {k: record[k] for k in ("eligible", "belief_bound", "belief_choice", "s2_arm", "grid_arm")}
                     | {"grid": len(record["grid"]), "notes": record["notes"]})
 
@@ -289,18 +291,37 @@ EVENT_RATES_OUTPUTS = ("rates.csv", "forward_nll.csv", "loro_nll.csv", "selectio
 
 
 def stage_event_rates(run: RealRun):
+    """From the neutralised periods table; without it, from the cross-race factors.csv of this
+    run when that holds MIN_HISTORY_RACES eligible races; else skipped."""
     stage, out = "event_rates", run.out / "event_rates"
-    inputs = {"periods": file_input(run.periods), "race_features": file_input(run.race_features)}
-    if not inputs["periods"]["present"]:
+    factors_path = run.out / "cross_race" / "factors.csv"
+    cross_done = run.entries.get("cross_race", {}).get("status") in (RAN, CURRENT)
+    inputs = {"periods": file_input(run.periods), "race_features": file_input(run.race_features),
+              "factors": file_input(factors_path) if cross_done else {"path": _rel(factors_path), "present": False}}
+    if inputs["periods"]["present"]:
+        source = None
+    elif inputs["factors"]["present"]:
+        factors = pd.read_csv(factors_path)
+        if len(factors) < MIN_HISTORY_RACES:
+            return run.skip(stage, inputs, f"no {inputs['periods']['path']} (the data team's neutralised periods "
+                            f"table), and the cross-race factors.csv holds {len(factors)} eligible race(s), fewer "
+                            f"than {MIN_HISTORY_RACES}")
+        source = f"cached races only ({len(factors)})"
+    else:
         return run.skip(stage, inputs, f"no {inputs['periods']['path']} (the data team's neutralised periods "
-                        "table); the rates are fitted from it, not from the cross-race factors")
+                        "table), and no cross-race factors.csv from this run")
     if run.resume(stage, inputs):
         return
     t0 = time.perf_counter()
-    stats, source = event_rates.load_stats(run.periods, None, run.race_features)
+    if source is None:
+        stats, source = event_rates.load_stats(run.periods, None, run.race_features)
+    else:
+        features = pd.read_csv(run.race_features) if run.race_features.is_file() else None
+        stats = event_rates.stats_from_factors(factors, features)
     kw = {} if run.n_boot is None else {"n_boot": run.n_boot}
     event_rates.report(stats, out, source, **kw)
-    return run.done(stage, inputs, [out / f for f in EVENT_RATES_OUTPUTS], t0, {"races": int(len(stats))})
+    return run.done(stage, inputs, [out / f for f in EVENT_RATES_OUTPUTS], t0,
+                    {"races": int(len(stats)), "source": source})
 
 
 FUEL_OUTPUTS = ("history.csv", "predictions.csv", "f_table.csv", "selection.csv", "summary.md")
@@ -309,8 +330,8 @@ FUEL_OUTPUTS = ("history.csv", "predictions.csv", "f_table.csv", "selection.csv"
 def stage_fuel_prior(run: RealRun):
     stage, out = "fuel_prior", run.out / "fuel_prior"
     inputs = {"eligible": value_input(run.eligible), "race_features": file_input(run.race_features)}
-    if len(run.eligible) < FUEL_MIN_RACES:
-        return run.skip(stage, inputs, f"{len(run.eligible)} eligible race(s), fewer than {FUEL_MIN_RACES}: the "
+    if len(run.eligible) < MIN_HISTORY_RACES:
+        return run.skip(stage, inputs, f"{len(run.eligible)} eligible race(s), fewer than {MIN_HISTORY_RACES}: the "
                         "race-pace prior (SPEC 0020) needs a history of races")
     if run.resume(stage, inputs):
         return
@@ -438,7 +459,6 @@ def execute(run: RealRun) -> dict:
 
 
 def summary_table(run: RealRun) -> str:
-    import pandas as pd
     return cross_race.md_table(pd.DataFrame([
         {"stage": e["stage"], "status": e["status"], "reason": e["reason"] or "-", "outputs": len(e["outputs"]),
          "wall time (s)": e["wall_time_s"]} for e in (run.entries[s] for s in STAGES if s in run.entries)]))
@@ -527,8 +547,8 @@ def main(argv=None):
     from ..eval.reference import REFERENCE_DIR
     argv = sys.argv[1:] if argv is None else argv
     ap = argparse.ArgumentParser(prog="python -m src.sim.calibrate real-run", description=__doc__.split("\n\n")[0])
-    ap.add_argument("--profile", help="compute profile: local (in-process) or sol (emits Slurm arrays); "
-                                      "default $SIM_PROFILE, else local")
+    ap.add_argument("--profile", help="compute profile: local (scheduler local, in-process) or sol (scheduler "
+                                      "slurm, emits Slurm arrays); default $SIM_PROFILE, else local")
     ap.add_argument("--races", nargs="+", default=["auto"], help="auto (every cached race, the default) or race ids")
     ap.add_argument("--out", default=str(REPORTS_DIR), help="root of the stage outputs (default reports/calibration)")
     ap.add_argument("--periods", default=str(event_rates.NEUTRALISED_PERIODS), help="the neutralised periods table")

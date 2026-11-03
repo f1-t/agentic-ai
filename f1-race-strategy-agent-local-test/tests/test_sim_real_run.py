@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import yaml
 
@@ -21,9 +22,9 @@ ENTRY_KEYS = {"stage", "status", "reason", "inputs", "outputs", "code_version", 
 COMMITTED = (real_run.REPORTS_DIR, ROOT / "data" / "references")
 
 
-def small_profile(name="local"):
+def small_profile(name="local", scheduler="local"):
     p = load_profile("local")
-    return p.model_copy(update={"name": name,
+    return p.model_copy(update={"name": name, "scheduler": scheduler,
                                 "g": p.g.model_copy(update={"laps_every": 20, "n_boot": 20}),
                                 "sim": p.sim.model_copy(update={"n_samples": 5}),
                                 "parallel": p.parallel.model_copy(update={"n_jobs": 1}),
@@ -126,6 +127,37 @@ def test_event_rates_run_from_the_periods_table_when_it_is_there(tmp_path):
     assert (tmp_path / "out" / "event_rates" / "summary.md").is_file()
 
 
+def _factors(n):
+    ids = [f"2021_{i:02d}_race" for i in range(1, n + 1)]
+    return pd.DataFrame({"race_id": ids, "total_laps": 60, "sc_count": [i % 2 for i in range(n)],
+                         "sc_laps": [3 * (i % 2) for i in range(n)], "vsc_count": 0, "vsc_laps": 0,
+                         "sc_start_laps": ["10" if i % 2 else "" for i in range(n)], "vsc_start_laps": ""})
+
+
+@pytest.mark.parametrize("n", [7, 8])
+def test_without_a_periods_table_the_event_rates_use_8_cached_races(tmp_path, n):
+    run = make_run(tmp_path, small_profile(), [], [])
+    cross = tmp_path / "out" / "cross_race"
+    cross.mkdir(parents=True)
+    _factors(n).to_csv(cross / "factors.csv", index=False)
+    assert real_run.stage_event_rates(run)["status"] == SKIPPED   # the pass did not run here
+    run.entries["cross_race"] = {"status": RAN}
+    e = real_run.stage_event_rates(run)
+    if n < 8:
+        assert e["status"] == SKIPPED and "holds 7 eligible race(s), fewer than 8" in e["reason"]
+    else:
+        assert e["status"] == RAN and e["detail"]["source"] == "cached races only (8)"
+        assert "cached races only (8)" in (tmp_path / "out" / "event_rates" / "summary.md").read_text()
+
+
+def test_the_scheduler_field_not_the_name_picks_slurm(tmp_path):
+    assert load_profile("sol").scheduler == "slurm" and load_profile("local").scheduler == "local"
+    assert not make_run(tmp_path, small_profile("sol", "local"), [], []).slurm
+    assert make_run(tmp_path, small_profile("local", "slurm"), [], []).slurm
+    p = load_profile("sol")
+    assert p.model_copy(update={"scheduler": "local"}).hash == p.hash   # where units run is not an output
+
+
 def test_the_fuel_prior_runs_from_8_eligible_races(tmp_path, monkeypatch):
     calls = []
 
@@ -197,7 +229,7 @@ def _task_body(script: Path) -> str:
 
 def test_sol_emits_the_arrays_from_the_templates_and_submits_nothing(tmp_path, monkeypatch):
     _no_sbatch(monkeypatch)
-    profile = small_profile("sol")
+    profile = small_profile("sol", "slurm")
     path = tmp_path / "sol.yaml"
     path.write_text(yaml.safe_dump(profile.model_dump(mode="json")))
     log = []
