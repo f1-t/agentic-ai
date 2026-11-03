@@ -22,6 +22,12 @@ times give the Monte Carlo precision of each regret under the shared draws:
 At N = 1 regret_se_s is 0, so within_mc is the tie rule (regret_s 0). summarize reports
 share_within_mc, the share of scored rows the draws cannot tell from the reference.
 
+Near ties (information only, eval.reference.near_ties): every row carries the size of the
+optimal set (the searched plans within 2 SE of the reference), the best pit-now and
+stay-out means, their gap, its paired SE and whether the pit-now call is decisive; ok rows
+add stop_agree_set and first_pit_error_set against the closest member of the optimal set.
+summarize does not read them; summarize_near_ties is the separate view `report` prints.
+
 A policy may return an agent decision (Decision.submission, PIT or STAY_OUT) instead of a
 plan. eval.decisions.to_plan expands it on the belief into the action plus an optimizer
 continuation, and the world scores that plan. Such rows also carry `decision` and `p_pit`
@@ -62,7 +68,8 @@ from ..sim import calibration, traffic
 from ..sim.optimizer_bridge import optimize_batch
 from . import decisions
 from .policies import Decision
-from .reference import REFERENCE_DIR, Reference, ReferenceStore, compute_reference, paired_se
+from .reference import REFERENCE_DIR, Reference, ReferenceStore, compute_reference, near_ties, paired_se, \
+    set_agreement
 
 STATUSES = ("ok", "invalid", "unavailable", "error", "no_reference")
 REGRET_TOL_S = 1e-6
@@ -152,7 +159,8 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
     base.update(n_samples=n, opt_plan=json.dumps(opt.plan.as_pairs()), opt_num_stops=opt.plan.num_stops,
                 opt_first_pit_lap=ref_pits[0] if ref_pits else None, opt_time_s=ref,
                 pit_now_opt=opt.pit_now_opt,
-                opt_final_position_mean=float(ref_pos.mean()) if ref_pos is not None else np.nan)
+                opt_final_position_mean=float(ref_pos.mean()) if ref_pos is not None else np.nan,
+                **near_ties(opt, snap))
     rows = []
     for name, policy in policies.items():
         row = {**base, "policy": name}
@@ -195,12 +203,14 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
         # the same plan summed in another order differs by ~1e-12 s; call that no regret
         regret = 0.0 if abs(mean - ref) < REGRET_TOL_S else mean - ref
         se = paired_se(batch.times[0], opt.times)
+        stop_agree_set, first_pit_error_set = set_agreement(opt, res.num_stops, res.pit_laps, _first_pit_error)
         rows.append({**row, "status": "ok", "plan": json.dumps(batch.plans[0].as_pairs()),
                      "num_stops": res.num_stops, "first_pit_lap": res.pit_laps[0] if res.pit_laps else None,
                      "time_s": mean, "std_s": res.remaining.std_s, "regret_s": regret,
                      "regret_se_s": se, "within_mc": bool(abs(regret) <= 2 * se),
                      "regret_pct": 100.0 * regret / ref, "stop_agree": res.num_stops == opt.plan.num_stops,
                      "first_pit_error": _first_pit_error(res.pit_laps, ref_pits),
+                     "stop_agree_set": stop_agree_set, "first_pit_error_set": first_pit_error_set,
                      "support_warnings": len(res.support_warnings),
                      "final_position_mean": final_pos, "position_regret": final_pos - base["opt_final_position_mean"]})
     return rows
@@ -362,6 +372,32 @@ def summarize_agreeing(rows: pd.DataFrame) -> pd.DataFrame | None:
     if "ref_models_agree" not in rows:
         return None
     return summarize(rows[rows["ref_models_agree"].astype(bool)])
+
+
+def summarize_near_ties(rows: pd.DataFrame) -> pd.DataFrame | None:
+    """The near-tie view (information only), one row per policy over every race: of the
+    scenarios with near-tie columns, the share whose optimal set holds more than one plan
+    (opt_set_size > 1) and the share where pitting now is decisive (of those with both a
+    pit-now and a stay-out plan); then over the scored rows the stop agreement and mean first
+    pit error against the reference and against the closest member of the optimal set. None
+    when the rows carry no near-tie columns (rows scored before them, or a format-1 cache)."""
+    if "opt_set_size" not in rows or rows["opt_set_size"].isna().all():
+        return None
+    out = []
+    for pol, g in rows[rows["opt_set_size"].notna()].groupby("policy", sort=True):
+        ok = g[g["status"] == "ok"]
+        decisive = g["pit_now_decisive"].dropna().astype(float)
+
+        def mean(col):
+            return float(ok[col].dropna().astype(float).mean()) if ok[col].notna().any() else np.nan
+        out.append({"policy": pol, "scenarios": len(g),
+                    "share_opt_set_gt1": float((g["opt_set_size"] > 1).mean()),
+                    "share_pit_now_decisive": float(decisive.mean()) if len(decisive) else np.nan,
+                    "scored": len(ok), "stop_agreement": mean("stop_agree"),
+                    "stop_agreement_set": mean("stop_agree_set"),
+                    "mean_first_pit_error": mean("first_pit_error"),
+                    "mean_first_pit_error_set": mean("first_pit_error_set")})
+    return pd.DataFrame(out)
 
 
 def to_markdown(table: pd.DataFrame, digits: int = 2) -> str:
