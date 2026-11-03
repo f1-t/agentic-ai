@@ -33,7 +33,9 @@ period; this is ignored.
 Lap-1 term (candidate circuit_lap1): p_sc_lap1 / p_vsc_lap1 (config.EventModel) are the
 posterior mean share of races with a period of that kind starting on lap 1, under a Beta
 prior with the global per-lap rate as its mean (no lap-1 excess a priori) worth
-LAP1_PRIOR_RACES races; p is then fitted on laps 2 onward.
+LAP1_PRIOR_RACES races; p is then fitted on laps 2 onward. A circuit-scaled lap-1 term (the
+circuit's rate times a global lap-1 multiplier) is a later candidate, worth adding only if the
+real periods table shows lap-1 risk tracking circuit type.
 
 As-of: EventRatesCalibrator gives a race the rates fitted on the races before it,
 race_ids.as_of (strictly earlier (season, round)), never itself.
