@@ -127,13 +127,19 @@ def score_batch(snapshot: Snapshot, plans, sim, *, seed=0, n_samples=None, scena
 
 
 def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops=2,
-                   scenario=None) -> BatchOptimizationResult:
+                   scenario=None, return_times=False) -> BatchOptimizationResult:
     """The baseline optimizer with every candidate scored in one simulate_batch call.
 
     Candidates come from baselines.candidate_plans; plans with a zero-lap first stint are
     filtered out (R1) until candidate_plans takes a first-stint minimum. Rows the
     simulator rejects are dropped and counted in `invalid`. The best plan follows the
-    baseline optimizer's tie-break."""
+    baseline optimizer's tie-break.
+
+    `return_times` (opt-in, off by default) adds the chosen plan's per-draw remaining times
+    to diagnostics["times"], an (n_samples,) float array, and the next plan in the tie-break
+    order to diagnostics["runner_up"]: {"plan", "mean_time_s", "times"}, None when only one
+    plan is legal. The eval's reference cache (src/eval/reference.py) reads both for its
+    paired standard errors."""
     state = from_contract(snapshot, sim)
     candidates = list(candidate_plans(state, max_stops))
     plans = [p for p in candidates if p.stints[0].laps > 0]
@@ -143,11 +149,19 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     if not scored:
         raise domain.NoFeasiblePlan("No legal remaining plan exists within the future-stop limit.")
     best = min(scored, key=lambda i: _key(evals[i], state))
+    diagnostics = {"set_assignment": assignments[best], "seed": seed,
+                   "n_samples": batch.times.shape[1],
+                   "zero_lap_first_stints": len(candidates) - len(plans)}
+    if return_times:
+        diagnostics["times"] = np.asarray(evals[best].seed_times_s, dtype=float)
+        rest = [i for i in scored if i != best]
+        second = min(rest, key=lambda i: _key(evals[i], state)) if rest else None
+        diagnostics["runner_up"] = None if second is None else {
+            "plan": contract_plans[second], "mean_time_s": evals[second].mean_time_s,
+            "times": np.asarray(evals[second].seed_times_s, dtype=float)}
     return BatchOptimizationResult(
         evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(scored),
-        diagnostics={"set_assignment": assignments[best], "seed": seed,
-                     "n_samples": batch.times.shape[1],
-                     "zero_lap_first_stints": len(candidates) - len(plans)},
+        diagnostics=diagnostics,
     )
 
 

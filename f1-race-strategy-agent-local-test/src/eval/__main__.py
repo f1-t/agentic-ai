@@ -1,4 +1,4 @@
-"""python -m src.eval {scenarios, score, report, jobs}. See docs/eval.md."""
+"""python -m src.eval {scenarios, reference, score, report, jobs}. See docs/eval.md."""
 import argparse
 import sys
 from pathlib import Path
@@ -6,6 +6,8 @@ from pathlib import Path
 import pandas as pd
 
 from .policies import resolve
+from .reference import REFERENCE_DIR, ReferenceMissing, ReferenceStore, build_references, stale_references, \
+    summarize_references
 from .scenarios import ScenarioSet, build_set
 from .score import install_job_runner, race_simulators, score_set, summarize, summarize_agreeing, to_markdown
 
@@ -58,6 +60,20 @@ def main(argv=None):
                         "refused, the split's digest is still recorded; never a source of report numbers")
     p.add_argument("--profile")
 
+    p = sub.add_parser("reference", help="compute and cache the world optimizer's reference per scenario")
+    p.add_argument("--scenarios", help="scenario set json (not needed with --check)")
+    p.add_argument("--world-config", "--config", dest="world_config",
+                   help="SimConfig yaml or json of the world (default: the profile's)")
+    p.add_argument("--profile")
+    p.add_argument("--hindsight", action="store_true",
+                   help="fix every draw's SC and VSC laps to the driver's recorded ones")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n-samples", type=int, help="default: the profile's sim.n_samples")
+    p.add_argument("--max-stops", type=int, choices=(0, 1, 2), help="default: the profile's sim.max_stops")
+    p.add_argument("--reference-dir", default=str(REFERENCE_DIR), help="default data/references")
+    p.add_argument("--check", action="store_true",
+                   help="list cached references whose sim_code_version differs from the current one")
+
     p = sub.add_parser("score", help="score policies against the optimizer on a scenario set")
     p.add_argument("--scenarios", required=True)
     p.add_argument("--policies", nargs="*", default=["baselines"],
@@ -69,6 +85,10 @@ def main(argv=None):
     _sim_configs(p)
     p.add_argument("--profile")
     p.add_argument("--out", required=True, help="per-row csv; the summary goes beside it")
+    p.add_argument("--reference-dir", default=str(REFERENCE_DIR),
+                   help="where cached references are looked up (default data/references)")
+    p.add_argument("--require-reference", action="store_true",
+                   help="a scenario without a cached reference is an error (report runs)")
 
     p = sub.add_parser("report", help="print the result tables of a scored csv")
     p.add_argument("rows")
@@ -79,6 +99,10 @@ def main(argv=None):
     p.add_argument("--policies", nargs="*", default=["baselines"])
     p.add_argument("--recorded", nargs="*", default=[])
     _sim_configs(p)
+    p.add_argument("--reference-dir", default=str(REFERENCE_DIR),
+                   help="where the runner looks up cached references (default data/references)")
+    p.add_argument("--require-reference", action="store_true",
+                   help="a scenario without a cached reference fails its chunk (report runs)")
 
     argv = list(sys.argv[1:] if argv is None else argv)
     rest = []
@@ -100,6 +124,29 @@ def main(argv=None):
               f"digest {out.digest[:12]} -> {path}")
         return 0
 
+    if args.command == "reference":
+        if args.check:
+            stale = stale_references(args.reference_dir)
+            from ..sim.calibration import SIM_CODE_VERSION
+            print(f"{len(stale)} cached references with a sim_code_version other than {SIM_CODE_VERSION}"
+                  + (":" if stale else ""))
+            for path, meta in stale:
+                print(f"  {path}  sim_code_version {meta.get('sim_code_version')}")
+            return 0
+        if args.scenarios is None:
+            ap.error("reference needs --scenarios (or --check)")
+        from ..sim.compute import load_profile
+        profile = load_profile(args.profile)
+        scenario_set = ScenarioSet.load(args.scenarios)
+        written = build_references(scenario_set, race_simulators(profile, None, _config(args.world_config)),
+                                   seed=args.seed, n_samples=args.n_samples or profile.sim.n_samples,
+                                   max_stops=profile.sim.max_stops if args.max_stops is None else args.max_stops,
+                                   hindsight=args.hindsight, root=args.reference_dir)
+        for path, refs in written:
+            print(f"{scenario_set.version}: {len(refs)} references -> {path}")
+            print(to_markdown(pd.DataFrame([summarize_references(refs)]), digits=3))
+        return 0
+
     if args.command == "score":
         from ..sim.compute import load_profile
         profile = load_profile(args.profile)
@@ -109,11 +156,17 @@ def main(argv=None):
         world, alts = _worlds(ap, args)
         belief = _config(args.belief_config)
         sims = race_simulators(profile, belief, _config(world))
-        rows = score_set(scenario_set, sims,
-                         resolve(args.policies, args.recorded, set_name=scenario_set.version, profile=profile),
-                         seed=args.seed, n_samples=args.n_samples or profile.sim.n_samples,
-                         max_stops=profile.sim.max_stops if args.max_stops is None else args.max_stops,
-                         ref_sims=[race_simulators(profile, belief, _config(a)) for a in alts])
+        store = ReferenceStore(args.reference_dir, require=args.require_reference)
+        try:
+            rows = score_set(scenario_set, sims,
+                             resolve(args.policies, args.recorded, set_name=scenario_set.version, profile=profile),
+                             seed=args.seed, n_samples=args.n_samples or profile.sim.n_samples,
+                             max_stops=profile.sim.max_stops if args.max_stops is None else args.max_stops,
+                             ref_sims=[race_simulators(profile, belief, _config(a)) for a in alts],
+                             references=store)
+        except ReferenceMissing as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         rows.to_csv(out, index=False)
@@ -137,7 +190,8 @@ def main(argv=None):
     from ..sim import jobs
     world, alts = _worlds(ap, args)
     install_job_runner(args.scenarios, args.policies, args.recorded, belief_config=args.belief_config,
-                       world_config=world, ref_world_configs=alts)
+                       world_config=world, ref_world_configs=alts, reference_dir=args.reference_dir,
+                       require_reference=args.require_reference)
     return jobs.main(rest)
 
 
