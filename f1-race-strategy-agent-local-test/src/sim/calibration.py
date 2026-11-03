@@ -461,8 +461,32 @@ MIN_OFFSET_LAPS = 5      # green non-pit laps up to k needed for a driver pace o
 PACE_OFFSET_ALL_LAPS = "pace_offset_all_laps"   # free-air offset fell back to every green lap
 
 
+# SIM_CODE_VERSION is a physics version: it hashes the src/sim modules that can move a
+# simulated time or a reference plan, plus src/contracts.py, and nothing else, so a change to
+# the tooling around the simulator does not mark every cached reference and report stale.
+# Every module in src/sim is on exactly one list (tests/test_sim_calibration_midrace.py
+# fails on a module on neither), so a new module is classified on purpose.
+PHYSICS_MODULES = (
+    "engine", "degradation", "events", "hazard", "track", "traffic", "rules", "config", "data",
+    "tyre_sets", "weather", "pace", "calibrators", "optimizer_bridge", "registry",
+    "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
+)
+NON_PHYSICS = (
+    "__init__",       # re-exports only
+    "agent_tools",    # the agent's tools over the simulator (lands with #41)
+    "jobs", "compute", "calibrate", "model_report", "race_ids",
+    # calibration builds the snapshots of the eval scenario sets (snapshot_at) and the
+    # calibration reports; the sets are frozen by their digest once sampled, so a change here
+    # cannot move a scored number through them.
+    "calibration",
+    # the cross-race report (SPEC 0016): eligibility, LORO arms and the selection over them;
+    # it runs the simulator under committed arm configs and never changes a lap time itself
+    "cross_race",
+)
+
+
 def _code_version(src=None) -> str:
-    """sha256 over every .py file under src/sim plus src/contracts.py, first 12 hex digits.
+    """sha256 over the PHYSICS_MODULES of src/sim plus src/contracts.py, first 12 hex digits.
 
     Files are taken in sorted order of their path relative to src/, and each contributes its
     relative path and its bytes, so the value depends on the source alone: the same on any
@@ -472,7 +496,7 @@ def _code_version(src=None) -> str:
     import hashlib
     from pathlib import Path
     src = Path(__file__).resolve().parent.parent if src is None else Path(src)
-    files = sorted([*src.joinpath("sim").rglob("*.py"), src / "contracts.py"],
+    files = sorted([*(src / "sim" / f"{m}.py" for m in PHYSICS_MODULES), src / "contracts.py"],
                    key=lambda p: p.relative_to(src).as_posix())
     h = hashlib.sha256()
     for p in files:

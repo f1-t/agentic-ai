@@ -12,31 +12,47 @@ circuit_type) when it exists, else CIRCUITS, keyed by the race id's GP slug.
 
 Model, per kind (sc, vsc): starts ~ Poisson(p x laps_at_risk) per race, laps_at_risk the
 total laps less the neutralised ones (any kind, red flags included), and period lengths
-geometric with mean d. p is shrunk empirical-Bayes (Gamma-Poisson) along
+geometric with mean d = 1 / q. p is shrunk empirical-Bayes (Gamma-Poisson) along
 global -> era (2018-2021, 2022+) -> circuit type (street / permanent) -> circuit. A node's
-estimate is (N + E0 m) / (L + E0): N starts over L laps at risk, m its parent's estimate,
-E0 = k x (mean laps at risk per race), k the level's prior strength in races. k comes from the
-method of moments over the level's nodes (between-node variance of N/L around the parent
-less the Poisson part), floored a priori at K0 = 5 races; no excess variance is full pooling.
-The global level is the pooled MLE; with no data it is the EventModel prior. d is pooled per
-kind and era only (global when the era has no period, the prior with none at all).
+posterior is Gamma(N + E0 m, L + E0): N starts over L laps at risk, m its parent's posterior
+mean, E0 = k x (mean laps at risk per race), k the level's prior strength in races. k comes
+from the method of moments over the level's nodes (between-node variance of N/L around the
+parent less the Poisson part), floored a priori at K0 = 5 races; no excess variance is full
+pooling. The global level has an a priori Gamma prior: the EventModel rate as its mean and
+K0 races of exposure. q is pooled per kind and era only (global when the era has no
+period), under an a priori Beta prior of mean 1 / d0 (EventModel d) worth D_PRIOR_PERIODS
+periods. The calibrator writes posterior means; with no data they are the EventModel values.
 
-Lap-1 term (candidate circuit_lap1): p_sc_lap1 / p_vsc_lap1 (config.EventModel) are the share
-of races with a period of that kind starting on lap 1; p is then fitted on laps 2 onward.
+Durations: a period that ends on the race's last lap is right-censored; it says only that
+the length was at least what was seen, so it adds the survival P(D >= l) to the likelihood
+and its continuations, but no end, to the q posterior. factors.csv has no period ends, so
+its periods count as complete. Back-to-back periods of one kind (one ending and the next
+starting on the following lap) cannot be told apart in the lap data and are taken as one
+period; this is ignored.
 
-As-of: EventRatesCalibrator gives a race the rates fitted on races dated before it
-((season, round) of the race id), never itself.
+Lap-1 term (candidate circuit_lap1): p_sc_lap1 / p_vsc_lap1 (config.EventModel) are the
+posterior mean share of races with a period of that kind starting on lap 1, under a Beta
+prior with the global per-lap rate as its mean (no lap-1 excess a priori) worth
+LAP1_PRIOR_RACES races; p is then fitted on laps 2 onward.
 
-Selection, stated before any data: leave-one-race-out over the dry races, held-out negative
-log-likelihood of each race's period starts (a Poisson process per lap at risk; lap 1 a
-Bernoulli under the lap-1 term) and durations (geometric). Candidates global, era,
-circuit_type, circuit, circuit_lap1; a candidate replaces global when the race-cluster 95
-percent CI of the paired NLL difference (candidate less global) is below 0. Among those that
-pass the lowest mean difference wins; ties go to the simpler (CANDIDATES order).
+As-of: EventRatesCalibrator gives a race the rates fitted on the races before it,
+race_ids.as_of (strictly earlier (season, round)), never itself.
 
-Output: rates.csv (each race's as-of rates per candidate), loro_nll.csv, selection.csv,
-strengths.csv and summary.md under OUT_DIR. A report with a synthetic race id refuses any
-directory under reports/calibration/ (guard_committed).
+Selection, stated before any data, on as-of folds (forward chaining): each dry race from
+FORWARD_FROM_SEASON on is scored under the posteriors fitted on the dry races before it
+(race_ids.as_of), as the calibrator is used. Leave-one-race-out (every other race) is
+reported beside it and does not select. The score is the held-out negative log-likelihood
+under the posterior predictive, so no held-out race can have probability 0: its period
+starts negative binomial (Gamma-Poisson; lap 1 beta-Bernoulli under the lap-1 term) and its
+periods' lengths beta-geometric (censored as above).
+Candidates global, era, circuit_type, circuit, circuit_lap1; a candidate replaces global when
+the race-cluster 95 percent CI of the paired NLL difference (candidate less global) is below
+0. Among those that pass the lowest mean difference wins; ties go to the simpler
+(CANDIDATES order).
+
+Output: rates.csv (each race's as-of rates per candidate), forward_nll.csv, loro_nll.csv,
+selection.csv (both schemes, the forward one decides), strengths.csv and summary.md under
+OUT_DIR. A report with a synthetic race id refuses any directory under reports/calibration/
 """
 import argparse
 import hashlib
@@ -51,7 +67,7 @@ import pandas as pd
 from ..contracts import RaceParams, Snapshot
 from .calibrators import CALIBRATORS, Calibrator
 from .config import EventModel
-from .race_ids import canonical_race_id, parse_race_id
+from .race_ids import as_of, canonical_race_id, parse_race_id
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 NEUTRALISED_PERIODS = ROOT / "data" / "derived" / "neutralised_periods.csv"
@@ -108,7 +124,8 @@ CIRCUITS = {
 
 STAT_COLUMNS = ["race_id", "season", "round", "era", "circuit", "circuit_type", "total_laps", "wet",
                 "neutralised_laps", "at_risk", "n_red_flag",
-                *[f"{c}_{k}" for k in KINDS for c in ("n", "laps", "lap1")]]
+                *[f"{c}_{k}" for k in KINDS for c in ("n", "laps", "lap1", "cens")]]
+FORWARD_FROM_SEASON = 2019   # forward chaining scores races from this season on
 
 
 def era(season: int) -> str:
@@ -191,6 +208,7 @@ def stats_from_periods(periods: pd.DataFrame, features: pd.DataFrame | None = No
             row[f"n_{kind}"] = int(len(k))
             row[f"laps_{kind}"] = int((k["end_lap"] - k["start_lap"] + 1).sum()) if len(k) else 0
             row[f"lap1_{kind}"] = int((k["start_lap"] == 1).any())
+            row[f"cens_{kind}"] = int((k["end_lap"] >= total).sum())   # still running at the flag
         for s, e in zip(real["start_lap"], real["end_lap"]):
             laps |= set(range(max(1, int(s)), min(total, int(e)) + 1))
         row["neutralised_laps"] = len(laps)
@@ -215,6 +233,7 @@ def stats_from_factors(factors: pd.DataFrame, features: pd.DataFrame | None = No
             row[f"n_{kind}"] = int(n) if pd.notna(n) else 0
             row[f"laps_{kind}"] = int(laps) if pd.notna(laps) else 0
             row[f"lap1_{kind}"] = int(1 in starts)
+            row[f"cens_{kind}"] = 0   # no period ends in factors.csv: every period counts as complete
         row["neutralised_laps"] = row["laps_sc"] + row["laps_vsc"]
         rows.append(row)
     return _stats_frame(rows, features)
@@ -232,32 +251,66 @@ def load_stats(periods_path=NEUTRALISED_PERIODS, factors_path=FACTORS, features_
 
 
 # --- fit -----------------------------------------------------------------------------------
+PRIOR_RACE_LAPS = 60.0     # laps at risk per race behind the global prior strength when no race is known
+D_PRIOR_PERIODS = 2.0      # strength of the a priori Beta on the per-lap ending probability, in periods
+LAP1_PRIOR_RACES = 2.0     # strength of the a priori Beta on the lap-1 start probability, in races
+
+
 def _prior(prior: EventModel | None):
     return prior if prior is not None else EventModel()
 
 
 @dataclass
 class KindFit:
-    """One kind's shrunk start rates per node and its pooled durations."""
+    """One kind's posteriors: Gamma (shape, rate) of the start rate per node, Beta (a, b) of the
+    per-lap ending probability globally and per era, and (lap-1 fit only) Beta (a, b) of the
+    lap-1 start probability. Point estimates are posterior means: p = shape / rate,
+    d = 1 / E[q] = (a + b) / a, the lap-1 share a / (a + b)."""
     kind: str
-    rates: dict = field(default_factory=dict)       # level -> {node key: p}
+    gamma: dict = field(default_factory=dict)       # level -> {node key: (shape, rate)}
     strength: dict = field(default_factory=dict)    # level -> k in races (inf: full pooling)
-    d_global: float = float("nan")
-    d_era: dict = field(default_factory=dict)
-    lap1: float | None = None                       # share of races with a lap-1 start
+    beta_global: tuple = (1.0, 0.0)
+    beta_era: dict = field(default_factory=dict)
+    lap1_beta: tuple | None = None
     n_races: int = 0
 
-    def p(self, level: str, row) -> float:
-        """The node's rate at `level` for a race (its era, circuit type, circuit), falling
+    def gamma_of(self, level: str, row) -> tuple:
+        """The node's posterior at `level` for a race (its era, circuit type, circuit), falling
         back to the nearest ancestor the training data has."""
         keys = _node_keys(row)
-        out = self.rates["global"][()]
+        out = self.gamma["global"][()]
         for lv in LEVELS[1:LEVELS.index(level) + 1]:
-            out = self.rates[lv].get(keys[lv], out)
+            out = self.gamma[lv].get(keys[lv], out)
         return out
 
+    def p(self, level: str, row) -> float:
+        shape, rate = self.gamma_of(level, row)
+        return shape / rate
+
+    def beta_of(self, level: str, row) -> tuple:
+        return self.beta_global if level == "global" else self.beta_era.get(row["era"], self.beta_global)
+
     def d(self, level: str, row) -> float:
-        return self.d_global if level == "global" else self.d_era.get(row["era"], self.d_global)
+        a, b = self.beta_of(level, row)
+        return (a + b) / a
+
+    @property
+    def lap1(self) -> float | None:
+        return None if self.lap1_beta is None else self.lap1_beta[0] / sum(self.lap1_beta)
+
+    # kept for the report and tests: the posterior mean rate per node
+    @property
+    def rates(self) -> dict:
+        return {lv: {k: s / r for k, (s, r) in nodes.items()} for lv, nodes in self.gamma.items()}
+
+    @property
+    def d_global(self) -> float:
+        a, b = self.beta_global
+        return (a + b) / a
+
+    @property
+    def d_era(self) -> dict:
+        return {e: (a + b) / a for e, (a, b) in self.beta_era.items()}
 
 
 def _node_keys(row) -> dict:
@@ -281,8 +334,17 @@ def _strength(groups: pd.DataFrame, mean_laps: float, k0: float) -> float:
 
 def fit_kind(train: pd.DataFrame, kind: str, prior: EventModel | None = None, k0: float = K0,
              lap1: bool = False) -> KindFit:
-    """Shrunk rates of one kind on `train` (stats rows). With `lap1`, p is fitted on laps 2
-    onward (a lap-1 start not counted, lap 1 not at risk) and the lap-1 share is kept."""
+    """Posteriors of one kind on `train` (stats rows). With `lap1`, p is fitted on laps 2
+    onward (a lap-1 start not counted, lap 1 not at risk) and the lap-1 Beta is kept.
+
+    Global start rate: Gamma prior with the EventModel rate as mean and k0 races of laps at risk
+    (the training mean, PRIOR_RACE_LAPS without races) as its exposure. Each lower node: the
+    parent's posterior mean as prior mean with the level's strength (method of moments, floor
+    k0); full pooling takes the parent's posterior. Ending probability q = 1 / d: Beta prior
+    with mean 1 / d0 (EventModel) and D_PRIOR_PERIODS periods; a complete period adds an end
+    and l - 1 continuations, a censored one only the continuations. An era with no period takes
+    the global posterior. Lap 1: Beta prior with mean the global per-lap rate (no lap-1 excess a
+    priori) and LAP1_PRIOR_RACES races, updated by the races with and without a lap-1 start."""
     prior = _prior(prior)
     p0, d0 = (prior.p_sc, prior.d_sc) if kind == "sc" else (prior.p_vsc, prior.d_vsc)
     out = KindFit(kind=kind, n_races=len(train))
@@ -291,33 +353,37 @@ def fit_kind(train: pd.DataFrame, kind: str, prior: EventModel | None = None, k0
                       "N": (train[f"n_{kind}"] - (train[f"lap1_{kind}"] if lap1 else 0)).to_numpy(dtype=float),
                       "L": (train["at_risk"] - (1 if lap1 else 0)).to_numpy(dtype=float),
                       "D": train[f"laps_{kind}"].to_numpy(dtype=float),
-                      "n": train[f"n_{kind}"].to_numpy(dtype=float)})
+                      "n": train[f"n_{kind}"].to_numpy(dtype=float),
+                      "u": (train[f"n_{kind}"] - train[f"cens_{kind}"]).to_numpy(dtype=float)})
     total_l = float(t["L"].sum())
-    m0 = float(t["N"].sum()) / total_l if len(t) and total_l > 0 else p0
-    out.rates["global"] = {(): m0}
-    out.strength["global"] = math.nan
     mean_laps = total_l / len(t) if len(t) else 0.0
-    parents = {(): m0}
+    e0g = k0 * (mean_laps if mean_laps > 0 else PRIOR_RACE_LAPS - (1 if lap1 else 0))
+    out.gamma["global"] = {(): (float(t["N"].sum()) + e0g * p0, total_l + e0g)}
+    out.strength["global"] = k0
+    parents = out.gamma["global"]
     cols = []
     for level in LEVELS[1:]:
         cols = cols + [level]
         g = t.groupby(cols, sort=True)[["N", "L"]].sum().reset_index()
         keys = [tuple(r) for r in g[cols].itertuples(index=False, name=None)]
-        g["parent"] = [parents[k[:-1]] for k in keys]
+        par = [parents[k[:-1]] for k in keys]
+        g["parent"] = [s / r for s, r in par]
         k = _strength(g, mean_laps, k0)
         out.strength[level] = k
         e0 = k * mean_laps
-        rates = {}
-        for key, n, lap, par in zip(keys, g["N"], g["L"], g["parent"]):
-            rates[key] = par if math.isinf(e0) else (n + e0 * par) / (lap + e0)
-        out.rates[level] = rates
-        parents = rates
-    n_all = float(t["n"].sum())
-    out.d_global = float(t["D"].sum()) / n_all if n_all > 0 else d0
-    by_era = t.groupby("era")[["D", "n"]].sum()
-    out.d_era = {e: float(r["D"] / r["n"]) for e, r in by_era.iterrows() if r["n"] > 0}
+        nodes = {}
+        for key, n, lap, pg, m in zip(keys, g["N"], g["L"], par, g["parent"]):
+            nodes[key] = pg if math.isinf(e0) else (n + e0 * m, lap + e0)
+        out.gamma[level] = nodes
+        parents = nodes
+    a0, b0 = D_PRIOR_PERIODS / d0, D_PRIOR_PERIODS * (1.0 - 1.0 / d0)
+    out.beta_global = (a0 + float(t["u"].sum()), b0 + float(t["D"].sum() - t["n"].sum()))
+    by_era = t.groupby("era")[["D", "n", "u"]].sum()
+    out.beta_era = {e: (a0 + float(r["u"]), b0 + float(r["D"] - r["n"])) for e, r in by_era.iterrows() if r["n"] > 0}
     if lap1 and len(train):
-        out.lap1 = float(train[f"lap1_{kind}"].astype(bool).mean())
+        m = out.p("global", {"era": None, "circuit_type": None, "circuit": None})
+        x = float(train[f"lap1_{kind}"].astype(bool).sum())
+        out.lap1_beta = (LAP1_PRIOR_RACES * m + x, LAP1_PRIOR_RACES * (1.0 - m) + len(train) - x)
     return out
 
 
@@ -328,10 +394,13 @@ class RateFit:
     lap1: dict
     n_races: int
 
+    def _pick(self, candidate):
+        return ("circuit" if candidate == LAP1 else candidate), (self.lap1 if candidate == LAP1 else self.plain)
+
     def rates(self, row, candidate: str) -> dict:
-        """{p_sc, d_sc, p_vsc, d_vsc, p_sc_lap1, p_vsc_lap1} for a race under a candidate."""
-        level = "circuit" if candidate == LAP1 else candidate
-        fits = self.lap1 if candidate == LAP1 else self.plain
+        """{p_sc, d_sc, p_vsc, d_vsc, p_sc_lap1, p_vsc_lap1} for a race under a candidate:
+        posterior means."""
+        level, fits = self._pick(candidate)
         out = {}
         for kind in KINDS:
             f = fits[kind]
@@ -339,49 +408,60 @@ class RateFit:
             out[f"p_{kind}_lap1"] = f.lap1 if candidate == LAP1 else None
         return out
 
+    def predictive(self, row, candidate: str) -> dict:
+        """Per kind the posteriors race_nll scores with: {kind: (gamma, beta, lap1_beta or None)}."""
+        level, fits = self._pick(candidate)
+        return {k: (fits[k].gamma_of(level, row), fits[k].beta_of(level, row),
+                    fits[k].lap1_beta if candidate == LAP1 else None) for k in KINDS}
+
 
 def fit(train: pd.DataFrame, prior: EventModel | None = None, k0: float = K0) -> RateFit:
     return RateFit({k: fit_kind(train, k, prior, k0) for k in KINDS},
                    {k: fit_kind(train, k, prior, k0, lap1=True) for k in KINDS}, len(train))
 
 
-# --- likelihood ------------------------------------------------------------------------------
-def _xlog(x: float, y: float) -> float:
-    """x log y with 0 log 0 = 0 and x log 0 = -inf for x > 0."""
-    if x == 0:
-        return 0.0
-    return -math.inf if y <= 0 else x * math.log(y)
+# --- likelihood (posterior predictive) --------------------------------------------------------
+def _lbeta(a: float, b: float) -> float:
+    return math.lgamma(a) + math.lgamma(b) - math.lgamma(a + b)
 
 
-def starts_nll(n: float, laps: float, p: float) -> float:
-    """Poisson process with rate p per lap at risk: p L - n log p."""
-    return p * laps - _xlog(n, p)
+def starts_nll(n: float, laps: float, shape: float, rate: float) -> float:
+    """Gamma-Poisson: the start laps of a held-out race with n starts over `laps` laps at risk,
+    the rate integrated over its Gamma(shape, rate) posterior. This is the negative binomial
+    count less log(n! / L^n), a term the same under every candidate."""
+    return -(math.lgamma(shape + n) - math.lgamma(shape) + shape * math.log(rate) - (shape + n) * math.log(rate + laps))
 
 
-def lap1_nll(x: int, p: float) -> float:
-    return -(_xlog(x, p) + _xlog(1 - x, 1 - p))
-
-
-def durations_nll(n: float, laps: float, d: float) -> float:
-    """n geometric lengths (support 1, 2, ...) with mean d summing to `laps`."""
+def durations_nll(n: float, laps: float, a: float, b: float, censored: float = 0) -> float:
+    """Beta-geometric: a held-out race's n periods of one kind, `laps` laps in all, `censored` of
+    them still running at the race's end, q = 1 / d integrated over its Beta(a, b) posterior. A
+    complete period of length l is an end after l - 1 continuations, a censored one only the
+    continuations (the survival function P(D >= l))."""
     if n == 0:
         return 0.0
-    q = 1.0 / d
-    return -(_xlog(n, q) + _xlog(laps - n, 1.0 - q))
+    ends, cont = n - censored, laps - n
+    return -(_lbeta(a + ends, b + cont) - _lbeta(a, b))
 
 
-def race_nll(row, rates: dict) -> float:
-    """Held-out NLL of one race's period starts and durations, both kinds, under `rates`
-    (RateFit.rates). A lap-1 share of None leaves lap 1 on p."""
+def lap1_nll(x: int, a: float, b: float) -> float:
+    """Beta-Bernoulli: a lap-1 start (x = 1) or none."""
+    return -math.log((a if x else b) / (a + b))
+
+
+def race_nll(row, pred: dict) -> float:
+    """Held-out NLL of one race's period starts and lengths, both kinds, under the posterior
+    predictive `pred` (RateFit.predictive). A lap-1 Beta of None leaves lap 1 on p. Always finite."""
     total = 0.0
     for kind in KINDS:
         n, at_risk, lap1 = float(row[f"n_{kind}"]), float(row["at_risk"]), int(row[f"lap1_{kind}"])
-        p, d, p1 = rates[f"p_{kind}"], rates[f"d_{kind}"], rates[f"p_{kind}_lap1"]
-        if p1 is None:
-            total += starts_nll(n, at_risk, p)
+        (shape, rate), (a, b), l1 = pred[kind]
+        if l1 is None:
+            total += starts_nll(n, at_risk, shape, rate)
         else:
-            total += lap1_nll(lap1, p1) + starts_nll(n - lap1, at_risk - 1, p)
-        total += durations_nll(n, float(row[f"laps_{kind}"]), d)
+            total += lap1_nll(lap1, *l1) + starts_nll(n - lap1, at_risk - 1, shape, rate)
+        total += durations_nll(n, float(row[f"laps_{kind}"]), a, b, float(row[f"cens_{kind}"]))
+    if not math.isfinite(total):
+        raise AssertionError(f"held-out NLL of {row.get('race_id', '?')} is not finite: {total}")
     return total
 
 
@@ -390,42 +470,82 @@ def dry(stats: pd.DataFrame, include_wet: bool = False) -> pd.DataFrame:
     return stats if include_wet else stats[~stats["wet"].astype(bool)]
 
 
+def _score(row, f: RateFit, candidates) -> list[dict]:
+    return [{"race_id": row["race_id"], "candidate": c, "nll": race_nll(row, f.predictive(row, c))}
+            for c in candidates]
+
+
 def loro(stats: pd.DataFrame, candidates=CANDIDATES, prior=None, k0=K0, include_wet=False) -> pd.DataFrame:
-    """Per held-out race and candidate: its NLL under the rates fitted on every other race
+    """Per held-out race and candidate: its NLL under the posteriors fitted on every other race
     (race_id, candidate, nll)."""
     s = dry(stats, include_wet).reset_index(drop=True)
     rows = []
     for i, row in s.iterrows():
-        f = fit(s.drop(index=i), prior, k0)
-        for c in candidates:
-            rows.append({"race_id": row["race_id"], "candidate": c, "nll": race_nll(row, f.rates(row, c))})
+        rows += _score(row, fit(s.drop(index=i), prior, k0), candidates)
     return pd.DataFrame(rows, columns=["race_id", "candidate", "nll"])
+
+
+def forward(stats: pd.DataFrame, candidates=CANDIDATES, prior=None, k0=K0, include_wet=False,
+            from_season: int = FORWARD_FROM_SEASON) -> pd.DataFrame:
+    """As-of folds (forward chaining): per dry race from `from_season` on and candidate, its NLL
+    under the posteriors fitted on the dry races before it (race_ids.as_of)."""
+    s = dry(stats, include_wet).reset_index(drop=True)
+    ids = list(s["race_id"])
+    rows, fits = [], {}
+    for _, row in s.iterrows():
+        if _date_key(row["race_id"])[0] < from_season:
+            continue
+        before = tuple(as_of(row["race_id"], ids))
+        if before not in fits:
+            fits[before] = fit(s[s["race_id"].isin(before)], prior, k0)
+        rows += _score(row, fits[before], candidates)
+    return pd.DataFrame(rows, columns=["race_id", "candidate", "nll"])
+
+
+def both_schemes(stats: pd.DataFrame, n_boot: int = N_BOOT, k0: float = K0, include_wet: bool = False):
+    """(table, chosen, forward_nll, loro_nll): the selection table under forward chaining (it
+    decides) and leave-one-race-out (reported beside), one row per scheme and candidate."""
+    fw, lo = forward(stats, k0=k0, include_wet=include_wet), loro(stats, k0=k0, include_wet=include_wet)
+    parts, chosen = [], "global"
+    for scheme, nll in (("forward", fw), ("loro", lo)):
+        if not len(nll):
+            continue
+        t, c = selection(nll, n_boot)
+        parts.append(t.assign(scheme=scheme))
+        if scheme == "forward":
+            chosen = c
+    cols = ["scheme", *SELECTION_COLUMNS, "chosen"]
+    table = pd.concat(parts, ignore_index=True)[cols] if parts else pd.DataFrame(columns=cols)
+    return table, chosen, fw, lo
 
 
 def _boot_ci(values: np.ndarray, n_boot: int, seed: int) -> tuple[float, float]:
     if not len(values):
-        return math.nan, math.nan
-    if not np.isfinite(values).all():
         return math.nan, math.nan
     idx = np.random.default_rng(seed).integers(0, len(values), size=(n_boot, len(values)))
     means = values[idx].mean(axis=1)
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
 
 
+SELECTION_COLUMNS = ["candidate", "n_races", "nll_per_race", "diff", "diff_lo", "diff_hi", "passes"]
+
+
 def selection(nll: pd.DataFrame, n_boot: int = N_BOOT, seed: int = 0) -> tuple[pd.DataFrame, str]:
     """(table, chosen): per candidate the mean held-out NLL per race, the paired difference
-    against global with its race-cluster 95 percent CI, whether it passes (CI below 0; a
-    non-finite difference never passes) and the choice."""
+    against global with its race-cluster 95 percent CI, whether it passes (CI below 0) and the
+    choice. Every held-out NLL is finite (posterior predictive scoring); a table with a
+    non-finite one is refused."""
     wide = nll.pivot(index="race_id", columns="candidate", values="nll")
+    if not np.isfinite(wide.to_numpy(dtype=float)).all():
+        raise ValueError("selection: a held-out NLL is not finite")
     rows = []
     for c in [c for c in CANDIDATES if c in wide]:
         diff = (wide[c] - wide["global"]).to_numpy(dtype=float)
         lo, hi = _boot_ci(diff, n_boot, seed) if c != "global" else (math.nan, math.nan)
-        finite = bool(np.isfinite(diff).all()) and len(diff) > 0
         rows.append({"candidate": c, "n_races": int(len(diff)), "nll_per_race": float(wide[c].mean()),
-                     "diff": float(diff.mean()) if finite else math.nan, "diff_lo": lo, "diff_hi": hi,
-                     "passes": c == "global" or bool(finite and hi < 0)})
-    t = pd.DataFrame(rows, columns=["candidate", "n_races", "nll_per_race", "diff", "diff_lo", "diff_hi", "passes"])
+                     "diff": float(diff.mean()) if len(diff) else math.nan, "diff_lo": lo, "diff_hi": hi,
+                     "passes": c == "global" or bool(len(diff) and hi < 0)})
+    t = pd.DataFrame(rows, columns=SELECTION_COLUMNS)
     chosen = "global"
     passing = t[(t["candidate"] != "global") & t["passes"]]
     if len(passing):
@@ -475,14 +595,11 @@ class EventRatesCalibrator(Calibrator):
         return row
 
     def fit_as_of(self, race_id: str) -> RateFit:
-        """The fit on the training races dated strictly before `race_id`."""
-        key = _date_key(canonical_race_id(race_id))
-        dates = [_date_key(r) for r in self.stats["race_id"]]
-        before = [d < key for d in dates]
-        cut = sum(before)
-        if cut not in self._fits:
-            self._fits[cut] = fit(self.stats[before], k0=self.k0)
-        return self._fits[cut]
+        """The fit on the training races before `race_id` (race_ids.as_of)."""
+        before = tuple(as_of(canonical_race_id(race_id), list(self.stats["race_id"])))
+        if before not in self._fits:
+            self._fits[before] = fit(self.stats[self.stats["race_id"].isin(before)], k0=self.k0)
+        return self._fits[before]
 
     def rates_for(self, race_id: str, circuit=None, circuit_type=None) -> dict:
         if not self.fitted:
@@ -660,16 +777,16 @@ def strengths_table(stats: pd.DataFrame, k0: float = K0) -> pd.DataFrame:
 
 def report(stats: pd.DataFrame, out=OUT_DIR, source: str = "", n_boot: int = N_BOOT, k0: float = K0,
            truth: pd.DataFrame | None = None) -> Path:
-    """rates.csv, loro_nll.csv, selection.csv, strengths.csv (and recovery.csv with `truth`)
-    and summary.md under `out`."""
+    """rates.csv, forward_nll.csv, loro_nll.csv, selection.csv, strengths.csv (and recovery.csv
+    with `truth`) and summary.md under `out`."""
     from .cross_race import md_table
     guard_committed(out, list(stats["race_id"]))
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     d = dry(stats)
-    nll = loro(stats, k0=k0)
-    nll.to_csv(out / "loro_nll.csv", index=False)
-    table, chosen = selection(nll, n_boot) if len(nll) else (pd.DataFrame(), "global")
+    table, chosen, fw, lo = both_schemes(stats, n_boot, k0)
+    fw.to_csv(out / "forward_nll.csv", index=False)
+    lo.to_csv(out / "loro_nll.csv", index=False)
     table.to_csv(out / "selection.csv", index=False)
     as_of_rates(stats, k0).to_csv(out / "rates.csv", index=False)
     strengths = strengths_table(stats, k0)
@@ -682,10 +799,13 @@ def report(stats: pd.DataFrame, out=OUT_DIR, source: str = "", n_boot: int = N_B
         md += ["Wet races, counted apart:", "", md_table(pd.DataFrame({
             "races": [len(wet)], "sc starts": [int(wet["n_sc"].sum())], "vsc starts": [int(wet["n_vsc"].sum())],
             "laps at risk": [int(wet["at_risk"].sum())]})), ""]
-    md += ["## Selection (leave-one-race-out, held-out NLL per race)", "",
-           "A candidate replaces global when the race-cluster 95 percent CI of the paired NLL difference "
-           "(candidate less global) is below 0; among those that pass the lowest mean difference wins, ties to "
-           "the simpler.", "", md_table(table, 3), "", f"Chosen: **{chosen}**.", ""]
+    md += ["## Selection (held-out NLL of period starts and lengths, per race)", "",
+           f"forward: each dry race from {FORWARD_FROM_SEASON} on, fitted on the races dated before it (as the "
+           "calibrator is used); it decides. loro: fitted on every other race, reported beside. A candidate "
+           "replaces global when the race-cluster 95 percent CI of the paired NLL difference (candidate less "
+           "global) is below 0; among those that pass the lowest mean difference wins, ties to the simpler. "
+           "`chosen` marks each scheme's pick.", "", md_table(table, 3), "",
+           f"Chosen (forward): **{chosen}**.", ""]
     md += ["## Prior strengths (all dry races, races-equivalent; floor "
            f"{k0:g}, inf = full pooling)", "", md_table(strengths, 2), ""]
     if truth is not None:

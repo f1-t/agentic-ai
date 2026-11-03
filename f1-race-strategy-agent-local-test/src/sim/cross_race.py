@@ -26,15 +26,19 @@ file hash and its config hash on SimConfig() (a cached race's config). A derived
 
 Selection, stated before any cross-race data (SPEC 0016 C, amendment 3, review of #44), per
 window, every point estimate race-weighted (the mean over races of the per-race value, the
-statistic the race-cluster CIs resample; the row-pooled value is reported beside it):
-  to_snapshot (the BELIEF), in two stages: first the bound, wear_nonneg against the baseline;
-      then every other candidate against the stage-1 winner. An arm replaces its comparator
-      when the 95 percent CI of the paired stop-gain mae difference (arm less comparator) is
-      below 0 AND the upper end of the paired G mae_offset CI at horizons 10-49 is under
-      +NONINFERIORITY_S.
-  full (the WORLD) and pre_race: when the paired G mae_offset difference at horizons 10-49
-      is below 0 AND its 95 percent CI excludes 0. In the full window an arm that differs only
-      in its calibrator or a to_snapshot-only option is the baseline by construction: n/a.
+statistic the race-cluster CIs resample; the row-pooled value is reported beside it), and
+every comparison incumbent-first: the incumbent is the arm the config carries now
+(INCUMBENTS, the report's "Current defaults"), and a change in either direction must pass:
+  to_snapshot (the BELIEF), in two stages: first the bound, the baseline (no bound) as the
+      challenger against the incumbent wear_nonneg (belief.yaml, adopted a priori), so the
+      bound stays unless removing it passes; then every other candidate against the stage-1
+      result. A challenger replaces its comparator when the 95 percent CI of the paired
+      stop-gain mae difference (challenger less comparator) is below 0 AND the upper end of
+      the paired G mae_offset CI at horizons 10-49 is under +NONINFERIORITY_S.
+  full (the WORLD) and pre_race, against the SimConfig default: when the paired G
+      mae_offset difference at horizons 10-49 is below 0 AND its 95 percent CI excludes 0.
+      In the full window an arm that differs only in its calibrator or a to_snapshot-only
+      option is the baseline by construction: n/a.
 Among arms that pass, the lowest primary metric wins; ties go to the simpler arm
 (SIMPLICITY). "posterior" is reported for coverage only. The tau grid is ranked by the belief
 rule against its x1 taus. With fewer than MIN_RACES eligible races the report says the
@@ -668,15 +672,51 @@ def compare_arms(arm_data: dict[str, dict], comparator: str, windows, n_boot=N_B
 
 
 BOUND_ARM = "wear_nonneg"
+# Every comparison is incumbent-first: the incumbent is the arm the config carries now, and a
+# change in either direction has to pass the window's rule. (arm, source, set by) per window.
+INCUMBENTS = {
+    "to_snapshot": (BOUND_ARM, "a priori",
+                    "configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the "
+                    "stop-gain check)"),
+    "full": (BASELINE, "default", "SimConfig defaults (configs/sim/world.yaml adds traffic only)"),
+    "pre_race": (BASELINE, "default", "SimConfig defaults"),
+}
+
+
+def incumbent(window: str) -> str:
+    return INCUMBENTS.get(window, (BASELINE,))[0]
+
+
+def _physics(cfg: SimConfig) -> tuple:
+    """What an arm sets: degradation model and params (draw left out), calibrator, free-air fit."""
+    params = {k: v for k, v in cfg.degradation.params.items() if k not in ("draw", "clip_wear_at_zero")}
+    return cfg.degradation.name, params, cfg.calibrator.name, cfg.fit_free_air_only, cfg.shrinkage
+
+
+def current_defaults() -> pd.DataFrame:
+    """Per window its incumbent arm, the arm's config hash, its source and what set it, and whether
+    the config that carries it (belief.yaml for to_snapshot, SimConfig() otherwise) has the same
+    physics, so the report and the config never disagree."""
+    belief = SimConfig.from_file(ROOT / "configs" / "sim" / "belief.yaml")
+    rows = []
+    for w, (arm, source, set_by) in INCUMBENTS.items():
+        cfg = arm_config(arm)
+        carried = belief if w == BELIEF_WINDOW else SimConfig()
+        rows.append({"window": w, "incumbent": arm, "config_hash": calibration.config_hash(cfg), "source": source,
+                     "set by": set_by, "matches the config": _physics(cfg) == _physics(carried)})
+    return pd.DataFrame(rows)
 
 
 def belief_selection(arm_data, n_boot=N_BOOT) -> tuple[pd.DataFrame, str, str]:
-    """The belief (to_snapshot) in two stages. Stage 1 decides the bound: wear_nonneg against the
-    baseline under the belief rule. Stage 2 compares every other candidate against the stage-1
-    winner, the belief default a candidate would replace. Returns (both stages' rows, the
-    stage-1 winner, the choice)."""
-    s1 = compare_arms({a: arm_data[a] for a in (BASELINE, BOUND_ARM)}, BASELINE, [BELIEF_WINDOW], n_boot, "bound")
-    bound = choose(s1, BELIEF_WINDOW, BASELINE)
+    """The belief (to_snapshot) in two stages, incumbent-first. Stage 1 is the bound: the baseline
+    (no bound) is the challenger against the incumbent wear_nonneg, so the bound stays unless
+    removing it passes the belief rule. Stage 2 compares every other candidate against the
+    stage-1 result, the belief default a candidate would replace (while provisional, the
+    incumbent). Returns (both stages' rows, the stage-1 result, the choice)."""
+    inc = incumbent(BELIEF_WINDOW)
+    challenger = BASELINE if inc == BOUND_ARM else BOUND_ARM
+    s1 = compare_arms({a: arm_data[a] for a in (inc, challenger)}, inc, [BELIEF_WINDOW], n_boot, "bound")
+    bound = choose(s1, BELIEF_WINDOW, inc)
     others = [a for a in arm_data if a not in (BASELINE, BOUND_ARM)]
     s2 = compare_arms({bound: arm_data[bound], **{a: arm_data[a] for a in others}}, bound, [BELIEF_WINDOW], n_boot,
                       "candidates")
@@ -685,16 +725,16 @@ def belief_selection(arm_data, n_boot=N_BOOT) -> tuple[pd.DataFrame, str, str]:
 
 def selection_tables(out, races, profile, n_boot=N_BOOT) -> dict:
     """The selection over the committed arms: {"table", "chosen": {window: arm}, "bound", "arm_data"}.
-    The belief window in two stages (belief_selection), the others against the baseline."""
+    The belief window in two stages (belief_selection), the others against their incumbent."""
     arm_data = {a: arm_outputs(out, a, races, profile) for a in ARMS}
     windows = list(profile.g.windows)
-    parts, chosen, bound = [], {}, BASELINE
+    parts, chosen, bound = [], {}, incumbent(BELIEF_WINDOW)
     for w in windows:
         if w == BELIEF_WINDOW:
             t, bound, chosen[w] = belief_selection(arm_data, n_boot)
         else:
-            t = compare_arms(arm_data, BASELINE, [w], n_boot)
-            chosen[w] = choose(t, w)
+            t = compare_arms(arm_data, incumbent(w), [w], n_boot)
+            chosen[w] = choose(t, w, incumbent(w))
         parts.append(t)
     return {"table": pd.concat(parts, ignore_index=True), "chosen": chosen, "bound": bound, "arm_data": arm_data}
 
@@ -950,29 +990,39 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
 
     md += ["## Arms", "", md_table(arms_table(ARMS)[["arm", "file", "file_sha256", "config_hash", "role"]]), ""]
 
+    md += ["## Current defaults", "", "Each window's incumbent: the arm its config carries now. Every comparison "
+           "is incumbent-first, so a change in either direction has to pass the window's rule.", "",
+           md_table(current_defaults()), ""]
+
     md += ["## Selection", "",
            f"G: mae_offset_s at horizons {G_HORIZONS[0]}-{G_HORIZONS[1]}; SG: stop-gain mae_s at real pit stops. "
            "mae and diff are race-weighted (the mean over races of each race's value, the statistic the "
-           "race-cluster 95% CI in brackets resamples); diff is the per-race paired difference against the "
-           "stage's comparator; 'pooled' is the row-pooled difference, secondary. "
+           "race-cluster 95% CI in brackets resamples); diff is the per-race paired difference, challenger less "
+           "the stage's comparator (the incumbent); 'pooled' is the row-pooled difference, secondary. "
            f"Belief rule (to_snapshot): SG diff CI below 0 and G diff CI upper end under +{NONINFERIORITY_S:g} s, "
-           "in two stages: the bound (wear_nonneg against the baseline), then every other candidate against "
-           "the stage-1 winner. World (full) and pre_race: G diff below 0 with its CI excluding 0. Ties to the "
-           "simpler arm. n/a: the same as the comparator in that window by construction (in the full window "
+           f"in two stages: the bound (the baseline, no bound, challenging the incumbent {BOUND_ARM}; the bound "
+           "stays unless removing it passes), then every other candidate against the stage-1 result. World "
+           "(full) and pre_race: G diff below 0 with its CI excluding 0, against the SimConfig default. Ties to "
+           "the simpler arm. n/a: the same as the comparator in that window by construction (in the full window "
            "there is no calibrator and no shrinkage fit).", ""]
     for w in windows:
         t = table[table["window"] == w]
-        md += [f"### {w} ({rule_for(w)})", ""]
+        inc = incumbent(w)
+        md += [f"### {w} ({rule_for(w)}; incumbent {inc})", ""]
         for stage, part in t.groupby("stage", sort=False):
             if w == BELIEF_WINDOW:
-                md += [f"Stage {'1, the bound' if stage == 'bound' else '2, against ' + part['comparator'].iloc[0]}:",
-                       ""]
+                label = (f"1, the bound: {BASELINE} (no bound) challenging the incumbent {inc}" if stage == "bound"
+                         else f"2, against the stage-1 result {part['comparator'].iloc[0]}")
+                md += [f"Stage {label}:", ""]
             md += [_selection_md(part), ""]
         pick = chosen[w]
         if w == BELIEF_WINDOW:
-            md += [f"Stage 1 (the bound): {sel['bound']}" + (" (provisional)." if provisional else "."), ""]
+            kept = sel["bound"] == inc
+            md += [f"Stage 1 result: {sel['bound']} ("
+                   + ("the incumbent stays" if kept else "the challenger passes") + (", provisional)." if provisional
+                                                                                      else ")."), ""]
         verdict = (f"provisional choice {pick}; the defaults stay" if provisional else
-                   f"{pick} replaces the baseline" if pick != BASELINE else "the baseline stays")
+                   f"{pick} replaces the incumbent {inc}" if pick != inc else f"the incumbent {inc} stays")
         md += [f"Decision for {w}: **{verdict}**.", ""]
     md += ["### Prior-sd fix (SPEC 0017 G), measured alone", ""]
     if len(s2):
