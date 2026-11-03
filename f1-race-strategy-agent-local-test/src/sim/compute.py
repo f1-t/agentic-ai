@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 PROFILE_DIR = Path(__file__).resolve().parent.parent.parent / "configs" / "compute"
 DEFAULT_PROFILE = "local"
 PROFILE_ENV = "SIM_PROFILE"
-HASH_EXCLUDE = {"wandb", "build"}   # sections that do not change a job's output
+HASH_EXCLUDE = {"wandb", "build", "scheduler"}   # sections that do not change a job's output
 
 
 class _Cfg(BaseModel):
@@ -102,6 +102,9 @@ class ComputeProfile(_Cfg):
     build: BuildCompute
     wandb: WandbCompute
     agent: AgentCompute = Field(default_factory=AgentCompute)
+    # where batch units run: "local" in-process (parallel.n_jobs), "slurm" as array scripts
+    # the run emits and never submits (real_run.SlurmEmitter)
+    scheduler: Literal["local", "slurm"] = "local"
 
     @property
     def hash(self) -> str:

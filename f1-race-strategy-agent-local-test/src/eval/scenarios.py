@@ -179,6 +179,21 @@ def load_eval_set(path=None) -> tuple[list[str], str] | None:
     return [canonical_race_id(str(r)) for r in races], hashlib.sha256(raw).hexdigest()
 
 
+def check_schedule_ids(race_ids) -> None:
+    """Every race id is the one its season's cached schedule gives it
+    (race_ids.make_race_id_from_schedule, through sim.data.schedule_race_id), so scenario ids
+    name races as real-run discovery and the data layout do. A season without a cached
+    schedule is not checked. Raises ValueError naming the expected id."""
+    from ..sim.data import schedule_race_id
+    from ..sim.race_ids import parse_race_id
+    for r in race_ids:
+        rid = canonical_race_id(str(r))
+        season, rnd, _ = parse_race_id(rid)
+        expected = schedule_race_id(season, rnd)
+        if expected is not None and expected != rid:
+            raise ValueError(f"race id {rid!r}: the {season} schedule names round {rnd} {expected!r}")
+
+
 def build_set(race_ids: list[str], version: str, *, profile=None, builder: SnapshotBuilder = calibration.snapshot_at,
               builder_name: str = DEFAULT_BUILDER, eval_set=None, development: bool = False,
               **sampling) -> ScenarioSet:
@@ -202,6 +217,7 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
                                  f"sha256 {digest[:12]}); a set sampled under the split takes eval races only")
         split = {"eval_set_digest": digest}
     profile = profile or load_profile()
+    check_schedule_ids(race_ids)
     items, skipped = [], []
     for race_id in race_ids:
         data = jobs.load_race(race_id, profile)

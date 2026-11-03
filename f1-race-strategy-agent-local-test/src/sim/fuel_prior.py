@@ -161,7 +161,8 @@ def _feature_frame(features) -> pd.DataFrame | None:
 
 def race_rows(race_ids, total_laps: dict, features=None) -> pd.DataFrame:
     """Per race: race_id, season, round, era, circuit, circuit_type (event_rates.circuit_info:
-    race_features.csv, else CIRCUITS by GP slug) and FEATURE_COLUMNS (NaN where unknown)."""
+    race_features.csv, else the cached schedule's location, else the race id's slug of unknown
+    type) and FEATURE_COLUMNS (NaN where unknown)."""
     feats = _feature_frame(features)
     ids = [canonical_race_id(r) for r in race_ids]
     t = circuit_info(ids, feats)
