@@ -95,7 +95,10 @@ STREET, PERMANENT = "street", "permanent"
 # event schedule's Location (location_key) through CIRCUITS, never from the race id: a country
 # can host several circuits in one season (Imola, Mugello and Monza in 2020; Miami, Austin
 # and Las Vegas from 2023). Location -> (circuit, circuit type), for the 2018 onward calendars,
-# with the spellings the schedules use. Street: a temporary or public-road circuit.
+# with every Location string fastf1.get_event_schedule gives for 2018-2025 (Monaco and Monte
+# Carlo, Singapore and Marina Bay, Yas Island and Yas Marina, Miami and Miami Gardens: the
+# spelling changes between seasons; tests/fixtures/schedules_2018_2025.csv). Street: a
+# temporary or public-road circuit.
 CIRCUITS = {
     "melbourne": ("albert_park", STREET), "albert_park": ("albert_park", STREET),
     "sakhir": ("sakhir", PERMANENT), "bahrain": ("sakhir", PERMANENT),
