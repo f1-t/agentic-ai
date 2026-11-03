@@ -155,6 +155,11 @@ policy's plan is scored by the world under the same draws (docs/rules.md R6).
 | `regret_se_s` | the paired standard error of `regret_s` under the shared draws: `sd(policy_times - reference_times) / sqrt(N)`, sd with N - 1, over the N per-draw remaining times (the reference's in float32, from the reference cache). 0 at N = 1 |
 | `within_mc` | `\|regret_s\| <= 2 * regret_se_s`: at this N the draws cannot tell the plan from the reference. At N = 1 (or in a world without drawn events, where every draw is the same) the standard error is 0, to rounding, and this is the tie rule, `regret_s` 0 |
 | `share_within_mc` | summary: share of scored rows with `within_mc` |
+| `opt_set_size` | near ties (information only): the searched plans whose mean is within 2 paired standard errors of the reference's (`gap <= 2 * SE`, the reference included), the optimal set. NaN from a format-1 reference cache |
+| `best_pit_now_s`, `best_stay_s` | near ties: the mean of the best searched plan that pits at the end of this lap, and of the best one that does not; NaN where there is no such plan (pitting now would leave a stint under the minimum, say) |
+| `pit_now_gap_s`, `pit_now_gap_se_s` | near ties: `best_pit_now_s - best_stay_s` and the paired standard error of that difference over the shared draws |
+| `pit_now_decisive` | near ties: `\|pit_now_gap_s\| > 2 * pit_now_gap_se_s`; empty where one of the two plans does not exist |
+| `stop_agree_set`, `first_pit_error_set` | near ties, ok rows: `stop_agree` and `first_pit_error` against the closest member of the optimal set (some member makes the same number of stops; the smallest first pit error over the members) |
 
 Row statuses: `ok`, `invalid`, `unavailable` (the policy does not apply here, e.g. the actual
 strategy of a driver whose real stint broke the minimum), `error` (the policy itself failed,
@@ -184,9 +189,18 @@ n_samples, max_stops, hindsight)[:12]` (`reference.reference_key`; `--n-samples`
 `--max-stops` default to the profile's, as in `score`). Per scenario the table holds the
 reference plan, its per-draw remaining times (float32), their mean, sd and `cvar_90`
 (mean of the worst 10 percent), `pit_now_opt`, the runner-up's mean (the next plan in the
-optimizer's tie-break order) and the paired standard error between the two. The command
-prints that precision: how far the runner-up is above the reference and whether the gap
-is within 2 standard errors.
+optimizer's tie-break order) and the paired standard error between the two. Since format 2
+(`reference.REFERENCE_FORMAT`, `"format"` in the sidecar) it also holds, in tie-break order,
+the searched plans whose gap to the reference is at most max(10 s, 5 x their paired SE)
+(`STORE_GAP_S`, `STORE_SE`), plus the best pit-now and best stay-out plans always, so
+neither the optimal set (gap <= 2 SE, inside that bound) nor `pit_now_gap_s` depends on the
+bound. For each: its mean minus the reference's (`plan_gap_s`) and
+its paired standard error against the reference (`plan_se_s`), both float32, its number of
+stops and first pit lap, and the paired standard error of the best pit-now plan against the
+best stay-out plan. Those give the near-tie columns. A format-1 cache still loads (its
+near-tie columns are NaN) and `reference --check` lists it as stale. The command
+prints the reference's precision: how far the runner-up is above the reference and whether
+the gap is within 2 standard errors.
 
 `score` looks up the reference for its own inputs under `--reference-dir` (default
 `data/references`). A hit is used as it is; a miss computes the reference the same way and
@@ -210,16 +224,48 @@ stale, and `reference` rebuilds it; a change to the tooling (agent tools, jobs) 
 Moving to the allowlist moved every `sim_code_version` stamp once; the committed reports
 keep their old stamps (stamp-only drift, reports/calibration/README.md).
 `optimizer_bridge.optimize_batch(..., return_times=True)` (off by default) is how the cache
-gets the per-draw times: `diagnostics["times"]` and `diagnostics["runner_up"]`.
+gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
+`diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed: `data/references/v1/a05aa55b0546.parquet` (16 KB), v1 under the default world
-(local profile: seed 0, 50 samples, two stops) at sim_code_version `56a328c26a60`. From
+Committed: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
+was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
+sim_code_version `21b81a57ea42`. From
 it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
 row (every value column; the stamp columns `latency_s`, `sim_code_version`,
 `belief_config_hash` and `world_config_hash` are excluded, stamp-only drift under
 reports/calibration/README.md); the rows gain `regret_se_s` and
 `within_mc`. That world draws no events, so every `regret_se_s` is 0 and `within_mc` is
-the tie rule there.
+the tie rule there. The rows also gain the near-tie columns, and in that world every
+optimal set is the reference alone (`opt_set_size` 1 on all 1320 rows), every pit-now
+call with both kinds of plan is decisive, and the set-based agreement equals the plain one.
+
+### Near ties (information only)
+
+`python -m src.eval report` prints, below the existing tables, a near-tie view when the rows
+carry the near-tie columns (`score.summarize_near_ties`), one row per policy over every
+race: the share of scenarios whose optimal set has more than one plan, the share where the
+pit-now call is decisive (of the scenarios with both a pit-now and a stay-out plan), and
+the stop agreement and mean first pit error against the reference and against the closest
+member of the optimal set. Nothing in the summary table or the headline metrics changes.
+Under the deterministic default world the view shows sets of size 1 and every call
+decisive.
+
+v1 under the default world with `events: {name: rate}` (default rates), 200 samples, belief
+default, baselines and the recorded run, from a cached reference:
+
+| policy | scenarios | share_opt_set_gt1 | share_pit_now_decisive | scored | stop_agreement | stop_agreement_set | mean_first_pit_error | mean_first_pit_error_set |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| actual_strategy | 264 | 0.78 | 0.84 | 199 | 0.59 | 0.60 | 9.99 | 8.22 |
+| baseline_agent_recorded | 264 | 0.78 | 0.84 | 1 | 0.00 | 0.00 | 14.00 | 10.00 |
+| fixed_one_stop | 264 | 0.78 | 0.84 | 250 | 0.86 | 0.86 | 8.14 | 6.12 |
+| fixed_two_stop | 264 | 0.78 | 0.84 | 211 | 0.05 | 0.05 | 9.28 | 7.03 |
+| greedy_crossover | 264 | 0.78 | 0.84 | 185 | 0.64 | 0.64 | 15.54 | 13.31 |
+
+Per scenario the optimal set has median 5 plans (max 9; 58 of 264 have one). 138 scenarios
+have both a pit-now and a stay-out plan; on 116 the call is decisive (median |gap| 1.69 s
+against a median paired SE of 0.24 s), and of the 22 that are not, 13 have the reference
+pitting now. The near ties sit within one strategy: the set-based stop agreement moves by
+at most 0.01, while the first pit error drops by about 2 laps for every policy.
 
 ### Precision under drawn events (v1, N = 200)
 
