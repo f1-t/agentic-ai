@@ -53,6 +53,11 @@ class RateEvents:
     passes the events substream (engine.EVENT_STREAM), so these draws never shift the
     degradation, hazard or track draws. With both rates zero and the snapshot green,
     nothing is drawn.
+
+    The optional lap-1 term (params p_sc_lap1, p_vsc_lap1, SPEC 0011b) replaces p_sc and
+    p_vsc on lap 1 when the walk starts there (laps_completed 0); the same uniform decides
+    it, so the stream is the same with or without the term. None, the default, keeps p on
+    lap 1 like every lap.
     """
 
     def __init__(self, **params):
@@ -72,12 +77,25 @@ class RateEvents:
             raise ValueError(f"race {race.race_id}: p_sc + p_vsc = {out[0] + out[2]} exceeds 1")
         return out
 
+    def lap1_rates(self, race):
+        """(p_sc, p_vsc) on lap 1 of a walk that starts there: the lap-1 params where set,
+        else this race's p."""
+        p_sc, _, p_vsc, _ = self.rates(race)
+        cfg = self.params
+        out = (p_sc if cfg.p_sc_lap1 is None else cfg.p_sc_lap1, p_vsc if cfg.p_vsc_lap1 is None else cfg.p_vsc_lap1)
+        if out[0] + out[1] > 1:
+            raise ValueError(f"race {race.race_id}: lap-1 p_sc + p_vsc = {out[0] + out[1]} exceeds 1")
+        return out
+
     def draw(self, snapshot: Snapshot, rng) -> Scenario:
         p_sc, d_sc, p_vsc, d_vsc = self.rates(snapshot.race)
         status = snapshot.track_status
-        if p_sc + p_vsc == 0 and status == "green":
-            return Scenario()
         first, last = snapshot.laps_completed + 1, snapshot.race.total_laps
+        lap1 = None
+        if first == 1 and (self.params.p_sc_lap1 is not None or self.params.p_vsc_lap1 is not None):
+            lap1 = self.lap1_rates(snapshot.race)
+        if p_sc + p_vsc == 0 and status == "green" and (lap1 is None or sum(lap1) == 0):
+            return Scenario()
         mean = {"sc": d_sc, "vsc": d_vsc}
         active, left = None, 0
         if status != "green":
@@ -86,7 +104,8 @@ class RateEvents:
         out = {"sc": [], "vsc": []}
         for lap, x in zip(range(first, last + 1), u):
             if active is None:
-                active = "sc" if x < p_sc else "vsc" if x < p_sc + p_vsc else None
+                a, b = lap1 if lap1 is not None and lap == 1 else (p_sc, p_vsc)
+                active = "sc" if x < a else "vsc" if x < a + b else None
                 if active is not None:
                     left = int(rng.geometric(1.0 / mean[active]))
             if active is not None:

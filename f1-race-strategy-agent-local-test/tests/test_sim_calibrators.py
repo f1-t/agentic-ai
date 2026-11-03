@@ -49,7 +49,7 @@ class Fixed(calibrators.Calibrator):
 
 # --- registry and contract -------------------------------------------------------------
 def test_registry_and_defaults():
-    assert CALIBRATORS.keys() == ["gbm", "mlp", "none", "ridge", "shrinkage"]
+    assert CALIBRATORS.keys() == ["event_rates", "gbm", "mlp", "none", "ridge", "shrinkage"]
     cfg = SimConfig()
     assert (cfg.calibrator.name, cfg.calibration_every, cfg.recalibrate_temp_delta_c) == ("shrinkage", 1, 3.0)
     assert calibration.config_hash(SimConfig(calibrator={"name": "none"})) != calibration.config_hash(cfg)
@@ -422,3 +422,16 @@ def test_race_ids():
     assert race_season("2021_Spain") == 2021
     with pytest.raises(ValueError, match="season"):
         parse_race_id("Spain")
+
+
+def test_race_ids_as_of():
+    from src.sim.race_ids import as_of
+    races = ["2022_05_spain", "2021_04_spain", "2021_05_monaco", "2021_04_synthetic_x", "2022_01_bahrain"]
+    assert as_of("2021_05_monaco", races) == ["2021_04_spain", "2021_04_synthetic_x"]   # given order kept
+    assert as_of("2022_05_spain", races) == ["2021_04_spain", "2021_05_monaco", "2021_04_synthetic_x",
+                                             "2022_01_bahrain"]
+    assert as_of("2021_04_spain", races) == []            # never itself nor its own (season, round)
+    assert as_of("2021_Spain", races) == []               # an alias compares as canonical
+    assert as_of("2023_01_bahrain", ["2022_24_abu_dhabi", "2023_01_bahrain"]) == ["2022_24_abu_dhabi"]
+    with pytest.raises(ValueError, match="season"):
+        as_of("2021_04_spain", ["Spain"])

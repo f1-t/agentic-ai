@@ -469,6 +469,7 @@ PACE_OFFSET_ALL_LAPS = "pace_offset_all_laps"   # free-air offset fell back to e
 PHYSICS_MODULES = (
     "engine", "degradation", "events", "hazard", "track", "traffic", "rules", "config", "data",
     "tyre_sets", "weather", "pace", "calibrators", "optimizer_bridge", "registry",
+    "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only

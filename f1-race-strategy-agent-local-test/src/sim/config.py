@@ -52,19 +52,30 @@ class EventModel(_Cfg):
     p_* is the chance per green lap that a period starts, d_* the mean period length in
     laps. A race whose RaceParams carries circuit rates (sc_rate_per_lap and friends)
     overrides these per race. Provisional, Spain only: one SC of 3 laps in 66 gives
-    p_sc 0.015 and d_sc 3; the VSC values are placeholders. Fitted across races from
-    the factor rows (calibration.observed_periods) later.
+    p_sc 0.015 and d_sc 3; the VSC values are placeholders. Fitted per circuit and era by
+    event_rates (SPEC 0011b), which fills the RaceParams rates; these stay the no-data prior.
+
+    p_sc_lap1 / p_vsc_lap1 (SPEC 0011b) replace p_sc / p_vsc on lap 1 alone, and only when
+    the walk starts there (a snapshot at laps_completed 0). None, the default, leaves lap 1
+    on p like every lap. event_rates estimates them as the share of races with a period of
+    that kind starting on lap 1.
     """
 
     p_sc: float = Field(default=0.015, ge=0, le=1)
     d_sc: float = Field(default=3.0, ge=1)
     p_vsc: float = Field(default=0.02, ge=0, le=1)
     d_vsc: float = Field(default=2.0, ge=1)
+    p_sc_lap1: float | None = Field(default=None, ge=0, le=1)
+    p_vsc_lap1: float | None = Field(default=None, ge=0, le=1)
 
     @model_validator(mode="after")
     def _check(self):
         if self.p_sc + self.p_vsc > 1:
             raise ValueError("p_sc + p_vsc must be at most 1")
+        lap1 = (self.p_sc if self.p_sc_lap1 is None else self.p_sc_lap1) + \
+            (self.p_vsc if self.p_vsc_lap1 is None else self.p_vsc_lap1)
+        if lap1 > 1:
+            raise ValueError("the lap-1 rates p_sc_lap1 + p_vsc_lap1 must be at most 1")
         return self
 
 

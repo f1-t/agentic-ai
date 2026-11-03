@@ -251,13 +251,12 @@ number cannot come from another simulator version without failing.
 
 | tag | sim_code_version | commit |
 | --- | --- | --- |
-| physics-v1 | `521bdb48e96a` (planned; current at this writing) | not tagged yet |
+| physics-v1 | tagged at the end of sprint 2 (Nov 20); its SIM_CODE_VERSION is recorded here when the tag is made | not tagged yet |
 
 TODO (end of sprint 2, the user): apply the tag with `git tag physics-v1 <commit>` on the
-commit that freezes the simulator, put the commit here, and replace the sim_code_version
-above with `python -c "from src.sim.calibration import SIM_CODE_VERSION as v; print(v)"` at
-that commit if a physics module (`calibration.PHYSICS_MODULES`) or `src/contracts.py` has
-changed since. Then
+commit that freezes the simulator, put the commit here, and record the sim_code_version
+above from `python -c "from src.sim.calibration import SIM_CODE_VERSION as v; print(v)"` at
+that commit. Then
 rebuild the report references (`python -m src.eval reference ...`) and check
 `python -m src.eval reference --check` lists nothing.
 
