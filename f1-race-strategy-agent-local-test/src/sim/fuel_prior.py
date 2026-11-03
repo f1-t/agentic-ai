@@ -47,6 +47,10 @@ C  Selection, leave-one-race-out over the eligible races (calibration.eligibilit
 D  If a candidate wins, the to_snapshot fuel tau becomes its predictive sd per race: that is
    what its calibrator outputs, so adopting it is setting SimConfig.calibrator to it. Nothing
    here changes a default; the report only names the choice.
+   For the real run: report pre_race and to_snapshot G twice, with the tau from the predictive
+   sd and with it floored at the config 0.008, to see whether a tighter tau helps or hurts on
+   real races (on synthetic histories a tighter sd from a larger grand mean trusted a prior
+   still off for some races).
 E  tests/test_sim_fuel_prior.py.
 F  report(): f_table.csv (candidate, held-out mae, coverage, G bias at 20-40 and 50-60 per
    window, stop-gain mae), and prior_share.csv: how much of the absolute G error was the
