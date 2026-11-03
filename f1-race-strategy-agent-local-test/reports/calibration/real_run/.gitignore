@@ -1,0 +1,2 @@
+# the emitted Slurm scripts carry absolute paths: `python -m src.sim.calibrate real-run --profile sol` rewrites them
+slurm/

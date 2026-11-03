@@ -459,6 +459,14 @@ def _args(races, **kw) -> Namespace:
                         "wandb": False, **kw})
 
 
+PENDING = "pending"   # a runner's status for a unit left to a scheduler (real_run's Slurm runner)
+
+
+def item_label(item) -> str:
+    """'job[/arm] unit' of a run item, as the run log prints it."""
+    return f"{item[0]}{'/' + item[4].arm if item[4].arm else ''} {item[1]}"
+
+
 def _run_items(items, n_jobs: int):
     """jobs._run_one over the items, in a pool of n_jobs; [(job[/arm] unit, status)]."""
     if n_jobs > 1 and len(items) > 1:
@@ -466,7 +474,7 @@ def _run_items(items, n_jobs: int):
             done = list(ex.map(jobs._run_one, items))
     else:
         done = [jobs._run_one(i) for i in items]
-    return [(f"{i[0]}{'/' + i[4].arm if i[4].arm else ''} {unit}", st) for i, (unit, st) in zip(items, done)]
+    return [(item_label(i), st) for i, (_, st) in zip(items, done)]
 
 
 def _fold_items(arms, races, profile, out):
@@ -482,18 +490,11 @@ def guard_committed(out, races):
                          "pass --out a scratch directory")
 
 
-def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid=True, n_jobs=None,
-        log=print) -> dict:
-    """A, B and the three C stages over `races` (canonical ids or aliases; synthetic ids
-    allowed outside CROSS_DIR, guard_committed). Writes eligibility.json and run.json under
-    `out`; returns the run record."""
-    guard_committed(out, races)
-    out = Path(out)
-    out.mkdir(parents=True, exist_ok=True)
-    n_jobs = profile.parallel.n_jobs if n_jobs is None else n_jobs
-    races = [canonical_race_id(r) for r in races]
+def eligibility_records(races, profile, log=print) -> list[dict]:
+    """A: calibration.eligibility per race (canonical ids or aliases), with the race control
+    messages when cached; each record gains race_id, and a note when the messages are missing."""
     elig = []
-    for r in races:
+    for r in (canonical_race_id(r) for r in races):
         data = load_race(r, profile)
         messages, note = race_messages(r)
         e = calibration.eligibility(data.frame, data.race, messages)
@@ -501,11 +502,48 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
         e["notes"] = e["notes"] + ([note] if note else [])
         elig.append(e)
         log(f"eligibility {r}: {'eligible' if e['eligible'] else 'not eligible: ' + '; '.join(e['reasons'])}")
+    return elig
+
+
+def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid=True, n_jobs=None,
+        log=print, elig=None, runner=None) -> dict:
+    """A, B and the three C stages over `races` (canonical ids or aliases; synthetic ids
+    allowed outside CROSS_DIR, guard_committed). Writes eligibility.json and run.json under
+    `out`; returns the run record.
+
+    `elig`: eligibility_records of `races` already computed (real_run), else computed here.
+    `runner(items, phase)` runs one phase's units (phase races, arms, s2 or tau_grid) and
+    returns [(label, status)]; the default runs them in-process with n_jobs workers. When a
+    runner leaves units PENDING (a scheduler will run them), the run stops after that phase:
+    run.json is removed, so nothing reads a half-finished run, and the record returned has
+    `pending` (the labels) and `phase`. Rerunning resumes, as every unit is a jobs.run_task."""
+    guard_committed(out, races)
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    n_jobs = profile.parallel.n_jobs if n_jobs is None else n_jobs
+    races = [canonical_race_id(r) for r in races]
+    elig = eligibility_records(races, profile, log) if elig is None else elig
     (out / "eligibility.json").write_text(json.dumps(elig, indent=1))
     eligible = [e["race_id"] for e in elig if e["eligible"]]
-    status = _run_items([("cross_race", r, profile, str(out), _args(eligible, profile=profile.name))
-                         for r in eligible], n_jobs)
-    status += _run_items(_fold_items(ARMS, eligible, profile, out), n_jobs)
+    runner = runner or (lambda items, phase: _run_items(items, n_jobs))
+    status = []
+
+    def step(items, phase):
+        done = runner(items, phase)
+        status.extend(done)
+        return [u for u, st in done if st == PENDING]
+
+    def halt(phase, pending):
+        for unit, st in status:
+            log(f"  {unit}: {st}")
+        (out / "run.json").unlink(missing_ok=True)
+        return {"races": races, "eligible": eligible, "phase": phase, "pending": pending}
+
+    pending = step([("cross_race", r, profile, str(out), _args(eligible, profile=profile.name)) for r in eligible],
+                   "races")
+    pending += step(_fold_items(ARMS, eligible, profile, out), "arms")
+    if pending:
+        return halt("races and arms", pending)
     sel = selection_tables(out, eligible, profile)
     chosen = sel["chosen"].get(BELIEF_WINDOW, BASELINE)
     record = {"races": races, "eligible": eligible, "arms": list(ARMS), "profile": profile.name,
@@ -516,12 +554,14 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
         record["notes"].append(f"{chosen} holds the prior: no shrinkage fit, so no prior-sd fix and no tau grid")
     else:
         record["s2_arm"] = f"{chosen}__{S2}"
-        status += _run_items(_fold_items([record["s2_arm"]], eligible, profile, out), n_jobs)
+        if pending := step(_fold_items([record["s2_arm"]], eligible, profile, out), "s2"):
+            return halt("s2", pending)
         s2 = s2_table(out, eligible, profile, chosen)
         grid_on = record["s2_arm"] if bool(s2["passes"].iloc[0]) else chosen
         if tau_grid:
             record["grid_arm"], record["grid"] = grid_on, tau_combos(grid_on, tau_multipliers)
-            status += _run_items(_fold_items(record["grid"], eligible, profile, out), n_jobs)
+            if pending := step(_fold_items(record["grid"], eligible, profile, out), "tau_grid"):
+                return halt("tau_grid", pending)
     for unit, st in status:
         log(f"  {unit}: {st}")
     (out / "run.json").write_text(json.dumps(record, indent=1))
