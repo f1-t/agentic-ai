@@ -484,6 +484,8 @@ NON_PHYSICS = (
     # the cross-race report (SPEC 0016): eligibility, LORO arms and the selection over them;
     # it runs the simulator under committed arm configs and never changes a lap time itself
     "cross_race",
+    # the report's LaTeX tables (SPEC 0022): reads committed csvs and writes .tex, runs no simulation
+    "report_tables",
 )
 
 
