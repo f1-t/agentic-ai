@@ -35,7 +35,16 @@ uses the `pre_race` window.
 
 **R6 Randomness.** Sample `i` of seed `s` is `numpy.random.default_rng([s, i])` (the main
 stream) for every candidate; its SC/VSC scenario comes from the events substream
-`default_rng([s, i, 1])`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
+`default_rng([s, i, 1])`. The degradation parameter draw (`degradation.params.draw:
+posterior`) and the residual lap noise (`lap_noise: residual`) each come from one generator
+per batch call, `default_rng([s, K, 2])` and `default_rng([s, K, 3])` with K = 2^32 - 1
+(`engine.STREAM_KEY`, never a sample index, so these keys never equal a main or event key):
+an (n, d) matrix of normals, d the parameter count or the remaining laps, whose row `i` is
+sample `i`'s draw. Rows are drawn in order, so row `i` depends on (s, i, d) only and sample
+`i` is the same in a batch of 10 or 200 (`engine.batch_normals`). Every draw is shared by
+every candidate, and turning one on leaves the other streams' draws as they were. A
+degradation model without a parameter vector gets `default_rng([s, i, 2])` per sample in
+its `draw(rng)`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
 `(seed=0, n_samples=n)` describe the same draws. Seed mapping in the bridge:
 `optimize_batch(seed=s, n_samples=n)` reports `Evaluation.seeds = (0, ..., n-1)`, the
 sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;

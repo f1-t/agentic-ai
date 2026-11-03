@@ -137,8 +137,23 @@ class BatchResult:
 TRAFFIC_DRAWN_EVENTS = "traffic_recorded_with_drawn_events"
 FIT_CACHE_SIZE = 64  # windowed fits kept per Simulator, oldest dropped first
 # events draw from their own substream, default_rng([seed, k, EVENT_STREAM]), so the main
-# stream never sees an event draw: with events on, every other draw matches the run without
+# stream never sees an event draw: with events on, every other draw matches the run without.
+# The degradation parameter draw and the residual lap noise come from one generator per
+# stream per batch call, default_rng([seed, STREAM_KEY, stream]), sample k taking row k
+# (batch_normals). Turning either on leaves the hazard, track and event draws as they were.
 EVENT_STREAM = 1
+DEGRADATION_STREAM = 2
+LAP_NOISE_STREAM = 3
+# never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
+# [seed, k, 1] key
+STREAM_KEY = 2 ** 32 - 1
+
+
+def batch_normals(seed: int, stream: int, n: int, width: int, sd: float = 1.0) -> np.ndarray:
+    """(n, width) normals N(0, sd^2) for `stream`, row k for sample k. Rows are drawn in order,
+    so row k depends on (seed, k, width) only, never on n: sample k is the same in a batch of
+    10 or 200 (R6)."""
+    return np.random.default_rng([seed, STREAM_KEY, stream]).normal(0.0, sd, (n, width))
 
 
 class Simulator:
@@ -329,12 +344,12 @@ class Simulator:
         prior, taus, fuel, held = _cal.degradation_prior(out, raw, cfg)
         if cfg.fit_window == "pre_race":
             self.calibration = _cal.CalibrationState(out, 0, True, raw)
-            return self._fit(practice, model=prior)
+            return self._fit(practice, model=_cal.held_prior(prior, out))
         self.calibration = _cal.CalibrationState(out, k0, held, raw)
         if held:   # nothing from the race: the pre_race fit, hazard and ref_lap_s included
             if prior is None:
                 raise ValueError(f"calibrator {out.source!r} holds the prior, which needs practice laps")
-            return self._fit(practice, model=prior)
+            return self._fit(practice, model=_cal.held_prior(prior, out))
         ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
         self._fit(race, ref=ref, prior=prior, shrinkage=taus, fuel_prior=fuel)
 
@@ -451,19 +466,33 @@ class Simulator:
         corr = (_cal.CorrectionLookup(cal.correction, names, codes, laps)
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
+        noise_sd = self._lap_noise_sd()
+        # parameter draws: the linear models take row k of one (n, n_params) normal matrix
+        # (draw_z); another model's draw(rng) gets the per-sample substream [seed, k, 2]. A
+        # model whose draw is "none" returns itself and draws nothing, so nothing is built.
+        param_draw = getattr(self.degradation, "param_draw", None) != "none"
+        z_par = (batch_normals(seed, DEGRADATION_STREAM, n, self.degradation.n_params)
+                 if param_draw and hasattr(self.degradation, "draw_z") else None)
+        eps = batch_normals(seed, LAP_NOISE_STREAM, n, n_laps, noise_sd) if noise_sd > 0 else None
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
-            # main stream draw order: calibrated factors, correction z, degradation, hazard,
-            # track: do not reorder, seeds depend on it (the hazard uniform is drawn here, ahead
-            # of the track state; its use comes later). The factor and z draws happen only when
-            # the calibrator gives a factor sd or a correction sd above 0. Events draw from
-            # their own substream (EVENT_STREAM), never from rng.
+            # main stream draw order: calibrated factors, correction z, hazard, track: do not
+            # reorder, seeds depend on it (the hazard uniform is drawn here, ahead of the track
+            # state; its use comes later). The factor and z draws happen only when the
+            # calibrator gives a factor sd or a correction sd above 0. Events, the degradation
+            # parameters and the lap noise draw from their own streams (EVENT_STREAM per
+            # sample, DEGRADATION_STREAM and LAP_NOISE_STREAM per batch), never from rng.
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
-            model = self.degradation.draw(rng)
+            if z_par is not None:
+                model = self.degradation.draw_z(z_par[k])
+            elif param_draw:
+                model = self.degradation.draw(np.random.default_rng([seed, k, DEGRADATION_STREAM]))
+            else:
+                model = self.degradation
             u = rng.uniform(size=(2, n_laps)) if self.hazard.draws else None
             # u is shared by every plan (common random numbers)
             track = self.track.draw(snapshot, rng)
@@ -491,6 +520,8 @@ class Simulator:
                              np.where(vsc, v["vsc_lap_factor"] * green, green))
             if offset:   # green laps only; skipped at 0 so a run without pace is bit for bit unchanged
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
+            if eps is not None:   # one vector per sample on the green laps, shared by every plan
+                lap_s += np.where(sc | vsc, 0.0, eps[k])
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
             scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
@@ -534,6 +565,15 @@ class Simulator:
         for r, i in enumerate(idx):
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
+
+    def _lap_noise_sd(self) -> float:
+        """SimConfig.lap_noise: 0 for "none", else the fit's residual_s (0 when the fit
+        report has none, or it is NaN)."""
+        if self.config.lap_noise == "none":
+            return 0.0
+        rep = getattr(self.degradation, "fit_report", None) or {}
+        s = float((rep.get("sd") or {}).get("residual_s", float("nan")))
+        return 0.0 if np.isnan(s) else s
 
     def _events_drawn(self, snapshot: Snapshot, scenario: Scenario | None) -> bool:
         """Whether the samples' SC and VSC laps may differ from the recorded race's: an event

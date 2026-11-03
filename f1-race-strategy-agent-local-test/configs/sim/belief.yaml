@@ -1,6 +1,12 @@
 # The eval's belief simulator (src/eval/score.py race_simulators, docs/eval.md "Who sees
 # what"): what a policy plans on. The default SimConfig fitted only on the laps up to the
-# snapshot, shrunk toward the practice prior, with traffic off.
+# snapshot, shrunk toward the practice prior, with traffic off. Its samples carry the
+# fit's own uncertainty: posterior parameter draws and residual lap noise (SPEC 0017).
 fit_window: to_snapshot
 traffic:
   name: none
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+lap_noise: residual

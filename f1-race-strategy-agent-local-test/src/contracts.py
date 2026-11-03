@@ -351,6 +351,9 @@ class ModelReport(_Contract):
     condition_number: float
     flags: list[str] = Field(default_factory=list)
     calibration_error_s: float = float("nan")
+    # {compound: correlation of the fuel slope with its wear slope} from fit_report["cov"];
+    # NaN where either variance is 0 or NaN, None for models without a fuel term
+    fuel_wear_corr: dict[str, float] | None = None
 
     @property
     def modelled(self) -> list[str]:

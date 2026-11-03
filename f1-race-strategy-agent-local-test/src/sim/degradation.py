@@ -1,7 +1,8 @@
 """Lap time models. A model maps (compound, tyre age, lap number) to a green-flag lap time.
 
 `draw(rng)` returns a concrete lap time function for one sample. Deterministic models
-return themselves, uncertainty-aware models return a parameter draw.
+(and the linear ones under the default draw "none") return themselves, uncertainty-aware
+models return a parameter draw.
 
 Rows with `lap` NaN are practice laps: they count for compound base and tyre wear only,
 never for the race lap (fuel) term. Inside a practice run tyre age and fuel burn advance
@@ -54,6 +55,21 @@ practice) only the fuel slope is penalised; base and wear are plain least square
                               NaN wherever s2 cannot be estimated.
   hinge                       linear_fuel_hinge only: {compound: {value, sd, source, weight,
                               knot, n_past_knot}}, see LinearFuelHingeDegradation
+  cov                         the posterior covariance, {"names": [...], "matrix": [[...]]},
+                              s2 (X'X + D)^-1 over the parameters in a fixed order:
+                              base_s[c], wear_s_per_lap[c] per compound (sorted), then
+                              fuel_s_per_lap, then hinge_s_per_lap[c] per hinged compound; the
+                              evolution slopes are left out. A parameter held or fixed gets
+                              its prior variance on the diagonal and no covariance: a fixed
+                              fuel slope fuel_prior_sd^2, a weight-0 shrunk coefficient tau^2;
+                              a dropped hinge is left out (fixed at 0, variance 0). NaN
+                              matrix when X'X + D is singular. A
+                              held prior (calibrators.held_prior) carries the calibrator's
+                              factor sds instead.
+
+`draw(rng)`: SimConfig.degradation.params `draw` "none" (the default: the point estimate,
+nothing drawn) or "posterior" (beta_hat + L z from fit_report["cov"], _ParameterDraws);
+`clip_wear_at_zero` (default false) floors drawn wear slopes at 0.
 
 `fit(..., base_delta=x)` adds x seconds per lap to the base of every compound fitted on
 practice rows only (no race rows): the practice-to-race level difference (practice runs
@@ -66,6 +82,9 @@ start time, fitted with base and wear in the ordinary fits with a ridge toward 0
 (EVOLUTION_TAU_S_PER_MIN), so track evolution between runs is not read as tyre wear.
 The term is constant within a stint, so it is identified across stints only.
 """
+import copy
+import warnings
+
 import numpy as np
 
 from .config import HINGE_KNOT, HINGE_TAU_S_PER_LAP
@@ -113,10 +132,11 @@ def _evolution_fit(X, y, n_evo):
 
 
 def _posterior_sd(X, y, beta, prec, fallback_s2=float("nan")):
-    """(sd per column, residual sd): sqrt(diag(s2 (X'X + D)^-1)), D = diag(prec).
+    """(sd per column, residual sd, cov): cov = s2 (X'X + D)^-1, D = diag(prec), and
+    sd = sqrt(diag(cov)).
 
     s2 = RSS / (n - p) over the rows of X, p the non-zero columns; `fallback_s2` when
-    n <= p. NaN where X'X + D is singular.
+    n <= p. NaN (sd and the whole matrix) where X'X + D is singular.
     """
     n, k = X.shape
     used = int(np.any(X != 0, axis=0).sum()) if X.size else 0
@@ -126,12 +146,42 @@ def _posterior_sd(X, y, beta, prec, fallback_s2=float("nan")):
     else:
         s2 = float(fallback_s2)
     if k == 0:
-        return np.empty(0), float(np.sqrt(s2))
+        return np.empty(0), float(np.sqrt(s2)), np.empty((0, 0))
     try:
-        cov = np.linalg.inv(X.T @ X + np.diag(prec))
+        inv = np.linalg.inv(X.T @ X + np.diag(prec))
     except np.linalg.LinAlgError:
-        return np.full(k, np.nan), float(np.sqrt(s2))
-    return np.sqrt(np.clip(s2 * np.diag(cov), 0.0, None)), float(np.sqrt(s2))
+        return np.full(k, np.nan), float(np.sqrt(s2)), np.full((k, k), np.nan)
+    return np.sqrt(np.clip(s2 * np.diag(inv), 0.0, None)), float(np.sqrt(s2)), s2 * inv
+
+
+def _param_names(comps, has_fuel, hinged=None):
+    """fit_report["cov"] names in their fixed order: base_s[c], wear_s_per_lap[c] per compound
+    (sorted), fuel_s_per_lap, hinge_s_per_lap[c] per hinged compound (a dropped hinge is not
+    a parameter: it stays at 0, variance 0)."""
+    names = [f"{p}[{c}]" for c in sorted(comps) for p in ("base_s", "wear_s_per_lap")]
+    names += ["fuel_s_per_lap"] if has_fuel else []
+    return names + [f"hinge_s_per_lap[{c}]" for c in sorted(hinged or [])]
+
+
+def _cov_entry(names, matrix):
+    return {"names": list(names), "matrix": [[float(v) for v in row] for row in np.asarray(matrix, dtype=float)]}
+
+
+def _place_cov(names, cols, cov, fixed=None):
+    """The fit_report["cov"] entry over `names`: `cols` names the rows of `cov` (columns of
+    the fit; names not in `names`, the evolution slopes, are left out); every name not in
+    `cols` gets the variance in `fixed` (0 when absent) and zero covariance."""
+    m = np.zeros((len(names), len(names)))
+    at = {n: i for i, n in enumerate(names)}
+    keep = [(j, at[c]) for j, c in enumerate(cols) if c in at]
+    if keep:
+        src, dst = map(list, zip(*keep))
+        m[np.ix_(dst, dst)] = np.asarray(cov)[np.ix_(src, src)]
+    for n, var in (fixed or {}).items():
+        i = at[n]
+        m[i, :] = m[:, i] = 0.0
+        m[i, i] = var
+    return _cov_entry(names, m)
 
 
 def _unmodelled(data, comps, min_samples, support=None):
@@ -267,11 +317,14 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None):
     weight = np.divide(dj, dj + prec, out=np.ones_like(dj), where=prec > 0)
     source = None if fuel_prior is None else ("shrunk" if len(d) else "prior")
     prior_res = ((support or {}).get("sd") or {}).get("residual_s", float("nan"))
-    sd, res = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
+    sd, res, cov = _posterior_sd(X, y, beta, prec, fallback_s2=prior_res ** 2)
     tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
-    sd = np.where((weight <= 0) & (prec > 0), tau, sd)  # held at the prior: its tau
+    held = (weight <= 0) & (prec > 0)
+    sd = np.where(held, tau, sd)  # held at the prior: its tau
     rep = _report(d, comps, X, source, weight[:n_main], fuel_prior is not None, support,
                   unmodelled=_unmodelled(data, comps, min_samples, support), sd=sd[:n_main], residual_s=res)
+    names = _param_names(comps, fuel_prior is not None, hinged if knots is not None else None)
+    rep["cov"] = _place_cov(names, names, cov, {names[j]: tau[j] ** 2 for j in np.flatnonzero(held)})
     if knots is not None:
         rep["hinge"] = {c: _dropped(knots[c], n_past[c]) for c in comps}
         for j, c in enumerate(hinged, start=n_main):
@@ -284,8 +337,114 @@ def _coefs(comps, beta):
     return {c: (float(beta[2 * i]), float(beta[2 * i + 1])) for i, c in enumerate(comps)}
 
 
+PARAM_DRAWS = ("none", "posterior")
+
+
+def _split_name(name):
+    """'wear_s_per_lap[SOFT]' -> ('wear_s_per_lap', 'SOFT'); 'fuel_s_per_lap' -> ('fuel_s_per_lap', None)."""
+    if name.endswith("]") and "[" in name:
+        p, _, c = name[:-1].partition("[")
+        return p, c
+    return name, None
+
+
+class NaNCovarianceWarning(UserWarning):
+    """A fit_report["cov"] row is NaN; posterior draws hold that parameter at its estimate."""
+
+
+class _ParameterDraws:
+    """draw(rng) for the linear models (SimConfig.degradation.params `draw`, `clip_wear_at_zero`).
+
+    "none" (the default) returns the model itself and consumes nothing. "posterior" returns
+    a shallow copy whose coefs, fuel_slope and hinges are beta_hat + L z, z standard normal
+    from `rng` (draw) or given (draw_z), L the Cholesky factor of fit_report["cov"] (eigh
+    with eigenvalues clipped at 0 when it is not positive definite; a parameter whose row
+    has a NaN gets 0 variance, with one NaNCovarianceWarning per fitted model).
+    clip_wear_at_zero floors drawn wear slopes at 0. The engine passes row k of its
+    per-batch DEGRADATION_STREAM normals to draw_z.
+    """
+
+    param_draw = "none"
+    clip_wear_at_zero = False
+
+    def with_draw(self, draw="none", clip_wear_at_zero=False):
+        if draw not in PARAM_DRAWS:
+            raise ValueError(f"degradation draw must be one of {PARAM_DRAWS}, got {draw!r}")
+        self.param_draw, self.clip_wear_at_zero = draw, bool(clip_wear_at_zero)
+        return self
+
+    def _value(self, name):
+        p, c = _split_name(name)
+        if p == "fuel_s_per_lap":
+            return float(self.fuel_slope)
+        if p == "hinge_s_per_lap":
+            return float(self.hinges[c])
+        return float(self.coefs[c][0 if p == "base_s" else 1])
+
+    def param_vector(self):
+        """(names, values) in fit_report["cov"] order."""
+        names = self.fit_report["cov"]["names"]
+        return names, np.array([self._value(n) for n in names], dtype=float)
+
+    def _plan(self):
+        """(L, mean, wear mask, layout), cached on this instance against its cov entry: L with
+        L L' = fit_report["cov"], the point estimate in cov order, and where each name goes."""
+        cov = self.fit_report["cov"]
+        cached = getattr(self, "_draw_plan", None)
+        if cached is not None and cached[0] is cov and cached[1] == id(self):
+            return cached[2]
+        names = cov["names"]
+        m = np.array(cov["matrix"], dtype=float).reshape(len(names), len(names))
+        bad = np.isnan(m).any(axis=1) | np.isnan(m).any(axis=0)
+        if bad.any():
+            warnings.warn(f"NaN posterior covariance for {[n for n, b in zip(names, bad) if b]}: "
+                          "drawn at their estimate", NaNCovarianceWarning, stacklevel=4)
+            m[bad, :] = 0.0
+            m[:, bad] = 0.0
+        try:
+            L = np.linalg.cholesky(m)
+        except np.linalg.LinAlgError:
+            w, v = np.linalg.eigh((m + m.T) / 2)
+            L = v * np.sqrt(np.clip(w, 0.0, None))
+        at = {n: i for i, n in enumerate(names)}
+        coefs = [(c, at.get(f"base_s[{c}]"), at.get(f"wear_s_per_lap[{c}]"), b, w) for c, (b, w) in self.coefs.items()]
+        hinges = getattr(self, "hinges", None)
+        hinges = None if hinges is None else [(c, at.get(f"hinge_s_per_lap[{c}]"), h) for c, h in hinges.items()]
+        plan = (L, self.param_vector()[1], np.array([n.startswith("wear_s_per_lap[") for n in names], dtype=bool),
+                coefs, at.get("fuel_s_per_lap"), hinges)
+        self._draw_plan = (cov, id(self), plan)
+        return plan
+
+    @property
+    def n_params(self):
+        """Length of the parameter vector a posterior draw takes (fit_report["cov"] names)."""
+        return len(self.fit_report["cov"]["names"])
+
+    def draw(self, rng):
+        if self.param_draw == "none":
+            return self
+        return self.draw_z(rng.standard_normal(self.n_params))
+
+    def draw_z(self, z):
+        """The posterior draw for standard normals `z` (n_params of them): beta_hat + L z.
+        The engine passes row k of engine.batch_normals for sample k."""
+        if self.param_draw == "none":
+            return self
+        L, mean, wear, coefs, fuel, hinges = self._plan()
+        x = (mean + L @ np.asarray(z, dtype=float)).tolist()
+        if self.clip_wear_at_zero:
+            x = [max(v, 0.0) if w else v for v, w in zip(x, wear)]
+        out = copy.copy(self)
+        out.coefs = {c: (b if i is None else x[i], w if j is None else x[j]) for c, i, j, b, w in coefs}
+        if fuel is not None:
+            out.fuel_slope = x[fuel]
+        if hinges is not None:
+            out.hinges = {c: h if i is None else x[i] for c, i, h in hinges}
+        return out
+
+
 @DEGRADATION.register("linear")
-class LinearDegradation:
+class LinearDegradation(_ParameterDraws):
     """Per compound line of lap time against tyre age. Matches the baseline fit."""
 
     def __init__(self, coefs, fit_report=None):
@@ -293,10 +452,11 @@ class LinearDegradation:
         self.fit_report = fit_report
 
     @classmethod
-    def fit(cls, data, min_samples=5, prior=None, shrinkage=None, base_delta=0.0, **_):
+    def fit(cls, data, min_samples=5, prior=None, shrinkage=None, base_delta=0.0, draw="none",
+            clip_wear_at_zero=False, **_):
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage)
-            return cls(_coefs(comps, beta), rep)
+            return cls(_coefs(comps, beta), rep).with_draw(draw, clip_wear_at_zero)
         coefs = {}
         for comp in sorted(data["compound"].unique()):
             d = _usable(data, comp, min_samples)
@@ -315,18 +475,17 @@ class LinearDegradation:
             evolution = {s: float(b) for s, b in zip(sessions, beta[2 * len(comps):])}
         else:  # the per compound lines are the joint least squares fit on X
             beta = np.array([v for c in comps for v in coefs[c]], dtype=float)
-        sd, res = (_posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo))) if comps
-                   else (np.empty(0), float("nan")))
+        sd, res, cov = (_posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo))) if comps
+                        else (np.empty(0), float("nan"), np.empty((0, 0))))
         rep = _report(d, comps, X, None, np.ones(2 * len(comps)), False, evolution=evolution,
                       unmodelled=_unmodelled(data, comps, min_samples), sd=sd[:2 * len(comps)], residual_s=res)
-        return cls(_apply_base_delta(coefs, rep, base_delta), rep)
+        names = _param_names(comps, False)
+        rep["cov"] = _place_cov(names, names, cov)
+        return cls(_apply_base_delta(coefs, rep, base_delta), rep).with_draw(draw, clip_wear_at_zero)
 
     @property
     def compounds(self):
         return set(self.coefs)
-
-    def draw(self, rng):
-        return self
 
     def lap_times(self, compound, ages, laps):
         base, slope = self.coefs[compound]
@@ -334,7 +493,7 @@ class LinearDegradation:
 
 
 @DEGRADATION.register("linear_fuel")
-class LinearFuelDegradation:
+class LinearFuelDegradation(_ParameterDraws):
     """Linear in tyre age per compound, plus one shared slope against race lap.
 
     The lap term absorbs fuel burn, so tyre slopes are not confounded with the car
@@ -355,19 +514,16 @@ class LinearFuelDegradation:
 
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
-            fuel_prior_sd=None, **_):
+            fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, **_):
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior)
-            return cls(_coefs(comps, beta), float(beta[-1]), rep)
+            return cls(_coefs(comps, beta), float(beta[-1]), rep).with_draw(draw, clip_wear_at_zero)
         coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd)
-        return cls(coefs, fuel, rep)
+        return cls(coefs, fuel, rep).with_draw(draw, clip_wear_at_zero)
 
     @property
     def compounds(self):
         return set(self.coefs)
-
-    def draw(self, rng):
-        return self
 
     def lap_times(self, compound, ages, laps):
         base, slope = self.coefs[compound]
@@ -391,6 +547,7 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     if not comps:
         rep = _report(d, comps, np.empty((0, 0)), "prior", np.zeros(1), True,
                       unmodelled=unmodelled, sd=np.array([fixed_sd]))
+        rep["cov"] = _cov_entry(["fuel_s_per_lap"], [[fixed_sd ** 2]])
         if hinge_knots is not None:
             rep["hinge"] = {}
         return {}, fuel_prior, None if hinge_knots is None else {}, rep
@@ -410,20 +567,23 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         X = np.column_stack(cols + [lap] + hcols + evo)
         beta = _evolution_fit(X, y, len(evo))
         fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1 + h:]
-        sd, res = _posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo)))
+        sd, res, cov = _posterior_sd(X, y, beta, _evolution_prec(X.shape[1], len(evo)))
         hinge, hinge_sd = beta[k + 1:k + 1 + h], sd[k + 1:k + 1 + h]
         sd = sd[:k + 1]
+        colnames, fixed = _param_names(comps, True, hinged), {}
     else:
         X = np.column_stack(cols + hcols + evo)
         beta = _evolution_fit(X, y - fuel_prior * lap, len(evo))
         fuel, source, slopes = float(fuel_prior), "prior", beta[k + h:]
-        sd, res = _posterior_sd(X, y - fuel_prior * lap, beta, _evolution_prec(X.shape[1], len(evo)))
+        sd, res, cov = _posterior_sd(X, y - fuel_prior * lap, beta, _evolution_prec(X.shape[1], len(evo)))
         hinge, hinge_sd = beta[k:k + h], sd[k:k + h]
         sd = np.append(sd[:k], fixed_sd)  # the fuel slope is fixed at the prior: its tau
+        colnames, fixed = _param_names(comps, False, hinged), {"fuel_s_per_lap": fixed_sd ** 2}
     weight = np.append(np.ones(k), 1.0 if source == "fitted" else 0.0)
     evolution = {s: float(b) for s, b in zip(sessions, slopes)}
     rep = _report(d, comps, X, source, weight, True, evolution=evolution, unmodelled=unmodelled,
                   sd=sd, residual_s=res)
+    rep["cov"] = _place_cov(_param_names(comps, True, hinged), colnames, cov, fixed)
     hinges = None
     if hinge_knots is not None:
         rep["hinge"] = {c: _dropped(hinge_knots[c], n_past[c]) for c in comps}
@@ -457,15 +617,17 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
 
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
-            fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, **_):
+            fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
+            clip_wear_at_zero=False, **_):
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots)
             hinges = {c: rep["hinge"][c]["value"] for c in comps}
-            return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps}, rep)
+            return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
+                       rep).with_draw(draw, clip_wear_at_zero)
         coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots)
-        return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep)
+        return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep).with_draw(draw, clip_wear_at_zero)
 
     def lap_times(self, compound, ages, laps):
         base, slope = self.coefs[compound]
