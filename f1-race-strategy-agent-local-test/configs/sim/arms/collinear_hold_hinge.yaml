@@ -1,0 +1,6 @@
+# SPEC 0016 amendment arm "collinear_hold_hinge": collinear_hold on linear_fuel_hinge, for the
+# post-knot MEDIUM curvature that practice (long runs end at age 21-22) does not see.
+degradation:
+  name: linear_fuel_hinge
+  params:
+    collinear_hold: 0.5

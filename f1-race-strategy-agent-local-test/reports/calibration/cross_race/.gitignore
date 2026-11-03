@@ -1,0 +1,4 @@
+# per-race and per-fold parquets and the per-stop rows: rebuilt by `python -m src.sim.calibrate cross run`
+races/
+h/
+stop_gain.csv

@@ -1,0 +1,4 @@
+# SPEC 0016 C arm "hinge_free": the hinge and free-air arms together.
+degradation:
+  name: linear_fuel_hinge
+fit_free_air_only: true

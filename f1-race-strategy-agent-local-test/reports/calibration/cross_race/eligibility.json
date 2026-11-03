@@ -1,0 +1,43 @@
+[
+ {
+  "race_id": "2021_04_spain",
+  "eligible": true,
+  "reasons": [],
+  "n_finishers": 19,
+  "drivers": [
+   "ALO",
+   "BOT",
+   "GAS",
+   "GIO",
+   "HAM",
+   "LAT",
+   "LEC",
+   "MAZ",
+   "MSC",
+   "NOR",
+   "OCO",
+   "PER",
+   "RAI",
+   "RIC",
+   "RUS",
+   "SAI",
+   "STR",
+   "VER",
+   "VET"
+  ],
+  "wet_laps_share": 0.0,
+  "red_flags": [],
+  "sc_periods": [
+   [
+    8,
+    10
+   ]
+  ],
+  "vsc_periods": [],
+  "dry_compounds": [
+   "MEDIUM",
+   "SOFT"
+  ],
+  "notes": []
+ }
+]

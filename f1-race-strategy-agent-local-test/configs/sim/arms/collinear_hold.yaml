@@ -1,0 +1,8 @@
+# SPEC 0016 amendment arm "collinear_hold": under to_snapshot a compound's wear is held at
+# the practice prior while |corr(fuel, wear[c])| of the shrinkage fit is above 0.5 (set a
+# priori, a moderate correlation, not selected on Spain), ordinary shrinkage once it is not
+# (degradation.py collinear_hold).
+degradation:
+  name: linear_fuel
+  params:
+    collinear_hold: 0.5
