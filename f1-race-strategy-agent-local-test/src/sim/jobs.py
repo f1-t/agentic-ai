@@ -157,14 +157,16 @@ def _stamp(df: pd.DataFrame, data: RaceData, cfg: SimConfig, profile: ComputePro
 def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None, laps_k=None) -> pd.DataFrame:
     """SPEC G rows for one race, one copy per N in profile.g.cadences, tagged k_subsample: the snapshots at multiples of N
     (None: lap 0 only) out of the profile's lap set. Rows do not depend on N, so the
-    midrace replay runs once and the copies are tagged."""
+    midrace replay runs once and the copies are tagged. The replay runs the profile's
+    n_samples, so with n_samples > 1 the rows carry the interval columns (calibration.midrace)."""
     laps_k = laps_k_for(data.frame, data.race.total_laps, profile) if laps_k is None else laps_k
 
     def factory(window):
         return Simulator(data.frame, cfg.model_copy(update={"fit_window": window}), data.practice)
 
     rows = calibration.midrace(factory, data.frame, data.race, laps_k=laps_k,
-                               windows=windows or profile.g.windows, results=data.results)
+                               windows=windows or profile.g.windows, results=data.results,
+                               n_samples=profile.sim.n_samples)
     parts = []
     for n in profile.g.cadences:
         keep = rows["k"] == 0 if n is None else rows["k"] % n == 0

@@ -19,7 +19,9 @@ stay max_stops. Every plan from a decision therefore lies inside the reference's
 Simulator.expand_action joins the action and the continuation, which is planned from the
 snapshot after the action on the belief simulator's fit at the decision snapshot (no lap
 after the decision enters it). A stay of n at least the laps left runs the current set to
-the flag, with no continuation.
+the flag, with no continuation. The continuation draws from seed +
+sim.agent_tools.BELIEF_SEED_OFFSET, like every belief-side simulation, so the belief never
+plans on the samples the world scores the plan on.
 
 For the Brier score, p_pit is the stated probability that pitting now is right: the
 confidence for a PIT, 1 - confidence for a STAY_OUT.
@@ -28,6 +30,7 @@ from __future__ import annotations
 
 from ..baselines.domain import NoFeasiblePlan
 from ..contracts import Plan, Snapshot
+from ..sim import agent_tools
 from ..sim.optimizer_bridge import as_continuation
 
 DECISIONS = ("PIT", "STAY_OUT")
@@ -73,7 +76,7 @@ def p_pit(decision: dict) -> float | None:
 def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, seed: int = 0,
             n_samples: int | None = None) -> Plan:
     """The decision's plan for the remaining laps: its action expanded by belief_sim with an
-    optimize_batch continuation (seed and n_samples go to it). `max_stops` limits the future
+    optimize_batch continuation (seed + BELIEF_SEED_OFFSET and n_samples go to it). `max_stops` limits the future
     stops of the whole plan, as for the reference: the continuation gets max_stops - 1
     (at least 0) after a PIT and max_stops after a STAY_OUT. Raises
     InvalidDecision when the submission is malformed, the action breaks a rule, or no legal
@@ -90,7 +93,9 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     # max_stops counts future stops from the decision snapshot, as the reference does: a PIT
     # spends one, so its continuation may add max_stops - 1; a stay spends none
     left = max(0, max_stops - 1) if action["action"] == "pit" else max_stops
-    continuation = as_continuation(fit, seed=seed, n_samples=n_samples, max_stops=left)
+    # belief-side draws: seed + the offset, never the world's samples (agent_tools)
+    continuation = as_continuation(fit, seed=seed + agent_tools.BELIEF_SEED_OFFSET, n_samples=n_samples,
+                                   max_stops=left)
     try:
         plan, errors = fit.expand_action(snapshot, action, continuation)
     except NoFeasiblePlan as exc:

@@ -114,13 +114,34 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     supported = hazard_support(hazard)
     if supported is not None:
         flags += [f"no_hazard_support:{c}" for c, r in compounds.items() if r.modelled and c not in supported]
+    # degradation.params wear_lower_bound: the fit put this compound's wear on the bound
+    flags += [f"wear_at_bound:{c}" for c, b in sorted((rep.get("bounded") or {}).items())
+              if b and c in compounds and compounds[c].modelled]
     if "n_pack_rows" in rep:   # SimConfig.fit_free_air_only: clean rows the fit left out
         flags.append(f"free_air_filter:{rep['n_pack_rows']}")
     return ModelReport(
         fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel,
         hinge=None if hinge is None else {c: dict(e) for c, e in hinge.items()},
         condition_number=rep["condition_number"], flags=flags,
-        calibration_error_s=calibration_error(fit_window, snapshot.remaining_laps, summary))
+        calibration_error_s=calibration_error(fit_window, snapshot.remaining_laps, summary),
+        fuel_wear_corr=fuel_wear_corr(rep) if fuel is not None else None)
+
+
+def fuel_wear_corr(rep) -> dict[str, float] | None:
+    """{compound: corr(fuel_s_per_lap, wear_s_per_lap[c])} from fit_report["cov"], NaN where a
+    variance is 0 or NaN; None without a cov or a fuel term in it."""
+    cov = (rep or {}).get("cov")
+    if not cov or "fuel_s_per_lap" not in cov["names"]:
+        return None
+    at = {n: i for i, n in enumerate(cov["names"])}
+    m, f = cov["matrix"], at["fuel_s_per_lap"]
+    out = {}
+    for n, i in at.items():
+        if n.startswith("wear_s_per_lap["):
+            vf, vw, c = m[f][f], m[i][i], m[f][i]
+            ok = all(not math.isnan(x) for x in (vf, vw, c)) and vf > 0 and vw > 0
+            out[n[len("wear_s_per_lap["):-1]] = c / math.sqrt(vf * vw) if ok else float("nan")
+    return out
 
 
 def support_warnings(model, snapshot: Snapshot, plan: Plan) -> list[str]:

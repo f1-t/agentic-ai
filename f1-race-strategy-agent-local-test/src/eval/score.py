@@ -257,7 +257,8 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
 def race_simulators(profile=None, belief_config=None, world_config=None):
     """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
-    by default configs/sim/belief.yaml (to_snapshot window, traffic off); the world runs
+    by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
+    residual lap noise on); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off, as before
     the split). Cached per race and role."""
     from ..sim import SimConfig, jobs

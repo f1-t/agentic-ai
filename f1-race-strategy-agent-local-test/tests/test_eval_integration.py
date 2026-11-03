@@ -14,6 +14,7 @@ from src.eval.scenarios import Scenario
 from src.eval.score import score_scenario, score_set
 from src.sim import SimConfig, Simulator, calibration
 from src.sim.data import CACHE_DIR
+from src.sim.agent_tools import BELIEF_SEED_OFFSET
 from src.sim.optimizer_bridge import optimize_batch
 
 HAS_CACHE = os.path.isdir(os.path.join(CACHE_DIR, "2021"))
@@ -155,7 +156,8 @@ def test_to_plan_pit_and_stay_with_a_stub_continuation(world, monkeypatch):
     stay = decisions.to_plan(snap, {"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": 0.6},
                              world, 1, seed=5, n_samples=4)
     assert stay.as_pairs() == [["SOFT", 3 + 12], ["MEDIUM", 50 - 10 - 15]]
-    assert calls[-1] == {"seed": 5, "n_samples": 4, "max_stops": 1}
+    # belief-side draws are offset from the eval seed (agent_tools.BELIEF_SEED_OFFSET)
+    assert calls[-1] == {"seed": 5 + BELIEF_SEED_OFFSET, "n_samples": 4, "max_stops": 1}
 
 
 def test_a_pit_spends_one_of_the_future_stops(world, monkeypatch):

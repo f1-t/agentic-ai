@@ -741,7 +741,7 @@ def test_fit_report_fields_present(name):
                   synthetic_practice())
     keys = {"n_rows", "n_race_rows", "n_race_rows_per_compound", "max_tyre_age", "fuel_slope_source",
             "condition_number", "shrinkage_weight", "evolution_s_per_min", "unmodelled", "base_delta_s",
-            "base_delta_source", "sd"}
+            "base_delta_source", "sd", "cov"}
     for snap in (start(), at_lap(30)):
         rep = s.fitted_for(snap).degradation.fit_report
         assert set(rep) == keys

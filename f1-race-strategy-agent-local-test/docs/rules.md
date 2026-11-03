@@ -17,7 +17,7 @@ by the race registry (the profile's `sim.min_stint` overrides it for a whole run
 races have 3-lap stints, and the simulator prices short stints honestly, so the rule no
 longer needs a 10-lap floor to keep plans sensible. The agent's tools read it from the
 snapshot (`race.min_stint_laps`, shown to the agent as `RaceSnapshot.min_stint_laps`),
-not from a tool-layer constant (SPEC 0015 points the tools at it). `src/legacy_tools.py`,
+not from a tool-layer constant (src/sim/agent_tools.py, SPEC 0015). `src/legacy_tools.py`,
 the frozen baseline, pins 10. A scenario set keeps the value inside its snapshots: v1
 carries 10 and keeps scoring under 10; sets sampled from now on carry 3.
 
@@ -35,13 +35,28 @@ uses the `pre_race` window.
 
 **R6 Randomness.** Sample `i` of seed `s` is `numpy.random.default_rng([s, i])` (the main
 stream) for every candidate; its SC/VSC scenario comes from the events substream
-`default_rng([s, i, 1])`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
+`default_rng([s, i, 1])`. The degradation parameter draw (`degradation.params.draw:
+posterior`) and the residual lap noise (`lap_noise: residual`) each come from one generator
+per batch call, `default_rng([s, K, 2])` and `default_rng([s, K, 3])` with K = 2^32 - 1
+(`engine.STREAM_KEY`, never a sample index, so these keys never equal a main or event key):
+an (n, d) matrix of normals, d the parameter count or the remaining laps, whose row `i` is
+sample `i`'s draw. Rows are drawn in order, so row `i` depends on (s, i, d) only and sample
+`i` is the same in a batch of 10 or 200 (`engine.batch_normals`). Every draw is shared by
+every candidate, and turning one on leaves the other streams' draws as they were. Under a
+wear bound (`degradation.params.wear_lower_bound`) a rejected parameter proposal is
+followed by the next one from `default_rng([s, K, 4])`, row `i` holding sample `i`'s 49
+further proposals, so a sample whose first proposal is accepted draws what it draws
+without the bound. A degradation model without a parameter vector gets `default_rng([s, i, 2])` per sample in
+its `draw(rng)`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the simulator's
 `(seed=0, n_samples=n)` describe the same draws. Seed mapping in the bridge:
 `optimize_batch(seed=s, n_samples=n)` reports `Evaluation.seeds = (0, ..., n-1)`, the
 sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;
 sample `i` of those times was drawn from `default_rng([s, i])`, its events from
 `default_rng([s, i, 1])`. With `s = 0` the
-evaluation's seeds are exactly the baseline optimizer's seed tuple.
+evaluation's seeds are exactly the baseline optimizer's seed tuple. Belief-side simulations
+(the agent's tools, the continuation of a decision in `eval.decisions.to_plan`) run at
+`s + agent_tools.BELIEF_SEED_OFFSET` (1 000 003), so the belief never plans on the samples
+the world scores with seed `s`.
 
 **R7 Ties.** Ties on mean time break by fewer stops, then earlier pit laps, then the
 compound tuple (Quan's key). The additive model scores stint orders identically (on

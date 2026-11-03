@@ -55,6 +55,7 @@ import pandas as pd
 from ..contracts import (COMPOUND_FACTORS, RACE_FACTORS, CalibrationOutput, CorrectionTable, RaceParams,  # noqa: F401
                          Snapshot, factor_name, split_factor)
 from .config import HINGE_TAU_S_PER_LAP, ComponentSpec, SimConfig
+from .degradation import new_draw_stats
 from .events import Scenario
 from .race_ids import canonical_race_id, race_season
 from .registry import Registry
@@ -269,6 +270,35 @@ def prior_model(raw, factors: dict, config: SimConfig):
     if getattr(raw, "hinges", None) is not None:
         m.hinges = {c: float(factors.get(factor_name("hinge_s_per_lap", c), (h,))[0]) for c, h in raw.hinges.items()}
         m.fit_report["hinge"] = {c: {**e, "value": m.hinges[c]} for c, e in rep["hinge"].items()}
+    return m
+
+
+_COV_FACTOR = {"base_s": "base_delta_s", "wear_s_per_lap": "wear_s_per_lap", "fuel_s_per_lap": "fuel_s_per_lap",
+               "hinge_s_per_lap": "hinge_s_per_lap"}
+
+
+def held_prior(prior, out: CalibrationOutput):
+    """A copy of a held prior (pre_race, or a calibrator holding it) whose fit_report["cov"]
+    is the calibrator's: each parameter's factor sd squared on the diagonal (0 for a factor
+    the output leaves out), no covariance, except the common base delta: every pair of
+    practice-derived bases shares it, covariance sd_c1 * sd_c2 (tau_base^2 for shrinkage),
+    so a draw moves those bases together. The posterior draws read this."""
+    m = copy.copy(prior)
+    names = prior.fit_report["cov"]["names"]
+    practice = set(prior.fit_report.get("base_delta_s") or {})
+    sd = np.zeros(len(names))
+    for i, n in enumerate(names):
+        p, c = split_factor(n)
+        sd[i] = float(out.factors.get(factor_name(_COV_FACTOR[p], c), (0.0, 0.0))[1])
+    cov = np.diag(sd ** 2)
+    bases = [i for i, n in enumerate(names) if split_factor(n)[0] == "base_s" and split_factor(n)[1] in practice]
+    cov[np.ix_(bases, bases)] = np.outer(sd[bases], sd[bases])
+    # under a wear bound the draws truncate this cov around the held point estimate, not the
+    # practice fit's unconstrained posterior, and count their own draw_stats
+    rep = {k: v for k, v in prior.fit_report.items() if k != "unconstrained"}
+    m.fit_report = {**rep, "cov": {"names": list(names), "matrix": [[float(v) for v in row] for row in cov]}}
+    if "draw_stats" in rep:
+        m.fit_report["draw_stats"] = new_draw_stats()
     return m
 
 

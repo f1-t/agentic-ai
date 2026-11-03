@@ -152,6 +152,11 @@ class SimConfig(_Cfg):
     # traffic model, see traffic.py: "none" (default) or "ghost", the recorded field replayed
     # as ghost cars. World-model only; the agent's tools keep it off
     traffic: ComponentSpec = ComponentSpec(name="none")
+    # residual lap noise: "none" (default) or "residual", per sample an independent
+    # N(0, residual_s^2) on every remaining green lap, residual_s from the degradation
+    # fit_report, one vector per sample shared by every plan (engine LAP_NOISE_STREAM).
+    # The degradation parameter draw is the model's `draw` param (degradation.py).
+    lap_noise: Literal["none", "residual"] = "none"
 
     @classmethod
     def from_file(cls, path):
