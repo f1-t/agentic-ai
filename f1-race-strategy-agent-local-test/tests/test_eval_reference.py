@@ -273,16 +273,19 @@ def test_searched_plans_round_trip_and_match_a_direct_computation(scenario_set, 
         assert got.plan_gap_s[0] == 0 and got.plan_se_s[0] == 0
         assert got.plan_se_s[1] == pytest.approx(ref.runner_up_se_s, rel=1e-6)
         se = np.array([paired_se(t, opt["times"][0]) for t in opt["times"]])
-        assert np.allclose(got.plan_se_s, se, rtol=1e-6, atol=1e-6)
         gap = opt["mean_time_s"] - opt["mean_time_s"][0]
-        assert np.allclose(got.plan_gap_s, gap, rtol=1e-6, atol=1e-6)
         firsts = [(p.pit_laps(snap) or [NO_STOP])[0] for p in opt["plans"]]
-        assert got.plan_first_pit_lap.tolist() == firsts
+        now = np.array(firsts) == snap.laps_completed + 1
+        keep = gap <= np.maximum(10.0, 5 * se)   # the storage bound, plus the best of each kind
+        keep[[int(np.argmax(m)) for m in (now, ~now) if m.any()]] = True
+        assert keep.sum() < len(keep)   # the bound drops plans here
+        assert np.allclose(got.plan_se_s, se[keep], rtol=1e-6, atol=1e-6)
+        assert np.allclose(got.plan_gap_s, gap[keep], rtol=1e-6, atol=1e-6)
+        assert got.plan_first_pit_lap.tolist() == np.array(firsts)[keep].tolist()
 
         ties = near_ties(got, snap)
         assert ties["opt_set_size"] == len(optimal_set(got)) >= 1 and optimal_set(got)[0] == 0
-        assert ties["opt_set_size"] == int((got.plan_gap_s.astype(float) <= 2 * got.plan_se_s.astype(float)).sum())
-        now = np.array(firsts) == snap.laps_completed + 1
+        assert ties["opt_set_size"] == int((gap <= 2 * se + 1e-6).sum())
         assert (~now).any()
         if not now.any():   # pitting now would leave a stint under the minimum
             assert np.isnan(ties["best_pit_now_s"]) and np.isnan(ties["pit_now_gap_se_s"])
@@ -352,6 +355,36 @@ def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
     pd.testing.assert_frame_equal(summarize(rows), summarize(old))
     ties = summarize_near_ties(rows).set_index("policy")
     assert (ties["share_opt_set_gt1"] == 0).all() and (ties["share_pit_now_decisive"] == 1).all()
+
+
+@pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
+@pytest.mark.parametrize("events", [None, {"name": "rate"}])
+def test_the_storage_bound_leaves_the_optimal_set_and_the_best_of_each_kind_unchanged(events):
+    """On a slice of v1, in the default world and with drawn events: the stored plans
+    (gap <= max(10 s, 5 SE), plus the best pit-now and stay-out plans) give the same optimal
+    set and near-tie columns as every searched plan, and set_agreement agrees for any plan."""
+    from src.eval.score import race_simulators
+    from src.sim.compute import load_profile
+    profile = load_profile("local")
+    config = None if events is None else SimConfig.model_validate(
+        {"fit_window": "full", "traffic": {"name": "none"}, "events": events})
+    sims = race_simulators(profile, None, config)
+    dropped = 0
+    for scenario in ScenarioSet.load(SCENARIOS_V1).items[::24]:
+        world = sims(scenario.race_id, "world")
+        kw = dict(n_samples=20, max_stops=profile.sim.max_stops)
+        bounded, full = compute_reference(scenario, world, **kw), compute_reference(scenario, world, keep_all=True,
+                                                                                      **kw)
+        dropped += len(full.plan_gap_s) - len(bounded.plan_gap_s)
+        a, b = optimal_set(bounded), optimal_set(full)
+        for name in ("plan_gap_s", "plan_se_s", "plan_num_stops", "plan_first_pit_lap"):
+            assert np.array_equal(getattr(bounded, name)[a], getattr(full, name)[b]), name
+        snap = scenario.snapshot
+        assert pd.Series(near_ties(bounded, snap)).equals(pd.Series(near_ties(full, snap)))
+        for stops, pits in ((0, []), (1, [snap.laps_completed + 5]), (2, [snap.laps_completed + 1, 60])):
+            assert set_agreement(bounded, stops, pits, _first_pit_error) == set_agreement(full, stops, pits,
+                                                                                           _first_pit_error)
+    assert dropped > 0
 
 
 def test_the_near_tie_columns_leave_the_existing_tables_unchanged(scenario_set, flat, tmp_path, capsys):

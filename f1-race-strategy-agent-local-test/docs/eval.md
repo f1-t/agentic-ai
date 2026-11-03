@@ -190,8 +190,11 @@ n_samples, max_stops, hindsight)[:12]` (`reference.reference_key`; `--n-samples`
 reference plan, its per-draw remaining times (float32), their mean, sd and `cvar_90`
 (mean of the worst 10 percent), `pit_now_opt`, the runner-up's mean (the next plan in the
 optimizer's tie-break order) and the paired standard error between the two. Since format 2
-(`reference.REFERENCE_FORMAT`, `"format"` in the sidecar) it also holds every plan the
-optimizer searched, in tie-break order: its mean minus the reference's (`plan_gap_s`) and
+(`reference.REFERENCE_FORMAT`, `"format"` in the sidecar) it also holds, in tie-break order,
+the searched plans whose gap to the reference is at most max(10 s, 5 x their paired SE)
+(`STORE_GAP_S`, `STORE_SE`), plus the best pit-now and best stay-out plans always, so
+neither the optimal set (gap <= 2 SE, inside that bound) nor `pit_now_gap_s` depends on the
+bound. For each: its mean minus the reference's (`plan_gap_s`) and
 its paired standard error against the reference (`plan_se_s`), both float32, its number of
 stops and first pit lap, and the paired standard error of the best pit-now plan against the
 best stay-out plan. Those give the near-tie columns. A format-1 cache still loads (its
@@ -224,8 +227,8 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed: `data/references/v1/396dff32d244.parquet` (595 KB, format 2; the format-1 file
-was 16 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
+Committed: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
+was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
 sim_code_version `21b81a57ea42`. From
 it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
 row (every value column; the stamp columns `latency_s`, `sim_code_version`,

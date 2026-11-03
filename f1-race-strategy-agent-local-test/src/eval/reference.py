@@ -16,9 +16,10 @@ the inputs in <key>.json beside it, where
 Per scenario the table holds the reference plan, its per-draw remaining times (float32),
 their mean, sd and cvar_90, pit_now_opt, the runner-up's mean (the next plan in the
 optimizer's tie-break order) and the paired standard error between the two. It also holds
-every plan the optimizer searched, in tie-break order (the reference first): its mean minus
-the reference's and its paired standard error against the reference (float32), its number
-of stops and first pit lap, and the paired standard error of the best pit-now plan against
+the searched plans within max(10 s, 5 SE) of the reference, plus the best pit-now and best
+stay-out plans, in tie-break order (the reference first): each one's mean minus the
+reference's and its paired standard error against the reference (float32), its number of
+stops and first pit lap, and the paired standard error of the best pit-now plan against
 the best stay-out plan. `near_ties` turns those into the near-tie measurements (SPEC 0019
 D-measure, information only): the plans within 2 standard errors of the reference (the
 optimal set) and whether pitting at the end of this lap is decisively right or wrong.
@@ -55,6 +56,8 @@ MISS_NOTICE = "reference computed, not cached"
 REFERENCE_FORMAT = 2   # 2 adds the searched plans (plan_gap_s, ...); a sidecar without "format" is 1
 NEAR_TIE_SE = 2.0      # a plan is in the optimal set when its gap to the reference is <= 2 SE
 NO_STOP = -1           # plan_first_pit_lap of a plan that makes no stop
+STORE_GAP_S = 10.0     # a searched plan is stored when its gap is <= max(STORE_GAP_S, STORE_SE * SE),
+STORE_SE = 5.0         # plus the best pit-now and best stay-out plans
 
 
 class ReferenceMissing(LookupError):
@@ -102,7 +105,8 @@ class Reference:
     runner_up_plan: str | None = None       # json pairs
     runner_up_mean_s: float = np.nan
     runner_up_se_s: float = np.nan          # paired_se(runner-up times, reference times)
-    # every searched plan in tie-break order, the reference first (None in a format-1 cache)
+    # the stored searched plans (compute_reference) in tie-break order, the reference first
+    # (None in a format-1 cache)
     plan_gap_s: np.ndarray | None = None          # float32, mean - reference mean
     plan_se_s: np.ndarray | None = None           # float32, paired_se(plan times, reference times)
     plan_num_stops: np.ndarray | None = None      # int8
@@ -129,8 +133,13 @@ def _pit_now_split(first_pit_laps, laps_completed: int):
 
 
 def compute_reference(scenario, world, *, seed: int = 0, n_samples: int | None = None,
-                      max_stops: int = 2, hindsight: bool = False) -> Reference:
-    """The reference of one scenario on `world`, as the cache stores it (times in float32)."""
+                      max_stops: int = 2, hindsight: bool = False, keep_all: bool = False) -> Reference:
+    """The reference of one scenario on `world`, as the cache stores it (times in float32).
+
+    Of the searched plans it keeps those with gap <= max(STORE_GAP_S, STORE_SE * SE), which
+    holds the optimal set (gap <= NEAR_TIE_SE * SE) by construction, plus the best pit-now
+    and best stay-out plans, so the near-tie columns do not depend on the bound.
+    `keep_all` keeps every searched plan (for the test that checks this)."""
     snap = scenario.snapshot
     events = recorded_events(world, snap) if hindsight else None
     try:
@@ -147,8 +156,12 @@ def compute_reference(scenario, world, *, seed: int = 0, n_samples: int | None =
     n = all_times.shape[1]
     diff = all_times - times[None, :]
     se = diff.std(axis=1, ddof=1) / sqrt(n) if n > 1 else np.zeros(len(all_times))
-    first_pits = [(p.pit_laps(snap) or [NO_STOP])[0] for p in searched["plans"]]
+    first_pits = np.array([(p.pit_laps(snap) or [NO_STOP])[0] for p in searched["plans"]], dtype=np.int16)
     i_pit, i_stay = _pit_now_split(first_pits, snap.laps_completed)
+    gap = searched["mean_time_s"] - opt.evaluation.mean_time_s
+    keep = np.ones(len(gap), dtype=bool) if keep_all else gap <= np.maximum(STORE_GAP_S, STORE_SE * se)
+    keep[[i for i in (0, i_pit, i_stay) if i is not None]] = True
+    stops = np.array([p.num_stops for p in searched["plans"]], dtype=np.int8)
     return Reference(
         scenario.scenario_id, plan=opt.plan, times=times.astype(np.float32),
         mean_s=opt.evaluation.mean_time_s, sd_s=summary.std_s, cvar_90_s=summary.cvar_90_s,
@@ -156,10 +169,8 @@ def compute_reference(scenario, world, *, seed: int = 0, n_samples: int | None =
         runner_up_plan=None if second is None else json.dumps(second["plan"].as_pairs()),
         runner_up_mean_s=np.nan if second is None else float(second["mean_time_s"]),
         runner_up_se_s=np.nan if second is None else paired_se(second["times"], times),
-        plan_gap_s=(searched["mean_time_s"] - opt.evaluation.mean_time_s).astype(np.float32),
-        plan_se_s=se.astype(np.float32),
-        plan_num_stops=np.array([p.num_stops for p in searched["plans"]], dtype=np.int8),
-        plan_first_pit_lap=np.array(first_pits, dtype=np.int16),
+        plan_gap_s=gap[keep].astype(np.float32), plan_se_s=se[keep].astype(np.float32),
+        plan_num_stops=stops[keep], plan_first_pit_lap=first_pits[keep],
         pit_now_gap_se_s=(np.nan if i_pit is None or i_stay is None
                           else paired_se(all_times[i_pit], all_times[i_stay])))
 
