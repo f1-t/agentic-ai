@@ -29,7 +29,9 @@ B  Candidates, calibrators in the #23 registry. Each is the shrinkage calibrator
                             total laps, plus the practice fit's session-evolution slopes (#13,
                             fit_report evolution_s_per_min, mean over sessions) read as
                             evolution per lap: times the median practice long-run lap in
-                            minutes. Constants fixed below before any run.
+                            minutes. The physics constants are a priori rules of thumb,
+                            fixed below before any run: FUEL_START_KG 110 kg (not fitted)
+                            and FUEL_EFFECT_S_PER_KG 0.03 s/kg (not fitted).
    As-of: a learned candidate sees only races of seasons before the held-out race's season,
    never its own or a later one. With no such race, it gives the config prior (source
    "config (no history)").
@@ -46,9 +48,11 @@ D  If a candidate wins, the to_snapshot fuel tau becomes its predictive sd per r
    here changes a default; the report only names the choice.
 E  tests/test_sim_fuel_prior.py.
 F  report(): f_table.csv (candidate, held-out mae, coverage, G bias at 20-40 and 50-60 per
-   window, stop-gain mae) and a sentence on how much of the absolute G error was the
-   race-pace prior, from the hindsight row: each race's own target as the prior, a bound and
-   not a candidate.
+   window, stop-gain mae), and prior_share.csv: how much of the absolute G error was the
+   race-pace prior, from the hindsight row (each race's own target as the prior, a bound and
+   not a candidate). The sentence for the simulator section is written only on real races:
+   on synthetic histories the share holds by construction, so it is a pipeline check and
+   stays out of the report text.
 
 A report with a synthetic race id refuses any directory under reports/calibration/
 (event_rates.guard_committed).
@@ -92,8 +96,8 @@ FEATURE_COLUMNS = ("lap_length_km", "turns", "street", "total_laps", "era_2022")
 MIN_SD = 1e-3                 # floor on a predictive sd, s/lap: a 0 would hold the fuel term alone
 
 # practice_longrun physics, fixed a priori (SPEC 0020 B), not tuned on any race:
-FUEL_START_KG = 110.0         # the race fuel limit (110 kg, 2019 on); cars start close to it
-FUEL_EFFECT_S_PER_KG = 0.03   # lap time per kg of fuel, the commonly quoted figure (about 0.3 s per 10 kg)
+FUEL_START_KG = 110.0         # a priori rule of thumb, not fitted: the race fuel limit (2019 on), cars start near it
+FUEL_EFFECT_S_PER_KG = 0.03   # a priori rule of thumb, not fitted: about 0.3 s per 10 kg of fuel
 FUEL_EFFECT_SD_S_PER_KG = 0.005   # its uncertainty, about one sixth of it
 EVOLUTION_SD_S_PER_LAP = 0.005    # the uncertainty of practice evolution read as race evolution
 
@@ -772,7 +776,9 @@ def run(race_ids, out=OUT_DIR, profile=None, loader=None, features_path=RACE_FEA
     md += [f"Decision: {verdict}.", ""]
     if down:
         md += ["## G by horizon (race-weighted bias and mae_offset, s)", "", md_table(by_horizon(down), 2), ""]
-        sentence = (f"Simulator section: on {'these synthetic histories' if synthetic else 'the eligible races'} "
+        pd.DataFrame([share]).to_csv(out / "prior_share.csv", index=False)
+    if down and not synthetic:   # on synthetic histories the share holds by construction: no sentence
+        sentence = (f"Simulator section: on the eligible races "
                     f"the config fuel prior leaves a {share['window']} G bias of {share['config_abs_bias_s']:.1f} s at "
                     f"horizons {share['horizons']}; each race's own race-pace slope as the prior brings it to "
                     f"{share['hindsight_abs_bias_s']:.1f} s, so about {100 * share['hindsight_share']:.0f} percent of "
@@ -780,6 +786,10 @@ def run(race_ids, out=OUT_DIR, profile=None, loader=None, features_path=RACE_FEA
                     f"{100 * share['best_share']:.0f} percent.")
         md += ["## Sentence (F)", "", sentence, ""]
         (out / "sentence.txt").write_text(sentence + "\n")
+    elif down:
+        md += ["## Sentence (F)", "", "Written on the real run only: on synthetic histories the race-pace "
+               "prior's share of the absolute error holds by construction (prior_share.csv keeps it as a "
+               "pipeline check).", ""]
     md += ["## Eligibility", "", md_table(pd.DataFrame(elig)), ""]
     path = out / "summary.md"
     path.write_text("\n".join(md))

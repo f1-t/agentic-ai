@@ -261,8 +261,10 @@ def test_synthetic_report_end_to_end(tmp_path):
                             n_boot=50, log=None)
     md = path.read_text()
     for name in ("history.csv", "predictions.csv", "selection.csv", "f_table.csv", "g_rows.csv", "stop_gain.csv",
-                 "g_by_horizon.csv", "recovery.csv", "sentence.txt"):
+                 "g_by_horizon.csv", "recovery.csv", "prior_share.csv"):
         assert (tmp_path / name).is_file()
+    # the share of error held by construction on synthetic histories stays out of the report text
+    assert not (tmp_path / "sentence.txt").exists() and "percent of that absolute error" not in md
     f = pd.read_csv(tmp_path / "f_table.csv")
     assert list(f["candidate"]) == ["config", "circuit_history", "practice_longrun", "hindsight"]
     assert "circuit_features: **unavailable**" in md and "Synthetic histories" in md
