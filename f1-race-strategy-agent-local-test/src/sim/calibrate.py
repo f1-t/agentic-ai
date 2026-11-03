@@ -22,8 +22,8 @@ The first writes reports/calibration/<race_id>_midrace.csv and the per driver ap
 <race_id>_midrace_by_driver.csv. Its pit loss is the observed one, measured as the plain
 command does, unless --pit-loss gives a number. Every row of both csvs carries pit_loss_s,
 pit_loss_source ("observed" or "--pit-loss"), config_hash (calibration.config_hash, a hash
-of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a hash of the
-src/sim and src/contracts.py source). The second prints the summary pivot and writes
+of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a hash of the physics
+modules of src/sim and src/contracts.py). The second prints the summary pivot and writes
 reports/calibration/midrace_summary.csv, every row with the same four columns taken from
 the input rows (calibrate._provenance); it refuses rows with more than one value of
 either version column unless --allow-mixed is given.

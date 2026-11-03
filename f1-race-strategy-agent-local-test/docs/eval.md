@@ -5,6 +5,7 @@ fixed, versioned set of decision points. No model is needed except for the `agen
 
 ```bash
 python -m src.eval scenarios --races 2021_04_spain --version v1 --out data/scenarios/v1.json
+python -m src.eval reference --scenarios data/scenarios/v1.json      # optional: cache the references
 python -m src.eval score --scenarios data/scenarios/v1.json --policies baselines \
     --recorded data/eval/baseline_agent_sample_run.json --out reports/eval/v1_baselines.csv
 python -m src.eval report reports/eval/v1_baselines.csv
@@ -151,6 +152,9 @@ policy's plan is scored by the world under the same draws (docs/rules.md R6).
 | `position_regret` | `final_position_mean - opt_final_position_mean`; positive means finishing behind the reference. NaN with world traffic off (the default world) or when traffic cannot be placed (no `elapsed_s`): without ghosts there is no field to finish in |
 | `mean_position_regret`, `mean_final_position` | summary, only when some row has a position |
 | `ref_models_agree` | optional (`--world-configs`): every alternative world's reference has the same number of stops and a first pit lap within 2 of the world's. `score` then also writes `*_summary_agree.csv`, the table over the agreeing rows |
+| `regret_se_s` | the paired standard error of `regret_s` under the shared draws: `sd(policy_times - reference_times) / sqrt(N)`, sd with N - 1, over the N per-draw remaining times (the reference's in float32, from the reference cache). 0 at N = 1 |
+| `within_mc` | `\|regret_s\| <= 2 * regret_se_s`: at this N the draws cannot tell the plan from the reference. At N = 1 (or in a world without drawn events, where every draw is the same) the standard error is 0, to rounding, and this is the tie rule, `regret_s` 0 |
+| `share_within_mc` | summary: share of scored rows with `within_mc` |
 
 Row statuses: `ok`, `invalid`, `unavailable` (the policy does not apply here, e.g. the actual
 strategy of a driver whose real stint broke the minimum), `error` (the policy itself failed,
@@ -160,6 +164,102 @@ Each row is stamped with the scenario set version and digest, `belief_config_has
 `world_config_hash`, `belief_window`, `sim_code_version`, the seed and `n_samples` (and
 `ref_world_config_hashes` with `--world-configs`). Rows scored before the split carry one
 `config_hash` instead.
+
+## Reference cache
+
+The reference of a scenario (the world optimizer's plan and its per-draw times) depends only
+on the scenario set, the world config, the simulator code, the seed, `n_samples`,
+`max_stops` and whether the events are fixed to the record, so it is computed once
+(`src/eval/reference.py`):
+
+```bash
+python -m src.eval reference --scenarios data/scenarios/v1.json [--world-config W] [--profile P] \
+    [--hindsight] [--seed 0] [--n-samples N] [--max-stops K]
+python -m src.eval reference --check        # cached references from another sim_code_version
+```
+
+It writes `data/references/<set version>/<key>.parquet`, with the inputs in `<key>.json`
+beside it, where `key = sha256(set digest, world config hash, sim_code_version, seed,
+n_samples, max_stops, hindsight)[:12]` (`reference.reference_key`; `--n-samples` and
+`--max-stops` default to the profile's, as in `score`). Per scenario the table holds the
+reference plan, its per-draw remaining times (float32), their mean, sd and `cvar_90`
+(mean of the worst 10 percent), `pit_now_opt`, the runner-up's mean (the next plan in the
+optimizer's tie-break order) and the paired standard error between the two. The command
+prints that precision: how far the runner-up is above the reference and whether the gap
+is within 2 standard errors.
+
+`score` looks up the reference for its own inputs under `--reference-dir` (default
+`data/references`). A hit is used as it is; a miss computes the reference the same way and
+prints `reference computed, not cached` once per run. Cached and computed references give
+identical rows. With `--require-reference` a miss is an error: report runs use it. The
+`jobs` runner reads the cache the same way (`python -m src.eval jobs --reference-dir D
+--require-reference ...`); both travel in the runner spec, so on Sol a report run's
+workers fail their first chunk on a miss instead of computing. `--hindsight` fixes every draw's SC and VSC laps to
+the ones the driver recorded over the remaining laps; `score` never reads a hindsight
+reference, since a regret needs both plans under the same draws.
+
+The key carries `sim_code_version`, a physics version: a hash of the modules listed in
+`calibration.PHYSICS_MODULES` (engine, degradation, events, hazard, track, traffic, rules,
+config, data, tyre_sets, weather, pace, calibrators, optimizer_bridge, registry) plus
+`src/contracts.py`. Every other module of `src/sim` is on `calibration.NON_PHYSICS` (the
+package `__init__`, agent_tools, jobs, compute, calibrate, calibration, model_report,
+race_ids), and a test fails on a module on neither list, so a new module is classified on
+purpose. calibration is non-physics because the scenario sets it builds are frozen by their
+digest. A change to a physics module orphans the cache: `reference --check` lists what is
+stale, and `reference` rebuilds it; a change to the tooling (agent tools, jobs) does not.
+Moving to the allowlist moved every `sim_code_version` stamp once; the committed reports
+keep their old stamps (stamp-only drift, reports/calibration/README.md).
+`optimizer_bridge.optimize_batch(..., return_times=True)` (off by default) is how the cache
+gets the per-draw times: `diagnostics["times"]` and `diagnostics["runner_up"]`.
+
+Committed: `data/references/v1/a05aa55b0546.parquet` (16 KB), v1 under the default world
+(local profile: seed 0, 50 samples, two stops) at sim_code_version `56a328c26a60`. From
+it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
+row (every value column; the stamp columns `latency_s`, `sim_code_version`,
+`belief_config_hash` and `world_config_hash` are excluded, stamp-only drift under
+reports/calibration/README.md); the rows gain `regret_se_s` and
+`within_mc`. That world draws no events, so every `regret_se_s` is 0 and `within_mc` is
+the tie rule there.
+
+### Precision under drawn events (v1, N = 200)
+
+The default world with `events: {name: rate}` (default rates), 200 samples, belief
+default, baselines and the recorded run, from a cached reference:
+
+| policy | scored | mean regret s | share_within_mc | mean regret_se_s |
+| --- | --- | --- | --- | --- |
+| fixed_one_stop | 250 | 4.90 | 0.17 | 0.27 |
+| actual_strategy | 199 | 6.52 | 0.22 | 0.24 |
+| greedy_crossover | 185 | 11.69 | 0.04 | 0.29 |
+| fixed_two_stop | 211 | 12.85 | 0.00 | 0.33 |
+| baseline agent (recorded) | 1 | 7.33 | 0.00 | 0.39 |
+
+Reference against runner-up on the 250 scenarios with more than one legal plan: paired
+standard error mean 0.19 s (median 0.19, max 0.29); the runner-up's gap has median 0.07 s
+(mean 1.45), and on 82% of them it is within 2 standard errors. At 200 draws the reference
+is not told apart from the next plan on most scenarios, while regrets of a few seconds are
+well outside the noise (a regret_se_s of about 0.3 s).
+
+## physics-v1
+
+`physics-v1` is the simulator release the report numbers are computed against: a git tag
+at the end of sprint 2, with the sim_code_version below. Report runs score with
+`--require-reference` against references cached at that sim_code_version, so a report
+number cannot come from another simulator version without failing.
+`data/ground_truth.json` stays the frozen legacy check (`legacy_tools.optimal_strategy`,
+`tests/test_case.py`) and is not regenerated from this simulator.
+
+| tag | sim_code_version | commit |
+| --- | --- | --- |
+| physics-v1 | `521bdb48e96a` (planned; current at this writing) | not tagged yet |
+
+TODO (end of sprint 2, the user): apply the tag with `git tag physics-v1 <commit>` on the
+commit that freezes the simulator, put the commit here, and replace the sim_code_version
+above with `python -c "from src.sim.calibration import SIM_CODE_VERSION as v; print(v)"` at
+that commit if a physics module (`calibration.PHYSICS_MODULES`) or `src/contracts.py` has
+changed since. Then
+rebuild the report references (`python -m src.eval reference ...`) and check
+`python -m src.eval reference --check` lists nothing.
 
 ## Current numbers (v1, deterministic)
 
@@ -267,6 +367,10 @@ python -m src.eval jobs --scenarios data/scenarios/v1.json --policies baselines 
     --world-config configs/sim/world.yaml -- run-all eval_chunk --manifest M --out O
 ```
 
+The runner reads cached references under `--reference-dir` (default `data/references`)
+when they match the seed (0) and the profile's `n_samples` and `max_stops`; a report run adds
+`--require-reference` so a missing reference fails the task (see "Reference cache").
+
 LLM policies stay on the desktop.
 
 ## Tests
@@ -276,4 +380,7 @@ committed Spain cache for the v1 set and an end-to-end baseline run.
 `tests/test_eval_integration.py` covers the belief and world split and the decision unit,
 `tests/test_eval_part2.py` positions, the drawn-events warning, the disagreement flag, the
 eval split, `run-all` with two spawned workers, the agent policy, the snapshot contract and
-the minimum-stint rule. No test calls a model.
+the minimum-stint rule. `tests/test_eval_reference.py` covers the reference cache (key
+stability, cached against computed rows, `--check` across code versions, hindsight
+events), `regret_se_s` on a world with known per-draw differences, and `within_mc` at
+N = 1 against the tie rule. No test calls a model.
