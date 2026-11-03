@@ -20,7 +20,7 @@
  ],
  "profile": "local",
  "profile_hash": "a0d0d34f2faa",
- "sim_code_version": "336ef170f6cc",
+ "sim_code_version": "f1ae55074d82",
  "belief_bound": "wear_nonneg",
  "belief_choice": "wear_nonneg",
  "s2_arm": "wear_nonneg__s2",

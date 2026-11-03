@@ -18,7 +18,8 @@
      degradation param divide_data_by_s2) alone on the to_snapshot choice; then the tau grid
      (TAU_MULTIPLIERS of base, wear, fuel and, for a hinge model, hinge) on it.
 `report` writes D factors.csv and E summary.md, with selection.csv, g_by_arm.csv,
-stop_gain.csv, tau_grid.csv and arms.csv beside them, from what `run` left.
+stop_gain.csv (gitignored), stop_gain_summary.csv, coverage_summary.csv, tau_grid.csv and
+arms.csv beside them, from what `run` left.
 
 Arms are overlays on each race's config, frozen before the run; arms.csv records each arm's
 file hash and its config hash on SimConfig() (a cached race's config). A derived arm is named
@@ -863,6 +864,38 @@ def _coverage(arm_data, arms, n_boot) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
+def stop_gain_summary(arm_data, n_boot=500) -> pd.DataFrame:
+    """Stop-gain error by window, arm and k bucket: n, bias, mae, the race-cluster 95% CI of the
+    mae (NaN with fewer than 2 races) and the mean of each decomposition term."""
+    rows = []
+    for arm, d in arm_data.items():
+        s = d["stop_gain"]
+        if not len(s):
+            continue
+        for (window, kb), t in s.groupby(["window", "k_bucket"], sort=True):
+            per_race = t.assign(a=t["err_s"].abs()).groupby("race_id")["a"].mean()
+            lo, hi = _boot_mean(per_race, n_boot)
+            rows.append({"window": window, "arm": arm, "k_bucket": int(kb), "n": int(len(t)),
+                         "n_races": int(t["race_id"].nunique()), "bias_s": float(t["err_s"].mean()),
+                         "mae_s": float(t["err_s"].abs().mean()), "mae_ci_lo": lo, "mae_ci_hi": hi,
+                         **{c: float(t[c].mean()) for c in calibration.STOP_GAIN_TERMS}})
+    return pd.DataFrame(rows)
+
+
+def coverage_summary(arm_data, n_boot=500) -> pd.DataFrame:
+    """Interval coverage by window, arm and horizon bucket, for the pace-corrected target
+    (coverage_68/90) and the raw one (coverage_raw_68/90), with the mean 90% width."""
+    parts = []
+    for arm, d in arm_data.items():
+        g = d["g"]
+        if not len(g) or "pred_p05_s" not in g:
+            continue
+        agg = calibration.aggregate(g, n_boot=n_boot).reset_index().assign(arm=arm)
+        parts.append(agg[["window", "arm", "horizon_bucket", "n", "coverage_68", "coverage_90",
+                          "coverage_raw_68", "coverage_raw_90", "mean_width_90_s"]])
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+
+
 def _decomposition(arm_data, window=BELIEF_WINDOW) -> pd.DataFrame:
     rows = []
     for arm, d in arm_data.items():
@@ -959,6 +992,8 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     sg_parts = [d["stop_gain"].assign(arm=a) for a, d in sel["arm_data"].items() if len(d["stop_gain"])]
     stop_gain = pd.concat(sg_parts, ignore_index=True) if sg_parts else pd.DataFrame()
     stop_gain.to_csv(out / "stop_gain.csv", index=False)
+    stop_gain_summary(sel["arm_data"]).to_csv(out / "stop_gain_summary.csv", index=False)
+    coverage_summary(sel["arm_data"]).to_csv(out / "coverage_summary.csv", index=False)
     windows = list(profile.g.windows)
 
     md = ["# Cross-race calibration report (SPEC 0016)", ""]
