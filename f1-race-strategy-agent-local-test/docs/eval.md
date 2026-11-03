@@ -212,10 +212,12 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 `optimizer_bridge.optimize_batch(..., return_times=True)` (off by default) is how the cache
 gets the per-draw times: `diagnostics["times"]` and `diagnostics["runner_up"]`.
 
-Committed: `data/references/v1/49f3bd020512.parquet` (16 KB), v1 under the default world
-(local profile: seed 0, 50 samples, two stops) at sim_code_version `521bdb48e96a`. From
+Committed: `data/references/v1/a05aa55b0546.parquet` (16 KB), v1 under the default world
+(local profile: seed 0, 50 samples, two stops) at sim_code_version `56a328c26a60`. From
 it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
-row (every column but `latency_s` and `sim_code_version`); the rows gain `regret_se_s` and
+row (every value column; the stamp columns `latency_s`, `sim_code_version`,
+`belief_config_hash` and `world_config_hash` are excluded, stamp-only drift under
+reports/calibration/README.md); the rows gain `regret_se_s` and
 `within_mc`. That world draws no events, so every `regret_se_s` is 0 and `within_mc` is
 the tie rule there.
 
