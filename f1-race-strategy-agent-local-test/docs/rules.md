@@ -17,7 +17,7 @@ by the race registry (the profile's `sim.min_stint` overrides it for a whole run
 races have 3-lap stints, and the simulator prices short stints honestly, so the rule no
 longer needs a 10-lap floor to keep plans sensible. The agent's tools read it from the
 snapshot (`race.min_stint_laps`, shown to the agent as `RaceSnapshot.min_stint_laps`),
-not from a tool-layer constant (SPEC 0015 points the tools at it). `src/legacy_tools.py`,
+not from a tool-layer constant (src/sim/agent_tools.py, SPEC 0015). `src/legacy_tools.py`,
 the frozen baseline, pins 10. A scenario set keeps the value inside its snapshots: v1
 carries 10 and keeps scoring under 10; sets sampled from now on carry 3.
 
@@ -53,7 +53,10 @@ its `draw(rng)`. The baseline optimizer's seed tuple `(0, ..., n-1)` and the sim
 sample indices, and records the batch seed `s` in the result's `diagnostics["seed"]`;
 sample `i` of those times was drawn from `default_rng([s, i])`, its events from
 `default_rng([s, i, 1])`. With `s = 0` the
-evaluation's seeds are exactly the baseline optimizer's seed tuple.
+evaluation's seeds are exactly the baseline optimizer's seed tuple. Belief-side simulations
+(the agent's tools, the continuation of a decision in `eval.decisions.to_plan`) run at
+`s + agent_tools.BELIEF_SEED_OFFSET` (1 000 003), so the belief never plans on the samples
+the world scores with seed `s`.
 
 **R7 Ties.** Ties on mean time break by fewer stops, then earlier pit laps, then the
 compound tuple (Quan's key). The additive model scores stint orders identically (on

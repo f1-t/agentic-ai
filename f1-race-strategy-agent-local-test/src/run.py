@@ -8,7 +8,7 @@ from .snapshot import RaceSnapshot
 
 def demo_snapshot():
     return RaceSnapshot(
-        season=2021, event="Spanish Grand Prix", lap=27, total_laps=66,
+        season=2021, event="spain", lap=27, total_laps=66,   # the cached race the tools load
         driver="HAM", position=2, compound="SOFT", tyre_age_laps=27,
         gap_ahead_s=1.4, gap_behind_s=3.8, track_status="GREEN",
         rain_probability=0.05,

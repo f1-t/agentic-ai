@@ -6,9 +6,18 @@
 # age, so the tools never show it. Physics, set a priori, and no worse on Spain's predicted
 # gain at real pit stops (stop-gain mae 0.99 s against 1.15 s without); the cross-race run
 # (0016 wear_nonneg) reports belief with and without it, and it comes off if it loses there.
+# Safety car and VSC periods are drawn from the rate model (src/sim/events.py) with the
+# EventModel defaults, so the belief carries the chance of a cheap stop under SC.
+# PROVISIONAL, Spain-derived: p_sc 0.015 per green lap and 3-lap periods from one SC in 66
+# laps of 2021 Spain; the VSC rates are placeholders. They are the rates the world takes
+# once the team decides; circuit rates (RaceParams) follow SPEC 0011b and override these
+# per race. Belief-side draws use seed + agent_tools.BELIEF_SEED_OFFSET, so the belief never
+# plans on the event samples the world scores on.
 fit_window: to_snapshot
 traffic:
   name: none
+events:
+  name: rate
 degradation:
   name: linear_fuel
   params:
