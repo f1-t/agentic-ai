@@ -190,7 +190,7 @@ def test_rich_data_goes_to_the_mle():
         mle = part["n_sc"].sum() / part["at_risk"].sum()
         got = f.plain["sc"].p("circuit", {"era": "2022+", "circuit_type": "permanent", "circuit": c})
         assert got == pytest.approx(mle, rel=0.01)
-    assert f.plain["sc"].d_era["2022+"] == pytest.approx(s["laps_sc"].sum() / s["n_sc"].sum())
+    assert f.plain["sc"].d_era["2022+"] == pytest.approx(s["laps_sc"].sum() / s["n_sc"].sum(), rel=1e-3)
     assert f.plain["sc"].strength["circuit"] >= er.K0
 
 
@@ -235,33 +235,67 @@ def test_wet_races_stay_out_of_the_dry_rates(rich):
 
 # --- likelihood and selection ------------------------------------------------------------------
 def test_nll_pieces():
-    assert er.starts_nll(0, 50, 0.0) == 0.0
-    assert math.isinf(er.starts_nll(1, 50, 0.0))
-    assert er.starts_nll(2, 50, 0.02) == pytest.approx(1.0 - 2 * math.log(0.02))
-    assert er.durations_nll(2, 6, 3.0) == pytest.approx(-(2 * math.log(1 / 3) + 4 * math.log(2 / 3)))
-    assert er.durations_nll(3, 3, 1.0) == 0.0
-    assert er.lap1_nll(1, 0.2) == pytest.approx(-math.log(0.2))
-    assert er.lap1_nll(0, 0.2) == pytest.approx(-math.log(0.8))
-    # lengths 2 and 4, the 4 still running at the flag: log q + log(1-q) for the 2, P(D >= 4) for the 4
-    q = 1 / 3
-    assert er.durations_nll(2, 6, 3.0, censored=1) == pytest.approx(-(math.log(q) + 4 * math.log(1 - q)))
+    # Gamma-Poisson: no starts over L laps under Gamma(s, r) has probability (r / (r + L))^s
+    assert er.starts_nll(0, 50, 2.0, 100.0) == pytest.approx(-2.0 * math.log(100 / 150))
+    # with a tight posterior it is the plug-in Poisson process p L - n log p
+    assert er.starts_nll(2, 50, 0.02 * 1e9, 1e9) == pytest.approx(1.0 - 2 * math.log(0.02), rel=1e-6)
+    # beta-geometric, lengths 2 and 4: tight posterior -> plug-in geometric with q = 1/3
+    q, big = 1 / 3, 1e9
+    tight = (q * big, (1 - q) * big)
+    assert er.durations_nll(2, 6, *tight) == pytest.approx(-(2 * math.log(q) + 4 * math.log(1 - q)), rel=1e-6)
+    # the 4 still running at the flag: an end for the 2, only the survival P(D >= 4) for the 4
+    assert er.durations_nll(2, 6, *tight, censored=1) == pytest.approx(-(math.log(q) + 4 * math.log(1 - q)),
+                                                                       rel=1e-6)
+    assert er.durations_nll(0, 0, 1.0, 1.0) == 0.0
+    assert er.lap1_nll(1, 1.0, 4.0) == pytest.approx(-math.log(0.2))
+    assert er.lap1_nll(0, 1.0, 4.0) == pytest.approx(-math.log(0.8))
+
+
+def test_held_out_nll_is_never_infinite():
+    """A sparse fold whose plug-in estimates rule out what the race shows (d = 1 from one 1-lap
+    VSC; no lap-1 start, no SC at all) still gives every held-out race a finite NLL."""
+    train = er.stats_from_periods(periods_table({"2019_01_bahrain": (57, [("vsc", 20, 20)], False)}))
+    held = er.stats_from_periods(periods_table({"2019_02_spain": (66, [("sc", 1, 4), ("vsc", 30, 32)], False)}))
+    f = er.fit(train)
+    assert f.plain["vsc"].d("era", held.iloc[0]) > 1.0                 # the Beta prior keeps d above 1
+    for c in er.CANDIDATES:
+        assert math.isfinite(er.race_nll(held.iloc[0], f.predictive(held.iloc[0], c)))
+    for f in (er.fit(train.iloc[:0]), er.fit(train)):                    # no data and one race
+        assert all(math.isfinite(er.race_nll(held.iloc[0], f.predictive(held.iloc[0], c))) for c in er.CANDIDATES)
 
 
 def test_durations_enter_the_race_nll_and_censoring_lengthens_d():
     row = {"at_risk": 50, **{f"{c}_vsc": 0 for c in ("n", "laps", "lap1", "cens")},
            "n_sc": 1, "laps_sc": 4, "lap1_sc": 0, "cens_sc": 0}
-    rates = {"p_sc": 0.02, "d_sc": 3.0, "p_vsc": 0.02, "d_vsc": 2.0, "p_sc_lap1": None, "p_vsc_lap1": None}
-    base = er.race_nll(row, rates)
-    assert er.race_nll(row, {**rates, "d_sc": 4.0}) < base            # length 4 is likelier under d 4
-    assert er.race_nll({**row, "cens_sc": 1}, rates) < base            # censored: P(D >= 4) > P(D = 4)
+    gamma = (2.0, 100.0)
+
+    def pred(d, strength=50.0):
+        return {"sc": (gamma, (strength / d, strength * (1 - 1 / d)), None), "vsc": (gamma, (1.0, 1.0), None)}
+    base = er.race_nll(row, pred(3.0))
+    assert er.race_nll(row, pred(4.0)) < base            # length 4 is likelier under d 4
+    assert er.race_nll({**row, "cens_sc": 1}, pred(3.0)) < base   # censored: P(D >= 4) > P(D = 4)
     races = {"2022_01_bahrain": (57, [("sc", 10, 12)], False), "2022_02_saudi_arabia": (50, [("sc", 46, 50)], False)}
     s = er.stats_from_periods(periods_table(races))
     f = er.fit(s).plain["sc"]
-    assert f.d_era["2022+"] == pytest.approx(1 + (8 - 2) / 1)         # 8 laps, 2 periods, 1 complete
-    assert f.d_era["2022+"] > s["laps_sc"].sum() / s["n_sc"].sum()     # longer than the naive mean
+    a0, b0 = er.D_PRIOR_PERIODS / 3.0, er.D_PRIOR_PERIODS * (2 / 3)
+    assert f.beta_era["2022+"] == pytest.approx((a0 + 1, b0 + 8 - 2))     # 8 laps, 2 periods, 1 complete
+    assert f.d_era["2022+"] > s["laps_sc"].sum() / s["n_sc"].sum()       # longer than the naive mean
     late = periods_table({"2022_02_saudi_arabia": races["2022_02_saudi_arabia"]})
-    only_censored = er.fit(er.stats_from_periods(late))
-    assert only_censored.plain["sc"].d_global == EventModel().d_sc     # no complete period: the prior
+    only_censored = er.fit(er.stats_from_periods(late)).plain["sc"]
+    assert only_censored.d_global > EventModel().d_sc                     # censored laps only lengthen d
+
+
+def test_posterior_means_shrink_sparse_levels_toward_the_prior():
+    one = er.stats_from_periods(periods_table({"2021_04_spain": (66, [("sc", 8, 10)], False)}))
+    f = er.fit(one)
+    ev = EventModel()
+    p = f.plain["sc"].p("global", one.iloc[0])
+    mle = 1 / 63
+    assert min(ev.p_sc, mle) < p < max(ev.p_sc, mle)                      # between the prior and the MLE
+    assert p == pytest.approx((1 + er.K0 * 63 * ev.p_sc) / (63 + er.K0 * 63))
+    lap1 = f.lap1["sc"]
+    m = lap1.p("global", one.iloc[0])
+    assert lap1.lap1 == pytest.approx(er.LAP1_PRIOR_RACES * m / (er.LAP1_PRIOR_RACES + 1))   # no lap-1 start seen
 
 
 def test_selection_rule():
@@ -271,13 +305,10 @@ def test_selection_rule():
     t, chosen = er.selection(nll, n_boot=200)
     assert chosen == "circuit"   # tie with circuit_lap1: the simpler
     assert not t.set_index("candidate").loc["era", "passes"]   # difference 0: the CI is not below 0
+    assert "n_dropped" not in t
     nll.loc[(nll["candidate"] == "circuit") & (nll["race_id"] == "r0"), "nll"] = math.inf
-    t, chosen = er.selection(nll, n_boot=200)
-    assert chosen == "circuit_lap1" and not t.set_index("candidate").loc["circuit", "passes"]
-    # a race infinite under every candidate cannot tell them apart: dropped and counted
-    void = pd.DataFrame([{"race_id": "r_void", "candidate": c, "nll": math.inf} for c in er.CANDIDATES])
-    t2, chosen2 = er.selection(pd.concat([nll, void]), n_boot=200)
-    assert chosen2 == chosen and (t2["n_dropped"] == 1).all() and (t2["n_races"] == 30).all()
+    with pytest.raises(ValueError, match="not finite"):
+        er.selection(nll, n_boot=200)
 
 
 def test_forward_folds_select_circuit_effects_on_the_rich_world(rich):
@@ -300,7 +331,7 @@ def test_forward_folds_fit_on_earlier_races_only(rich):
     again = er.forward(changed).set_index(["race_id", "candidate"])["nll"]
     f = er.fit(dry.iloc[:cut])   # the races dated before the target
     for c in er.CANDIDATES:
-        assert fw[(target["race_id"], c)] == er.race_nll(target, f.rates(target, c))
+        assert fw[(target["race_id"], c)] == er.race_nll(target, f.predictive(target, c))
         assert again[(dry.iloc[cut - 1]["race_id"], c)] == fw[(dry.iloc[cut - 1]["race_id"], c)]
 
 

@@ -35,3 +35,11 @@ def parse_race_id(race_id: str) -> tuple[int, int, str]:
 def race_season(race_id: str) -> int:
     """The season of any id that starts with <season>_."""
     return int(canonical_race_id(race_id).split("_", 1)[0])
+
+
+def as_of(race_id: str, races) -> list[str]:
+    """The races in `races` strictly before `race_id` by (season, round), in their given order:
+    what is known on the day of `race_id`. Never the race itself, nor another race of the same
+    season and round. Every id must parse (parse_race_id); aliases compare as canonical."""
+    key = parse_race_id(race_id)[:2]
+    return [r for r in races if parse_race_id(r)[:2] < key]
