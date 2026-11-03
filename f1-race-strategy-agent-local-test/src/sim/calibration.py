@@ -469,11 +469,13 @@ PACE_OFFSET_ALL_LAPS = "pace_offset_all_laps"   # free-air offset fell back to e
 PHYSICS_MODULES = (
     "engine", "degradation", "events", "hazard", "track", "traffic", "rules", "config", "data",
     "tyre_sets", "weather", "pace", "calibrators", "optimizer_bridge", "registry",
+    "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
     "agent_tools",    # the agent's tools over the simulator (lands with #41)
     "jobs", "compute", "calibrate", "model_report", "race_ids",
+    "cross_race",     # the cross-race report runner (#44): arms are config overlays, stamped by config_hash
     # calibration builds the snapshots of the eval scenario sets (snapshot_at) and the
     # calibration reports; the sets are frozen by their digest once sampled, so a change here
     # cannot move a scored number through them.
