@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from src.contracts import RaceParams
-from src.sim import SimConfig, Simulator, calibration, calibrators, cross_race, fuel_prior as fp
+from src.sim import SimConfig, Simulator, calibration, calibrators, cross_race, fuel_prior as fp, race_ids
 from src.sim.calibrators import CALIBRATORS
 from src.sim.compute import load_profile
 
@@ -80,16 +80,22 @@ def test_synthetic_race_defaults_are_unchanged_and_evolution_is_opt_in():
 
 # --- E: as-of discipline ---------------------------------------------------------------------------
 @pytest.mark.parametrize("candidate", ["circuit_history", "circuit_features"])
-def test_a_held_out_2022_race_never_sees_its_own_or_later_seasons(history, features, candidate):
-    rid = fp.synthetic_id(2022, "c2")
-    assert set(fp.as_of(history, rid)["season"]) == {2018, 2019, 2020, 2021}
-    before = history[history["season"] < 2022]
-    want = predict(candidate, before, rid, 70, features_path=features)
-    # the held-out race, its season and every later one, with absurd targets: nothing moves
-    poisoned = history.assign(target=np.where(history["season"] >= 2022, 5.0, history["target"]))
-    got = predict(candidate, poisoned, rid, 70, features_path=features)
+def test_a_held_out_2022_race_never_sees_its_own_or_later_races(history, features, candidate):
+    rid = fp.synthetic_id(2022, "c3")   # round 3: 2022 rounds 1 and 2 are known on the day
+    seen = fp.as_of(history, rid)
+    assert set(seen["season"]) == {2018, 2019, 2020, 2021, 2022}
+    assert set(seen.loc[seen["season"] == 2022, "round"]) == {1, 2}
+    assert list(seen["race_id"]) == race_ids.as_of(rid, list(history["race_id"]))
+    later = (history["season"] > 2022) | ((history["season"] == 2022) & (history["round"] >= 3))
+    want = predict(candidate, history[~later], rid, 66, features_path=features)
+    # the held-out race, its season's later rounds and every later season, with absurd targets: nothing moves
+    poisoned = history.assign(target=np.where(later, 5.0, history["target"]))
+    got = predict(candidate, poisoned, rid, 66, features_path=features)
     assert got == want and got["source"] in ("circuit history", "circuit features")
     assert abs(got["mean"]) < 0.2
+    # the same season's earlier rounds do enter the grand mean
+    assert predict(candidate, history.assign(target=np.where(history["race_id"] == fp.synthetic_id(2022, "c1"), 5.0,
+                                                             history["target"])), rid, 66, features_path=features) != want
 
 
 def test_circuit_history_shrinks_toward_the_grand_mean(history):
@@ -131,7 +137,7 @@ def test_no_history_falls_back(history):
     train = fp.as_of(history, "2023_09_new_circuit")
     assert p["source"].startswith("grand mean") and p["n_history"] == 0
     assert p["mean"] == pytest.approx(train["target"].mean()) and p["sd"] == pytest.approx(train["target"].std())
-    # no earlier season at all, an empty history, or an id without a season: the config prior
+    # no earlier race at all (round 1 of the first season), an empty history, or an id without a season: the config prior
     for train, rid in ((history, fp.synthetic_id(2018, "c1")), (history.iloc[:0], fp.synthetic_id(2022, "c1")),
                        (history, "syn")):
         for c in ("circuit_history", "circuit_features"):
@@ -143,14 +149,14 @@ def test_no_history_falls_back(history):
 
 
 def test_circuit_features_needs_twelve_races_with_every_covariate(history):
-    rid = fp.synthetic_id(2020, "c3")   # 2018-2019: 12 races before it
-    p = predict("circuit_features", history, rid, 66)
+    rid = fp.synthetic_id(2020, "c1")   # round 1 of 2020: the 12 races of 2018-2019 before it
+    p = predict("circuit_features", history, rid, 58)
     assert p["source"] == "circuit features" and p["n_history"] == 12 and p["alpha"] in fp.ALPHAS
     assert -0.1 < p["mean"] < -0.03 and p["sd"] > 0
-    q = predict("circuit_features", history[history["race_id"] != fp.synthetic_id(2019, "c6")], rid, 66)
+    q = predict("circuit_features", history[history["race_id"] != fp.synthetic_id(2019, "c6")], rid, 58)
     assert q["source"].startswith("config")
     nofeat = history.assign(turns=np.nan)
-    assert predict("circuit_features", nofeat, rid, 66)["source"].startswith("config")
+    assert predict("circuit_features", nofeat, rid, 58)["source"].startswith("config")
 
 
 def test_ridge_inner_loro_picks_the_lowest_mse_alpha():
@@ -272,8 +278,11 @@ def test_synthetic_report_end_to_end(tmp_path):
     g = pd.read_csv(tmp_path / "g_rows.csv")
     assert set(g["window"]) == {"pre_race", "to_snapshot"} and g["race_id"].nunique() == 6
     pred = pd.read_csv(tmp_path / "predictions.csv")
-    first = pred[(pred["season"] == 2018) & pred["candidate"].isin(["circuit_history"])]
-    assert first["source"].str.startswith("config").all()   # nothing before 2018
+    hist = pred[pred["candidate"] == "circuit_history"].set_index("race_id")["source"]
+    assert hist[fp.synthetic_id(2018, "c1", circuits)].startswith("config")   # nothing before round 1 of 2018
+    # one earlier race gives a mean but no spread: still the config prior
+    assert hist[fp.synthetic_id(2018, "c3", circuits)].startswith("config")
+    assert hist[fp.synthetic_id(2019, "c1", circuits)] == "circuit history"
 
 
 def test_synthetic_reports_never_go_under_reports_calibration(tmp_path):

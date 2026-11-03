@@ -470,6 +470,8 @@ PHYSICS_MODULES = (
     "engine", "degradation", "events", "hazard", "track", "traffic", "rules", "config", "data",
     "tyre_sets", "weather", "pace", "calibrators", "optimizer_bridge", "registry",
     "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
+    # the fuel_* calibrators (SPEC 0020) set the fuel prior and its tau, which move lap times
+    "fuel_prior",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only

@@ -32,8 +32,9 @@ B  Candidates, calibrators in the #23 registry. Each is the shrinkage calibrator
                             minutes. The physics constants are a priori rules of thumb,
                             fixed below before any run: FUEL_START_KG 110 kg (not fitted)
                             and FUEL_EFFECT_S_PER_KG 0.03 s/kg (not fitted).
-   As-of: a learned candidate sees only races of seasons before the held-out race's season,
-   never its own or a later one. With no such race, it gives the config prior (source
+   As-of: a learned candidate sees only races strictly before the held-out race by (season,
+   round) (race_ids.as_of, the rule of event_rates too): for the grand mean and the features
+   that admits the same season's earlier rounds; never the race itself or a later one. With no such race, it gives the config prior (source
    "config (no history)").
 C  Selection, leave-one-race-out over the eligible races (calibration.eligibility): per
    candidate the held-out target mae and the 68 percent interval coverage (|err| <= sd), the
@@ -71,6 +72,7 @@ from ..contracts import CalibrationOutput, RaceParams
 from .calibrators import CALIBRATORS, CalibrationDataset, ShrinkageCalibrator
 from .config import ComponentSpec, SimConfig
 from .event_rates import PERMANENT, REPORTS_DIR, STREET, circuit_info, era, guard_committed
+from . import race_ids
 from .race_ids import canonical_race_id, parse_race_id
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -188,9 +190,10 @@ def history_from_races(races, features=None) -> pd.DataFrame:
 
 
 def as_of(history: pd.DataFrame, race_id: str) -> pd.DataFrame:
-    """The races of seasons before `race_id`'s season, with a target: the as-of training set."""
-    season = _season_round(canonical_race_id(race_id))[0]
-    h = history[(history["season"] < season) & (history["race_id"] != canonical_race_id(race_id))]
+    """The as-of training set: the rows of races strictly before `race_id` by (season, round)
+    (race_ids.as_of, the rule event_rates uses too), with a target."""
+    keep = set(race_ids.as_of(race_id, list(history["race_id"])))
+    h = history[history["race_id"].isin(keep)]
     return h[h["target"].notna()]
 
 
@@ -752,7 +755,7 @@ def run(race_ids, out=OUT_DIR, profile=None, loader=None, features_path=RACE_FEA
               f"fewer than {MIN_FEATURE_RACES}")
            + f". practice_longrun: -{FUEL_EFFECT_S_PER_KG:g} s/kg x {FUEL_START_KG:g} kg / laps plus practice "
            f"evolution per lap, sd from {FUEL_EFFECT_SD_S_PER_KG:g} s/kg and {EVOLUTION_SD_S_PER_LAP:g} s/lap. "
-           "Learned candidates see only seasons before the held-out race's.", ""]
+           "Learned candidates see only races strictly before the held-out race by (season, round).", ""]
     if truth is not None:
         md += ["## Planted against recovered circuit effect (synthetic)", "",
                "circuit_history's prediction for each circuit the season after the last, on every race "
