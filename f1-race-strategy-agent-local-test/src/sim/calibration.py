@@ -478,6 +478,9 @@ NON_PHYSICS = (
     # calibration reports; the sets are frozen by their digest once sampled, so a change here
     # cannot move a scored number through them.
     "calibration",
+    # the cross-race report (SPEC 0016): eligibility, LORO arms and the selection over them;
+    # it runs the simulator under committed arm configs and never changes a lap time itself
+    "cross_race",
 )
 
 
