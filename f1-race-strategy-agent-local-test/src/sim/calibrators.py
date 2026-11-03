@@ -33,6 +33,10 @@ Registry:
   "ridge", "gbm", "mlp"
                learned candidates, registered stubs until the multi-race dataset exists:
                fit raises NotImplementedError.
+  "fuel_config", "fuel_circuit_history", "fuel_circuit_features", "fuel_practice_longrun"
+               the race-pace prior candidates of SPEC 0020 (fuel_prior.py): shrinkage with
+               fuel_s_per_lap (mean, sd) from the candidate, the sd its to_snapshot tau.
+               fuel_config is shrinkage's output as is. Not a default.
 
 Cadence (SimConfig.calibration_every = N): the calibration point for a snapshot at lap k
 is the largest multiple of N at or below k, moved up to the latest refresh event since
@@ -739,5 +743,7 @@ def selection_table(results: dict, window="to_snapshot", horizons=(20, 40), cali
     return table
 
 
-# "event_rates" (SPEC 0011b) registers itself; imported last, as it builds on Calibrator
+# "event_rates" (SPEC 0011b) and the fuel_* race-pace priors (SPEC 0020, fuel_prior) register
+# themselves; imported last, as they build on Calibrator
 from . import event_rates  # noqa: E402,F401
+from . import fuel_prior  # noqa: E402,F401

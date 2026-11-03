@@ -238,13 +238,22 @@ def _strategy(rng, laps):
     return [("SOFT", a), ("MEDIUM", b), ("SOFT", laps - a - b)]
 
 
-def synthetic_race(race_id: str, n_drivers: int = 16, total_laps: int = 50, sc: bool = True) -> jobs.RaceData:
+def synthetic_race(race_id: str, n_drivers: int = 16, total_laps: int = 50, sc: bool = True, fuel: float = SYN_FUEL,
+                   practice_fuel: float | None = None, evolution_s_per_min: float | None = None) -> jobs.RaceData:
     """A dry race drawn from a known model, seeded by `race_id`: lap time = base_c + wear_c x age
-    + SYN_FUEL x lap + the driver's pace + N(0, SYN_NOISE_S^2), lap 1 slower by the config's
+    + fuel x lap + the driver's pace + N(0, SYN_NOISE_S^2), lap 1 slower by the config's
     lap1_extra_s, the pit loss split over the in and out laps, and (with `sc`) one 3-lap SC
-    at SYN_SC_FACTOR. Practice: an FP2 and an FP3 long run per driver, 1 s quicker in base.
-    Every driver finishes on the lead lap, so it is eligible."""
+    at SYN_SC_FACTOR. Practice: an FP2 and an FP3 long run per driver, 1 s quicker in base,
+    with `practice_fuel` (default `fuel`) per lap in the run. Every driver finishes on the
+    lead lap, so it is eligible.
+
+    `fuel` is the race-pace slope (fuel burn plus track evolution), SYN_FUEL by default.
+    `evolution_s_per_min` (SPEC 0020) adds track evolution to practice: each long run starts
+    at a stint_start_min drawn in [5, 55] from a second stream seeded by the id, and its laps
+    are evolution_s_per_min x stint_start_min slower. None, the default, draws nothing and
+    leaves the practice frame as before."""
     rng = np.random.default_rng(int(hashlib.sha256(race_id.encode()).hexdigest()[:8], 16))
+    practice_fuel = fuel if practice_fuel is None else practice_fuel
     cfg = SimConfig()
     drivers = [f"D{i:02d}" for i in range(n_drivers)]
     team = {d: f"T{i // 2}" for i, d in enumerate(drivers)}
@@ -261,9 +270,9 @@ def synthetic_race(race_id: str, n_drivers: int = 16, total_laps: int = 50, sc: 
                 lap += 1
                 pit_in, pit_out = age == n and i < len(plan) - 1, age == 1 and i > 0
                 under_sc = lap in sc_laps
-                lt = base + wear * age + SYN_FUEL * lap + pace_s[d] + rng.normal(0.0, SYN_NOISE_S)
+                lt = base + wear * age + fuel * lap + pace_s[d] + rng.normal(0.0, SYN_NOISE_S)
                 if under_sc:
-                    lt = SYN_SC_FACTOR * (ref + SYN_FUEL * lap) + rng.normal(0.0, SYN_NOISE_S)
+                    lt = SYN_SC_FACTOR * (ref + fuel * lap) + rng.normal(0.0, SYN_NOISE_S)
                 lt += cfg.effects.lap1_extra_s if lap == 1 else 0.0
                 lt += 0.45 * SYN_PIT_LOSS_S if pit_in else 0.55 * SYN_PIT_LOSS_S if pit_out else 0.0
                 rows.append({"driver": d, "lap": lap, "stint": i + 1, "compound": comp, "tyre_age": float(age),
@@ -277,15 +286,22 @@ def synthetic_race(race_id: str, n_drivers: int = 16, total_laps: int = 50, sc: 
     gap = order.groupby("lap")["start_s"].diff()
     frame["free_air"] = (gap.isna() | (gap >= 1.5)).reindex(frame.index)
     practice = []
+    evo_rng = (np.random.default_rng(int(hashlib.sha256(f"{race_id}:evolution".encode()).hexdigest()[:8], 16))
+               if evolution_s_per_min is not None else None)
     for k, d in enumerate(drivers):
         for session, comp in (("FP2", "SOFT"), ("FP3", "HARD" if k % 2 else "MEDIUM")):
             base, wear = SYN_TRUE[comp]
+            start = float(evo_rng.uniform(5.0, 55.0)) if evo_rng is not None else None
             for age in range(1, 13):
-                practice.append({"driver": d, "team": team[d], "session": session, "stint": 1, "compound": comp,
-                                 "tyre_age": float(age), "lap": np.nan, "lap_in_stint": float(age),
-                                 "lap_time_s": base - cfg.pre_race_base_delta_s + wear * age + SYN_FUEL * age
-                                 + pace_s[d] + rng.normal(0.0, SYN_NOISE_S),
-                                 "clean": True, "run_class": "long_run"})
+                row = {"driver": d, "team": team[d], "session": session, "stint": 1, "compound": comp,
+                       "tyre_age": float(age), "lap": np.nan, "lap_in_stint": float(age),
+                       "lap_time_s": base - cfg.pre_race_base_delta_s + wear * age + practice_fuel * age
+                       + pace_s[d] + rng.normal(0.0, SYN_NOISE_S),
+                       "clean": True, "run_class": "long_run"}
+                if start is not None:
+                    row["lap_time_s"] += evolution_s_per_min * start
+                    row["stint_start_min"] = start
+                practice.append(row)
     last = frame[frame["lap"] == total_laps].set_index("driver")["position"]
     results = pd.DataFrame({"grid": pd.Series(pace_s).rank(method="first").to_numpy(),
                             "classified": last.reindex(drivers).to_numpy()},
