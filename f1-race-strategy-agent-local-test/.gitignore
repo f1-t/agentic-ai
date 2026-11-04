@@ -7,3 +7,5 @@ __pycache__/
 
 # Local planning notes, not committed.
 docs/sim_model_plan.md
+.audit/
+
