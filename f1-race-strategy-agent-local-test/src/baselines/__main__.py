@@ -80,7 +80,47 @@ def main():
         help="callback: the legacy simulator per plan and seed; "
         "batch: every plan in one Simulator.simulate_batch call (seeds must be 0..n-1).",
     )
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="Run live agent along with the optimizer and baselines on world simulator.",
+    )
+    parser.add_argument(
+        "--pipeline",
+        action="store_true",
+        help="Run integrated evaluation pipeline on the calibrated world simulator.",
+    )
+    parser.add_argument(
+        "--snapshot",
+        help="Path to snapshot JSON file (for pipeline / agent comparison).",
+    )
+    parser.add_argument(
+        "--table",
+        action="store_true",
+        help="Render results as formatted table instead of JSON.",
+    )
     args = parser.parse_args()
+    if args.agent or args.pipeline or args.snapshot:
+        from .runner import main as run_pipeline_main
+
+        run_args = [
+            "--driver",
+            args.driver,
+            "--lap",
+            str(args.lap),
+            "--max-stops",
+            str(args.max_stops),
+            "--seed",
+            str(args.seeds[0] if args.seeds else 0),
+        ]
+        if not args.agent:
+            run_args.append("--no-agent")
+        if args.snapshot:
+            run_args.extend(["--snapshot", args.snapshot])
+        if not args.table:
+            run_args.append("--json")
+        run_pipeline_main(run_args)
+        return
     try:
         context = load_legacy_context(args.driver, args.lap)
         if args.scorer == "batch":
