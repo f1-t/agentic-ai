@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>F1 strategy lab · prototype</title>
+<style>
+:root{--blue:#4AAEED;--ink:#12384f;--muted:#587185;--paper:#F5FBFF;--line:#d4e5ef;--navy:#185b85;--white:#fff;--soft:#d5edfc;--gray:#96a7b1;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:14px}button,select{font:inherit;color:inherit}button,select{border:1px solid var(--line);background:var(--white);border-radius:4px;padding:8px 12px;cursor:pointer}button:hover,select:hover{border-color:var(--blue)}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:3px}button.active,button[aria-pressed=true]{border-color:var(--blue);background:var(--soft)}button.primary{background:var(--ink);color:var(--white);border-color:var(--ink)}button:disabled{opacity:.5;cursor:default}.mono,code,pre{font-family:var(--mono)}.eyebrow{font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)}.shell{max-width:1520px;margin:auto;padding:0 34px}header{display:flex;align-items:center;justify-content:space-between;height:58px;border-bottom:1px solid var(--line)}.brand{font:700 15px var(--mono);letter-spacing:1px}.brand span{color:var(--blue)}.badge{border:1px solid var(--line);padding:5px 9px;border-radius:3px;font:10px var(--mono);letter-spacing:1px}.title-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-top:21px}h1{font-size:30px;letter-spacing:-1px;margin:4px 0 8px}h2{font-size:23px;letter-spacing:-.5px;margin:4px 0 0}h3{font-size:16px;margin:0 0 10px}p{margin:0}.question{color:var(--muted);font-size:13px}.source{font:10px var(--mono);text-align:right;line-height:1.7;color:var(--muted)}.controls{display:flex;gap:14px;align-items:end;margin:17px 0 15px}.control{display:grid;gap:5px}.control label{font:10px var(--mono);text-transform:uppercase;letter-spacing:1px;color:var(--muted)}.control select{min-width:155px}.controls .end{margin-left:auto;display:flex;gap:8px;align-items:center}.state{display:grid;grid-template-columns:1.2fr repeat(5,1fr);border:1px solid var(--line);background:var(--white);border-radius:5px}.stat{padding:12px 18px;border-right:1px solid var(--line);min-width:0}.stat:last-child{border:0}.stat .value{display:block;font:600 25px var(--mono);margin-top:7px;letter-spacing:-1px}.stat .unit{font:12px Arial;margin-left:4px;color:var(--muted)}.flow{display:flex;align-items:center;gap:10px;margin:17px 0 15px}.flow button{flex:1;text-align:left;padding:10px 14px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:13px}.flow .number{font:11px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:2px;padding:3px 5px}.flow button.active .number{background:var(--blue);border-color:var(--blue);color:var(--ink)}.arrow{font:17px var(--mono);color:#84a9be}.panel{background:var(--white);border:1px solid var(--line);border-radius:5px;padding:20px 24px 12px;min-height:348px}.panel-head{display:flex;align-items:start;justify-content:space-between;gap:15px;margin-bottom:10px}.panel-note{font:11px var(--mono);color:var(--muted);text-align:right;line-height:1.6;max-width:430px}.panel-note strong{font-size:19px;color:var(--ink)}.chart{width:100%;height:248px;display:block}.chart text{font-family:Arial,Helvetica,sans-serif;fill:var(--ink);font-size:13px}.chart .tick{fill:var(--muted);font-size:11px}.chart .axis-label{fill:var(--muted);font:10px var(--mono);letter-spacing:.6px}.chart .big{font-size:26px;font-weight:700}.chart .label{font-size:15px}.chart .minor{fill:var(--muted);font-size:12px}.chart .on-dark{fill:white}.chart .select-row{cursor:pointer}.stage-footer{display:flex;justify-content:space-between;gap:20px;align-items:center;color:var(--muted);font-size:11px;padding-top:4px;min-height:26px}.stage-footer .legend{display:flex;gap:16px}.key{display:inline-flex;align-items:center;gap:5px}.swatch{width:14px;height:9px;display:inline-block;background:var(--blue)}.swatch.medium{background:var(--navy)}.swatch.hard{background:white;border:1px solid var(--navy)}.policy-picker{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:9px}.policy-picker button{padding:5px 10px;font-size:11px}.tour{margin:16px 0;border-top:1px solid var(--line);padding-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.tour-tabs{display:flex;gap:5px}.tour-tabs button{font-size:12px;padding:7px 10px}.tour-caption{font:10px var(--mono);letter-spacing:1px;color:var(--muted)}.tour-steps{display:flex;align-items:center;gap:6px;margin-left:auto}.tour-steps button{font-size:11px;padding:7px 10px}.details{margin-top:18px;margin-bottom:26px;display:grid;grid-template-columns:1fr 1fr;gap:14px}.details details{border:1px solid var(--line);background:white;border-radius:4px;min-width:0}.details summary{padding:12px 15px;cursor:pointer;font:12px var(--mono)}.details pre{font-size:11px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;max-height:390px;overflow:auto;margin:0;padding:0 15px 15px}.details .inside{padding:0 15px 15px;font-size:12px;line-height:1.7}.details code{display:block;white-space:pre-wrap;word-break:break-word;font-size:11px;padding:10px;background:var(--paper);margin:5px 0 10px}.details ul{padding-left:18px}.stage-caption{font-size:12px;color:var(--muted);margin-top:4px}.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.download{font-size:11px}.empty{fill:var(--gray)}.footer{padding-bottom:18px;font-size:10px;color:var(--muted);display:flex;justify-content:space-between}.capture{padding-bottom:1px}.full-state{border-top:1px dotted var(--line);padding-top:10px;margin-top:12px}.source a{color:inherit}.small-pill{font:10px var(--mono);border:1px solid var(--line);padding:4px 7px;border-radius:3px}
+@media(max-width:950px){.shell{padding:0 16px}.title-row{align-items:start}.source{max-width:180px}.controls{flex-wrap:wrap}.controls .end{margin-left:0}.control select{min-width:130px}.state{grid-template-columns:repeat(3,1fr)}.stat:nth-child(3){border-right:0}.stat:nth-child(-n+3){border-bottom:1px solid var(--line)}.flow{gap:4px}.flow button{padding:8px;gap:6px;font-size:11px}.arrow{display:none}.panel{padding:15px 12px}.chart{height:270px}.panel-note{font-size:10px;max-width:260px}.tour-steps{margin-left:0;flex-wrap:wrap}.details{grid-template-columns:1fr}.stage-footer{align-items:start}.stage-footer .legend{gap:8px}h1{font-size:24px}}
+@media print{button,select,.tour,.details,.controls{display:none}.shell{max-width:none}.chart{height:300px}.source{font-size:9px}.panel{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="shell">
+<div class="capture" id="capture">
+<header><div class="brand">F1 <span>///</span> STRATEGY LAB</div><span class="badge">THROWAWAY PROTOTYPE</span></header>
+<div class="title-row"><div><div class="eyebrow">2021 Spanish Grand Prix · Hamilton</div><h1>Snapshot → plan → score</h1><p class="question">Can the same race state distinguish simple policies from the optimum?</p></div><div class="source" id="source"></div></div>
+<div class="controls">
+<div class="control"><label for="lap">Completed laps</label><select id="lap"><option value="0">Lap 0 · race start</option><option value="30" selected>Lap 30 · mid-race</option><option value="42">Lap 42 · pit boundary</option><option value="60">Lap 60 · final stint</option><option value="65">Lap 65 · final lap</option></select></div>
+<div class="control"><label for="world">Scoring world</label><select id="world"><option value="default">Default · deterministic</option><option value="seeded">Seeded · stochastic demo</option></select></div>
+<div class="control"><label for="budget">Reference search budget</label><select id="budget"><option value="1">Up to 1 future stop</option><option value="2" selected>Up to 2 future stops</option></select></div>
+<div class="end"><span class="small-pill">CAPTURED PYTHON OUTPUT</span><button id="reset">Reset</button><button class="primary" id="next">Next stage →</button></div>
+</div>
+<div class="state" id="state" aria-live="polite"></div>
+<nav class="flow" id="flow" aria-label="Usage flow"></nav>
+<section class="panel" id="panel" aria-live="polite"></section>
+</div>
+<div class="tour"><span class="tour-caption">GUIDED DEMOS</span><div class="tour-tabs" id="tour-tabs"></div><div class="tour-steps" id="tour-steps"></div></div>
+<div class="details">
+<details id="evidence"><summary>Inspect the exact state and selected result</summary><pre id="raw"></pre></details>
+<details><summary>Reproduce the run and inspect the model split</summary><div class="inside"><div class="eyebrow">Default integrated runner · no model key needed</div><code id="command"></code><p>Policies use the belief fit through the decision lap. The reference and final scores use the full-race world fit.</p><ul><li>Default world: the runner's current deterministic configuration.</li><li>Seeded world: a separate demo configuration with rate events, posterior parameter draws, and residual lap noise.</li><li>All candidates share seed 0 and draw indices 0–31 within a world. Belief-side planning uses the separate belief configuration.</li><li>Regret is a difference in expected remaining time, not elapsed race time.</li><li>Whiskers show ±2 paired Monte Carlo standard errors. They do not measure model accuracy.</li><li>No live LLM agent was called. This demonstrates the optimizer and baseline path.</li></ul><div class="full-state" id="provenance"></div><button class="download" id="download">Download captured evidence</button></div></details>
+</div>
+<div class="footer"><span>Open this file directly. Every displayed choice replays captured simulator output.</span><span class="mono">No server · no external assets · no persistence</span></div>
+</div>
+<script>
+const DEMO_DATA=__DEMO_PAYLOAD__;
+const POLICY_NAMES={optimizer:"Optimizer reference",actual_strategy:"Actual driver replay",fixed_one_stop:"Fixed one-stop",fixed_two_stop:"Fixed two-stop",greedy_crossover:"Greedy crossover"};
+const STAGES=["Snapshot","Search","Replay","Compare","Shared draws"];
+const TOURS={
+ flow:{name:"Usage flow",steps:[{label:"Load lap 30",patch:{lap:"30",world:"default",budget:2,stage:0,policy:"fixed_one_stop"}},{label:"Search plans",patch:{stage:1}},{label:"Trace stops",patch:{stage:2}},{label:"Compare regret",patch:{stage:3}},{label:"Inspect draws",patch:{stage:4}}]},
+ stochastic:{name:"Stochastic scoring",steps:[{label:"Enable shared draws",patch:{lap:"30",world:"seeded",budget:2,stage:3,policy:"greedy_crossover"}},{label:"Inspect paired outcomes",patch:{stage:4}},{label:"Limit reference stops",patch:{budget:1,stage:1}},{label:"Compare again",patch:{stage:3}}]},
+ late:{name:"Late-race boundary",steps:[{label:"Load lap 60",patch:{lap:"60",world:"default",budget:2,stage:2,policy:"actual_strategy"}},{label:"Advance to lap 65",patch:{lap:"65",stage:0}},{label:"Search the final lap",patch:{stage:1}},{label:"Inspect unavailable rules",patch:{stage:3}}]}
+};
+const DemoModel={
+ initial:()=>({lap:"30",world:"default",budget:2,stage:0,policy:"fixed_one_stop",tour:"flow",tourStep:0}),
+ reduce:(state,action)=>{
+  if(action.type==="reset")return DemoModel.initial();
+  if(action.type==="tour"){
+   const tour=TOURS[action.name];const index=Math.max(0,Math.min(action.step??0,tour.steps.length-1));
+   let next=DemoModel.initial();for(let i=0;i<=index;i++)next={...next,...tour.steps[i].patch};
+   return {...next,tour:action.name,tourStep:index};
+  }
+  if(action.type==="next")return {...state,stage:(state.stage+1)%STAGES.length,tour:null};
+  return {...state,...action.patch,tour:null};
+ },
+ select:state=>{
+  const raceCase=DEMO_DATA.cases[state.lap];const run=raceCase.runs[state.world][String(state.budget)];
+  const selected=run.rows.find(r=>r.policy===state.policy&&r.status==="ok")||run.rows.find(r=>r.status==="ok");
+  return {raceCase,run,snapshot:raceCase.snapshot,selected,reference:run.rows[0]};
+ }
+};
+let state=DemoModel.initial();
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll('"',"&quot;");
+const fmt=(value,digits=2)=>Number(value).toLocaleString("en-US",{minimumFractionDigits:digits,maximumFractionDigits:digits});
+const signed=value=>(value>0?"+":"")+fmt(value);
+const text=(x,y,label,cls="",extra="")=>`<text x="${x}" y="${y}" class="${cls}" ${extra}>${esc(label)}</text>`;
+const line=(x1,y1,x2,y2,stroke="#d4e5ef",extra="")=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" ${extra}/>`;
+const rect=(x,y,w,h,fill,extra="")=>`<rect x="${x}" y="${y}" width="${Math.max(0,w)}" height="${h}" fill="${fill}" ${extra}/>`;
+const svg=(content,title)=>`<svg class="chart" role="img" aria-label="${esc(title)}" viewBox="0 0 1200 248">${content}</svg>`;
+const compoundFill=compound=>compound==="SOFT"?"#4AAEED":compound==="MEDIUM"?"#185b85":"#e6f2f9";
+const compoundLetter=compound=>compound==="MEDIUM"?"M":compound==="SOFT"?"S":compound.slice(0,1);
+const legend=()=>`<div class="legend"><span class="key"><i class="swatch"></i>Soft</span><span class="key"><i class="swatch medium"></i>Medium</span><span class="key"><i class="swatch hard"></i>Hard</span></div>`;
+const footer=(left,right="")=>`<div class="stage-footer"><span>${left}</span>${right}</div>`;
+const head=(eyebrow,title,note)=>`<div class="panel-head"><div><div class="eyebrow">${eyebrow}</div><h2>${title}</h2></div><div class="panel-note">${note}</div></div>`;
+const picker=run=>`<div class="policy-picker">${run.rows.filter(r=>r.status==="ok").map(r=>`<button data-policy="${r.policy}" class="${r.policy===(DemoModel.select(state).selected.policy)?"active":""}">${POLICY_NAMES[r.policy]}</button>`).join("")}</div>`;
+function snapshotChart(s){
+ const x=lap=>90+lap/s.race.total_laps*1040;
+ let body="";
+ [0,10,20,30,40,50,60,s.race.total_laps].filter((v,i,a)=>a.indexOf(v)===i).forEach(lap=>{body+=line(x(lap),82,x(lap),148);body+=text(x(lap),172,lap,"tick",'text-anchor="middle"');});
+ body+=rect(90,91,1040,47,"#edf4f8");
+ let done=0;
+ const history=s.stints.map(stint=>[stint.compound,stint.laps]);
+ const current=s.laps_completed-history.reduce((sum,item)=>sum+item[1],0);
+ const spans=[...history,...(current?[[s.compound,current]]:[])];
+ spans.forEach(([compound,laps])=>{body+=rect(x(done),91,x(done+laps)-x(done),47,compoundFill(compound));if(laps>=4)body+=text((x(done)+x(done+laps))/2,120,`${compoundLetter(compound)} ${laps}`,compound==="MEDIUM"?"label on-dark":"label",'text-anchor="middle"');done+=laps;});
+ body+=line(x(s.laps_completed),60,x(s.laps_completed),150,"#12384f",'stroke-width="2"');
+ body+=text(Math.min(1070,Math.max(170,x(s.laps_completed))),43,`Decision before lap ${s.laps_completed+1}`,"label",'text-anchor="middle"');
+ body+=text((x(s.laps_completed)+1130)/2,121,`${s.race.total_laps-s.laps_completed} laps remain`,"label",'text-anchor="middle"');
+ body+=text(90,205,"ABSOLUTE RACE LAP","axis-label");
+ body+=text(90,234,`Prior compounds ${s.stints.map(r=>r.compound).filter((v,i,a)=>a.indexOf(v)===i).join(" / ")||"none"} · current set ${s.tyre_age} laps old · minimum new stint ${s.race.min_stint_laps} laps`,"minor");
+ return svg(body,"Race timeline with completed stints and the remaining decision horizon");
+}
+function searchChart(s,run,ref){
+ const points=run.frontier;const x=lap=>84+(lap-s.laps_completed)/(s.race.total_laps-s.laps_completed)*1040;
+ const values=points.map(p=>p.mean_s-ref.time_s);const top=Math.max(4,...values)*1.12;
+ const y=v=>204-v/top*165;let body="";
+ for(let i=0;i<=4;i++){const v=top*i/4;body+=line(84,y(v),1124,y(v));body+=text(68,y(v)+4,fmt(v,0),"tick",'text-anchor="end"');}
+ const colors=["#8399a6","#185b85","#4AAEED"];
+ for(let stops=0;stops<=2;stops++){
+  const series=points.filter(p=>p.stops===stops);if(!series.length)continue;
+  body+=`<polyline points="${series.map(p=>`${x(p.first_pit)},${y(p.mean_s-ref.time_s)}`).join(" ")}" fill="none" stroke="${colors[stops]}" stroke-width="3" ${stops===2?'stroke-dasharray="7 4"':""}/>`;
+  series.forEach(p=>{body+=`<circle cx="${x(p.first_pit)}" cy="${y(p.mean_s-ref.time_s)}" r="3" fill="${colors[stops]}"><title>${stops} stops, first pit ${p.first_pit}, ${fmt(p.mean_s)} seconds</title></circle>`;});
+ }
+ const bestPit=ref.first_pit_lap??s.race.total_laps;const bx=x(bestPit);
+ body+=line(bx,36,bx,205,"#12384f",'stroke-dasharray="3 4"');
+ body+=`<circle cx="${bx}" cy="${y(0)}" r="6" fill="#12384f"/>`;
+ body+=text(Math.max(200,Math.min(995,bx)),25,ref.first_pit_lap===null?"Optimum: run to the flag":`Best first pit: lap ${bestPit}`,"label",'text-anchor="middle"');
+ const ticks=[s.laps_completed+1,...Array.from({length:6},(_,i)=>Math.ceil((s.laps_completed+1+i*(s.race.total_laps-s.laps_completed-1)/5)/1))];
+ [...new Set(ticks)].forEach(lap=>body+=text(x(lap),225,lap,"tick",'text-anchor="middle"'));
+ body+=text(84,245,"FIRST PIT LAP · FINAL LAP DENOTES NO FURTHER STOP","axis-label");
+ body+=text(84,13,"SECONDS ABOVE THE OPTIMUM","axis-label");
+ return svg(body,"Best expected time at each first pit lap for each future-stop count");
+}
+function replayChart(s,run,selected){
+ const x=lap=>270+(lap-s.laps_completed)/(s.race.total_laps-s.laps_completed)*845;
+ let body="";
+ const tickSet=[s.laps_completed,s.race.total_laps];for(let lap=Math.ceil((s.laps_completed+1)/5)*5;lap<s.race.total_laps;lap+=5)tickSet.push(lap);
+ tickSet.sort((a,b)=>a-b).forEach(lap=>{body+=line(x(lap),18,x(lap),220);body+=text(x(lap),242,lap,"tick",'text-anchor="middle"');});
+ run.rows.forEach((row,i)=>{const y=30+i*39;body+=`<g class="select-row" data-policy="${row.policy}">`;
+ if(row.policy===selected.policy)body+=rect(0,y-18,1190,35,"#F0F9FF",'rx="3"');
+ body+=text(12,y+4,POLICY_NAMES[row.policy],row.policy===selected.policy?"label":"");
+ if(row.status!=="ok"){body+=text(280,y+4,"Unavailable · "+row.reason,"minor");body+="</g>";return;}
+ let lap=s.laps_completed;row.plan.forEach(([compound,n],j)=>{const w=x(lap+n)-x(lap);body+=rect(x(lap)+1,y-13,w-2,25,compoundFill(compound),'rx="2"');if(w>32)body+=text(x(lap)+w/2,y+4,`${compoundLetter(compound)} ${n}`,compound==="MEDIUM"?"on-dark":"",'text-anchor="middle"');lap+=n;if(j<row.plan.length-1)body+=text(x(lap),y-17,lap,"tick",'text-anchor="middle"');});
+ body+=text(1138,y+4,`${row.num_stops} stop${row.num_stops===1?"":"s"}`,"minor");body+="</g>";
+ });
+ return svg(body,"Remaining stint timeline for the optimizer and each baseline, with absolute pit laps");
+}
+function comparisonChart(run,selected){
+ const valid=run.rows.filter(r=>r.status==="ok");const lo=Math.min(0,...valid.map(r=>r.regret_s-2*r.regret_se_s));const hi=Math.max(1,...valid.map(r=>r.regret_s+2*r.regret_se_s));
+ const min=lo<0?lo*1.1:0;const max=hi*1.17;const x=v=>290+(v-min)/(max-min)*655;let body="";
+ for(let i=0;i<=4;i++){const v=min+(max-min)*i/4;body+=line(x(v),10,x(v),210);body+=text(x(v),232,fmt(v,1),"tick",'text-anchor="middle"');}
+ body+=line(x(0),8,x(0),214,"#12384f",'stroke-width="1.5"');
+ run.rows.forEach((row,i)=>{const y=25+i*39;body+=`<g class="select-row" data-policy="${row.policy}">`;
+ if(row.policy===selected.policy)body+=rect(0,y-17,1190,36,"#F0F9FF",'rx="3"');
+ body+=text(12,y+5,POLICY_NAMES[row.policy],"label");
+ if(row.status!=="ok"){body+=text(300,y+5,"Unavailable · "+row.reason,"minor");body+="</g>";return;}
+ body+=rect(Math.min(x(0),x(row.regret_s)),y-11,Math.max(2,Math.abs(x(row.regret_s)-x(0))),24,row.policy===selected.policy?"#185b85":"#4AAEED",'rx="2"');
+ const se=2*row.regret_se_s;if(se>0){body+=line(x(row.regret_s-se),y+1,x(row.regret_s+se),y+1,"#12384f",'stroke-width="2"');body+=line(x(row.regret_s-se),y-5,x(row.regret_s-se),y+7,"#12384f");body+=line(x(row.regret_s+se),y-5,x(row.regret_s+se),y+7,"#12384f");}
+ body+=text(990,y+5,`${signed(row.regret_s)} s`,"label");body+=text(1123,y+5,fmt(row.time_s)+" s","minor",'text-anchor="end"');
+ if(row.outside_reference_budget)body+=text(1140,y+5,"†","label");body+="</g>";
+ });
+ body+=text(290,247,"REGRET · MEAN REMAINING TIME MINUS REFERENCE","axis-label");
+ body+=text(1123,11,"REMAINING TIME","axis-label",'text-anchor="end"');
+ return svg(body,"Baseline regret with paired Monte Carlo error whiskers and remaining-time labels");
+}
+function drawsChart(selected){
+ const values=selected.paired_deltas;const mean=selected.regret_s;let min=Math.min(0,...values);let max=Math.max(0,...values);const pad=Math.max(1,(max-min)*.16);min-=pad;max+=pad;
+ const x=i=>86+i/(values.length-1)*1040;const y=v=>205-(v-min)/(max-min)*170;let body="";
+ for(let i=0;i<=4;i++){const v=min+(max-min)*i/4;body+=line(86,y(v),1126,y(v));body+=text(70,y(v)+4,fmt(v,1),"tick",'text-anchor="end"');}
+ body+=line(86,y(0),1126,y(0),"#8399a6",'stroke-dasharray="3 5"');
+ body+=line(86,y(mean),1126,y(mean),"#185b85",'stroke-width="1.5" stroke-dasharray="8 4"');
+ body+=`<polyline points="${values.map((v,i)=>`${x(i)},${y(v)}`).join(" ")}" fill="none" stroke="#4AAEED" stroke-width="2.5"/>`;
+ values.forEach((v,i)=>body+=`<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="#185b85"><title>Draw ${i}: ${signed(v)} seconds</title></circle>`);
+ [0,7,15,23,31].forEach(i=>body+=text(x(i),228,i,"tick",'text-anchor="middle"'));
+ body+=text(86,245,"SHARED DRAW INDEX i · BATCH SEED 0","axis-label");body+=text(86,15,"PAIRED REMAINING-TIME DIFFERENCE · SECONDS","axis-label");
+ return svg(body,"Each shared draw's remaining-time difference between the selected policy and optimizer");
+}
+function renderPanel(view){
+ const {snapshot:s,run,reference:ref,selected}=view;const stochastic=state.world==="seeded";
+ if(state.stage===0)return head("01 / Input contract","One decision boundary",`<strong>${s.laps_completed+1}</strong> next lap<br>History is kept; elapsed time is excluded from the objective.`)+snapshotChart(s)+footer("Fitted tyre age includes prior use. The first remaining stint continues that set.",legend());
+ if(state.stage===1)return head("02 / Exhaustive search",`${run.scored.toLocaleString()} legal plans scored`,`${run.enumerated.toLocaleString()} enumerated · ${run.zero_lap_filtered} zero-lap starts removed · ${run.rejected} simulator rejections<br>Minimum mean remaining time: <strong>${fmt(ref.time_s)} s</strong>`)+searchChart(s,run,ref)+footer("Each point is the best compound and stint sequence for that first pit boundary.",`<div class="legend"><span>━ 1 stop</span><span style="color:#4AAEED">┄ 2 stops</span><span>● No stop</span></div>`);
+ if(state.stage===2)return head("03 / Plan output","Trace the remaining stints",`Selected: <strong>${POLICY_NAMES[selected.policy]}</strong><br>${selected.num_stops} future stops · pit loss ${fmt(selected.pit_loss_s)} s`)+replayChart(s,run,selected)+footer("Numbers above joins are absolute pit laps. Segment labels show compound and remaining laps.",legend());
+ if(state.stage===3)return head("04 / Evaluation",`${POLICY_NAMES[selected.policy]}: ${signed(selected.regret_s)} s`,`${stochastic?"32 paired stochastic draws":"32 identical deterministic draws"}<br>${stochastic?"Whiskers are ±2 paired Monte Carlo standard errors.":"Repeated samples add no spread in the default world."}`)+comparisonChart(run,selected)+footer(run.rows.some(r=>r.outside_reference_budget)?"† Policy has more future stops than the reference budget; its result remains visible.":"Unavailable policies keep their reason and receive no invented score.","Lower regret is better · reference = 0 s");
+ return head("05 / Shared randomness",`${POLICY_NAMES[selected.policy]} across draws`,`Mean Δ <strong>${signed(selected.regret_s)} s</strong><br>Paired standard error ${fmt(selected.regret_se_s,3)} s`)+picker(run)+drawsChart(selected)+footer(stochastic?"The policy and reference experience the same sampled world in each pair.":"The default scoring world is deterministic. Switch to the seeded world to inspect variation.","Monte Carlo precision does not establish physical accuracy.");
+}
+function render(){
+ const view=DemoModel.select(state);const s=view.snapshot;
+ $("lap").value=state.lap;$("world").value=state.world;$("budget").value=String(state.budget);
+ $("source").innerHTML=`SOURCE ${esc(DEMO_DATA.source_commit.slice(0,7))}<br>PYTHON RUN · SEED ${DEMO_DATA.seed} · ${DEMO_DATA.n_samples} DRAWS`;
+ const stats=[["Decision snapshot",`${s.laps_completed}<span class="unit">/ ${s.race.total_laps} laps</span>`],["Current tyre",`${s.compound}<span class="unit">${s.tyre_age} laps old</span>`],["Remaining distance",`${s.race.total_laps-s.laps_completed}<span class="unit">laps</span>`],["Minimum new stint",`${s.race.min_stint_laps}<span class="unit">laps</span>`],["Reference stop budget",`≤ ${state.budget}<span class="unit">future stops</span>`],["Scoring mode",`${state.world==="seeded"?"SAMPLED":"FIXED"}<span class="unit">${DEMO_DATA.n_samples} draws</span>`]];
+ $("state").innerHTML=stats.map(([label,value])=>`<div class="stat"><span class="eyebrow">${label}</span><span class="value">${value}</span></div>`).join("");
+ $("flow").innerHTML=STAGES.map((name,i)=>`<button data-stage="${i}" class="${state.stage===i?"active":""}" aria-current="${state.stage===i?"step":"false"}"><span class="number">0${i+1}</span>${name}</button>${i<4?'<span class="arrow" aria-hidden="true">→</span>':""}`).join("");
+ $("panel").innerHTML=renderPanel(view);
+ $("next").textContent=state.stage===4?"Return to snapshot ↺":"Next stage →";
+ $("tour-tabs").innerHTML=Object.entries(TOURS).map(([key,tour])=>`<button data-tour="${key}" class="${state.tour===key?"active":""}">${tour.name}</button>`).join("");
+ $("tour-steps").innerHTML=state.tour?TOURS[state.tour].steps.map((step,i)=>`<button data-tour-step="${i}" class="${state.tourStep===i?"active":""}">${i+1}. ${step.label}</button>`).join(""):"";
+ $("raw").textContent=JSON.stringify({demo_state:state,snapshot:s,selected_result:view.selected,reference:view.reference,search:{enumerated:view.run.enumerated,legal:view.run.scored,rejected:view.run.rejected,zero_lap_filtered:view.run.zero_lap_filtered}},null,2);
+ $("command").textContent=DEMO_DATA.command.replace("--lap 30",`--lap ${state.lap}`)+` --max-stops ${state.budget}`;
+ $("provenance").innerHTML=`<div class="eyebrow">Evidence provenance</div><code>source ${esc(DEMO_DATA.source_commit)}\nworld config ${esc(DEMO_DATA.worlds[state.world].config_hash)}\ncreated ${esc(DEMO_DATA.created_utc)}\n${state.world==="seeded"?"Seeded demo world: belief settings with fit_window=full.":"Current integrated runner default world."}</code>`;
+ document.querySelectorAll("[data-stage]").forEach(el=>el.onclick=()=>dispatch({patch:{stage:Number(el.dataset.stage)}}));
+ document.querySelectorAll("[data-policy]").forEach(el=>el.onclick=()=>dispatch({patch:{policy:el.dataset.policy}}));
+ document.querySelectorAll("[data-tour]").forEach(el=>el.onclick=()=>dispatch({type:"tour",name:el.dataset.tour}));
+ document.querySelectorAll("[data-tour-step]").forEach(el=>el.onclick=()=>dispatch({type:"tour",name:state.tour,step:Number(el.dataset.tourStep)}));
+}
+function dispatch(action){state=DemoModel.reduce(state,action);render();}
+$("lap").onchange=event=>dispatch({patch:{lap:event.target.value}});
+$("world").onchange=event=>dispatch({patch:{world:event.target.value}});
+$("budget").onchange=event=>dispatch({patch:{budget:Number(event.target.value)}});
+$("reset").onclick=()=>dispatch({type:"reset"});$("next").onclick=()=>dispatch({type:"next"});
+$("download").onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(DEMO_DATA,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="f1-strategy-demo-evidence.json";link.click();URL.revokeObjectURL(url);};
+window.demo={dispatch,getState:()=>({...state}),getView:()=>DemoModel.select(state)};
+render();
+</script>
+</body>
+</html>
