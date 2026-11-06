@@ -13,10 +13,10 @@ These observations validate the demonstration flow, without establishing the acc
 
 ## Present the demo
 
-1. Select the usage-flow walkthrough and load Hamilton after lap 30.
+1. Select the mid-race briefing walkthrough and load Hamilton after lap 30.
 2. Follow the search, remaining-stint timeline, and regret comparison.
-3. Select stochastic scoring to inspect paired outcomes on shared draws.
-4. Select the late-race walkthrough to show when planned stops cease to be feasible.
+3. Select changing conditions to inspect paired outcomes on shared draws.
+4. Select the last-lap walkthrough to show when planned stops cease to be feasible.
 
 The default world matches the current integrated runner.
 The seeded world is an explicitly separate demonstration configuration with rate events, posterior parameter draws, and residual lap noise.
