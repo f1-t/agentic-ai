@@ -1,0 +1,52 @@
+{
+    "race": {
+        "race_id": "2023_01_bahrain",
+        "total_laps": 57,
+        "pit_loss_s": 26.59,
+        "min_stint_laps": 10,
+        "compounds": [
+            "HARD",
+            "MEDIUM",
+            "SOFT"
+        ],
+        "sc_rate_per_lap": null,
+        "sc_mean_laps": null,
+        "vsc_rate_per_lap": null,
+        "vsc_mean_laps": null
+    },
+    "driver": "VER",
+    "laps_completed": 25,
+    "compound": "SOFT",
+    "tyre_age": 11,
+    "stints": [
+        {
+            "compound": "SOFT",
+            "laps": 14,
+            "start_lap": 1,
+            "start_age": 3
+        }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2473.385,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 13.519999999999527,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+        "rainfall_now": false,
+        "track_temp_c": null,
+        "air_temp_c": null,
+        "wind_kph": null,
+        "rain_laps": [],
+        "wetness_estimate": null
+    },
+    "field": {
+        "class_counts": {},
+        "class_pace_s": {}
+    },
+    "red_flag_laps": [],
+    "standing_start": false
+}

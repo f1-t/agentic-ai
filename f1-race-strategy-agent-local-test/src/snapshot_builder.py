@@ -1,139 +1,85 @@
 
-import fastf1
-import pandas as pd
-import json
+import argparse
 import re
 from pathlib import Path
 from pprint import pprint
 
+from src.contracts import Snapshot
+from src.contracts import RaceParams, Snapshot
+from src.sim import calibration, calibrate
+from src.sim.config import SimConfig
+from src.sim.data import CACHE_DIR, lap_frame, load_session
+from src.sim.data import CACHE_DIR, load_session
+from src.sim.race_ids import make_race_id
 
-def build_snapshot(session, driver, lap_number):
-    # ----------------------------------
-    # Get lap data for selected driver
-    # ----------------------------------
-    laps = session.laps.pick_drivers(driver)
 
-    completed = laps[
-        laps["LapNumber"] <= lap_number
-    ].sort_values("LapNumber")
+# Output path relative to the project, not the terminal's location
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = PROJECT_ROOT / "data" / "snapshots"
 
-    if completed.empty:
-        raise ValueError("No completed laps found")
 
-    current = completed.iloc[-1]
+def get_red_flag_laps(frame, k):
+    """Find red-flag laps up to the snapshot decision point."""
+    red_flag_laps = set()
 
-    # ----------------------------------
-    # Stint history
-    # ----------------------------------
-    stint_history = []
+    for _, row in frame.iterrows():
+        lap = int(row["lap"])
+        status = str(row["track_status"])
 
-    for stint_number, stint_laps in completed.groupby(
-        "Stint", sort=True
-    ):
-        if pd.isna(stint_number):
+        if 1 <= lap <= k and "5" in status:
+            red_flag_laps.add(lap)
+
+    return sorted(red_flag_laps)
+
+
+
+def _build_snapshot(frame, race, driver, k, messages=None) -> Snapshot:
+    """Build a snapshot, optionally cross-checking race-control messages."""
+
+    snapshot = calibration.snapshot_at(frame, race, driver, k)
+
+    periods = calibration.observed_periods(frame, messages)
+
+    sc_laps = []
+    vsc_laps = []
+
+    for kind, start, end in periods:
+        first = max(1, start)
+        last = min(k, end)
+
+        if first > last:
             continue
 
-        stint_history.append({
-            "stint": int(stint_number),
-            "compound": stint_laps.iloc[0]["Compound"],
-            "start_lap": int(stint_laps["LapNumber"].min()),
-            "end_lap": int(stint_laps["LapNumber"].max()),
-            "laps_completed": len(stint_laps)
-        })
+        laps = range(first, last + 1)
 
-    # ----------------------------------
-    # Safety car / red flag / VSC history
-    # ----------------------------------
-    safety_car_history = []
+        if kind == "sc":
+            sc_laps.extend(laps)
+        elif kind == "vsc":
+            vsc_laps.extend(laps)
 
-    messages = session.race_control_messages
-
-    if messages is not None:
-        messages = messages.copy()
-
-        # Include events up to selected lap
-        messages = messages[
-            messages["Lap"].notna()
-            & (messages["Lap"] <= lap_number)
-        ]
-
-        event_types = {
-            "RED FLAG": "RED_FLAG",
-            "SAFETY CAR DEPLOYED": "SC",
-            "VIRTUAL SAFETY CAR DEPLOYED": "VSC"
-        }
-
-        for _, event in messages.iterrows():
-            message = str(event["Message"]).upper().strip()
-
-            if message not in event_types:
-                continue
-
-            safety_car_history.append({
-                "type": event_types[message],
-                "lap": int(event["Lap"]),
-                "message": message
-            })
-
-    # ----------------------------------
-    # Build snapshot
-    # ----------------------------------
-    snapshot = {
-        "race": (
-            f"{session.event['EventDate'].year} "
-            f"{session.event['EventName']}"
-        ),
-        "driver": driver,
-        "lap_completed": int(current["LapNumber"]),
-        "total_laps": int(session.total_laps),
-        "remaining_laps": (
-            int(session.total_laps)
-            - int(current["LapNumber"])
-        ),
-        "current_compound": current["Compound"],
-        "tyre_age": (
-            int(current["TyreLife"])
-            if pd.notna(current["TyreLife"])
-            else None
-        ),
-        "current_stint": (
-            int(current["Stint"])
-            if pd.notna(current["Stint"])
-            else None
-        ),
-        "stint_history": stint_history,
-        "safety_car_history": safety_car_history,
-        "compounds_used": (
-            completed["Compound"]
-            .dropna()
-            .unique()
-            .tolist()
-        )
-    }
-
-    return snapshot
+    return Snapshot.model_validate({
+        **snapshot.model_dump(),
+        "sc_laps": sorted(set(sc_laps)),
+        "vsc_laps": sorted(set(vsc_laps)),
+        "red_flag_laps": get_red_flag_laps(frame, k),
+    })
 
 
-def save_snapshot(snapshot, session, driver, lap_number):
-    # ----------------------------------
-    # Create output directory
-    # ----------------------------------
-    output_dir = Path("data/snapshots")
-    output_dir.mkdir(parents=True, exist_ok=True)
+def build_snapshot(frame, race, driver, k) -> Snapshot:
+    """Evaluator-compatible snapshot builder."""
+    return _build_snapshot(frame, race, driver, k)
 
-    # ----------------------------------
-    # Automatically generate filename
-    # ----------------------------------
-    season = session.event["EventDate"].year
-    race_name = session.event["EventName"]
+
+
+def save_snapshot(snapshot, season, gp, driver, lap_number):
+    """Save a validated snapshot with an automatic filename."""
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     race_slug = re.sub(
-        r"[^a-z0-9]+",
-        "_",
-        race_name.lower()
+        r"[^a-z0-9]+", "_", gp.lower()
     ).strip("_")
 
-    # Remove duplicate Grand Prix suffix
     race_slug = race_slug.removesuffix("_grand_prix")
 
     filename = (
@@ -141,64 +87,123 @@ def save_snapshot(snapshot, session, driver, lap_number):
         f"{driver.upper()}_lap{lap_number}.json"
     )
 
-    output_file = output_dir / filename
+    output_file = OUTPUT_DIR / filename
 
-    # ----------------------------------
-    # Save snapshot as JSON
-    # ----------------------------------
-    with open(output_file, "w", encoding="utf-8") as file:
-        json.dump(snapshot, file, indent=4)
+    output_file.write_text(
+        snapshot.model_dump_json(indent=4) + "\n",
+        encoding="utf-8",
+    )
 
     print(f"\nSnapshot saved to: {output_file}")
-
     return output_file
 
 
 def main():
-    # ----------------------------------
-    # Configure FastF1 cache
-    # ----------------------------------
-    fastf1.Cache.enable_cache("cache")
-    fastf1.Cache.offline_mode(True)
-
-    # ----------------------------------
-    # Select race, driver, and lap
-    # ----------------------------------
-    season = 2024
-    gp = "Sao Paolo"
-    driver = "HAM"
-    lap_number = 40
-
-    # ----------------------------------
-    # Load race data
-    # ----------------------------------
-    session = fastf1.get_session(
-        season, gp, "R"
+    parser = argparse.ArgumentParser(
+        description="Generate an F1 race snapshot"
     )
 
-    session.load(
-        telemetry=False,
-        weather=False
+    parser.add_argument("--season", type=int, default=2024)
+    parser.add_argument(
+        "--gp", type=str, default="Monaco Grand Prix"
+    )
+    parser.add_argument("--driver", type=str, default="LEC")
+    parser.add_argument("--lap", type=int, default=20)
+
+    args = parser.parse_args()
+
+    driver = args.driver.upper()
+    lap_number = args.lap
+
+    print(f"Using shared cache: {CACHE_DIR}")
+    print(f"Loading {args.season} {args.gp}...")
+
+    session = load_session(
+    args.season,
+    args.gp,
+    kind="R",
+    messages=True,
     )
 
-    # ----------------------------------
-    # Generate snapshot
-    # ----------------------------------
-    snapshot = build_snapshot(
-        session, driver, lap_number
+    # Resolve the selected event to the repository's race ID.
+    round_number = int(session.event["RoundNumber"])
+
+    race_id = make_race_id(
+        args.season,
+        round_number,
+        args.gp.removesuffix(" Grand Prix"),
     )
 
-    # ----------------------------------
-    # Print snapshot
-    # ----------------------------------
+    
+    # Convert the loaded race laps to the simulator's format.
+    frame = lap_frame(session.laps)
+
+    # Create the race parameters.
+    config = SimConfig()
+
+    race = RaceParams(
+        race_id=race_id,
+        total_laps=int(session.total_laps),
+        pit_loss_s=calibrate.DEFAULT_PIT_LOSS_S,
+        min_stint_laps=RaceParams.model_fields[
+            "min_stint_laps"
+        ].default,
+        compounds=sorted(
+            frame["compound"].dropna().unique().tolist()
+        ),
+    )
+
+    # Use the same observed pit-loss calculation as the simulator.
+    from src.sim.engine import Simulator
+
+    observed_pit_loss = calibration.run(
+        Simulator(frame, config),
+        frame,
+        race,
+    )[1]["observed_pit_loss_s"]
+
+    race = race.model_copy(
+        update={"pit_loss_s": observed_pit_loss}
+    )
+
+    print(f"Race loaded: {race_id}")
+    print(f"Observed pit loss: {observed_pit_loss:.2f}s")
+
+
+    # Validate the requested driver and decision lap.
+    driver_laps = frame.loc[
+        frame["driver"] == driver, "lap"
+    ]
+
+    if driver_laps.empty:
+        raise ValueError(
+            f"Driver {driver} not found in {race_id}"
+        )
+
+    if not 0 <= lap_number < int(driver_laps.max()):
+        raise ValueError(
+            f"Lap must be between 0 and "
+            f"{int(driver_laps.max()) - 1}"
+        )
+
+    # Generate the snapshot using the shared contract.
+    snapshot = _build_snapshot(
+    frame,
+    race,
+    driver,
+    lap_number,
+    messages=session.race_control_messages,
+)
+
     print("\nGenerated Snapshot:")
-    pprint(snapshot)
+    pprint(snapshot.model_dump())
 
-    # ----------------------------------
-    # Save snapshot to JSON
-    # ----------------------------------
     save_snapshot(
-        snapshot, session, driver, lap_number
+        snapshot,
+        args.season,
+        args.gp,
+        driver,
+        lap_number,
     )
 
 
