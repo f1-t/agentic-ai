@@ -476,6 +476,17 @@ def test_race_features_join_when_present(run_dir, tmp_path):
     assert "feature:track_length_km" not in cross_race.factors_table(outputs, tmp_path / "missing.csv")
 
 
+def test_report_writes_stop_gain_and_coverage_summaries(run_dir):
+    out, _, _ = run_dir
+    sg = pd.read_csv(out / "stop_gain_summary.csv")
+    assert {"window", "arm", "k_bucket", "n", "bias_s", "mae_s", "mae_ci_lo", "mae_ci_hi",
+            *calibration.STOP_GAIN_TERMS} <= set(sg)
+    assert set(sg["arm"]) == set(ARMS) - {"posterior"} and sg["n"].min() > 0
+    cov = pd.read_csv(out / "coverage_summary.csv")
+    assert {"coverage_68", "coverage_90", "coverage_raw_68", "coverage_raw_90", "mean_width_90_s"} <= set(cov)
+    assert "posterior" in set(cov["arm"])
+
+
 def test_eligibility_json_lists_every_race(run_dir):
     out, _, _ = run_dir
     elig = json.loads((out / "eligibility.json").read_text())
