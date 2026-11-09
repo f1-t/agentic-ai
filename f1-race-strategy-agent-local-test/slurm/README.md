@@ -55,3 +55,12 @@ runs on Sol.
   copy of the profile and request a GPU in `h_fold.sbatch`.
 
 The LLM calls of the eval stay on the desktop with the API key.
+
+## The real runs
+
+`python -m src.sim.calibrate real-run --profile sol` (docs/runbook_real_runs.md) writes its own
+array scripts for the cross-race pass. The per-race units come from `g_race.sbatch` and the
+per-fold units (one per arm and held-out race) from `h_fold.sbatch`. The scripts keep these
+templates' `#SBATCH` header and environment, so the placeholders above apply to them as well.
+The command prints the `sbatch` lines and submits nothing. When the arrays finish, run the same
+command again to get the next phase.

@@ -1,5 +1,6 @@
 # Desktop: Ryzen 9850X3D, RTX 5080. The default profile.
 name: local
+scheduler: local           # batch units run in-process on parallel.n_jobs
 sim:
   n_samples: 50
   max_stops: 2

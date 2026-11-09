@@ -1,5 +1,6 @@
 # ASU Sol: one core per array task, the scheduler provides the parallelism.
 name: sol
+scheduler: slurm           # real-run emits array scripts from slurm/*.sbatch and submits nothing
 sim:
   n_samples: 500
   max_stops: 3

@@ -66,6 +66,13 @@ reports/calibration/fuel_prior/ (a synthetic run goes to a scratch directory):
 
     python -m src.sim.calibrate fuel --races 2021_04_spain ... [--race-features data/race_features.csv]
     python -m src.sim.calibrate fuel --synthetic --out /tmp/fuel
+
+The real runs in one command (SPEC 0021, real_run.py; docs/runbook_real_runs.md): eligibility
+over every cached race, the cross-race pass and LORO, event rates, the fuel prior, the eval
+references and the cross-race report, each run or skipped with its reason, with a manifest
+under reports/calibration/real_run/. The sol profile emits Slurm arrays and submits nothing:
+
+    python -m src.sim.calibrate real-run --profile local [--races auto|<ids>] [--out DIR]
 """
 import argparse
 import json
@@ -470,6 +477,9 @@ def main(argv=None):
     if argv and argv[0] == "rates":
         from . import event_rates
         return event_rates.main(argv[1:])
+    if argv and argv[0] == "real-run":
+        from . import real_run
+        return real_run.main(argv[1:])
     if argv and argv[0] == "fuel":
         from . import fuel_prior
         return fuel_prior.main(argv[1:])
