@@ -442,3 +442,7 @@ data/scenarios/pilot1.json --policies baselines agent`, and the paired intervals
 `python -m src.eval.compare reports/eval/pilot1.csv --reference agent --others fixed_one_stop
 actual_strategy`. The model is not deterministic at this temperature: identical inputs gave 5 of
 10 submissions on Case B. The pilot set is a development set, not a report-set estimate.
+
+To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
+`python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
+the run was produced at), or run one fresh episode with `--live`, which writes `case_b/live_<time>.*`.
