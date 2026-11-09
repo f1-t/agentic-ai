@@ -131,10 +131,11 @@ def test_stats_from_periods_counts_and_laps_at_risk():
 
 
 def test_circuit_info_map_features_and_unknown():
-    ids = ["2021_04_spain", "2023_06_monaco", "2024_02_atlantis"]
-    c = er.circuit_info(ids).set_index("race_id")   # 2021 from the cached schedule, the rest not cached
+    ids = ["2021_04_spain", "2023_06_monaco", "2024_08_monaco", "2024_02_atlantis"]
+    c = er.circuit_info(ids).set_index("race_id")   # 2021 and 2023 schedules are cached, 2024 is not
     assert tuple(c.loc["2021_04_spain"]) == ("catalunya", "permanent")
-    assert tuple(c.loc["2023_06_monaco"]) == ("monaco", er.UNKNOWN)       # the race id never names the circuit
+    assert tuple(c.loc["2023_06_monaco"]) == ("monaco", "street")          # from the cached schedule's Location
+    assert tuple(c.loc["2024_08_monaco"]) == ("monaco", er.UNKNOWN)       # the race id never names the circuit
     assert tuple(c.loc["2024_02_atlantis"]) == ("atlantis", er.UNKNOWN)
     monaco = pd.DataFrame({"RoundNumber": [6], "EventName": ["Monaco Grand Prix"], "Country": ["Monaco"],
                            "Location": ["Monte Carlo"]})
