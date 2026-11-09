@@ -1,0 +1,52 @@
+{
+    "race": {
+        "race_id": "2023_07_spanish",
+        "total_laps": 66,
+        "pit_loss_s": 24.94,
+        "min_stint_laps": 10,
+        "compounds": [
+            "HARD",
+            "MEDIUM",
+            "SOFT"
+        ],
+        "sc_rate_per_lap": null,
+        "sc_mean_laps": null,
+        "vsc_rate_per_lap": null,
+        "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 30,
+    "compound": "MEDIUM",
+    "tyre_age": 6,
+    "stints": [
+        {
+            "compound": "SOFT",
+            "laps": 24,
+            "start_lap": 1,
+            "start_age": 3
+        }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2441.4549999999995,
+    "position": 2,
+    "gap_ahead_s": 12.962999999999738,
+    "gap_behind_s": 3.630000000000109,
+    "car_ahead": "VER",
+    "sets_available": null,
+    "weather": {
+        "rainfall_now": false,
+        "track_temp_c": null,
+        "air_temp_c": null,
+        "wind_kph": null,
+        "rain_laps": [],
+        "wetness_estimate": null
+    },
+    "field": {
+        "class_counts": {},
+        "class_pace_s": {}
+    },
+    "red_flag_laps": [],
+    "standing_start": false
+}
