@@ -176,7 +176,7 @@ def test_the_fuel_prior_runs_from_8_eligible_races(tmp_path, monkeypatch):
 
 
 def _stale_sidecar(directory, **change):
-    meta = json.loads((ROOT / "data" / "references" / "v1" / "a05aa55b0546.json").read_text())
+    meta = json.loads(sorted((ROOT / "data" / "references" / "v1").glob("*.json"))[0].read_text())
     meta = {**meta, "sim_code_version": "000000stale0", **change}
     directory.mkdir(parents=True, exist_ok=True)
     (directory / f"{meta['key']}{len(list(directory.glob('*.json')))}.json").write_text(json.dumps(meta))
