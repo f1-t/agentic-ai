@@ -1,6 +1,6 @@
 # Cross-race calibration report (SPEC 0016)
 
-sim_code_version `f1ae55074d82`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
+sim_code_version `b62094155bde`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
 
 **PROVISIONAL: 1 eligible race(s), fewer than 8. The selection below is provisional and the defaults stay** (belief.yaml, world.yaml and the SimConfig defaults are unchanged).
 
