@@ -56,7 +56,12 @@ def smoke(tmp_path_factory):
 
 
 def test_cached_races_are_the_committed_spain_cache():
-    assert real_run.cached_races() == (["2021_04_spain"], [])
+    # The 2023 and 2024 race folders (OpenF1 work) are cached without their event
+    # schedules, so discovery leaves them out with a note until those schedules are cached.
+    assert real_run.cached_races() == (["2021_04_spain"], [
+        "2023: no cached event schedule, its 2 race(s) left out",
+        "2024: no cached event schedule, its 3 race(s) left out",
+    ])
 
 
 def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smoke):
