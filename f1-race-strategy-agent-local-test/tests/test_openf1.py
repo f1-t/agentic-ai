@@ -1,22 +1,24 @@
+"""OpenF1 reads from the committed cache without touching the network."""
 
+import pytest
 import requests
 
-url = "https://api.openf1.org/v1/sessions"
+from src.data_sources import openf1
 
-response = requests.get(
-    url,
-    params={
-        "year": 2023,
-        "country_name": "Bahrain",
-        "session_name": "Race",
-    },
-    timeout=30,
-)
 
-response.raise_for_status()
+def _no_network(*args, **kwargs):
+    raise AssertionError("openf1 tried the network for a cached endpoint")
 
-for session in response.json():
-    print("Session key:", session["session_key"])
-    print("Session:", session["session_name"])
-    print("Location:", session["location"])
 
+def test_cached_endpoint_loads_from_disk(monkeypatch):
+    monkeypatch.setattr(requests, "get", _no_network)
+    drivers = openf1.fetch_openf1("drivers", 7953)
+    assert isinstance(drivers, list) and drivers
+    assert {"driver_number", "name_acronym"} <= set(drivers[0])
+
+
+def test_uncached_endpoint_would_fetch(monkeypatch, tmp_path):
+    monkeypatch.setattr(openf1, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(requests, "get", _no_network)
+    with pytest.raises(AssertionError, match="tried the network"):
+        openf1.fetch_openf1("drivers", 7953)

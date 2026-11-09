@@ -221,3 +221,7 @@ CLAUDE.md
 
 # macOS Finder metadata
 .DS_Store
+
+# Audit logs and tracking
+.audit/
+
