@@ -1,0 +1,2258 @@
+{
+ "schema_version": 1,
+ "version": "pilot1",
+ "builder": "src.sim.calibration.snapshot_at",
+ "sampling": {
+  "races": [
+   "2021_04_spain"
+  ],
+  "drivers": null,
+  "max_laps_down": 2,
+  "max_per_race": 25,
+  "seed": 0
+ },
+ "sim_code_version": "f1ae55074d82",
+ "digest": "b8bfe341cfd3508db556d77530d3347cf844f0b3fea1d3516b2b4595bd7414a3",
+ "development": true,
+ "items": [
+  {
+   "scenario_id": "2021_04_spain:ALO:55",
+   "race_id": "2021_04_spain",
+   "driver": "ALO",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "ALO",
+    "laps_completed": 55,
+    "compound": "MEDIUM",
+    "tyre_age": 34,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 21,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4784.901,
+    "position": 9,
+    "gap_ahead_s": 15.262000000000626,
+    "gap_behind_s": 0.3209999999999127,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 8,
+       "gap_s": -15.262000000000626
+      },
+      {
+       "driver": "NOR",
+       "position": 10,
+       "gap_s": 0.3209999999999127
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.861,
+     84.596,
+     85.347,
+     84.629,
+     85.543
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     21
+    ],
+    [
+     "MEDIUM",
+     40
+    ],
+    [
+     "SOFT",
+     4
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:BOT:05",
+   "race_id": "2021_04_spain",
+   "driver": "BOT",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BOT",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 8,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 428.67300000000023,
+    "position": 4,
+    "gap_ahead_s": 1.262000000000171,
+    "gap_behind_s": 1.5169999999998254,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 3,
+       "gap_s": -1.262000000000171
+      },
+      {
+       "driver": "RIC",
+       "position": 5,
+       "gap_s": 1.5169999999998254
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     90.174,
+     85.251,
+     84.121,
+     84.192,
+     84.784
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "SOFT",
+     13
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:GAS:35",
+   "race_id": "2021_04_spain",
+   "driver": "GAS",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GAS",
+    "laps_completed": 35,
+    "compound": "MEDIUM",
+    "tyre_age": 17,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 18,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3098.283,
+    "position": 14,
+    "gap_ahead_s": 1.1080000000001746,
+    "gap_behind_s": 2.5709999999999127,
+    "car_ahead": "VET",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VET",
+       "position": 13,
+       "gap_s": -1.1080000000001746
+      },
+      {
+       "driver": "RUS",
+       "position": 15,
+       "gap_s": 2.5709999999999127
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     83.567,
+     83.816,
+     84.03,
+     83.955,
+     84.079
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     18
+    ],
+    [
+     "MEDIUM",
+     29
+    ],
+    [
+     "SOFT",
+     18
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:GAS:40",
+   "race_id": "2021_04_spain",
+   "driver": "GAS",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GAS",
+    "laps_completed": 40,
+    "compound": "MEDIUM",
+    "tyre_age": 22,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 18,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3518.9240000000004,
+    "position": 11,
+    "gap_ahead_s": 2.206000000000131,
+    "gap_behind_s": 2.9379999999991924,
+    "car_ahead": "ALO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "ALO",
+       "position": 10,
+       "gap_s": -2.206000000000131
+      },
+      {
+       "driver": "RUS",
+       "position": 12,
+       "gap_s": 2.9379999999991924
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.341,
+     84.498,
+     84.336,
+     83.711,
+     83.755
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     18
+    ],
+    [
+     "MEDIUM",
+     29
+    ],
+    [
+     "SOFT",
+     18
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:GIO:20",
+   "race_id": "2021_04_spain",
+   "driver": "GIO",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GIO",
+    "laps_completed": 20,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 8,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1818.2379999999998,
+    "position": 16,
+    "gap_ahead_s": 2.2719999999999345,
+    "gap_behind_s": 4.302000000000135,
+    "car_ahead": "LAT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LAT",
+       "position": 15,
+       "gap_s": -2.2719999999999345
+      },
+      {
+       "driver": "MSC",
+       "position": 17,
+       "gap_s": 4.302000000000135
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.931,
+     85.405,
+     84.888,
+     85.042,
+     85.269
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     8
+    ],
+    [
+     "MEDIUM",
+     31
+    ],
+    [
+     "SOFT",
+     26
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:GIO:25",
+   "race_id": "2021_04_spain",
+   "driver": "GIO",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GIO",
+    "laps_completed": 25,
+    "compound": "MEDIUM",
+    "tyre_age": 20,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 8,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2244.2270000000003,
+    "position": 10,
+    "gap_ahead_s": 1.2390000000004875,
+    "gap_behind_s": 0.3989999999994325,
+    "car_ahead": "LAT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LAT",
+       "position": 9,
+       "gap_s": -1.2390000000004875
+      },
+      {
+       "driver": "SAI",
+       "position": 11,
+       "gap_s": 0.3989999999994325
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     85.288,
+     85.261,
+     84.996,
+     85.431,
+     85.013
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     8
+    ],
+    [
+     "MEDIUM",
+     31
+    ],
+    [
+     "SOFT",
+     26
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:LAT:10",
+   "race_id": "2021_04_spain",
+   "driver": "LAT",
+   "lap": 10,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LAT",
+    "laps_completed": 10,
+    "compound": "MEDIUM",
+    "tyre_age": 1,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 9,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "sc",
+    "elapsed_s": 954.6819999999998,
+    "position": 18,
+    "gap_ahead_s": 0.5049999999996544,
+    "gap_behind_s": 11.934000000000196,
+    "car_ahead": "RUS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RUS",
+       "position": 17,
+       "gap_s": -0.5049999999996544
+      },
+      {
+       "driver": "GIO",
+       "position": 19,
+       "gap_s": 11.934000000000196
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     86.574,
+     86.037,
+     100.465,
+     114.725,
+     119.384
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     9
+    ],
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "SOFT",
+     15
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:LAT:40",
+   "race_id": "2021_04_spain",
+   "driver": "LAT",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LAT",
+    "laps_completed": 40,
+    "compound": "MEDIUM",
+    "tyre_age": 13,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 9,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 18,
+      "start_lap": 10,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3528.6420000000003,
+    "position": 13,
+    "gap_ahead_s": 6.780000000000655,
+    "gap_behind_s": 7.073999999999614,
+    "car_ahead": "RUS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RUS",
+       "position": 12,
+       "gap_s": -6.780000000000655
+      },
+      {
+       "driver": "STR",
+       "position": 14,
+       "gap_s": 7.073999999999614
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.247,
+     83.855,
+     84.337,
+     84.104,
+     83.93
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     9
+    ],
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "SOFT",
+     15
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:LEC:11",
+   "race_id": "2021_04_spain",
+   "driver": "LEC",
+   "lap": 11,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 11,
+    "compound": "SOFT",
+    "tyre_age": 14,
+    "stints": [],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1031.7420000000002,
+    "position": 3,
+    "gap_ahead_s": 1.399000000000342,
+    "gap_behind_s": 0.9089999999996508,
+    "car_ahead": "HAM",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAM",
+       "position": 2,
+       "gap_s": -1.399000000000342
+      },
+      {
+       "driver": "BOT",
+       "position": 4,
+       "gap_s": 0.9089999999996508
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.062,
+     91.332,
+     122.691,
+     137.414,
+     84.637
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     28
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "SOFT",
+     8
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:LEC:55",
+   "race_id": "2021_04_spain",
+   "driver": "LEC",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 55,
+    "compound": "MEDIUM",
+    "tyre_age": 27,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 28,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4716.387000000001,
+    "position": 3,
+    "gap_ahead_s": 25.29399999999987,
+    "gap_behind_s": 1.3670000000001892,
+    "car_ahead": "HAM",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAM",
+       "position": 2,
+       "gap_s": -25.29399999999987
+      },
+      {
+       "driver": "BOT",
+       "position": 4,
+       "gap_s": 1.3670000000001892
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     82.461,
+     82.462,
+     82.286,
+     82.717,
+     82.944
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     28
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "SOFT",
+     8
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:MAZ:06",
+   "race_id": "2021_04_spain",
+   "driver": "MAZ",
+   "lap": 6,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 64,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAZ",
+    "laps_completed": 6,
+    "compound": "SOFT",
+    "tyre_age": 6,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 535.8139999999999,
+    "position": 20,
+    "gap_ahead_s": 1.7429999999999382,
+    "gap_behind_s": null,
+    "car_ahead": "LAT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LAT",
+       "position": 19,
+       "gap_s": -1.7429999999999382
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     88.311,
+     87.309,
+     86.368,
+     86.945,
+     86.904
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     22
+    ],
+    [
+     "MEDIUM",
+     20
+    ],
+    [
+     "MEDIUM",
+     22
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:MAZ:30",
+   "race_id": "2021_04_spain",
+   "driver": "MAZ",
+   "lap": 30,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 64,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAZ",
+    "laps_completed": 30,
+    "compound": "MEDIUM",
+    "tyre_age": 8,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 22,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2707.6160000000004,
+    "position": 19,
+    "gap_ahead_s": 10.98200000000088,
+    "gap_behind_s": null,
+    "car_ahead": "MSC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MSC",
+       "position": 18,
+       "gap_s": -10.98200000000088
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.806,
+     84.844,
+     84.862,
+     84.754,
+     84.83
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     22
+    ],
+    [
+     "MEDIUM",
+     20
+    ],
+    [
+     "MEDIUM",
+     22
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:MSC:30",
+   "race_id": "2021_04_spain",
+   "driver": "MSC",
+   "lap": 30,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 64,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MSC",
+    "laps_completed": 30,
+    "compound": "MEDIUM",
+    "tyre_age": 7,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 23,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2696.6339999999996,
+    "position": 18,
+    "gap_ahead_s": 8.198999999999614,
+    "gap_behind_s": 10.98200000000088,
+    "car_ahead": "LAT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LAT",
+       "position": 17,
+       "gap_s": -8.198999999999614
+      },
+      {
+       "driver": "MAZ",
+       "position": 19,
+       "gap_s": 10.98200000000088
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.435,
+     84.419,
+     84.372,
+     83.989,
+     83.959
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     27
+    ],
+    [
+     "MEDIUM",
+     14
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:NOR:10",
+   "race_id": "2021_04_spain",
+   "driver": "NOR",
+   "lap": 10,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 10,
+    "compound": "SOFT",
+    "tyre_age": 13,
+    "stints": [],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "sc",
+    "elapsed_s": 950.1179999999999,
+    "position": 9,
+    "gap_ahead_s": 0.45299999999997453,
+    "gap_behind_s": 0.6300000000001091,
+    "car_ahead": "SAI",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "SAI",
+       "position": 8,
+       "gap_s": -0.45299999999997453
+      },
+      {
+       "driver": "ALO",
+       "position": 10,
+       "gap_s": 0.6300000000001091
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     85.13,
+     84.853,
+     94.755,
+     117.441,
+     131.688
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     28
+    ],
+    [
+     "SOFT",
+     14
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:OCO:00",
+   "race_id": "2021_04_spain",
+   "driver": "OCO",
+   "lap": 0,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 0,
+    "compound": "SOFT",
+    "tyre_age": 3,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 0.0,
+    "position": null,
+    "gap_ahead_s": null,
+    "gap_behind_s": null,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": []
+    },
+    "red_flag_laps": [],
+    "standing_start": true,
+    "recent_lap_times_s": [],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     42
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:OCO:06",
+   "race_id": "2021_04_spain",
+   "driver": "OCO",
+   "lap": 6,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 6,
+    "compound": "SOFT",
+    "tyre_age": 9,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 518.0059999999999,
+    "position": 7,
+    "gap_ahead_s": 2.5450000000000728,
+    "gap_behind_s": 1.3470000000002074,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 6,
+       "gap_s": -2.5450000000000728
+      },
+      {
+       "driver": "SAI",
+       "position": 8,
+       "gap_s": 1.3470000000002074
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     85.631,
+     85.236,
+     84.858,
+     84.449,
+     84.906
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     42
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:OCO:20",
+   "race_id": "2021_04_spain",
+   "driver": "OCO",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 20,
+    "compound": "SOFT",
+    "tyre_age": 23,
+    "stints": [],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1800.225,
+    "position": 7,
+    "gap_ahead_s": 3.7039999999997235,
+    "gap_behind_s": 1.3859999999999673,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 6,
+       "gap_s": -3.7039999999997235
+      },
+      {
+       "driver": "SAI",
+       "position": 8,
+       "gap_s": 1.3859999999999673
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.954,
+     84.623,
+     84.886,
+     84.729,
+     85.167
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     42
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:OCO:25",
+   "race_id": "2021_04_spain",
+   "driver": "OCO",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 25,
+    "compound": "MEDIUM",
+    "tyre_age": 2,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 23,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2246.0359999999996,
+    "position": 12,
+    "gap_ahead_s": 1.4099999999998545,
+    "gap_behind_s": 2.867000000000189,
+    "car_ahead": "SAI",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "SAI",
+       "position": 11,
+       "gap_s": -1.4099999999998545
+      },
+      {
+       "driver": "NOR",
+       "position": 13,
+       "gap_s": 2.867000000000189
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     85.228,
+     85.145,
+     88.11,
+     103.206,
+     84.122
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     42
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:OCO:50",
+   "race_id": "2021_04_spain",
+   "driver": "OCO",
+   "lap": 50,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 65,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 50,
+    "compound": "MEDIUM",
+    "tyre_age": 27,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 23,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4342.745999999999,
+    "position": 6,
+    "gap_ahead_s": 26.094999999999345,
+    "gap_behind_s": 0.7880000000004657,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 5,
+       "gap_s": -26.094999999999345
+      },
+      {
+       "driver": "RIC",
+       "position": 7,
+       "gap_s": 0.7880000000004657
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     83.311,
+     83.799,
+     83.611,
+     83.583,
+     83.793
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     23
+    ],
+    [
+     "MEDIUM",
+     42
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:PER:00",
+   "race_id": "2021_04_spain",
+   "driver": "PER",
+   "lap": 0,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PER",
+    "laps_completed": 0,
+    "compound": "SOFT",
+    "tyre_age": 3,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 0.0,
+    "position": null,
+    "gap_ahead_s": null,
+    "gap_behind_s": null,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": []
+    },
+    "red_flag_laps": [],
+    "standing_start": true,
+    "recent_lap_times_s": [],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     27
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "SOFT",
+     9
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:RIC:20",
+   "race_id": "2021_04_spain",
+   "driver": "RIC",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RIC",
+    "laps_completed": 20,
+    "compound": "SOFT",
+    "tyre_age": 23,
+    "stints": [],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1795.355,
+    "position": 5,
+    "gap_ahead_s": 7.788000000000011,
+    "gap_behind_s": 1.1660000000001673,
+    "car_ahead": "BOT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOT",
+       "position": 4,
+       "gap_s": -7.788000000000011
+      },
+      {
+       "driver": "PER",
+       "position": 6,
+       "gap_s": 1.1660000000001673
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.705,
+     84.491,
+     84.588,
+     84.479,
+     84.436
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     25
+    ],
+    [
+     "MEDIUM",
+     21
+    ],
+    [
+     "SOFT",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:SAI:05",
+   "race_id": "2021_04_spain",
+   "driver": "SAI",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 8,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 434.4569999999999,
+    "position": 8,
+    "gap_ahead_s": 1.356999999999971,
+    "gap_behind_s": 1.7940000000003238,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 7,
+       "gap_s": -1.356999999999971
+      },
+      {
+       "driver": "NOR",
+       "position": 9,
+       "gap_s": 1.7940000000003238
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     93.5,
+     85.97,
+     85.249,
+     84.828,
+     84.759
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     22
+    ],
+    [
+     "MEDIUM",
+     24
+    ],
+    [
+     "SOFT",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:SAI:55",
+   "race_id": "2021_04_spain",
+   "driver": "SAI",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 55,
+    "compound": "SOFT",
+    "tyre_age": 12,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 22,
+      "start_lap": 1,
+      "start_age": 3
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 24,
+      "start_lap": 23,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4758.523999999999,
+    "position": 7,
+    "gap_ahead_s": 0.9669999999996435,
+    "gap_behind_s": 11.114999999999782,
+    "car_ahead": "RIC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RIC",
+       "position": 6,
+       "gap_s": -0.9669999999996435
+      },
+      {
+       "driver": "OCO",
+       "position": 8,
+       "gap_s": 11.114999999999782
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.136,
+     84.631,
+     81.568,
+     81.918,
+     81.815
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     22
+    ],
+    [
+     "MEDIUM",
+     24
+    ],
+    [
+     "SOFT",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:VER:15",
+   "race_id": "2021_04_spain",
+   "driver": "VER",
+   "lap": 15,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VER",
+    "laps_completed": 15,
+    "compound": "SOFT",
+    "tyre_age": 18,
+    "stints": [],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1362.007,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 1.2779999999997926,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAM",
+       "position": 2,
+       "gap_s": 1.2779999999997926
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     83.251,
+     83.297,
+     83.009,
+     83.155,
+     83.152
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     24
+    ],
+    [
+     "MEDIUM",
+     36
+    ],
+    [
+     "SOFT",
+     6
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2021_04_spain:VER:20",
+   "race_id": "2021_04_spain",
+   "driver": "VER",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2021_04_spain",
+     "total_laps": 66,
+     "pit_loss_s": 23.85,
+     "min_stint_laps": 3,
+     "compounds": [
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VER",
+    "laps_completed": 20,
+    "compound": "SOFT",
+    "tyre_age": 23,
+    "stints": [],
+    "sc_laps": [
+     8,
+     9,
+     10
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1778.7530000000002,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 1.5329999999999018,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAM",
+       "position": 2,
+       "gap_s": 1.5329999999999018
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     83.515,
+     83.263,
+     83.289,
+     83.317,
+     83.362
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     24
+    ],
+    [
+     "MEDIUM",
+     36
+    ],
+    [
+     "SOFT",
+     6
+    ]
+   ]
+  }
+ ],
+ "skipped": []
+}

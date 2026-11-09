@@ -429,3 +429,16 @@ the minimum-stint rule. `tests/test_eval_reference.py` covers the reference cach
 stability, cached against computed rows, `--check` across code versions, hindsight
 events), `regret_se_s` on a world with known per-draw differences, and `within_mc` at
 N = 1 against the tie rule. No test calls a model.
+
+## Live agent runs for the Milestone 2 report
+
+The live-agent outputs in `reports/eval/case_b/`, `reports/eval/pilot1*.csv` and
+`reports/eval/trajectories/` were produced on ASU RC Voyager with `LLM_BACKEND=voyager`,
+`VOYAGER_BASE_URL=https://openai.rc.asu.edu/v1`, `VOYAGER_MODEL=qwen3-30b-a3b` and the default
+`VOYAGER_TEMPERATURE` (1e-9), all set through `.env` (the API key is never committed). Case B is
+`python -m src.baselines.runner --driver HAM --lap 30 --json --quiet`, run ten times
+(`reports/eval/case_b/run_01..10`); the pilot is `python -m src.eval score --scenarios
+data/scenarios/pilot1.json --policies baselines agent`, and the paired intervals are
+`python -m src.eval.compare reports/eval/pilot1.csv --reference agent --others fixed_one_stop
+actual_strategy`. The model is not deterministic at this temperature: identical inputs gave 5 of
+10 submissions on Case B. The pilot set is a development set, not a report-set estimate.
