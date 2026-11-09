@@ -48,18 +48,19 @@ def make_run(tmp, profile, races, log, **kw):
 def smoke(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("real_run")
     before = snapshot()
-    races, notes = real_run.cached_races()
+    # The smoke run stays on the 2021 Spain cache so its cost and expectations do not grow
+    # with every newly cached race.
+    _, notes = real_run.cached_races()
     log = []
-    manifest = real_run.execute(make_run(tmp, small_profile(), races, log, race_notes=notes,
+    manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log, race_notes=notes,
                                          race_source="auto: every cached race"))
     return tmp, manifest, log, before
 
 
 def test_cached_races_are_the_committed_spain_cache():
-    # The 2023 and 2024 race folders (OpenF1 work) are cached without their event
-    # schedules, so discovery leaves them out with a note until those schedules are cached.
-    assert real_run.cached_races() == (["2021_04_spain"], [
-        "2023: no cached event schedule, its 2 race(s) left out",
+    # 2023 has its event schedule cached (dataset 2); the 2024 race folders do not yet,
+    # so discovery leaves them out with a note.
+    assert real_run.cached_races() == (["2021_04_spain", "2023_01_bahrain", "2023_07_spain"], [
         "2024: no cached event schedule, its 3 race(s) left out",
     ])
 
