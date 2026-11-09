@@ -14,11 +14,19 @@ Jobs: g_race (SPEC G rows for one race), h_fold (one held-out race or season for
 calibrator, run by calibrators.loro), eval_chunk (one chunk of scenario items through a
 pluggable runner), build_weekend (not here: owned by the data pipeline).
 
+eval_chunk runs through the eval, which installs its runner first:
+
+    python -m src.eval jobs --scenarios data/scenarios/v1.json -- run-all eval_chunk --manifest M --out O
+
+The runner's spec rides in every task's payload (set_eval_runner), so run-all's worker
+processes install the same runner before their tasks.
+
 Race ids are <season>_<round:02d>_<gp_slug> (race_ids.py); the aliases there (2021_Spain)
 are accepted anywhere and mapped to the canonical id, which names the output files.
 """
 import argparse
 import contextlib
+import importlib
 import json
 import logging
 import math
@@ -69,6 +77,13 @@ def split_race_id(race_id: str) -> tuple[int, int | str]:
         return race_season(race_id), race_id.partition("_")[2]
 
 
+def race_min_stint(profile: ComputeProfile) -> int:
+    """R2's minimum stint for a race loaded under `profile`: the profile's sim.min_stint when
+    set, else the race's own value. There is no race registry yet, so the race's value is the
+    RaceParams default (calibrate.MIN_STINT_DEFAULT, 3); the registry replaces it here."""
+    return calibrate.MIN_STINT_DEFAULT if profile.sim.min_stint is None else profile.sim.min_stint
+
+
 def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
     """Frame, race constants (observed pit loss, as `calibrate midrace` does), practice and results.
 
@@ -76,7 +91,7 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
     race_id = canonical_race_id(race_id)
     season, rnd, _ = parse_race_id(race_id)
     args = SimpleNamespace(season=season, gp=rnd, pit_loss="observed", degradation=SimConfig().degradation.name,
-                           config=None, min_stint=profile.sim.min_stint or RaceParams.model_fields["min_stint_laps"].default)
+                           config=None, min_stint=race_min_stint(profile))
     session, frame, cfg, race = calibrate._race_setup(args)
     pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
     race = race.model_copy(update={"pit_loss_s": pit_loss, "race_id": race_id})
@@ -84,14 +99,40 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
                     session_results(session), cfg)
 
 
+def race_loader(args=None) -> Callable:
+    """load_race, or the fn(race_id, profile) -> RaceData named by args.race_loader
+    ("module:function", a plain string so run-all's workers resolve it too). The cross-race
+    run (cross_race.load_race) adds synthetic races this way."""
+    spec = getattr(args, "race_loader", None)
+    if not spec:
+        return load_race
+    module, _, name = spec.partition(":")
+    return getattr(importlib.import_module(module), name)
+
+
 # --- eval runner (the eval harness plugs in here) --------------------------------------
 EvalRunner = Callable[[str, ComputeProfile], pd.DataFrame]
 _EVAL_RUNNER: list[EvalRunner | None] = [None]
+_EVAL_SPEC: list[dict | None] = [None]
 
 
-def set_eval_runner(fn: EvalRunner | None):
-    """Install fn(chunk_id, profile) -> DataFrame of that chunk's results."""
+def set_eval_runner(fn: EvalRunner | None, spec: dict | None = None):
+    """Install fn(chunk_id, profile) -> DataFrame of that chunk's results.
+
+    `spec` says how another process installs the same runner: {"installer": "module:function",
+    **kwargs}, plain picklable values. run-all carries it in every eval_chunk task's payload
+    (args.eval_runner), and a worker calls installer(**kwargs) before its task, so the
+    workers need no state from the parent process (spawn and forkserver start them empty)."""
     _EVAL_RUNNER[0] = fn
+    _EVAL_SPEC[0] = spec
+
+
+def install_eval_runner(spec: dict | None):
+    """Install the runner a set_eval_runner spec describes, unless it is the one installed."""
+    if spec is None or (spec == _EVAL_SPEC[0] and _EVAL_RUNNER[0] is not None):
+        return
+    module, _, name = spec["installer"].partition(":")
+    getattr(importlib.import_module(module), name)(**{k: v for k, v in spec.items() if k != "installer"})
 
 
 # --- job definitions ---------------------------------------------------------------
@@ -127,14 +168,16 @@ def _stamp(df: pd.DataFrame, data: RaceData, cfg: SimConfig, profile: ComputePro
 def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None, laps_k=None) -> pd.DataFrame:
     """SPEC G rows for one race, one copy per N in profile.g.cadences, tagged k_subsample: the snapshots at multiples of N
     (None: lap 0 only) out of the profile's lap set. Rows do not depend on N, so the
-    midrace replay runs once and the copies are tagged."""
+    midrace replay runs once and the copies are tagged. The replay runs the profile's
+    n_samples, so with n_samples > 1 the rows carry the interval columns (calibration.midrace)."""
     laps_k = laps_k_for(data.frame, data.race.total_laps, profile) if laps_k is None else laps_k
 
     def factory(window):
         return Simulator(data.frame, cfg.model_copy(update={"fit_window": window}), data.practice)
 
     rows = calibration.midrace(factory, data.frame, data.race, laps_k=laps_k,
-                               windows=windows or profile.g.windows, results=data.results)
+                               windows=windows or profile.g.windows, results=data.results,
+                               n_samples=profile.sim.n_samples)
     parts = []
     for n in profile.g.cadences:
         keep = rows["k"] == 0 if n is None else rows["k"] % n == 0
@@ -233,10 +276,36 @@ def _wandb_config(update: dict):
         wandb.run.config.update(update, allow_val_change=True)
 
 
+class CrossRace(Job):
+    """SPEC 0016 B: one race's cross-race tables (cross_race.race_tables) as one parquet,
+    <out>/races/<race_id>/<race_id>.parquet. The race comes from race_loader(args)."""
+    name, subdir = "cross_race", "races"
+
+    def units(self, args):
+        return _race_ids(args.races)
+
+    def output(self, out, unit, args=None):
+        stem = self.stem(unit)
+        return Path(out) / self.subdir / stem / f"{stem}{self.suffix}"
+
+    def run(self, unit, profile, out, args=None):
+        from . import cross_race
+        return cross_race.race_job(unit, profile, race_loader(args))
+
+    def summarize(self, tables, profile, out, args=None):
+        from . import cross_race
+        return [cross_race.write_factors({u: cross_race.unpack(t) for u, t in tables.items()}, out)]
+
+
 class HFold(Job):
+    """With args.arm (SPEC 0016 C) a fold is the held-out race under a cross-race arm
+    (cross_race.fold_job), written to <out>/h/arms/<arm>/<race_id>.parquet; without it, a
+    calibrator's fold as below."""
     name, subdir = "h_fold", "h"
 
     def output(self, out, unit, args=None):
+        if getattr(args, "arm", None):
+            return Path(out) / self.subdir / "arms" / args.arm / f"{self.stem(unit)}{self.suffix}"
         return Path(out) / self.subdir / args.calibrator / f"{self.stem(unit)}{self.suffix}"
 
     def units(self, args):
@@ -254,6 +323,9 @@ class HFold(Job):
         """One fold through calibrators.loro, which owns the protocol: fit on the pool outside
         the fold, replay the held-out races on G's pre_race and to_snapshot windows at the
         profile's cadences (SimConfig.calibration_every). Writes <unit>.rmse.json beside the rows."""
+        if getattr(args, "arm", None):
+            from . import cross_race
+            return cross_race.fold_job(unit, args.arm, profile, race_loader(args), _race_ids(args.pool or args.races))
         pool = _race_ids(args.pool or args.races)
         data = [replace(load_race(r, profile), race_id=r) for r in pool]
         dataset = calibrators.build_dataset(data, laps_k=lambda d: laps_k_for(d.frame, d.race.total_laps, profile))
@@ -274,6 +346,12 @@ class HFold(Job):
         return res.rows
 
     def summarize(self, tables, profile, out, args=None):
+        if getattr(args, "arm", None):   # the arm's G summary; the selection is cross_race.report's
+            from . import cross_race
+            rows = pd.concat([cross_race.unpack(t)["g"] for t in tables.values()], ignore_index=True)
+            path = Path(out) / "h" / "arms" / args.arm / "summary.csv"
+            calibration.aggregate(rows, n_boot=profile.g.n_boot).to_csv(path)
+            return [path]
         rows = pd.concat(tables.values(), ignore_index=True)
         paths = []
         base = Path(out) / "h" / (args.calibrator if args else "all")
@@ -300,6 +378,8 @@ class EvalChunk(Job):
         return [f"chunk_{i:04d}" for i in range(math.ceil(args.n_items / size))]
 
     def run(self, unit, profile, out, args=None):
+        # the task payload's runner spec (main sets args.eval_runner), for workers started empty
+        install_eval_runner(getattr(args, "eval_runner", None))
         runner = _EVAL_RUNNER[0]
         if runner is None:
             raise NotImplementedError("no eval runner installed; call jobs.set_eval_runner(fn)")
@@ -325,7 +405,7 @@ class BuildWeekend(Job):
         raise NotImplementedError("owned by the data pipeline")
 
 
-JOBS: dict[str, Job] = {j.name: j for j in (GRace(), HFold(), EvalChunk(), BuildWeekend())}
+JOBS: dict[str, Job] = {j.name: j for j in (GRace(), HFold(), EvalChunk(), BuildWeekend(), CrossRace())}
 
 
 # --- runner ---------------------------------------------------------------------------
@@ -386,7 +466,8 @@ def aggregate(job: Job, units: list[str], profile: ComputeProfile, out, args=Non
               "missing": missing, "files": []}
     if present:
         status["files"] = [str(p) for p in job.summarize(present, profile, out, args)]
-    path = Path(out) / job.subdir / ("status.json" if not isinstance(job, HFold) else f"{args.calibrator}/status.json")
+    sub = (f"arms/{args.arm}" if getattr(args, "arm", None) else args.calibrator) if isinstance(job, HFold) else ""
+    path = Path(out) / job.subdir / sub / "status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(status, indent=1))
     return status
@@ -409,6 +490,9 @@ def build_parser():
         p.add_argument("--races", nargs="+", help="race ids such as 2021_04_spain, aliases accepted (manifest, h_fold pool, aggregate)")
         p.add_argument("--pool", nargs="+", help="h_fold: training pool, default --races")
         p.add_argument("--calibrator", default="shrinkage", help="h_fold: a calibrators.CALIBRATORS name")
+        p.add_argument("--arm", help="h_fold: a cross-race arm (cross_race.ARMS, or a derived __s2 / __tau_ name)")
+        p.add_argument("--race-loader", help="module:function loading a race id, default jobs.load_race "
+                                             "(src.sim.cross_race:load_race adds synthetic races)")
         p.add_argument("--n-items", type=int, default=0, help="eval_chunk manifest: number of scenario items")
         p.add_argument("--wandb", action="store_true", help="log to wandb as the profile's wandb section says")
         if task:
@@ -433,6 +517,7 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     profile = load_profile(args.profile)
     args.profile = profile.name   # units() reloads by name
+    args.eval_runner = _EVAL_SPEC[0]   # eval_chunk payload: how a worker installs the runner
     cmd = args.command
     job = JOBS[args.job if cmd in ("manifest", "run-all", "aggregate") else cmd]
     if cmd == "manifest":

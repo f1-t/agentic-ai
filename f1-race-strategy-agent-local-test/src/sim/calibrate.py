@@ -22,8 +22,8 @@ The first writes reports/calibration/<race_id>_midrace.csv and the per driver ap
 <race_id>_midrace_by_driver.csv. Its pit loss is the observed one, measured as the plain
 command does, unless --pit-loss gives a number. Every row of both csvs carries pit_loss_s,
 pit_loss_source ("observed" or "--pit-loss"), config_hash (calibration.config_hash, a hash
-of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a hash of the
-src/sim and src/contracts.py source). The second prints the summary pivot and writes
+of the physics config) and sim_code_version (calibration.SIM_CODE_VERSION, a hash of the physics
+modules of src/sim and src/contracts.py). The second prints the summary pivot and writes
 reports/calibration/midrace_summary.csv, every row with the same four columns taken from
 the input rows (calibrate._provenance); it refuses rows with more than one value of
 either version column unless --allow-mixed is given.
@@ -46,6 +46,26 @@ Calibrators side by side (calibrators.py), per cadence N:
 writes reports/calibration/<race_id>_calibrators.csv, <race_id>_calibrator_factors.csv and
 <race_id>_selection.csv (calibrators.selection_table per cadence, with --note on every row),
 named by the canonical race id (2021_04_spain).
+
+Across races (SPEC 0016, cross_race.py): eligibility, per-race tables, leave-one-race-out
+per arm, then factors.csv and summary.md under reports/calibration/cross_race/:
+
+    python -m src.sim.calibrate cross run --races 2021_04_spain [--synthetic 2]
+    python -m src.sim.calibrate cross report
+
+SC and VSC rates by circuit and era (SPEC 0011b, event_rates.py): shrunk rates, their
+leave-one-race-out selection and as-of rates per race, under reports/calibration/event_rates/
+(a synthetic run goes to a scratch directory):
+
+    python -m src.sim.calibrate rates [--periods data/derived/neutralised_periods.csv]
+    python -m src.sim.calibrate rates --synthetic --out /tmp/rates
+
+The per-circuit race-pace prior for the fuel term (SPEC 0020, fuel_prior.py): targets, the
+fuel_* calibrators' leave-one-race-out selection and the F table, under
+reports/calibration/fuel_prior/ (a synthetic run goes to a scratch directory):
+
+    python -m src.sim.calibrate fuel --races 2021_04_spain ... [--race-features data/race_features.csv]
+    python -m src.sim.calibrate fuel --synthetic --out /tmp/fuel
 """
 import argparse
 import json
@@ -66,6 +86,8 @@ REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports", "cal
 PRACTICE_SESSIONS = ("FP1", "FP2", "FP3")
 VERSION_COLUMNS = ("config_hash", "sim_code_version")
 PROVENANCE_COLUMNS = ("pit_loss_s", "pit_loss_source", *VERSION_COLUMNS)
+FREE_AIR_HELP = "fit on free-air rows only (SimConfig.fit_free_air_only)"
+MIN_STINT_DEFAULT = RaceParams.model_fields["min_stint_laps"].default   # R2, docs/rules.md
 PIVOT_METRICS = ["n", "n_nan", "mae_s", "bias_s", "mae_offset_s", "within_2_rate_sim", "mae_pos_sim",
                  "within_2_rate_real", "mae_pos_real"]
 
@@ -75,7 +97,7 @@ def _race_args(ap):
     ap.add_argument("--gp", default="Spain")
     ap.add_argument("--pit-loss", default="observed",
                     help=f'seconds, or "observed" to measure it from a first pass at {DEFAULT_PIT_LOSS_S}')
-    ap.add_argument("--min-stint", type=int, default=10)
+    ap.add_argument("--min-stint", type=int, default=MIN_STINT_DEFAULT, help="R2, default RaceParams.min_stint_laps")
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
@@ -442,6 +464,15 @@ def traffic_main(argv):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "cross":
+        from . import cross_race
+        return cross_race.main(argv[1:])
+    if argv and argv[0] == "rates":
+        from . import event_rates
+        return event_rates.main(argv[1:])
+    if argv and argv[0] == "fuel":
+        from . import fuel_prior
+        return fuel_prior.main(argv[1:])
     if argv and argv[0] == "traffic":
         return traffic_main(argv[1:])
     if argv and argv[0] == "calibrators":
@@ -455,7 +486,7 @@ def main(argv=None):
     ap.add_argument("--gp", default="Spain")
     ap.add_argument("--pit-loss", default="observed",
                     help='seconds, or "observed" to measure it from a first pass at 22.0 and rerun with it')
-    ap.add_argument("--min-stint", type=int, default=10)
+    ap.add_argument("--min-stint", type=int, default=MIN_STINT_DEFAULT, help="R2, default RaceParams.min_stint_laps")
     ap.add_argument("--degradation", default=SimConfig().degradation.name)
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)

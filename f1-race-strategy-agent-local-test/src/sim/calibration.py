@@ -19,7 +19,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from ..contracts import Plan, RaceParams, Snapshot, StintRecord
+from ..contracts import FieldState, NearbyCar, Plan, RaceParams, Snapshot, StintRecord
 from .config import SimConfig
 from .data import race_stints
 from . import traffic
@@ -204,6 +204,83 @@ def observed_periods(frame: pd.DataFrame | None = None, messages: pd.DataFrame |
     return periods
 
 
+# --- cross-race eligibility (SPEC 0016 A) --------------------------------------------
+MIN_FINISHERS = 12        # eligible drivers (eval.scenarios.eligible_drivers)
+MIN_DRY_COMPOUNDS = 2     # dry compounds raced
+MIN_COMPOUND_DRIVERS = 3  # a compound this many drivers used needs MIN_CLEAN_LAPS clean laps
+MIN_CLEAN_LAPS = 5
+WET_COMPOUNDS = ("INTERMEDIATE", "WET")
+
+
+def _red_flag_laps(frame, messages):
+    """Laps with a red flag: track status 5 on any car's lap, or a race control Flag message
+    RED (its lap, when it has one)."""
+    laps = set(frame.loc[frame["track_status"].astype(str).str.contains("5"), "lap"].astype(int))
+    if messages is not None and len(messages) and "Flag" in messages:
+        red = messages[(messages["Category"].astype(str) == "Flag") & (messages["Flag"].astype(str) == "RED")]
+        laps |= {int(x) for x in red["Lap"].dropna()}
+    return sorted(laps)
+
+
+MAX_LAPS_DOWN = 2          # eval.scenarios.eligible_drivers' default
+
+
+def eligibility(frame: pd.DataFrame, race: RaceParams, messages: pd.DataFrame | None = None) -> dict:
+    """Whether a race enters the cross-race calibration (SPEC 0016 A), and why not.
+
+    Eligible when: no lap on an INTERMEDIATE or WET tyre; no red flag (a red flag lets every
+    car change tyres, which resets the strategy; a lap-1 red flag, a restart, is excluded
+    too and named as such); at least MIN_FINISHERS eligible drivers; at least
+    MIN_DRY_COMPOUNDS dry compounds raced; and at least MIN_CLEAN_LAPS clean laps on every
+    compound MIN_COMPOUND_DRIVERS or more drivers used. `messages` (race control) adds red
+    flags and cross-checks the SC and VSC periods (observed_periods).
+
+    The drivers are the eval sampler's (eval.scenarios.eligible_drivers): laps 1..n with no
+    gap, at most MAX_LAPS_DOWN laps down, so a race eligible here also gives an eval set from
+    the same drivers. Lapped finishers within two laps are in, as they made real strategy
+    decisions; blue flags further down are not modelled, so those cars are out. G keeps its
+    own rows (90 percent of the leader's laps, _finisher_ids).
+
+    Returns {eligible, reasons, n_finishers, drivers, wet_laps_share, red_flags,
+    sc_periods, vsc_periods, dry_compounds, notes}: periods as [[start, end]], laps inclusive.
+    """
+    from ..eval.scenarios import eligible_drivers   # here: src.eval imports this module
+    from .config import compound_class
+    comp = frame["compound"].astype(str)
+    wet = comp.isin(WET_COMPOUNDS)
+    reasons = []
+    if wet.any():
+        reasons.append(f"wet: {int(wet.sum())} laps on {', '.join(sorted(set(comp[wet])))}")
+    red = _red_flag_laps(frame, messages)
+    if red:
+        lap1 = [x for x in red if x <= 1]
+        reasons.append(f"red flag on lap {', '.join(map(str, red))}"
+                       + (" (lap 1: a restart, excluded too)" if lap1 else ""))
+    finishers = eligible_drivers(frame, race.total_laps, MAX_LAPS_DOWN)
+    if len(finishers) < MIN_FINISHERS:
+        reasons.append(f"{len(finishers)} eligible drivers (laps 1..n, at most {MAX_LAPS_DOWN} down), "
+                       f"under {MIN_FINISHERS}")
+    dry = sorted(c for c in set(frame["compound"].dropna()) if c not in WET_COMPOUNDS
+                 and compound_class(None, c) == "SLICK")
+    if len(dry) < MIN_DRY_COMPOUNDS:
+        reasons.append(f"{len(dry)} dry compound(s) raced ({', '.join(dry) or 'none'}), under {MIN_DRY_COMPOUNDS}")
+    drivers = frame.groupby("compound")["driver"].nunique()
+    clean = frame[frame["clean"].astype(bool)].groupby("compound").size()
+    for c in sorted(drivers.index):
+        if drivers[c] >= MIN_COMPOUND_DRIVERS and int(clean.get(c, 0)) < MIN_CLEAN_LAPS:
+            reasons.append(f"{c}: used by {int(drivers[c])} drivers, {int(clean.get(c, 0))} clean laps, "
+                           f"under {MIN_CLEAN_LAPS}")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        periods = observed_periods(frame, messages if messages is not None and len(messages) else None)
+    notes = [str(w.message) for w in caught]
+    return {"race_id": race.race_id, "eligible": not reasons, "reasons": reasons,
+            "n_finishers": len(finishers), "drivers": finishers, "wet_laps_share": float(wet.mean()) if len(frame) else 0.0,
+            "red_flags": red, "sc_periods": [[a, b] for k, a, b in periods if k == "sc"],
+            "vsc_periods": [[a, b] for k, a, b in periods if k == "vsc"], "dry_compounds": dry,
+            "notes": notes}
+
+
 def _sc_pit_factor(laps, green_pit_loss_s):
     """In plus out lap residual on stops whose in lap is under SC, over the green observed pit loss."""
     ins = laps[(laps["kind"] == "in_lap") & laps["track_status"].str.contains("4")]
@@ -384,8 +461,34 @@ MIN_OFFSET_LAPS = 5      # green non-pit laps up to k needed for a driver pace o
 PACE_OFFSET_ALL_LAPS = "pace_offset_all_laps"   # free-air offset fell back to every green lap
 
 
+# SIM_CODE_VERSION is a physics version: it hashes the src/sim modules that can move a
+# simulated time or a reference plan, plus src/contracts.py, and nothing else, so a change to
+# the tooling around the simulator does not mark every cached reference and report stale.
+# Every module in src/sim is on exactly one list (tests/test_sim_calibration_midrace.py
+# fails on a module on neither), so a new module is classified on purpose.
+PHYSICS_MODULES = (
+    "engine", "degradation", "events", "hazard", "track", "traffic", "rules", "config", "data",
+    "tyre_sets", "weather", "pace", "calibrators", "optimizer_bridge", "registry",
+    "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
+    # the fuel_* calibrators (SPEC 0020) set the fuel prior and its tau, which move lap times
+    "fuel_prior",
+)
+NON_PHYSICS = (
+    "__init__",       # re-exports only
+    "agent_tools",    # the agent's tools over the simulator (lands with #41)
+    "jobs", "compute", "calibrate", "model_report", "race_ids",
+    # calibration builds the snapshots of the eval scenario sets (snapshot_at) and the
+    # calibration reports; the sets are frozen by their digest once sampled, so a change here
+    # cannot move a scored number through them.
+    "calibration",
+    # the cross-race report (SPEC 0016): eligibility, LORO arms and the selection over them;
+    # it runs the simulator under committed arm configs and never changes a lap time itself
+    "cross_race",
+)
+
+
 def _code_version(src=None) -> str:
-    """sha256 over every .py file under src/sim plus src/contracts.py, first 12 hex digits.
+    """sha256 over the PHYSICS_MODULES of src/sim plus src/contracts.py, first 12 hex digits.
 
     Files are taken in sorted order of their path relative to src/, and each contributes its
     relative path and its bytes, so the value depends on the source alone: the same on any
@@ -395,7 +498,7 @@ def _code_version(src=None) -> str:
     import hashlib
     from pathlib import Path
     src = Path(__file__).resolve().parent.parent if src is None else Path(src)
-    files = sorted([*src.joinpath("sim").rglob("*.py"), src / "contracts.py"],
+    files = sorted([*(src / "sim" / f"{m}.py" for m in PHYSICS_MODULES), src / "contracts.py"],
                    key=lambda p: p.relative_to(src).as_posix())
     h = hashlib.sha256()
     for p in files:
@@ -419,6 +522,7 @@ def config_hash(config: SimConfig) -> str:
     data = config.model_dump(mode="json", exclude={"fit_window"})
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
+RECENT_LAPS = 5          # snapshot_at: own lap times kept in recent_lap_times_s
 N_BOOT = 500             # race-cluster bootstrap draws
 
 
@@ -454,26 +558,54 @@ def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> S
     the driver drove, as in replay_driver. The caller skips drivers without a lap-k row.
     At k > 0, gap_ahead_s, gap_behind_s and car_ahead are the lap frame's gap columns at
     the start of lap k + 1 (data.gap_columns, so the lap k + 1 row), None where that row
-    is missing or the value is NaN; at k = 0 they stay None.
+    is missing or the value is NaN; at k = 0 they stay None. field.nearby comes from the
+    same lap k + 1 rows: the car ahead (gap_s = -gap_ahead_s) and the car whose car_ahead
+    is us (gap_s = our gap_behind_s), each with its position after lap k.
+    recent_lap_times_s is the driver's last RECENT_LAPS lap times up to lap k, oldest
+    first, laps without a time left out. Nothing after the end of lap k is read.
     """
     g = frame[frame["driver"] == driver].sort_values("lap")
     stints = race_stints(frame, driver)
     j, done = _current_stint(stints, k)
     comp, _, start_age, _ = stints[j]
-    position, status, elapsed, gaps = None, "green", 0.0, {}
+    position, status, elapsed, gaps, nearby, recent = None, "green", 0.0, {}, [], []
     if k > 0:
         row = g[g["lap"] == k].iloc[0]
         position = int(row["position"]) if pd.notna(row["position"]) else None
         status = _track_status(str(row["track_status"]))
         elapsed = float(row["end_s"] - g["start_s"].iloc[0])
         gaps = _gaps(g, k + 1)
+        nearby = _nearby(frame, driver, k, gaps)
+        last = g[(g["lap"] <= k) & (g["lap"] > k - RECENT_LAPS)]["lap_time_s"]
+        recent = [float(x) for x in last if pd.notna(x)]
     hist = _scenario(g[g["lap"] <= k])
     return Snapshot(
         race=race.model_copy(update={"total_laps": len(g)}), driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=n, start_lap=first, start_age=a) for c, n, a, first in stints[:j]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=status, elapsed_s=elapsed,
-        position=position, sets_available=None, standing_start=k == 0, **gaps)
+        position=position, sets_available=None, standing_start=k == 0, field=FieldState(nearby=nearby),
+        recent_lap_times_s=recent, **gaps)
+
+
+def _nearby(frame, driver, k, gaps):
+    """NearbyCar for the car ahead and the car behind at the start of lap k + 1 (the gap columns)."""
+    out = []
+    nxt = frame[frame["lap"] == k + 1]
+    pos = frame[frame["lap"] == k].set_index("driver")["position"]
+
+    def position(d):
+        p = pos.get(d)
+        return int(p) if p is not None and pd.notna(p) else None
+    if gaps.get("car_ahead") is not None and gaps.get("gap_ahead_s") is not None:
+        out.append(NearbyCar(driver=gaps["car_ahead"], position=position(gaps["car_ahead"]),
+                             gap_s=-gaps["gap_ahead_s"]))
+    if "car_ahead" in nxt and gaps.get("gap_behind_s") is not None:
+        behind = nxt.loc[nxt["car_ahead"] == driver, "driver"]
+        if len(behind):
+            out.append(NearbyCar(driver=str(behind.iloc[0]), position=position(behind.iloc[0]),
+                                 gap_s=gaps["gap_behind_s"]))
+    return out
 
 
 def _gaps(g, lap):
@@ -580,8 +712,12 @@ def _rank(laps, totals, against):
     return np.where(np.isnan(totals), np.nan, 1 + ahead.sum(axis=1))
 
 
+INTERVAL_COLUMNS = ["pred_p05_s", "pred_p16_s", "pred_p50_s", "pred_p84_s", "pred_p95_s"]
+INTERVAL_PERCENTILES = [5, 16, 50, 84, 95]
+
+
 def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, windows=MIDRACE_WINDOWS,
-            practice=None, min_laps_frac=0.9, results: pd.DataFrame | None = None) -> pd.DataFrame:
+            practice=None, min_laps_frac=0.9, results: pd.DataFrame | None = None, n_samples=1) -> pd.DataFrame:
     """One row per (window, finisher, k): predicted against real remaining race time.
 
     sim_factory(window) returns the Simulator for this race with that fit window. None
@@ -595,6 +731,11 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     covers every finisher, otherwise the last-lap Position. A window fitted with
     fit_free_air_only, or a config with traffic on (free_air_offset), adds pace_offset_flag
     ("pace_offset_all_laps" where _pace_offset fell back to every green lap, else empty).
+
+    n_samples 1 (the default) simulates each row at the config's n_samples, as before. With
+    n_samples > 1 each row runs that many samples, pred_remaining_s is their mean, and the
+    rows gain the percentiles INTERVAL_COLUMNS (pred_p05_s ... pred_p95_s) of the remaining
+    time, which aggregate() turns into interval coverage.
     """
     if sim_factory is None:
         def sim_factory(window):
@@ -618,10 +759,19 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
                     continue
                 snap = snapshot_at(frame, race, d, k)
                 s = sim.fitted_for(snap)
-                res = s.simulate(snap, remaining_plan(frame, d, k), scenario=_scenario(g[g["lap"] > k]),
-                                 rules=REPLAY_RULES, return_laps=True)
+                interval = {}
+                if n_samples > 1:
+                    b = s.simulate_batch(snap, [remaining_plan(frame, d, k)], n_samples=n_samples,
+                                         scenario=_scenario(g[g["lap"] > k]), rules=REPLAY_RULES)
+                    ok = bool(b.valid[0])
+                    pred_rem = float(b.times[0].mean()) if ok else float("nan")
+                    q = np.percentile(b.times[0], INTERVAL_PERCENTILES) if ok else [np.nan] * len(INTERVAL_COLUMNS)
+                    interval = {c: float(v) for c, v in zip(INTERVAL_COLUMNS, q)}
+                else:
+                    res = s.simulate(snap, remaining_plan(frame, d, k), scenario=_scenario(g[g["lap"] > k]),
+                                     rules=REPLAY_RULES, return_laps=True)
+                    pred_rem = res.remaining.mean_s if res.valid else float("nan")
                 real_rem = fin.loc[d, "real_s"] - snap.elapsed_s
-                pred_rem = res.remaining.mean_s if res.valid else float("nan")
                 flags = []
                 err, offset, horizon = pred_rem - real_rem, _pace_offset(s, g, k, flags), snap.remaining_laps
                 at_k.append({**({"pace_offset_flag": ";".join(flags)} if free_air_offset(s.config) else {}),
@@ -629,7 +779,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
                     "k": k, "laps": len(g), "horizon": horizon, "elapsed_s": snap.elapsed_s,
                     "real_remaining_s": real_rem, "pred_remaining_s": pred_rem, "err_s": err,
                     "pace_offset_s": offset, "err_offset_s": err + offset * horizon,
-                    "real_pos": fin.loc[d, "real_pos"]})
+                    "real_pos": fin.loc[d, "real_pos"], **interval})
             if not at_k:
                 continue
             t = pd.DataFrame(at_k)
@@ -649,8 +799,98 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
     if not rows:
         return pd.DataFrame(columns=MIDRACE_COLUMNS)
     out = pd.concat(rows, ignore_index=True)
-    # pace_offset_flag only on free-air offset runs (free_air_offset), so default rows keep their columns
-    return out[MIDRACE_COLUMNS + (["pace_offset_flag"] if "pace_offset_flag" in out else [])]
+    # pace_offset_flag only on free-air offset runs (free_air_offset), the intervals only with
+    # n_samples > 1, so default rows keep their columns
+    return out[MIDRACE_COLUMNS + (["pace_offset_flag"] if "pace_offset_flag" in out else [])
+               + (INTERVAL_COLUMNS if n_samples > 1 else [])]
+
+
+# --- predicted gain at real pit stops (the #40 check, SPEC 0016 amendment 2) -------------
+STOP_GAIN_TERMS = ["t_base_old", "t_base_new", "t_wear_old", "t_wear_new", "t_hinge_old", "t_hinge_new",
+                   "t_fuel", "t_floor"]
+STOP_GAIN_COLUMNS = ["race_id", "window", "k", "k_bucket", "stop", "from", "to", "real_gain_s", "pred_gain_s",
+                     "err_s", *STOP_GAIN_TERMS, "age_before", "age_after"]
+
+
+def _stops(g):
+    """(in lap, last two clean laps of the stint before, first two clean laps of the next) per
+    stop of one driver, where both pairs exist."""
+    out = []
+    g = g.sort_values("lap")
+    for _, r in g[g["pit_in"].astype(bool)].iterrows():
+        in_lap, stint = int(r["lap"]), r["stint"]
+        before = g[(g["lap"] < in_lap) & (g["stint"] == stint) & g["clean"].astype(bool)].tail(2)
+        outl = g[(g["lap"] > in_lap) & g["pit_out"].astype(bool)]
+        if outl.empty:
+            continue
+        out_lap = int(outl["lap"].iloc[0])
+        nxt = g.loc[g["lap"] == out_lap, "stint"].iloc[0]
+        after = g[(g["lap"] > out_lap) & (g["stint"] == nxt) & g["clean"].astype(bool)].head(2)
+        if len(before) == 2 and len(after) == 2:
+            out.append((in_lap, before, after))
+    return out
+
+
+def _mean_pred(model, rows):
+    return float(np.mean([float(model.lap_times(c, np.array([a], dtype=float), np.array([lap], dtype=float))[0])
+                          for c, a, lap in zip(rows["compound"], rows["tyre_age"], rows["lap"])]))
+
+
+def _hinge_age(model, compound, ages):
+    knot = (getattr(model, "knots", None) or {}).get(compound)
+    return 0.0 if knot is None else float(np.mean(np.maximum(0.0, np.asarray(ages, dtype=float) - knot)))
+
+
+def stop_gain(sim: Simulator, frame: pd.DataFrame, race: RaceParams, hindsight, laps_k=None,
+              min_laps_frac=0.9) -> pd.DataFrame:
+    """Predicted against real lap-time gain at every later real pit stop, from each snapshot k.
+
+    gain = mean lap time of the last two clean laps before the stop less that of the first two
+    clean laps after it, real and under the model sim.fitted_for(snapshot at k) (its point
+    estimate), for each finisher's stops after lap k. err_s = pred - real splits into terms
+    against `hindsight` (the same config's full-window degradation model): with d = fitted
+    less hindsight, t_base_old = d base_old, t_base_new = -d base_new, t_wear_old = d wear_old
+    x mean age before, t_wear_new = -d wear_new x mean age after, the hinge likewise on the
+    ages past the knot, t_fuel = d fuel x (mean lap before - mean lap after), and t_floor the
+    hindsight model's own error. The terms sum to err_s. laps_k defaults to default_laps_k.
+    """
+    laps_k = default_laps_k(frame, race.total_laps) if laps_k is None else laps_k
+    groups = {d: frame[frame["driver"] == d].sort_values("lap") for d in _finisher_ids(frame, min_laps_frac)}
+    stops = {d: _stops(g) for d, g in groups.items()}
+    window = sim.config.fit_window
+    hs = getattr(hindsight, "hinges", None)
+    rows = []
+    for k in laps_k:
+        for d, g in groups.items():
+            if k >= len(g) or (k > 0 and not (g["lap"] == k).any()):
+                continue
+            m = sim.fitted_for(snapshot_at(frame, race, d, k)).degradation
+            ms = getattr(m, "hinges", None)
+            for in_lap, before, after in stops[d]:
+                if in_lap <= k:
+                    continue
+                old, new = before["compound"].iloc[-1], after["compound"].iloc[0]
+                if not {old, new} <= set(m.coefs) & set(hindsight.coefs):
+                    continue
+                real = float(before["lap_time_s"].mean() - after["lap_time_s"].mean())
+                pred = _mean_pred(m, before) - _mean_pred(m, after)
+                ab, aa = float(before["tyre_age"].mean()), float(after["tyre_age"].mean())
+                dl = float(before["lap"].mean() - after["lap"].mean())
+                (bo, wo), (bn, wn) = m.coefs[old], m.coefs[new]
+                (ho, hwo), (hn, hwn) = hindsight.coefs[old], hindsight.coefs[new]
+                ho_h = hn_h = 0.0
+                if ms is not None and hs is not None:
+                    ho_h = (ms[old] - hs[old]) * _hinge_age(m, old, before["tyre_age"])
+                    hn_h = -(ms[new] - hs[new]) * _hinge_age(m, new, after["tyre_age"])
+                fuel = getattr(m, "fuel_slope", 0.0) - getattr(hindsight, "fuel_slope", 0.0)
+                rows.append({"race_id": race.race_id, "window": window, "k": k, "k_bucket": k // 10 * 10,
+                             "stop": f"{d}:{in_lap}", "from": old, "to": new, "real_gain_s": real,
+                             "pred_gain_s": pred, "err_s": pred - real, "t_base_old": bo - ho,
+                             "t_base_new": -(bn - hn), "t_wear_old": (wo - hwo) * ab, "t_wear_new": -(wn - hwn) * aa,
+                             "t_hinge_old": ho_h, "t_hinge_new": hn_h, "t_fuel": fuel * dl,
+                             "t_floor": _mean_pred(hindsight, before) - _mean_pred(hindsight, after) - real,
+                             "age_before": ab, "age_after": aa})
+    return pd.DataFrame(rows, columns=STOP_GAIN_COLUMNS)
 
 
 def _bucketed(rows):
@@ -671,6 +911,18 @@ def _metrics(t):
         pos = t[f"abs_pos_err_{mode}"].dropna()
         out[f"within_2_rate_{mode}"] = float((pos <= 2).mean())
         out[f"mae_pos_{mode}"] = float(pos.mean())
+    if "pred_p05_s" in t:   # midrace(n_samples > 1): interval coverage of the pace-corrected real time
+        real = t["real_remaining_s"] - t["pace_offset_s"] * t["horizon"]
+        ok = real.notna() & t["pred_p05_s"].notna()
+        r, q = real[ok], t[ok]
+        out["coverage_68"] = float(((q["pred_p16_s"] <= r) & (r <= q["pred_p84_s"])).mean()) if ok.any() else np.nan
+        out["coverage_90"] = float(((q["pred_p05_s"] <= r) & (r <= q["pred_p95_s"])).mean()) if ok.any() else np.nan
+        out["mean_width_90_s"] = float((q["pred_p95_s"] - q["pred_p05_s"]).mean()) if ok.any() else np.nan
+        # the raw target: real_remaining_s itself, every row with a prediction (an offset not needed)
+        raw = t["real_remaining_s"].notna() & t["pred_p05_s"].notna()
+        r, q = t.loc[raw, "real_remaining_s"], t[raw]
+        out["coverage_raw_68"] = float(((q["pred_p16_s"] <= r) & (r <= q["pred_p84_s"])).mean()) if raw.any() else np.nan
+        out["coverage_raw_90"] = float(((q["pred_p05_s"] <= r) & (r <= q["pred_p95_s"])).mean()) if raw.any() else np.nan
     return out
 
 
@@ -694,6 +946,8 @@ def _bootstrap_ci(t, n_boot=N_BOOT, seed=0):
 
 SUMMARY_COLUMNS = ["n", "n_nan", "n_races", "mae_s", "bias_s", "mae_offset_s", "mae_offset_ci_lo",
                    "mae_offset_ci_hi", "within_2_rate_sim", "mae_pos_sim", "within_2_rate_real", "mae_pos_real"]
+# rows with INTERVAL_COLUMNS only
+COVERAGE_COLUMNS = ["coverage_68", "coverage_90", "coverage_raw_68", "coverage_raw_90", "mean_width_90_s"]
 
 
 def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
@@ -704,6 +958,7 @@ def _table(rows, keys, ci, n_boot=N_BOOT, seed=0):
         out.append(m)
         index.append(key)
     cols = SUMMARY_COLUMNS if ci else [c for c in SUMMARY_COLUMNS if not c.startswith("mae_offset_ci")]
+    cols = cols + (COVERAGE_COLUMNS if "pred_p05_s" in rows else [])
     table = pd.DataFrame(out, columns=cols, index=pd.MultiIndex.from_tuples(index, names=keys))
     return table.astype({"n": int, "n_nan": int, "n_races": int})
 
@@ -712,6 +967,14 @@ def aggregate(rows: pd.DataFrame, n_boot=N_BOOT, seed=0) -> pd.DataFrame:
     """Summary indexed by (window, horizon_bucket); bucket b holds horizons b to b + 9.
 
     mae_offset_ci_lo and _hi are a race-cluster bootstrap 95 percent CI, NaN with one race.
+    Rows from midrace(n_samples > 1) add coverage_68 and coverage_90, the share of rows whose
+    pace-corrected real remaining time, real_remaining_s - pace_offset_s * horizon, falls
+    inside [pred_p16_s, pred_p84_s] and [pred_p05_s, pred_p95_s] (rows with a NaN offset or
+    prediction skipped), coverage_raw_68 and coverage_raw_90, the same against real_remaining_s
+    itself on every row with a prediction (the target for a window whose driver term is in the
+    engine, Simulator(pace=...), such as pre_race with practice offsets: the pace-corrected
+    target would also remove the common error the interval carries), and mean_width_90_s,
+    the mean of pred_p95_s - pred_p05_s on the pace-corrected rows.
     """
     return _table(rows, ["window", "horizon_bucket"], ci=True, n_boot=n_boot, seed=seed)
 
@@ -781,13 +1044,6 @@ def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver
     return snap, res, traffic.anchor(frame, snap) + res.remaining.mean_s
 
 
-def _place(frame, driver, lap, t):
-    """(1 + ghosts that finished `lap` before t, t less the end of the car directly ahead)."""
-    G = traffic.ghost_table(frame, driver, [lap]).G[:, 0]
-    ahead = G[np.isfinite(G) & (G < t)]
-    return 1 + len(ahead), (float(t - ahead.max()) if len(ahead) else float("nan"))
-
-
 def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min_laps_frac=0.9) -> pd.DataFrame:
     """One row per real pit stop of a finisher: the replay from the snapshot at k = in_lap - 1
     over the in-lap and the out-lap, with the real remaining plan and SC/VSC laps.
@@ -807,8 +1063,8 @@ def rejoin(sim: Simulator, frame: pd.DataFrame, race: RaceParams, pace=None, min
             if out not in g.index or (k > 0 and k not in g.index):
                 continue
             _, res, t = _replay_window(sim, frame, race, d, k, out)
-            pred_pos, pred_gap = _place(frame, d, out, t)
-            clock_pos, real_gap = _place(frame, d, out, float(g.loc[out, "end_s"]))
+            pred_pos, pred_gap = traffic.place(frame, d, out, t)
+            clock_pos, real_gap = traffic.place(frame, d, out, float(g.loc[out, "end_s"]))
             real_pos = float(g.loc[out, "position"])
             rows.append({"driver": d, "in_lap": int(in_lap), "k": k, "out_lap": out,
                          "pred_pos": pred_pos, "real_pos": real_pos, "pos_err": pred_pos - real_pos,
@@ -842,7 +1098,7 @@ def placement(sim: Simulator, frame: pd.DataFrame, race: RaceParams, lap: int, p
         if lap not in g.index:
             continue
         _, res, t = _replay_window(sim, frame, race, d, 0, lap)
-        pred_pos, _ = _place(frame, d, lap, t)
+        pred_pos, _ = traffic.place(frame, d, lap, t)
         real_pos = float(g.loc[lap, "position"])
         rows.append({"driver": d, "lap": lap, "pred_pos": pred_pos, "real_pos": real_pos,
                      "abs_err": abs(pred_pos - real_pos), "traffic_s": res.traffic_s, "passes": res.passes_mean})

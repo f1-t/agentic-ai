@@ -1,0 +1,8 @@
+# SPEC 0016 review arm "collinear_hold_nonneg": collinear_hold with the wear bound at 0. A
+# compound's wear is held at the practice prior while |corr(fuel, wear[c])| is above 0.5 and
+# bounded below at 0 once it is released (the bound only matters after release).
+degradation:
+  name: linear_fuel
+  params:
+    collinear_hold: 0.5
+    wear_lower_bound: 0.0

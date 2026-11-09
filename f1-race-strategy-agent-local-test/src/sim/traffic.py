@@ -130,6 +130,12 @@ Known limits, not solved here:
 (3) Ghosts do not react: no undercut defence, no rival strategist.
 (4) Our clock drifts from the real one by the model error (0.1 to 0.3 s/lap), so positions
     far from the snapshot are noisy; the rejoin a few laps on is the trustworthy use.
+(5) Recorded ghosts are valid only under the recorded events. Under a drawn SC the field ran
+    green, so any field-time rule prices that SC at nothing. With an event model other than
+    "none", or a fixed scenario other than the record over the remaining laps, the engine
+    adds "traffic_recorded_with_drawn_events" to every plan's support warnings (positions
+    and traffic approximate). The optimizer with rate events keeps traffic off; the ghost
+    model is for replay, calibration and hindsight ground truth under the real events.
 """
 from dataclasses import dataclass, field
 from typing import Literal
@@ -200,26 +206,39 @@ class GhostTable:
 def ghost_table(frame, driver, laps) -> GhostTable:
     """Every driver in `frame` except `driver`, over the lap numbers `laps`.
 
-    The one place the end_s(L - 1) gap arithmetic lives: the anchor check in prepare and
-    calibration.rejoin / placement read gaps only through this table. data.lap_frame's gap
-    columns (SPEC 0010b) use the same arithmetic; whichever lands second dedupes onto the
-    other.
+    The session times come from data.line_crossings, the end_s(L - 1) arithmetic shared
+    with data.gap_columns: G_prev[j, L] is ghost j's crossing at the start of lap L, G its
+    crossing at the start of lap L + 1. The anchor check in prepare and calibration.rejoin
+    / placement read gaps only through this table.
     """
     laps = np.asarray(laps, dtype=int)
     ghosts = sorted(d for d in frame["driver"].unique() if d != driver)
-    n_lap = int(max(laps.max(), frame["lap"].max())) + 1 if len(laps) else 1
-    end = np.full((len(ghosts), n_lap), np.nan)
+    n_lap = int(max(laps.max(), frame["lap"].max())) + 2 if len(laps) else 2
+    start = np.full((len(ghosts), n_lap), np.nan)   # start[j, L]: crossing at the start of lap L
     pit_in = np.zeros((len(ghosts), n_lap), dtype=bool)
     pit_out = np.zeros((len(ghosts), n_lap), dtype=bool)
     rows = frame[frame["driver"].isin(ghosts)]
+    cross = line_crossings(rows)
+    jc = np.searchsorted(ghosts, cross["driver"].to_numpy())
+    start[jc, cross["lap"].to_numpy(dtype=int)] = cross["t"].to_numpy()
     j = np.searchsorted(ghosts, rows["driver"].to_numpy())
     lap = rows["lap"].to_numpy(dtype=int)
-    end[j, lap] = rows["end_s"].to_numpy(dtype=float)
     pit_in[j, lap] = rows["pit_in"].to_numpy(dtype=bool)
     pit_out[j, lap] = rows["pit_out"].to_numpy(dtype=bool)
-    G, G_prev = end[:, laps], end[:, laps - 1]   # lap 0 has no row, so NaN
+    G, G_prev = start[:, laps + 1], start[:, laps]   # no lap-0 row, so lap 1's G_prev is NaN
     return GhostTable(ghosts=ghosts, laps=laps, G=G, G_prev=G_prev, g=G - G_prev, in_lap=pit_in[:, laps],
                       out_lap=pit_out[:, laps])
+
+
+def place(frame, driver, lap, t):
+    """(position, gap): our position at the end of `lap` if we cross the line at session time
+    t, 1 + the ghosts (every other driver in `frame`) that finished `lap` before t, and t less
+    the end of lap `lap` of the car directly ahead (NaN when none is). A ghost without a lap
+    `lap` (retired, or laps down) is not ahead. calibration.rejoin and placement rank our
+    clock with it, the eval's position regret our finishing time (SPEC 0014 D)."""
+    G = ghost_table(frame, driver, [lap]).G[:, 0]
+    ahead = G[np.isfinite(G) & (G < t)]
+    return 1 + len(ahead), (float(t - ahead.max()) if len(ahead) else float("nan"))
 
 
 def race_start(frame, driver):

@@ -12,6 +12,19 @@ Sampling, per race: drivers whose laps run 1..n without a gap and who finished a
 calibration.default_laps_k (every 5th lap plus the laps either side of each SC and VSC
 period) that leave room for one more stint, optionally subsampled to `max_per_race` with a
 seeded rng.
+
+The registered eval split (docs/eval.md "Development and report sets"). data/eval_set.json,
+written by the data team's register_eval_set, lists the races held out for reporting:
+
+    {"races": ["2022_05_miami", ...], ...}      (or a bare list of race ids)
+
+While it exists, build_set refuses any race outside it, records the file's sha256 in
+sampling["eval_set_digest"] and marks the set development=False: a report set. Without it a
+set is a development set (development=True), which v1 is: sampled before the split, from a
+race we tuned on. build_set(..., development=True) (`scenarios --development`) samples a
+development set while the split exists, a debug set of any race: no refusal, and the digest
+is still recorded so the set shows the split existed. Report numbers come from sets with
+development=False only.
 """
 from __future__ import annotations
 
@@ -30,9 +43,27 @@ from ..sim.data import race_stints
 from ..sim.race_ids import canonical_race_id
 
 SCHEMA_VERSION = 1
+EVAL_SET = Path(__file__).resolve().parents[2] / "data" / "eval_set.json"
 # The data team's snapshot builder replaces this; it has the same signature.
 SnapshotBuilder = Callable[[pd.DataFrame, RaceParams, str, int], Snapshot]
 DEFAULT_BUILDER = "src.sim.calibration.snapshot_at"
+
+
+# Snapshot fields added to the contract after sets were published (SPEC 0014 I). The digest
+# leaves each out while it holds its default, so a set saved before the field existed keeps
+# its digest, and a set that fills the field hashes it.
+_ADDED_FIELDS = {("snapshot", "recent_lap_times_s"): [], ("snapshot", "context"): {},
+                 ("snapshot", "weather", "rain_probability"): None, ("snapshot", "field", "nearby"): []}
+
+
+def _digest_view(item: dict) -> dict:
+    for path, default in _ADDED_FIELDS.items():
+        parent = item
+        for key in path[:-1]:
+            parent = parent.get(key, {})
+        if path[-1] in parent and parent[path[-1]] == default:
+            del parent[path[-1]]
+    return item
 
 
 class Scenario(BaseModel):
@@ -55,11 +86,14 @@ class ScenarioSet(BaseModel):
     sampling: dict = Field(default_factory=dict)
     sim_code_version: str = ""
     digest: str = ""                     # sha256 of the items, set by save(), checked by load()
+    # True: sampled without the registered eval split (tuning and debugging; v1 is one).
+    # False: sampled from the eval races only, the set the report numbers come from.
+    development: bool = True
     items: list[Scenario] = Field(default_factory=list)
     skipped: list[dict] = Field(default_factory=list)   # {race_id, driver, lap, reason}
 
     def compute_digest(self) -> str:
-        payload = json.dumps([s.model_dump(mode="json") for s in self.items], sort_keys=True)
+        payload = json.dumps([_digest_view(s.model_dump(mode="json")) for s in self.items], sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def save(self, path) -> Path:
@@ -68,6 +102,11 @@ class ScenarioSet(BaseModel):
         self.digest = self.compute_digest()
         path.write_text(self.model_dump_json(indent=1) + "\n")
         return path
+
+    @property
+    def kind(self) -> str:
+        """"development set" or "report set", for the score CLI's one-line notice."""
+        return "development set" if self.development else "report set"
 
     @classmethod
     def load(cls, path) -> ScenarioSet:
@@ -124,12 +163,44 @@ def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuild
     return items, skipped
 
 
+class OutsideEvalSet(ValueError):
+    """A race asked for while the eval split is registered is not in it."""
+
+
+def load_eval_set(path=None) -> tuple[list[str], str] | None:
+    """(canonical race ids, sha256 of the file) of the registered eval split, None when the
+    file does not exist. `path` defaults to data/eval_set.json."""
+    path = Path(EVAL_SET if path is None else path)
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    data = json.loads(raw)
+    races = data if isinstance(data, list) else data["races"]
+    return [canonical_race_id(str(r)) for r in races], hashlib.sha256(raw).hexdigest()
+
+
 def build_set(race_ids: list[str], version: str, *, profile=None, builder: SnapshotBuilder = calibration.snapshot_at,
-              builder_name: str = DEFAULT_BUILDER, **sampling) -> ScenarioSet:
-    """Sample every race in `race_ids` from the committed cache (sim.jobs.load_race)."""
+              builder_name: str = DEFAULT_BUILDER, eval_set=None, development: bool = False,
+              **sampling) -> ScenarioSet:
+    """Sample every race in `race_ids` from the committed cache (sim.jobs.load_race).
+
+    `eval_set` is the registered split's file, data/eval_set.json when None. When it exists,
+    a race outside it raises OutsideEvalSet before anything is sampled, and the set is a
+    report set (development False) stamped with sampling["eval_set_digest"]. Without it the
+    set is a development set. `development` True asks for a development set while the split
+    exists: any race is sampled and the digest is still recorded."""
     from ..sim import jobs
     from ..sim.compute import load_profile
 
+    registered = load_eval_set(eval_set)
+    split = {}
+    if registered is not None:
+        allowed, digest = registered
+        outside = [canonical_race_id(r) for r in race_ids if canonical_race_id(r) not in set(allowed)]
+        if outside and not development:
+            raise OutsideEvalSet(f"races {outside} are not in the registered eval set ({len(allowed)} races, "
+                                 f"sha256 {digest[:12]}); a set sampled under the split takes eval races only")
+        split = {"eval_set_digest": digest}
     profile = profile or load_profile()
     items, skipped = [], []
     for race_id in race_ids:
@@ -138,5 +209,6 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
         items += got
         skipped += miss
     return ScenarioSet(version=version, builder=builder_name,
-                       sampling={"races": [canonical_race_id(r) for r in race_ids], **sampling},
-                       sim_code_version=calibration.SIM_CODE_VERSION, items=items, skipped=skipped)
+                       sampling={"races": [canonical_race_id(r) for r in race_ids], **sampling, **split},
+                       sim_code_version=calibration.SIM_CODE_VERSION, items=items, skipped=skipped,
+                       development=development or registered is None)

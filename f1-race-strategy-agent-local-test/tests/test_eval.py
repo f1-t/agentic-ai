@@ -225,10 +225,24 @@ def test_resolve_expands_baselines_and_rejects_unknown_names():
         resolve(["oracle"])
 
 
-def test_agent_is_unavailable_mid_race_without_calling_a_model(items, sim):
+def test_agent_runs_mid_race_without_the_lap0_guard(items, sim, tmp_path):
+    """SPEC 0014 H: the lap-0 same-race guard is gone, so a mid-race scenario of any race
+    reaches the snapshot loop. A scripted backend stands in for the model."""
+    from src.eval.policies import AgentPolicy
+    from src.llm.base import ModelBackend, ModelTurn, ToolCall
+
+    class Scripted(ModelBackend):
+        name = "test"
+
+        def run_turn(self, **kw):
+            return ModelTurn(tool_calls=[ToolCall("1", "submit_recommendation", {
+                "decision": "STAY_OUT", "reassess_after_laps": 2, "confidence": 0.6, "rationale": "r",
+                "key_risks": []})])
+
     mid = next(s for s in items if s.lap > 0)
-    with pytest.raises(PolicyUnavailable, match="mid-race"):
-        agent_policy(mid, sim, 2)
+    assert isinstance(agent_policy, AgentPolicy)
+    d = AgentPolicy(set_name="t", max_steps=2, log_dir=tmp_path, backend=Scripted())(mid, sim, 2)
+    assert d.plan is None and d.submission["decision"] == "STAY_OUT" and d.tool_calls == 1
 
 
 # --- committed Spain cache -------------------------------------------------------

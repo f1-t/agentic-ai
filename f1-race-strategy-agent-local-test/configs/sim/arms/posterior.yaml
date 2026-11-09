@@ -1,0 +1,8 @@
+# SPEC 0016 C arm "posterior", coverage only: the baseline's point estimates with the
+# belief's samples (SPEC 0017: posterior parameter draws and residual lap noise), so its G
+# intervals have a width. Reported for coverage, never a candidate in the selection.
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+lap_noise: residual

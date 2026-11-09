@@ -107,9 +107,11 @@ def test_default_off_and_no_pace_hash_equal_to_main():
 
 def test_traffic_is_part_of_the_config_hash():
     # no special case for the default: adding the field moved the default hash off main's
-    # 94a5373a6a20 (76aa6a1), as any new config field does
+    # 0778d5ef02f6 (eeea1e3), as any new config field does; SimConfig.lap_noise (SPEC 0017)
+    # moved it again off eccb59070c14
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "e56663f618bd" and ghost_on == "d366f35d04bf" and default != "94a5373a6a20"
+    assert default == "07dc9587709d" and ghost_on == "5a4646fe5574"
+    assert default not in ("0778d5ef02f6", "eccb59070c14")
 
 
 @pytest.fixture(scope="module")
@@ -161,6 +163,21 @@ def test_ghost_table_arrays():
     assert np.allclose(t.g, 80.5) and t.in_lap[0].tolist() == [lap == 8 for lap in range(6, N + 1)]
     assert t.out_lap[0].tolist() == [lap == 9 for lap in range(6, N + 1)]
     assert np.isnan(ghost_table(df, OUR, np.arange(1, N + 1)).G_prev[0, 0])   # no lap-0 row
+
+
+def test_ghost_table_and_gap_columns_share_the_crossings():
+    # one home for the end_s(L - 1) arithmetic (data.line_crossings): the lap frame's
+    # gap_ahead_s to AAA is our crossing less AAA's G_prev on every lap AAA is ahead
+    from src.sim.data import gap_columns
+    df = gap_columns(frame(ghost("AAA", 80.5, 3.0)))
+    laps = np.arange(2, N + 1)
+    t = ghost_table(df, OUR, laps)
+    ours = df[df["driver"] == OUR].set_index("lap")
+    ahead = ours.loc[laps, "car_ahead"].eq("AAA").to_numpy()   # the recorded XXX passes AAA on lap 7
+    assert ahead.sum() == 10
+    ours_start = ours.loc[laps - 1, "end_s"].to_numpy()
+    assert ours.loc[laps, "gap_ahead_s"].to_numpy()[ahead] == pytest.approx((ours_start - t.G_prev[0])[ahead])
+    assert np.all((ours_start - t.G_prev[0])[~ahead] <= 0)   # level or ahead of it: not the car ahead
 
 
 def test_held_behind_a_slower_car():

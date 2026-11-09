@@ -1,0 +1,6 @@
+# SPEC 0016 review arm "collinear_hold_nonneg_hinge": collinear_hold_nonneg on linear_fuel_hinge.
+degradation:
+  name: linear_fuel_hinge
+  params:
+    collinear_hold: 0.5
+    wear_lower_bound: 0.0

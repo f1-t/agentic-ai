@@ -1,0 +1,6 @@
+# SPEC 0016 amendment arm "wear_nonneg": wear bounded below at 0 in every fit (SPEC 0017b),
+# the bound configs/sim/belief.yaml carries.
+degradation:
+  name: linear_fuel
+  params:
+    wear_lower_bound: 0.0

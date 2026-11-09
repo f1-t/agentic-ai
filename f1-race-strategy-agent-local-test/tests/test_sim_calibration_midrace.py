@@ -338,9 +338,23 @@ def test_config_hash_is_stable_for_identical_configs():
     assert calibration.config_hash(SimConfig(degradation={"name": "linear"})) != calibration.config_hash(a)
 
 
+def test_every_sim_module_is_classified_physics_or_not():
+    """SIM_CODE_VERSION hashes PHYSICS_MODULES only; a module on neither list is a decision
+    nobody made, so it fails here until it is put on one."""
+    from pathlib import Path
+    sim = Path(calibration.__file__).resolve().parent
+    modules = {p.stem for p in sim.glob("*.py")}
+    assert not set(calibration.PHYSICS_MODULES) & set(calibration.NON_PHYSICS)
+    assert set(calibration.PHYSICS_MODULES) <= modules, "a physics module is missing from src/sim"
+    unclassified = modules - set(calibration.PHYSICS_MODULES) - set(calibration.NON_PHYSICS)
+    assert not unclassified, f"add to PHYSICS_MODULES or NON_PHYSICS in calibration.py: {sorted(unclassified)}"
+    assert not [p for p in sim.iterdir() if p.is_dir() and p.name != "__pycache__"], "no subpackages"
+
+
 def test_sim_code_version_hashes_the_sim_sources(tmp_path):
     """A copy of the sources outside the repo, with no git and stray non-source files, gives the
-    same value; one edited byte, or a new .py file, changes it."""
+    same value; one edited byte of a physics module or contracts.py changes it, while a
+    non-physics module or a new (unclassified) file does not."""
     import shutil
     from pathlib import Path
     src = Path(calibration.__file__).resolve().parent.parent
@@ -355,8 +369,13 @@ def test_sim_code_version_hashes_the_sim_sources(tmp_path):
     (copy / "agent.py").write_text("# outside src/sim, not hashed")
     assert calibration._code_version(copy) == calibration.SIM_CODE_VERSION
     (copy / "sim" / "extra.py").write_text("")
+    (copy / "sim" / "jobs.py").write_text((copy / "sim" / "jobs.py").read_text() + "\n")
+    (copy / "sim" / "calibration.py").write_text((copy / "sim" / "calibration.py").read_text() + "\n")
+    assert calibration._code_version(copy) == calibration.SIM_CODE_VERSION
+    (copy / "sim" / "engine.py").write_text((copy / "sim" / "engine.py").read_text() + "\n")
     assert calibration._code_version(copy) != calibration.SIM_CODE_VERSION
-    (copy / "sim" / "extra.py").unlink()
+    shutil.copy(src / "sim" / "engine.py", copy / "sim" / "engine.py")
+    assert calibration._code_version(copy) == calibration.SIM_CODE_VERSION
     (copy / "contracts.py").write_text((copy / "contracts.py").read_text() + "\n")
     assert calibration._code_version(copy) != calibration.SIM_CODE_VERSION
 

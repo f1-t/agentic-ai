@@ -49,7 +49,8 @@ class Fixed(calibrators.Calibrator):
 
 # --- registry and contract -------------------------------------------------------------
 def test_registry_and_defaults():
-    assert CALIBRATORS.keys() == ["gbm", "mlp", "none", "ridge", "shrinkage"]
+    assert CALIBRATORS.keys() == ["event_rates", "fuel_circuit_features", "fuel_circuit_history", "fuel_config",
+                                  "fuel_practice_longrun", "gbm", "mlp", "none", "ridge", "shrinkage"]
     cfg = SimConfig()
     assert (cfg.calibrator.name, cfg.calibration_every, cfg.recalibrate_temp_delta_c) == ("shrinkage", 1, 3.0)
     assert calibration.config_hash(SimConfig(calibrator={"name": "none"})) != calibration.config_hash(cfg)
@@ -149,7 +150,10 @@ def test_none_holds_the_pre_race_fit_at_every_k():
         assert fit.calibration.held and fit.calibration.output.source == "none"
         assert fit.degradation.coefs == pre.degradation.coefs and fit.degradation.fuel_slope == pre.degradation.fuel_slope
         assert fit.ref_lap_s == pre.ref_lap_s
-        assert report_json(fit.degradation.fit_report) == report_json(pre.degradation.fit_report)
+        # the held prior's cov is its calibrator's: sd 0 under none, the taus under shrinkage
+        assert report_json({**fit.degradation.fit_report, "cov": None}) == report_json(
+            {**pre.degradation.fit_report, "cov": None})
+        assert not np.any(fit.degradation.fit_report["cov"]["matrix"])
     # the race moves shrinkage toward the truth and leaves none where practice put it
     assert shrink.fitted_for(at(40)).degradation.coefs["SOFT"][1] == pytest.approx(TRUE["SOFT"][1], abs=0.01)
     assert none.fitted_for(at(40)).degradation.coefs["SOFT"][1] == pytest.approx(OFF["SOFT"][1])
@@ -419,3 +423,16 @@ def test_race_ids():
     assert race_season("2021_Spain") == 2021
     with pytest.raises(ValueError, match="season"):
         parse_race_id("Spain")
+
+
+def test_race_ids_as_of():
+    from src.sim.race_ids import as_of
+    races = ["2022_05_spain", "2021_04_spain", "2021_05_monaco", "2021_04_synthetic_x", "2022_01_bahrain"]
+    assert as_of("2021_05_monaco", races) == ["2021_04_spain", "2021_04_synthetic_x"]   # given order kept
+    assert as_of("2022_05_spain", races) == ["2021_04_spain", "2021_05_monaco", "2021_04_synthetic_x",
+                                             "2022_01_bahrain"]
+    assert as_of("2021_04_spain", races) == []            # never itself nor its own (season, round)
+    assert as_of("2021_Spain", races) == []               # an alias compares as canonical
+    assert as_of("2023_01_bahrain", ["2022_24_abu_dhabi", "2023_01_bahrain"]) == ["2022_24_abu_dhabi"]
+    with pytest.raises(ValueError, match="season"):
+        as_of("2021_04_spain", ["Spain"])

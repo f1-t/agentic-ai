@@ -1,0 +1,3 @@
+# SPEC 0016 C arm "none": the practice prior held at every k (calibrator none).
+calibrator:
+  name: none

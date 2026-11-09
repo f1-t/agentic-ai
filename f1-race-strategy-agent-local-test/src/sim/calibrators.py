@@ -33,6 +33,10 @@ Registry:
   "ridge", "gbm", "mlp"
                learned candidates, registered stubs until the multi-race dataset exists:
                fit raises NotImplementedError.
+  "fuel_config", "fuel_circuit_history", "fuel_circuit_features", "fuel_practice_longrun"
+               the race-pace prior candidates of SPEC 0020 (fuel_prior.py): shrinkage with
+               fuel_s_per_lap (mean, sd) from the candidate, the sd its to_snapshot tau.
+               fuel_config is shrinkage's output as is. Not a default.
 
 Cadence (SimConfig.calibration_every = N): the calibration point for a snapshot at lap k
 is the largest multiple of N at or below k, moved up to the latest refresh event since
@@ -55,6 +59,7 @@ import pandas as pd
 from ..contracts import (COMPOUND_FACTORS, RACE_FACTORS, CalibrationOutput, CorrectionTable, RaceParams,  # noqa: F401
                          Snapshot, factor_name, split_factor)
 from .config import HINGE_TAU_S_PER_LAP, ComponentSpec, SimConfig
+from .degradation import new_draw_stats
 from .events import Scenario
 from .race_ids import canonical_race_id, race_season
 from .registry import Registry
@@ -269,6 +274,35 @@ def prior_model(raw, factors: dict, config: SimConfig):
     if getattr(raw, "hinges", None) is not None:
         m.hinges = {c: float(factors.get(factor_name("hinge_s_per_lap", c), (h,))[0]) for c, h in raw.hinges.items()}
         m.fit_report["hinge"] = {c: {**e, "value": m.hinges[c]} for c, e in rep["hinge"].items()}
+    return m
+
+
+_COV_FACTOR = {"base_s": "base_delta_s", "wear_s_per_lap": "wear_s_per_lap", "fuel_s_per_lap": "fuel_s_per_lap",
+               "hinge_s_per_lap": "hinge_s_per_lap"}
+
+
+def held_prior(prior, out: CalibrationOutput):
+    """A copy of a held prior (pre_race, or a calibrator holding it) whose fit_report["cov"]
+    is the calibrator's: each parameter's factor sd squared on the diagonal (0 for a factor
+    the output leaves out), no covariance, except the common base delta: every pair of
+    practice-derived bases shares it, covariance sd_c1 * sd_c2 (tau_base^2 for shrinkage),
+    so a draw moves those bases together. The posterior draws read this."""
+    m = copy.copy(prior)
+    names = prior.fit_report["cov"]["names"]
+    practice = set(prior.fit_report.get("base_delta_s") or {})
+    sd = np.zeros(len(names))
+    for i, n in enumerate(names):
+        p, c = split_factor(n)
+        sd[i] = float(out.factors.get(factor_name(_COV_FACTOR[p], c), (0.0, 0.0))[1])
+    cov = np.diag(sd ** 2)
+    bases = [i for i, n in enumerate(names) if split_factor(n)[0] == "base_s" and split_factor(n)[1] in practice]
+    cov[np.ix_(bases, bases)] = np.outer(sd[bases], sd[bases])
+    # under a wear bound the draws truncate this cov around the held point estimate, not the
+    # practice fit's unconstrained posterior, and count their own draw_stats
+    rep = {k: v for k, v in prior.fit_report.items() if k != "unconstrained"}
+    m.fit_report = {**rep, "cov": {"names": list(names), "matrix": [[float(v) for v in row] for row in cov]}}
+    if "draw_stats" in rep:
+        m.fit_report["draw_stats"] = new_draw_stats()
     return m
 
 
@@ -594,7 +628,8 @@ def _probe_driver(frame, k, min_laps_frac=0.9):
     return None
 
 
-def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, wandb_profile, calibrator_params):
+def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, wandb_profile, calibrator_params,
+               midrace_samples=1):
     from . import calibration
     from .engine import Simulator
     rows, errs, fold_rows = [], [], []
@@ -623,12 +658,15 @@ def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, 
                                      weather=getattr(r, "weather", None), race_features=getattr(r, "features", None),
                                      calibrator=cal)
 
-                g = calibration.midrace(factory, r.frame, race, laps_k=ks, windows=list(windows), results=r.results)
+                g = calibration.midrace(factory, r.frame, race, laps_k=ks, windows=list(windows), results=r.results,
+                                        **({"n_samples": midrace_samples} if midrace_samples > 1 else {}))
                 rows.append(g.assign(calibrator=name, calibration_every=cadence_label(n), fold=fold))
                 targets = {c.split(":", 1)[1]: v for c, v in
                            dataset.rows.loc[dataset.rows["race_id"] == rid, dataset.target_columns].iloc[0].items()
                            if pd.notna(v)}
                 for window in windows:
+                    if window == "full":   # the world: no calibrator, nothing held out to score
+                        continue
                     sim = factory(window)
                     for k in ks:
                         d = _probe_driver(r.frame, k)
@@ -647,7 +685,8 @@ def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, 
 
 
 def loro(dataset: CalibrationDataset, name: str, fold: str | None = None, *, cadences=(1,),
-         windows=("pre_race", "to_snapshot"), n_samples=None, wandb_profile=None, calibrator_params=None):
+         windows=("pre_race", "to_snapshot"), n_samples=None, wandb_profile=None, calibrator_params=None,
+         midrace_samples=1):
     """Leave-one-race-out and leave-one-season-out validation of calibrator `name` on SPEC G.
 
     With `fold` None, returns {"loro": LoroResult, "loso": LoroResult}. With a fold (a race
@@ -656,8 +695,13 @@ def loro(dataset: CalibrationDataset, name: str, fold: str | None = None, *, cad
     compute profile, logs learned fits with the fold assignment), then each held-out race
     is replayed at every cadence in `cadences`. With one race the training set is empty and
     the CIs are NaN: none and shrinkage need no training, learned classes raise.
+
+    `midrace_samples` above 1 replays each G row at that many samples, so the rows carry the
+    interval columns (calibration.midrace); 1, the default, keeps the one-run replay. A
+    "full" entry in `windows` replays the full window too (the world, which never calls the
+    calibrator), with no factor errors.
     """
-    args = (cadences, windows, n_samples, wandb_profile, calibrator_params)
+    args = (cadences, windows, n_samples, wandb_profile, calibrator_params, midrace_samples)
     if fold is not None:
         protocol = "season" if fold.startswith("season:") else "race"
         key = fold if protocol == "season" else canonical_race_id(fold)
@@ -697,3 +741,9 @@ def selection_table(results: dict, window="to_snapshot", horizons=(20, 40), cali
         "reference" if k == "reference" else ("adopt" if hi < ref_lo else "keep shrinkage")
         for k, hi in zip(table["kind"], table["mae_offset_ci_hi"])]
     return table
+
+
+# "event_rates" (SPEC 0011b) and the fuel_* race-pace priors (SPEC 0020, fuel_prior) register
+# themselves; imported last, as they build on Calibrator
+from . import event_rates  # noqa: E402,F401
+from . import fuel_prior  # noqa: E402,F401

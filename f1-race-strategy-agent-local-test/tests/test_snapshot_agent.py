@@ -9,7 +9,8 @@ from src import tools
 
 
 def snap():
-    return RaceSnapshot(season=2026, event="Test GP", lap=30, total_laps=60, driver="TST",
+    # a race in the committed cache: the tools run on its belief simulator (SPEC 0015)
+    return RaceSnapshot(season=2021, event="spain", lap=30, total_laps=60, driver="TST",
                         position=4, compound="SOFT", tyre_age_laps=22, gap_ahead_s=1.2,
                         gap_behind_s=2.5, rain_probability=0.2)
 
