@@ -1,0 +1,1 @@
+Live agent episode on the belief simulator, model qwen3-30b-a3b via ASU RC Voyager (seed 0); scored on the world simulator against the optimizer reference.

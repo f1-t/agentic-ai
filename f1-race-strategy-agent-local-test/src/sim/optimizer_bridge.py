@@ -138,8 +138,10 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     `return_times` (opt-in, off by default) adds the chosen plan's per-draw remaining times
     to diagnostics["times"], an (n_samples,) float array, and the next plan in the tie-break
     order to diagnostics["runner_up"]: {"plan", "mean_time_s", "times"}, None when only one
-    plan is legal. The eval's reference cache (src/eval/reference.py) reads both for its
-    paired standard errors."""
+    plan is legal. It also adds diagnostics["searched"], every legal plan in tie-break order
+    (the chosen plan first): {"plans": [contract Plan, ...], "mean_time_s": (k,) array,
+    "times": (k, n_samples) array}. The eval's reference cache (src/eval/reference.py) reads
+    them for its paired standard errors and near-tie measurements."""
     state = from_contract(snapshot, sim)
     candidates = list(candidate_plans(state, max_stops))
     plans = [p for p in candidates if p.stints[0].laps > 0]
@@ -159,6 +161,11 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
         diagnostics["runner_up"] = None if second is None else {
             "plan": contract_plans[second], "mean_time_s": evals[second].mean_time_s,
             "times": np.asarray(evals[second].seed_times_s, dtype=float)}
+        order = [best, *sorted(rest, key=lambda i: _key(evals[i], state))]
+        diagnostics["searched"] = {
+            "plans": [contract_plans[i] for i in order],
+            "mean_time_s": np.array([evals[i].mean_time_s for i in order], dtype=float),
+            "times": np.array([evals[i].seed_times_s for i in order], dtype=float).reshape(len(order), -1)}
     return BatchOptimizationResult(
         evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(scored),
         diagnostics=diagnostics,

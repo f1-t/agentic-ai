@@ -484,6 +484,9 @@ NON_PHYSICS = (
     # the cross-race report (SPEC 0016): eligibility, LORO arms and the selection over them;
     # it runs the simulator under committed arm configs and never changes a lap time itself
     "cross_race",
+    # the real-run orchestration (SPEC 0021): sequences the stage commands, writes a manifest
+    # and Slurm scripts; it runs the simulator only through those stages
+    "real_run",
 )
 
 

@@ -84,7 +84,7 @@ class VoyagerBackend(ModelBackend):
 
         self.base_url = os.environ.get(
             "VOYAGER_BASE_URL",
-            "https://voyager.rc.asu.edu/v1",
+            "https://openai.rc.asu.edu/v1",
         )
 
         self.api_key = os.environ.get(
@@ -94,7 +94,7 @@ class VoyagerBackend(ModelBackend):
 
         self.model_id = os.environ.get(
             "VOYAGER_MODEL",
-            "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "qwen3-30b-a3b",
         )
 
         # ------------------------------------------------------------------
@@ -169,7 +169,15 @@ class VoyagerBackend(ModelBackend):
             model=self.model_id,
             messages=chat,
             max_tokens=local_max,
-            temperature=0.0,
+            temperature=float(
+                os.environ.get(
+                    "VOYAGER_TEMPERATURE",
+                    # Some OpenAI-compatible servers treat 0 as "use the
+                    # server default"; a tiny positive value asks for greedy
+                    # decoding explicitly.
+                    "1e-9",
+                )
+            ),
         )
 
         text = response.choices[0].message.content or ""
@@ -221,5 +229,5 @@ class VoyagerBackend(ModelBackend):
         return ModelTurn(
             text=text,
             tool_calls=calls,
-            raw=payload,
+            raw=response,
         )

@@ -7,8 +7,10 @@ Input: data/derived/neutralised_periods.csv (race_id, kind sc/vsc/red_flag, star
 end_lap, total_laps, wet; a race with no period has one row with an empty kind) when it
 exists, else the SC/VSC periods of 0016's factors.csv (reports/calibration/cross_race/,
 dry races by construction). Wet races are left out of the dry rates (include_wet=False) and
-counted apart. Circuit and circuit type come from race_features.csv (columns circuit,
-circuit_type) when it exists, else CIRCUITS, keyed by the race id's GP slug.
+counted apart. Circuit and circuit type come from race_features.csv (circuit or F1DB's
+circuitId, circuit_type or circuitType) when it names them, else from the cached event
+schedule's Location through CIRCUITS, else the race id's slug as its own circuit of unknown
+type (circuit_info).
 
 Model, per kind (sc, vsc): starts ~ Poisson(p x laps_at_risk) per race, laps_at_risk the
 total laps less the neutralised ones (any kind, red flags included), and period lengths
@@ -89,40 +91,53 @@ N_BOOT = 2000
 UNKNOWN = "unknown"
 
 STREET, PERMANENT = "street", "permanent"
-# GP slug of the race id (race_ids.slug of the --gp name) -> (circuit, circuit type), for the
-# circuits of the 2018 onward calendars. Street: a temporary or public-road circuit.
+# The circuit of a race comes from race_features.csv when it names one, else from the cached
+# event schedule's Location (location_key) through CIRCUITS, never from the race id: a country
+# can host several circuits in one season (Imola, Mugello and Monza in 2020; Miami, Austin
+# and Las Vegas from 2023). Location -> (circuit, circuit type), for the 2018 onward calendars,
+# with every Location string fastf1.get_event_schedule gives for 2018-2025 (Monaco and Monte
+# Carlo, Singapore and Marina Bay, Yas Island and Yas Marina, Miami and Miami Gardens: the
+# spelling changes between seasons; tests/fixtures/schedules_2018_2025.csv). Street: a
+# temporary or public-road circuit.
 CIRCUITS = {
-    "australia": ("albert_park", STREET), "melbourne": ("albert_park", STREET),
-    "bahrain": ("sakhir", PERMANENT), "sakhir": ("sakhir_outer", PERMANENT),
-    "china": ("shanghai", PERMANENT),
-    "azerbaijan": ("baku", STREET), "baku": ("baku", STREET),
-    "spain": ("catalunya", PERMANENT), "barcelona": ("catalunya", PERMANENT),
-    "monaco": ("monaco", STREET),
-    "canada": ("villeneuve", STREET), "montreal": ("villeneuve", STREET),
-    "france": ("paul_ricard", PERMANENT),
-    "austria": ("red_bull_ring", PERMANENT), "styria": ("red_bull_ring", PERMANENT),
-    "great_britain": ("silverstone", PERMANENT), "british": ("silverstone", PERMANENT),
-    "britain": ("silverstone", PERMANENT), "70th_anniversary": ("silverstone", PERMANENT),
-    "germany": ("hockenheim", PERMANENT), "eifel": ("nurburgring", PERMANENT),
-    "hungary": ("hungaroring", PERMANENT),
-    "belgium": ("spa", PERMANENT),
-    "netherlands": ("zandvoort", PERMANENT), "dutch": ("zandvoort", PERMANENT),
-    "italy": ("monza", PERMANENT), "monza": ("monza", PERMANENT),
-    "tuscany": ("mugello", PERMANENT),
-    "emilia_romagna": ("imola", PERMANENT), "imola": ("imola", PERMANENT),
-    "portugal": ("portimao", PERMANENT), "turkey": ("istanbul_park", PERMANENT),
-    "russia": ("sochi", PERMANENT),
-    "singapore": ("marina_bay", STREET),
-    "japan": ("suzuka", PERMANENT), "suzuka": ("suzuka", PERMANENT),
-    "qatar": ("lusail", PERMANENT),
-    "united_states": ("cota", PERMANENT), "usa": ("cota", PERMANENT), "austin": ("cota", PERMANENT),
-    "mexico": ("rodriguez", PERMANENT), "mexico_city": ("rodriguez", PERMANENT),
-    "brazil": ("interlagos", PERMANENT), "sao_paulo": ("interlagos", PERMANENT),
-    "saudi_arabia": ("jeddah", STREET), "jeddah": ("jeddah", STREET),
-    "miami": ("miami", STREET),
+    "melbourne": ("albert_park", STREET), "albert_park": ("albert_park", STREET),
+    "sakhir": ("sakhir", PERMANENT), "bahrain": ("sakhir", PERMANENT),
+    "shanghai": ("shanghai", PERMANENT),
+    "baku": ("baku", STREET),
+    "barcelona": ("catalunya", PERMANENT), "montmelo": ("catalunya", PERMANENT),
+    "catalunya": ("catalunya", PERMANENT),
+    "monte_carlo": ("monaco", STREET), "monaco": ("monaco", STREET),
+    "montreal": ("villeneuve", STREET),
+    "le_castellet": ("paul_ricard", PERMANENT), "paul_ricard": ("paul_ricard", PERMANENT),
+    "spielberg": ("red_bull_ring", PERMANENT),
+    "silverstone": ("silverstone", PERMANENT),
+    "hockenheim": ("hockenheim", PERMANENT),
+    "nurburgring": ("nurburgring", PERMANENT), "nurburg": ("nurburgring", PERMANENT),
+    "budapest": ("hungaroring", PERMANENT), "mogyorod": ("hungaroring", PERMANENT),
+    "spa_francorchamps": ("spa", PERMANENT), "spa": ("spa", PERMANENT), "stavelot": ("spa", PERMANENT),
+    "zandvoort": ("zandvoort", PERMANENT),
+    "monza": ("monza", PERMANENT),
+    "mugello": ("mugello", PERMANENT), "scarperia": ("mugello", PERMANENT),
+    "imola": ("imola", PERMANENT),
+    "portimao": ("portimao", PERMANENT),
+    "istanbul": ("istanbul_park", PERMANENT),
+    "sochi": ("sochi", PERMANENT),
+    "marina_bay": ("marina_bay", STREET), "singapore": ("marina_bay", STREET),
+    "suzuka": ("suzuka", PERMANENT),
+    "lusail": ("lusail", PERMANENT), "doha": ("lusail", PERMANENT),
+    "austin": ("cota", PERMANENT),
+    "mexico_city": ("rodriguez", PERMANENT),
+    "sao_paulo": ("interlagos", PERMANENT), "interlagos": ("interlagos", PERMANENT),
+    "jeddah": ("jeddah", STREET),
+    "miami": ("miami", STREET), "miami_gardens": ("miami", STREET),
     "las_vegas": ("las_vegas", STREET),
+    "yas_island": ("yas_marina", PERMANENT), "yas_marina": ("yas_marina", PERMANENT),
     "abu_dhabi": ("yas_marina", PERMANENT),
 }
+# events held at a location on another layout than its usual one: event_slug -> circuit
+EVENT_CIRCUITS = {"sakhir": ("sakhir_outer", PERMANENT)}
+# F1DB's circuitType in race_features.csv -> circuit type
+F1DB_CIRCUIT_TYPES = {"race": PERMANENT, "street": STREET, "road": STREET}
 
 STAT_COLUMNS = ["race_id", "season", "round", "era", "circuit", "circuit_type", "total_laps", "wet",
                 "neutralised_laps", "at_risk", "n_red_flag",
@@ -140,24 +155,56 @@ def _date_key(race_id: str) -> tuple[int, int]:
 
 
 # --- input ---------------------------------------------------------------------------------
-def circuit_info(race_ids, features: pd.DataFrame | None = None) -> pd.DataFrame:
-    """race_id, circuit, circuit_type per race: from `features` (race_features.csv columns
-    circuit and circuit_type) where it has them, else CIRCUITS by GP slug, else the slug as
-    the circuit with type UNKNOWN."""
+def location_key(location) -> str:
+    """A schedule Location as a CIRCUITS key: accents dropped, slugged ('São Paulo' -> 'sao_paulo')."""
+    from .race_ids import _ascii, slug
+    return slug(_ascii(location))
+
+
+def schedule_circuit(event) -> tuple[str, str] | None:
+    """(circuit, circuit type) of one schedule event (EventName, Location), None when its
+    location is not in CIRCUITS."""
+    from .race_ids import event_slug
+    hit = EVENT_CIRCUITS.get(event_slug(event["EventName"]))
+    return hit or CIRCUITS.get(location_key(event["Location"]))
+
+
+def circuit_info(race_ids, features: pd.DataFrame | None = None, schedule=None) -> pd.DataFrame:
+    """race_id, circuit, circuit_type per race, never read from the race id's slug when anything
+    else knows it:
+      1. `features` (race_features.csv): circuit (or F1DB's circuitId) and circuit_type (or
+         F1DB's circuitType: RACE permanent, STREET and ROAD street), where they are given;
+      2. else the race's event in its season's schedule, `schedule(season)` (default
+         data.season_schedule, the cached FastF1 schedule), through schedule_circuit;
+      3. else the race id's slug as its own circuit, type UNKNOWN.
+    Synthetic race ids skip the schedule."""
+    from .cross_race import is_synthetic
+    from .data import season_schedule
+    schedule = season_schedule if schedule is None else schedule
     rows = []
     for rid in race_ids:
-        slug = parse_race_id(rid)[2]
-        circuit, ctype = CIRCUITS.get(slug, (slug, UNKNOWN))
+        season, rnd, slug = parse_race_id(rid)
+        circuit, ctype = slug, UNKNOWN
+        sched = None if is_synthetic(canonical_race_id(rid)) else schedule(season)
+        if sched is not None:
+            event = sched[sched["RoundNumber"] == rnd]
+            hit = schedule_circuit(event.iloc[0]) if len(event) else None
+            if hit is not None:
+                circuit, ctype = hit
         rows.append({"race_id": rid, "circuit": circuit, "circuit_type": ctype})
     out = pd.DataFrame(rows, columns=["race_id", "circuit", "circuit_type"])
     if features is not None and len(features) and "race_id" in features:
         f = features.assign(race_id=features["race_id"].map(canonical_race_id)).drop_duplicates("race_id")
         f = f.set_index("race_id")
-        for col in ("circuit", "circuit_type"):
-            if col in f:
-                given = out["race_id"].map(f[col])
-                ok = given.notna() & (given.astype(str).str.strip() != "")
-                out.loc[ok, col] = given[ok].astype(str).str.strip().str.lower()
+        for col, names, values in (("circuit", ("circuit", "circuitId", "circuit_id"), None),
+                                   ("circuit_type", ("circuit_type", "circuitType"), F1DB_CIRCUIT_TYPES)):
+            src = next((n for n in names if n in f), None)
+            if src is None:
+                continue
+            given = out["race_id"].map(f[src])
+            ok = given.notna() & (given.astype(str).str.strip() != "")
+            text = given[ok].astype(str).str.strip().str.lower()
+            out.loc[ok, col] = text.map(lambda v: values.get(v, v)) if values else text
     return out
 
 

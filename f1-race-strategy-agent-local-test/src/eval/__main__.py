@@ -9,7 +9,8 @@ from .policies import resolve
 from .reference import REFERENCE_DIR, ReferenceMissing, ReferenceStore, build_references, stale_references, \
     summarize_references
 from .scenarios import ScenarioSet, build_set
-from .score import install_job_runner, race_simulators, score_set, summarize, summarize_agreeing, to_markdown
+from .score import install_job_runner, race_simulators, score_set, summarize, summarize_agreeing, \
+    summarize_near_ties, to_markdown
 
 
 def _config(path):
@@ -72,7 +73,8 @@ def main(argv=None):
     p.add_argument("--max-stops", type=int, choices=(0, 1, 2), help="default: the profile's sim.max_stops")
     p.add_argument("--reference-dir", default=str(REFERENCE_DIR), help="default data/references")
     p.add_argument("--check", action="store_true",
-                   help="list cached references whose sim_code_version differs from the current one")
+                   help="list cached references whose sim_code_version differs from the current one "
+                        "or whose format is older than the current one")
 
     p = sub.add_parser("score", help="score policies against the optimizer on a scenario set")
     p.add_argument("--scenarios", required=True)
@@ -128,10 +130,11 @@ def main(argv=None):
         if args.check:
             stale = stale_references(args.reference_dir)
             from ..sim.calibration import SIM_CODE_VERSION
-            print(f"{len(stale)} cached references with a sim_code_version other than {SIM_CODE_VERSION}"
-                  + (":" if stale else ""))
+            from .reference import REFERENCE_FORMAT
+            print(f"{len(stale)} cached references with a sim_code_version other than {SIM_CODE_VERSION} "
+                  f"or a format older than {REFERENCE_FORMAT}" + (":" if stale else ""))
             for path, meta in stale:
-                print(f"  {path}  sim_code_version {meta.get('sim_code_version')}")
+                print(f"  {path}  sim_code_version {meta.get('sim_code_version')}  format {meta.get('format', 1)}")
             return 0
         if args.scenarios is None:
             ap.error("reference needs --scenarios (or --check)")
@@ -185,6 +188,10 @@ def main(argv=None):
         agreeing = summarize_agreeing(rows)
         if agreeing is not None:
             print("\nRows where the reference models agree:\n" + to_markdown(agreeing))
+        ties = summarize_near_ties(rows)
+        if ties is not None:
+            print("\nNear-tie view (information only; optimal set: plans within 2 SE of the reference):\n"
+                  + to_markdown(ties))
         return 0
 
     from ..sim import jobs

@@ -34,6 +34,39 @@ def load_session(season, gp, kind="R", cache_dir=CACHE_DIR, weather=False, messa
     return session
 
 
+SCHEDULE_COLUMNS = ["RoundNumber", "EventName", "Country", "Location"]
+_SCHEDULES: dict = {}
+
+
+def season_schedule(season, cache_dir=CACHE_DIR):
+    """The season's race events (SCHEDULE_COLUMNS, testing left out) from the FastF1 cache,
+    offline; None when the cache does not hold that season's schedule. Kept per process."""
+    key = (int(season), os.path.abspath(cache_dir))
+    if key not in _SCHEDULES:
+        import fastf1
+        fastf1.set_log_level("ERROR")
+        fastf1.Cache.configure(cache_dir=cache_dir)
+        fastf1.Cache.offline_mode(True)
+        try:
+            s = fastf1.get_event_schedule(int(season), include_testing=False)
+            s = pd.DataFrame(s[SCHEDULE_COLUMNS]).reset_index(drop=True) if len(s) else None
+        except Exception:   # not in the offline cache
+            s = None
+        _SCHEDULES[key] = s
+    return _SCHEDULES[key]
+
+
+def schedule_race_id(season, round_number, cache_dir=CACHE_DIR):
+    """race_ids.make_race_id_from_schedule for (season, round) from the cached schedule; None
+    when the schedule is not cached or has no such round."""
+    from .race_ids import make_race_id_from_schedule
+    s = season_schedule(season, cache_dir)
+    if s is None:
+        return None
+    row = s[s["RoundNumber"] == int(round_number)]
+    return make_race_id_from_schedule(row.iloc[0], s, int(season)) if len(row) else None
+
+
 def session_weather(session):
     """Weather samples (about one per minute) in simulator units, empty if not loaded."""
     from fastf1.exceptions import DataNotLoadedError
