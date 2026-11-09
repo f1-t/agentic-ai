@@ -169,7 +169,15 @@ class VoyagerBackend(ModelBackend):
             model=self.model_id,
             messages=chat,
             max_tokens=local_max,
-            temperature=0.0,
+            temperature=float(
+                os.environ.get(
+                    "VOYAGER_TEMPERATURE",
+                    # Some OpenAI-compatible servers treat 0 as "use the
+                    # server default"; a tiny positive value asks for greedy
+                    # decoding explicitly.
+                    "1e-9",
+                )
+            ),
         )
 
         text = response.choices[0].message.content or ""
