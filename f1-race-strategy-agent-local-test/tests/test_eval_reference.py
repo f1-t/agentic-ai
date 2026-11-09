@@ -9,10 +9,11 @@ from test_eval import HAS_CACHE, RACE, SC_LAPS, SCENARIOS_V1, race_frame
 
 from src.eval import Decision, ScenarioSet, resolve, sample_race, score_scenario, summarize
 from src.eval.__main__ import main
-from src.eval.reference import (MISS_NOTICE, Reference, ReferenceMissing, ReferenceStore, build_references,
-                                compute_reference, load_references, paired_se, recorded_events,
-                                reference_inputs, reference_key, stale_references)
-from src.eval.score import score_set
+from src.eval.reference import (MISS_NOTICE, NO_STOP, REFERENCE_FORMAT, Reference, ReferenceMissing,
+                                ReferenceStore, build_references, compute_reference, load_references, near_ties,
+                                optimal_set, paired_se, recorded_events, reference_inputs, reference_key,
+                                set_agreement, stale_references)
+from src.eval.score import _first_pit_error, score_set, summarize_near_ties, to_markdown
 from src.sim import SimConfig, Simulator
 from src.sim.optimizer_bridge import optimize_batch
 
@@ -234,3 +235,190 @@ def test_eval_jobs_runner_reads_the_cache_and_carries_require_reference(tmp_path
             jobs.run_task(jobs.JOBS["eval_chunk"], "chunk_0000", profile, tmp_path / "b")
     finally:
         jobs.set_eval_runner(None)
+
+
+# --- near ties (SPEC 0019 D-measure, information only) ----------------------------------
+NEW_COLUMNS = ["opt_set_size", "best_pit_now_s", "best_stay_s", "pit_now_gap_s", "pit_now_gap_se_s",
+               "pit_now_decisive", "stop_agree_set", "first_pit_error_set"]
+
+
+def test_optimize_batch_returns_every_searched_plan_in_tie_break_order(scenario_set, world):
+    snap = scenario_set.items[0].snapshot
+    on = optimize_batch(snap, world, n_samples=8, return_times=True)
+    searched = on.diagnostics["searched"]
+    k = on.candidates_evaluated
+    assert len(searched["plans"]) == k and searched["times"].shape == (k, 8) and searched["mean_time_s"].shape == (k,)
+    assert searched["plans"][0] == on.plan and searched["plans"][1] == on.diagnostics["runner_up"]["plan"]
+    assert np.array_equal(searched["times"][0], on.diagnostics["times"])
+    assert np.array_equal(searched["times"][1], on.diagnostics["runner_up"]["times"])
+    assert (np.diff(searched["mean_time_s"]) >= 0).all()
+    assert "searched" not in optimize_batch(snap, world, n_samples=8).diagnostics
+
+
+def test_searched_plans_round_trip_and_match_a_direct_computation(scenario_set, world, tmp_path):
+    (path, refs), = build_references(scenario_set, lambda race_id, role: world, n_samples=12, root=tmp_path)
+    assert json.loads(path.with_suffix(".json").read_text())["format"] == REFERENCE_FORMAT == 2
+    loaded = load_references(path)
+    pitted = []
+    for scenario, ref in zip(scenario_set.items, refs):
+        got = loaded[ref.scenario_id]
+        for name, dtype in (("plan_gap_s", np.float32), ("plan_se_s", np.float32), ("plan_num_stops", np.int8),
+                            ("plan_first_pit_lap", np.int16)):
+            assert getattr(got, name).dtype == dtype and np.array_equal(getattr(got, name), getattr(ref, name))
+        assert got.pit_now_gap_se_s == ref.pit_now_gap_se_s or np.isnan(got.pit_now_gap_se_s) == np.isnan(
+            ref.pit_now_gap_se_s) == True   # noqa: E712
+
+        snap = scenario.snapshot
+        opt = optimize_batch(snap, world, n_samples=12, return_times=True).diagnostics["searched"]
+        assert got.plan_gap_s[0] == 0 and got.plan_se_s[0] == 0
+        assert got.plan_se_s[1] == pytest.approx(ref.runner_up_se_s, rel=1e-6)
+        se = np.array([paired_se(t, opt["times"][0]) for t in opt["times"]])
+        gap = opt["mean_time_s"] - opt["mean_time_s"][0]
+        firsts = [(p.pit_laps(snap) or [NO_STOP])[0] for p in opt["plans"]]
+        now = np.array(firsts) == snap.laps_completed + 1
+        keep = gap <= np.maximum(10.0, 5 * se)   # the storage bound, plus the best of each kind
+        keep[[int(np.argmax(m)) for m in (now, ~now) if m.any()]] = True
+        assert keep.sum() < len(keep)   # the bound drops plans here
+        assert np.allclose(got.plan_se_s, se[keep], rtol=1e-6, atol=1e-6)
+        assert np.allclose(got.plan_gap_s, gap[keep], rtol=1e-6, atol=1e-6)
+        assert got.plan_first_pit_lap.tolist() == np.array(firsts)[keep].tolist()
+
+        ties = near_ties(got, snap)
+        assert ties["opt_set_size"] == len(optimal_set(got)) >= 1 and optimal_set(got)[0] == 0
+        assert ties["opt_set_size"] == int((gap <= 2 * se + 1e-6).sum())
+        assert (~now).any()
+        if not now.any():   # pitting now would leave a stint under the minimum
+            assert np.isnan(ties["best_pit_now_s"]) and np.isnan(ties["pit_now_gap_se_s"])
+            assert ties["pit_now_decisive"] is None and np.isfinite(ties["best_stay_s"])
+            continue
+        pitted.append(scenario.scenario_id)
+        i_pit, i_stay = int(np.argmax(now)), int(np.argmax(~now))
+        assert ties["best_pit_now_s"] == pytest.approx(opt["mean_time_s"][i_pit], abs=1e-3)
+        assert ties["best_stay_s"] == pytest.approx(opt["mean_time_s"][i_stay], abs=1e-3)
+        assert ties["pit_now_gap_s"] == pytest.approx(gap[i_pit] - gap[i_stay], abs=1e-3)
+        assert ties["pit_now_gap_se_s"] == pytest.approx(paired_se(opt["times"][i_pit], opt["times"][i_stay]))
+        assert ties["pit_now_decisive"] == (abs(ties["pit_now_gap_s"]) > 2 * ties["pit_now_gap_se_s"])
+    assert pitted   # both branches are covered
+    assert any(len(optimal_set(r)) > 1 for r in loaded.values())   # drawn events: some near ties
+
+
+def test_set_agreement_takes_the_closest_member_of_the_optimal_set():
+    ref = Reference("s", plan_gap_s=np.array([0.0, 0.1, 0.5, 3.0], dtype=np.float32),
+                    plan_se_s=np.array([0.0, 0.1, 0.2, 0.1], dtype=np.float32),
+                    plan_num_stops=np.array([1, 2, 0, 1], dtype=np.int8),
+                    plan_first_pit_lap=np.array([30, 20, NO_STOP, 25], dtype=np.int16))
+    assert optimal_set(ref).tolist() == [0, 1]   # 0.5 > 2 * 0.2 and 3.0 > 2 * 0.1 are out
+    assert set_agreement(ref, 2, [22, 40], _first_pit_error) == (True, 2)
+    assert set_agreement(ref, 1, [27], _first_pit_error) == (True, 3)
+    assert set_agreement(ref, 0, [], _first_pit_error) == (False, None)
+    assert set_agreement(Reference("s"), 1, [27], _first_pit_error) == (None, None)
+
+
+def test_without_drawn_events_the_optimal_set_holds_only_exact_ties(scenario_set, flat):
+    """No spread, so every standard error is 0 and only a plan with the reference's very mean
+    joins it. The synthetic race has no fuel effect, so swapping two later stints is such a
+    tie (scenario AAA:05); the Spain world below has none."""
+    for scenario in scenario_set.items:
+        ref = compute_reference(scenario, flat, n_samples=6)
+        members = optimal_set(ref)
+        assert (ref.plan_se_s == 0).all() and (ref.plan_gap_s[members] == 0).all()
+        ties = near_ties(ref, scenario.snapshot)
+        if ties["pit_now_decisive"] is not None:
+            assert ties["pit_now_decisive"] and ties["pit_now_gap_se_s"] == 0
+
+
+def _deterministic_world_rows(scenario_set, sims, pols, n_samples):
+    rows = score_set(scenario_set, sims, pols, n_samples=n_samples)
+    assert set(NEW_COLUMNS) <= set(rows.columns)
+    return rows, rows.drop(columns=NEW_COLUMNS)
+
+
+@pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
+def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
+    """The deterministic default world on a slice of v1: every optimal set is the reference
+    alone, every pit-now call is decisive, the set-based agreement is the plain one, and the
+    summary table is the one without the near-tie columns."""
+    from src.eval.score import race_simulators
+    from src.sim.compute import load_profile
+    profile = load_profile("local")
+    v1 = ScenarioSet.load(SCENARIOS_V1)
+    part = ScenarioSet(version="tv1", items=v1.items[::12])
+    part.digest = part.compute_digest()
+    rows, old = _deterministic_world_rows(part, race_simulators(profile), resolve(["baselines"]),
+                                          profile.sim.n_samples)
+    assert (rows["opt_set_size"] == 1).all()
+    decisive = rows["pit_now_decisive"].dropna()
+    assert len(decisive) > len(rows) / 2 and decisive.astype(bool).all()
+    ok = rows[rows.status == "ok"]
+    assert len(ok) and (ok["stop_agree_set"] == ok["stop_agree"]).all()
+    assert ok["first_pit_error_set"].fillna(-1).tolist() == ok["first_pit_error"].fillna(-1).tolist()
+    pd.testing.assert_frame_equal(summarize(rows), summarize(old))
+    ties = summarize_near_ties(rows).set_index("policy")
+    assert (ties["share_opt_set_gt1"] == 0).all() and (ties["share_pit_now_decisive"] == 1).all()
+
+
+@pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
+@pytest.mark.parametrize("events", [None, {"name": "rate"}])
+def test_the_storage_bound_leaves_the_optimal_set_and_the_best_of_each_kind_unchanged(events):
+    """On a slice of v1, in the default world and with drawn events: the stored plans
+    (gap <= max(10 s, 5 SE), plus the best pit-now and stay-out plans) give the same optimal
+    set and near-tie columns as every searched plan, and set_agreement agrees for any plan."""
+    from src.eval.score import race_simulators
+    from src.sim.compute import load_profile
+    profile = load_profile("local")
+    config = None if events is None else SimConfig.model_validate(
+        {"fit_window": "full", "traffic": {"name": "none"}, "events": events})
+    sims = race_simulators(profile, None, config)
+    dropped = 0
+    for scenario in ScenarioSet.load(SCENARIOS_V1).items[::24]:
+        world = sims(scenario.race_id, "world")
+        kw = dict(n_samples=20, max_stops=profile.sim.max_stops)
+        bounded, full = compute_reference(scenario, world, **kw), compute_reference(scenario, world, keep_all=True,
+                                                                                      **kw)
+        dropped += len(full.plan_gap_s) - len(bounded.plan_gap_s)
+        a, b = optimal_set(bounded), optimal_set(full)
+        for name in ("plan_gap_s", "plan_se_s", "plan_num_stops", "plan_first_pit_lap"):
+            assert np.array_equal(getattr(bounded, name)[a], getattr(full, name)[b]), name
+        snap = scenario.snapshot
+        assert pd.Series(near_ties(bounded, snap)).equals(pd.Series(near_ties(full, snap)))
+        for stops, pits in ((0, []), (1, [snap.laps_completed + 5]), (2, [snap.laps_completed + 1, 60])):
+            assert set_agreement(bounded, stops, pits, _first_pit_error) == set_agreement(full, stops, pits,
+                                                                                           _first_pit_error)
+    assert dropped > 0
+
+
+def test_the_near_tie_columns_leave_the_existing_tables_unchanged(scenario_set, flat, tmp_path, capsys):
+    pols = {**resolve(["baselines"]), "probe": _fixed([["SOFT", 20], ["MEDIUM", 20]])}
+    rows, old = _deterministic_world_rows(scenario_set, lambda race_id, role: flat, pols, 6)
+    pd.testing.assert_frame_equal(summarize(rows), summarize(old))
+    assert to_markdown(summarize(rows)) == to_markdown(summarize(old))
+    new_csv, old_csv = tmp_path / "new.csv", tmp_path / "old.csv"
+    rows.to_csv(new_csv, index=False)
+    old.to_csv(old_csv, index=False)
+    capsys.readouterr()
+    assert main(["report", str(old_csv)]) == 0
+    before = capsys.readouterr().out
+    assert "Near-tie view" not in before
+    assert main(["report", str(new_csv)]) == 0
+    after = capsys.readouterr().out
+    assert after.startswith(before) and "Near-tie view" in after
+    assert to_markdown(summarize_near_ties(pd.read_csv(new_csv))) == to_markdown(summarize_near_ties(rows))
+    assert after == before + "\nNear-tie view (information only; optimal set: plans within 2 SE of the " \
+                             "reference):\n" + to_markdown(summarize_near_ties(rows)) + "\n"
+
+
+def test_a_format_1_cache_still_loads_and_is_flagged_stale(scenario_set, world, tmp_path, capsys):
+    import pyarrow.parquet as pq
+    (path, _), = build_references(scenario_set, lambda race_id, role: world, n_samples=4, root=tmp_path)
+    pq.write_table(pq.read_table(path).drop(["plan_gap_s", "plan_se_s", "plan_num_stops", "plan_first_pit_lap",
+                                             "pit_now_gap_se_s"]), path)
+    meta = json.loads(path.with_suffix(".json").read_text())
+    path.with_suffix(".json").write_text(json.dumps({k: v for k, v in meta.items() if k != "format"}))
+    assert [p for p, _ in stale_references(tmp_path)] == [path]
+    assert main(["reference", "--check", "--reference-dir", str(tmp_path)]) == 0
+    assert "format 1" in capsys.readouterr().out
+    assert all(r.plan_gap_s is None for r in load_references(path).values())
+    rows = score_set(scenario_set, lambda race_id, role: world, {"probe": _fixed([["SOFT", 20], ["MEDIUM", 20]])},
+                     n_samples=4, references=ReferenceStore(tmp_path, require=True))
+    assert rows["opt_set_size"].isna().all() and rows["stop_agree_set"].isna().all()
+    assert summarize_near_ties(rows) is None
