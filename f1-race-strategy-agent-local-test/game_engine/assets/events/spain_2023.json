@@ -1,0 +1,150 @@
+{
+  "event_id": "spain-2023",
+  "name": "Spanish Grand Prix",
+  "year": 2023,
+  "laps": 66,
+  "circuit": "barcelona_2023",
+  "focus_driver": "HAM",
+  "drivers": [
+    {
+      "grid": 1,
+      "number": 1,
+      "driver": "VER",
+      "team": "Red Bull",
+      "start": "GRID"
+    },
+    {
+      "grid": 2,
+      "number": 55,
+      "driver": "SAI",
+      "team": "Ferrari",
+      "start": "GRID"
+    },
+    {
+      "grid": 3,
+      "number": 4,
+      "driver": "NOR",
+      "team": "McLaren",
+      "start": "GRID"
+    },
+    {
+      "grid": 4,
+      "number": 44,
+      "driver": "HAM",
+      "team": "Mercedes",
+      "start": "GRID"
+    },
+    {
+      "grid": 5,
+      "number": 18,
+      "driver": "STR",
+      "team": "Aston Martin",
+      "start": "GRID"
+    },
+    {
+      "grid": 6,
+      "number": 31,
+      "driver": "OCO",
+      "team": "Alpine",
+      "start": "GRID"
+    },
+    {
+      "grid": 7,
+      "number": 27,
+      "driver": "HUL",
+      "team": "Haas",
+      "start": "GRID"
+    },
+    {
+      "grid": 8,
+      "number": 14,
+      "driver": "ALO",
+      "team": "Aston Martin",
+      "start": "GRID"
+    },
+    {
+      "grid": 9,
+      "number": 81,
+      "driver": "PIA",
+      "team": "McLaren",
+      "start": "GRID"
+    },
+    {
+      "grid": 10,
+      "number": 10,
+      "driver": "GAS",
+      "team": "Alpine",
+      "start": "GRID"
+    },
+    {
+      "grid": 11,
+      "number": 11,
+      "driver": "PER",
+      "team": "Red Bull",
+      "start": "GRID"
+    },
+    {
+      "grid": 12,
+      "number": 63,
+      "driver": "RUS",
+      "team": "Mercedes",
+      "start": "GRID"
+    },
+    {
+      "grid": 13,
+      "number": 24,
+      "driver": "ZHO",
+      "team": "Alfa Romeo",
+      "start": "GRID"
+    },
+    {
+      "grid": 14,
+      "number": 21,
+      "driver": "DEV",
+      "team": "AlphaTauri",
+      "start": "GRID"
+    },
+    {
+      "grid": 15,
+      "number": 22,
+      "driver": "TSU",
+      "team": "AlphaTauri",
+      "start": "GRID"
+    },
+    {
+      "grid": 16,
+      "number": 77,
+      "driver": "BOT",
+      "team": "Alfa Romeo",
+      "start": "GRID"
+    },
+    {
+      "grid": 17,
+      "number": 20,
+      "driver": "MAG",
+      "team": "Haas",
+      "start": "GRID"
+    },
+    {
+      "grid": 18,
+      "number": 23,
+      "driver": "ALB",
+      "team": "Williams",
+      "start": "GRID"
+    },
+    {
+      "grid": 19,
+      "number": 16,
+      "driver": "LEC",
+      "team": "Ferrari",
+      "start": "PIT_LANE"
+    },
+    {
+      "grid": 20,
+      "number": 2,
+      "driver": "SAR",
+      "team": "Williams",
+      "start": "PIT_LANE"
+    }
+  ]
+}

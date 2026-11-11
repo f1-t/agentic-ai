@@ -9,3 +9,15 @@ __pycache__/
 docs/sim_model_plan.md
 .audit/
 
+
+# Game-engine generated files
+output/
+*.mp4
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
