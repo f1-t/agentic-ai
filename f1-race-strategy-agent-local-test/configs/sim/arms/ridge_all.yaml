@@ -1,0 +1,8 @@
+# SPEC 0024 arm "ridge_all", learned: the ridge arm with the event factors as targets too
+# (pit_loss_s, sc/vsc_lap_factor, sc_pit_loss_factor, lap1_extra_s; drawn per sample at their
+# predictive sd). The comparison variant of "ridge", which fits the degradation factors only.
+# Reported beside none and shrinkage, never chosen. Opt in with --learned ridge_all.
+calibrator:
+  name: ridge
+  params:
+    targets: all

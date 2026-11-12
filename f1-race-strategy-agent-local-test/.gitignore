@@ -9,3 +9,6 @@ __pycache__/
 docs/sim_model_plan.md
 .audit/
 
+
+# wandb offline runs (compute.training_run), synced later with `wandb sync`.
+wandb/

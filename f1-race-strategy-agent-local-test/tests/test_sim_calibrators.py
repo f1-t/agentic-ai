@@ -59,7 +59,7 @@ def test_registry_and_defaults():
         Simulator(synthetic_frame(), SimConfig(calibrator={"name": "nope"}))
 
 
-@pytest.mark.parametrize("name", ["ridge", "gbm", "mlp"])
+@pytest.mark.parametrize("name", ["gbm", "mlp"])
 def test_learned_classes_are_stubs_until_the_dataset_exists(name):
     cal = CALIBRATORS.get(name)()
     assert cal.learned and not cal.fitted and cal.report()["learned"]
@@ -70,13 +70,12 @@ def test_learned_classes_are_stubs_until_the_dataset_exists(name):
         s.fitted_for(at(10))
 
 
-@pytest.mark.xfail(raises=NotImplementedError, strict=True, reason="ridge is a stub until the multi-race dataset")
 def test_ridge_recovers_a_linear_synthetic_map():
     rng = np.random.default_rng(0)
     x = rng.normal(size=(200, 2))
     rows = pd.DataFrame({"race_id": [f"2021_{i % 20 + 1:02d}_r{i % 20}" for i in range(200)], "season": 2021,
                          "k": 0, "f1": x[:, 0], "f2": x[:, 1], "target:pit_loss_s": 20 + 2 * x[:, 0] - x[:, 1]})
-    cal = CALIBRATORS.get("ridge")().fit(calibrators.CalibrationDataset(rows, {}))
+    cal = CALIBRATORS.get("ridge")(targets="all").fit(calibrators.CalibrationDataset(rows, {}))
     assert cal.report()["coef"]["pit_loss_s"] == pytest.approx([2.0, -1.0], abs=0.05)
 
 
@@ -376,6 +375,8 @@ def test_loro_on_one_race_runs_with_nan_cis():
     pd.testing.assert_series_equal(w.loc[w["window"] == "pre_race", "pred_remaining_s"],
                                    w.loc[w["window"] == "to_snapshot", "pred_remaining_s"])
     with pytest.raises(NotImplementedError, match="needs the multi-race dataset"):
+        calibrators.loro(ds, "gbm")
+    with pytest.raises(ValueError, match="training set is empty"):
         calibrators.loro(ds, "ridge")
     with pytest.raises(KeyError, match="matches no race"):
         calibrators.loro(ds, "none", "2021_09_other")

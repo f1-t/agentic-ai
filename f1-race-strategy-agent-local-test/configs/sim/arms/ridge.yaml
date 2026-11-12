@@ -1,0 +1,8 @@
+# SPEC 0024 arm "ridge", learned: the ridge calibrator (calibrators.RidgeCalibrator) at its
+# defaults: the degradation factors as targets (base_delta, wear, fuel, hinge), alpha grid
+# 10^-2 to 10^3 by inner leave-one-race-out, 5 training races at least per factor, else
+# shrinkage's output. Trained per fold on the eligible races outside it. Reported beside none
+# and shrinkage, never chosen by the arm selection: a learned class is adopted per factor by
+# the SPEC H rule (calibrators.selection_table), not here. Opt in with --learned ridge.
+calibrator:
+  name: ridge
