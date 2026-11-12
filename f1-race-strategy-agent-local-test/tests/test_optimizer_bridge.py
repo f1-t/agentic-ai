@@ -306,6 +306,13 @@ def test_a_set_already_past_its_limit_pits_at_the_soonest_legal_stop():
     # fewer laps left than the soonest stop plus a minimum stint: the set runs to the flag
     late = Snapshot(race=RACE, driver="X", laps_completed=45, compound="SOFT", tyre_age=45)
     assert sim.simulate(late, [["SOFT", 5]]).errors == ["A valid dry strategy must use at least two different compounds."]
+    # inside the limit now (age 18, limit 23) but no stop fits in the 7 laps left (minimum 8),
+    # and the flag is at age 25: the set runs to the flag, which is the only plan there is
+    tight = Snapshot(race=RACE, driver="X", laps_completed=43, compound="MEDIUM", tyre_age=18,
+                     stints=[StintRecord(compound="SOFT", laps=25, start_lap=1)])
+    assert sim.simulate(tight, [["MEDIUM", 7]]).valid
+    res = optimize_batch(tight, sim)
+    assert res.plan.as_pairs() == [["MEDIUM", 7]] and res.diagnostics["stint_limit_fallback"] is True
 
 
 def test_a_baseline_past_the_limit_is_unavailable():

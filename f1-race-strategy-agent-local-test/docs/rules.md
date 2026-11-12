@@ -75,9 +75,10 @@ for a later one. The limits are computed once per race from the full race lap fr
 belief and the world simulators are both built on, so both apply the same limits whatever
 their fit window. A compound no car ran in the race has no limit. There is no exemption for
 a degradation model with a hinge: past the last observed age a hinge is still a straight
-line. If the current set is already past its limit at the snapshot (it cannot reach its
-soonest legal stop, R1 and R2, inside the limit), the first stint may run to that soonest
-stop, or to the flag when no legal stop fits in the laps left; `optimize_batch` records this
+line. If the current set cannot keep inside its limit (it cannot reach its soonest legal
+stop, R1 and R2, inside the limit, or no legal stop fits in the laps left and the flag is
+past the limit), the first stint may run to that soonest stop, or to the flag when no legal
+stop fits; `optimize_batch` records this
 as `diagnostics["stint_limit_fallback"]`. The limit is a hindsight race constant, in the
 same class as the observed pit loss: it reads the whole race, including laps after the
 snapshot. An as-of source (earlier seasons at the circuit, Pirelli guidance) can replace

@@ -124,9 +124,15 @@ def _soonest_stop(snapshot) -> int:
 
 
 def current_set_past_limit(snapshot, limits, margin) -> bool:
-    """R8 fallback: the current set cannot reach its soonest legal stop inside its limit."""
+    """R8 fallback: the current set cannot keep inside its limit. Either it cannot reach its
+    soonest legal stop inside the limit, or no legal stop fits in the laps left (the next
+    stint would be below the minimum) and running to the flag passes the limit."""
     seen = (limits or {}).get(snapshot.compound)
-    return margin is not None and seen is not None and snapshot.tyre_age + _soonest_stop(snapshot) > seen + margin
+    if margin is None or seen is None:
+        return False
+    soonest, limit = _soonest_stop(snapshot), seen + margin
+    no_stop = snapshot.remaining_laps < soonest + snapshot.race.min_stint_laps
+    return snapshot.tyre_age + soonest > limit or (no_stop and snapshot.tyre_age + snapshot.remaining_laps > limit)
 
 
 def stint_limit_violations(snapshot, plan, limits, margin) -> list[str]:
