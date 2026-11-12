@@ -163,19 +163,21 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
 
         results = []
         for call in turn.tool_calls:
-            if tool_calls_used >= max_tool_calls:
-                messages.append({"role": "user", "content": "Tool-call budget exhausted. Submit your best recommendation now."})
-                break
-            tool_calls_used += 1
             args = dict(call.arguments)
+            rec = None
+            # A submission is always processed and never counts against the evidence budget;
+            # the budget guard applies to evidence tools only.
             if call.name == "submit_recommendation":
                 rec, error = _normalise_submission(args)
                 out = {"accepted": error is None} if error is None else {"error": error, "recoverable": True}
+            elif tool_calls_used >= max_tool_calls:
+                out = {"error": "Tool-call budget exhausted; call not run. Submit your best recommendation now.",
+                       "recoverable": True}
             else:
-                rec = None
+                tool_calls_used += 1
                 out = _dispatch(call.name, args)
 
-            event = {"episode_id": episode_id, "step": step, "call_index": tool_calls_used, "tool": call.name,
+            event = {"episode_id": episode_id, "step": step, "call_index": len(trajectory) + 1, "tool": call.name,
                      "input": args, "output": out, "error": out.get("error") if isinstance(out, dict) else None}
             trajectory.append(event)
             _append_log(log_path, {**event, "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
@@ -190,12 +192,16 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             else:
                 results.append({"tool": call.name, "result": out})
 
-        if tool_calls_used >= max_tool_calls:
-            # One final model turn is allowed to submit without additional evidence calls.
-            messages.append({"role": "user", "content": "Evidence budget is exhausted. You MUST call submit_recommendation now; do not call any other tool."})
-        elif backend.name == "anthropic":
-            messages.append({"role": "user", "content": results})
+        # Once the evidence budget is spent the turn's results are kept and the model is told to
+        # submit; a later submission is still accepted, further evidence calls are refused.
+        must_submit = "Evidence budget is exhausted. You MUST call submit_recommendation now; do not call any other tool."
+        if backend.name == "anthropic":
+            content = results + ([{"type": "text", "text": must_submit}] if tool_calls_used >= max_tool_calls else [])
+            messages.append({"role": "user", "content": content})
         else:
-            messages.append({"role": "user", "content": "Tool results:\n" + json.dumps(results, ensure_ascii=False)})
+            content = "Tool results:\n" + json.dumps(results, ensure_ascii=False)
+            if tool_calls_used >= max_tool_calls:
+                content += "\n\n" + must_submit
+            messages.append({"role": "user", "content": content})
 
     return None, trajectory
