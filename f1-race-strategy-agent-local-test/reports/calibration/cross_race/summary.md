@@ -212,6 +212,8 @@ Per window, race and arm, over the held-out stop-gain rows (one per real stop an
 
 Per race: the field's stop counts (pit-in laps of the cars within 2 laps of the distance, 'stops:cars') and their mode, against the reference's from lap 0 for the same cars (optimizer_bridge.optimize_batch on the arm's world: full window, one sample, up to 2 stops) and its mode; 2-1 is the best two-stop less the best one-stop remaining time over the cars (s; above 0 when one stop is quicker), median [min, max]. stop_counts.csv holds the rows.
 
+Note: the reference search covers at most max_stops = 2 stops (the profile's sim.max_stops), so a field mode above that can never be matched; a car that stopped more often counts in the field but has no reference plan of its count.
+
 | race | field (cars) | field stops | field mode | arm | reference stops | reference mode | match | 2-1 (s) |
 |---|---|---|---|---|---|---|---|---|
 | 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | baseline | 1:19 | 1 | no | 5.41 [4.24, 7.63] |

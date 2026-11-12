@@ -610,6 +610,7 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     assert "sg_bias" in sel
     md = (out / "summary.md").read_text()
     assert "| SG mae | SG bias |" in md
+    assert f"the reference search covers at most max_stops = {small_profile().sim.max_stops} stops" in md
     for heading in ("## Eligibility", "## Selection", "### Prior-sd fix", "### Tau grid", "## Coverage",
                     "## Stop-gain per race", "## Stop-count check (lap 0)", "## Held-out races",
                     "## Gate and pairs", "## Current defaults", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):

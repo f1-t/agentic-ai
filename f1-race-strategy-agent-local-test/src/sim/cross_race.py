@@ -1365,7 +1365,10 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
            "lap 0 for the same cars (optimizer_bridge.optimize_batch on the arm's world: full window, one sample, "
            f"up to {profile.sim.max_stops} stops) and its mode; 2-1 is the best two-stop less the best one-stop "
            "remaining time over the cars (s; above 0 when one stop is quicker), median [min, max]. "
-           "stop_counts.csv holds the rows.", ""]
+           "stop_counts.csv holds the rows.", "",
+           f"Note: the reference search covers at most max_stops = {profile.sim.max_stops} stops (the profile's "
+           "sim.max_stops), so a field mode above that can never be matched; a car that stopped more often counts "
+           "in the field but has no reference plan of its count.", ""]
     if len(stop_counts):
         md += [md_table(pd.DataFrame({
             "race": stop_counts["race_id"], "field (cars)": stop_counts["field_cars"],
