@@ -116,19 +116,23 @@ start time, fitted with base and wear in the ordinary fits with a ridge toward 0
 (EVOLUTION_TAU_S_PER_MIN), so track evolution between runs is not read as tyre wear.
 The term is constant within a stint, so it is identified across stints only.
 
-`driver_effects` (SimConfig.degradation.params, default false; linear_fuel and
-linear_fuel_hinge only): one pace offset per driver in the fit's rows, in every fit path
-(full, practice, to_snapshot), so a field where the faster cars run the older tyres does not
-flatten the wear slopes. The offsets are constrained to sum to zero over the drivers, so
-each compound base stays the field mean: they enter as m - 1 orthonormal sum-to-zero
-contrasts (_driver_design), whose ridge penalty is the plain sum of squared offsets. The
-full and practice fits leave them unpenalised; the to_snapshot fit shrinks every offset
+`driver_effects` (SimConfig.degradation.params: "off", the default, "race" or "all"; linear_fuel
+and linear_fuel_hinge only): one pace offset per driver, so a field where the faster cars run
+the older tyres does not flatten the wear slopes. "race" puts offsets on race rows only, for the
+drivers with race rows in the fit: the full and to_snapshot fits get them, and the practice fit
+(the pre_race prior) stays the pooled fit, exactly the option-off prior. "all" puts them on
+every fit's rows, practice included (true is read as "all"); it is kept so the practice
+finding (driver offsets in practice lower the prior's wear on 2021 Spain) stays reproducible.
+The offsets are constrained to sum to zero over the drivers, so each compound base stays the
+field mean: they enter as m - 1 orthonormal sum-to-zero contrasts (_driver_design), whose
+ridge penalty is the plain sum of squared offsets. The full and practice fits leave them
+unpenalised; the to_snapshot fit shrinks every offset
 toward 0 with tau shrinkage["driver_s"], else the base tau shrinkage["base_s"] (the
 calibrator's). They are nuisance parameters: the lap time a model returns has no driver term
 (the engine's pace offset is unchanged), and fit_report["cov"] and the posterior draws leave
 them out (the cov of the other parameters is their marginal posterior over the offsets).
 fit_report gains
-  driver_effects              {tau (None when unpenalised), n_drivers, value: {driver: s},
+  driver_effects              {mode, tau (None when unpenalised), n_drivers, value: {driver: s},
                               sd: {driver: s}}, value summing to 0
 """
 import copy
@@ -168,28 +172,47 @@ def _sum_to_zero_basis(m):
     return Q
 
 
-def _driver_design(d):
+DRIVER_EFFECTS = ("off", "race", "all")
+
+
+def driver_effects_mode(value):
+    """The driver_effects param as None (off), "race" or "all": False, None and "off" are off,
+    True is "all" (the option's first, every-fit form)."""
+    if value is None or value is False or value == "off":
+        return None
+    if value is True:
+        return "all"
+    if value in DRIVER_EFFECTS:
+        return value
+    raise ValueError(f"driver_effects must be one of {DRIVER_EFFECTS}, got {value!r}")
+
+
+def _driver_design(d, race_only=False):
     """(drivers, contrast columns, Q) for driver_effects: the sorted drivers of the rows `d`
-    and the m - 1 columns (driver indicators) Q, Q from _sum_to_zero_basis (a row without a
-    driver gets 0, the field mean). No columns with fewer than two drivers."""
+    (with `race_only`, of its race rows, lap not NaN) and the m - 1 columns (driver
+    indicators) Q, Q from _sum_to_zero_basis (a row without a driver, or a practice row under
+    race_only, gets 0, the field mean). No columns with fewer than two drivers."""
+    rows = ~np.isnan(_race_lap(d)) if race_only else np.ones(len(d), dtype=bool)
+    if not rows.any():
+        return [], [], _sum_to_zero_basis(0)
     if "driver" not in d:
         raise ValueError("driver_effects needs a driver column in the fit's rows")
-    drivers = sorted(d["driver"].dropna().unique())
+    drivers = sorted(d.loc[rows, "driver"].dropna().unique())
     Q = _sum_to_zero_basis(len(drivers))
     if len(drivers) < 2:
         return drivers, [], Q
     idx = d["driver"].map({x: i for i, x in enumerate(drivers)}).to_numpy(dtype=float)
-    has = ~np.isnan(idx)
+    has = ~np.isnan(idx) & rows
     Z = np.zeros((len(d), Q.shape[1]))
     Z[has] = Q[idx[has].astype(int)]
     return drivers, [Z[:, j] for j in range(Z.shape[1])], Q
 
 
-def _driver_report(drivers, Q, v, cov_v, tau):
+def _driver_report(drivers, Q, v, cov_v, tau, mode):
     """fit_report["driver_effects"]: the offsets u = Q v and their sds sqrt(diag(Q cov_v Q'))."""
     u = Q @ np.asarray(v, dtype=float) if Q.size else np.zeros(len(drivers))
     var = np.diag(Q @ np.asarray(cov_v, dtype=float) @ Q.T) if Q.size else np.zeros(len(drivers))
-    return {"tau": None if tau is None else float(tau), "n_drivers": len(drivers),
+    return {"mode": mode, "tau": None if tau is None else float(tau), "n_drivers": len(drivers),
             "value": {x: float(a) for x, a in zip(drivers, u)},
             "sd": {x: float(s) for x, s in zip(drivers, np.sqrt(np.clip(var, 0.0, None)))}}
 
@@ -627,7 +650,8 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
     if hold_rep is not None:
         rep["collinear_hold"] = hold_rep
     if driver_effects:
-        rep["driver_effects"] = _driver_report(drivers, Q, beta[n_fixed:], cov[n_fixed:, n_fixed:], tau_driver)
+        rep["driver_effects"] = _driver_report(drivers, Q, beta[n_fixed:], cov[n_fixed:, n_fixed:], tau_driver,
+                                               driver_effects)
     return comps, beta, rep
 
 
@@ -809,8 +833,8 @@ class LinearDegradation(_ParameterDraws):
 
     @classmethod
     def fit(cls, data, min_samples=5, prior=None, shrinkage=None, base_delta=0.0, draw="none",
-            clip_wear_at_zero=False, wear_lower_bound=None, divide_data_by_s2=False, driver_effects=False, **_):
-        if driver_effects:
+            clip_wear_at_zero=False, wear_lower_bound=None, divide_data_by_s2=False, driver_effects="off", **_):
+        if driver_effects_mode(driver_effects):
             raise ValueError("driver_effects is a linear_fuel / linear_fuel_hinge option")
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, wear_lower_bound=wear_lower_bound,
@@ -884,7 +908,8 @@ class LinearFuelDegradation(_ParameterDraws):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False, driver_effects=False, **_):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects="off", **_):
+        driver_effects = driver_effects_mode(driver_effects)
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
                                        wear_lower_bound=wear_lower_bound, collinear_hold=collinear_hold,
@@ -930,7 +955,7 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         if hinge_knots is not None:
             rep["hinge"] = {}
         if driver_effects:
-            rep["driver_effects"] = _driver_report([], np.zeros((0, 0)), [], np.zeros((0, 0)), None)
+            rep["driver_effects"] = _driver_report([], np.zeros((0, 0)), [], np.zeros((0, 0)), None, driver_effects)
         return {}, fuel_prior, None if hinge_knots is None else {}, rep
     lap = _race_lap(d)
     race = ~np.isnan(lap)
@@ -942,7 +967,7 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     n_race = [int(((d["compound"] == c).to_numpy() & race).sum()) for c in comps]
     cols = _compound_columns(d, comps)
     hcols = [_hinge_column(d, c, hinge_knots[c]) for c in hinged]
-    drivers, dcols, Q = _driver_design(d) if driver_effects else ([], [], None)
+    drivers, dcols, Q = _driver_design(d, driver_effects == "race") if driver_effects else ([], [], None)
     sessions, evo = evolution_columns(d)
     k, h, nd = 2 * len(comps), len(hinged), len(dcols)
     fitted = any(n >= min_samples for n in n_race)
@@ -957,7 +982,7 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         beta, bound_fixed, (sd, res, cov), unconstrained = _bound_fit(
             X, target, prec, np.zeros(len(prec)), beta, (sd, res, cov), len(comps), wear_lower_bound, True)
     j0 = k + 1 + h if fitted else k + h   # the first driver contrast
-    driver_rep = (_driver_report(drivers, Q, beta[j0:j0 + nd], cov[j0:j0 + nd, j0:j0 + nd], None)
+    driver_rep = (_driver_report(drivers, Q, beta[j0:j0 + nd], cov[j0:j0 + nd, j0:j0 + nd], None, driver_effects)
                   if driver_effects else None)
     if fitted:
         fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1 + h + nd:]
@@ -1013,7 +1038,8 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
             clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False,
-            driver_effects=False, **_):
+            driver_effects="off", **_):
+        driver_effects = driver_effects_mode(driver_effects)
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
         if shrinkage is not None:

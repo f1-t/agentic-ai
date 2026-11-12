@@ -210,11 +210,11 @@ def test_committed_arms_load_and_are_distinct():
     assert t.set_index("arm").loc["posterior", "role"] == "coverage only"
     assert cross_race.arm_config("wear_nonneg").degradation.params == {"wear_lower_bound": 0.0}
     assert cross_race.arm_config("driver_effects").degradation.model_dump() == {
-        "name": "linear_fuel", "params": {"driver_effects": True}}
-    assert cross_race.arm_config("driver_effects_nonneg").degradation.params == {"driver_effects": True,
+        "name": "linear_fuel", "params": {"driver_effects": "race"}}
+    assert cross_race.arm_config("driver_effects_nonneg").degradation.params == {"driver_effects": "race",
                                                                                 "wear_lower_bound": 0.0}
     assert cross_race.arm_config("driver_effects_hinge").degradation.model_dump() == {
-        "name": "linear_fuel_hinge", "params": {"driver_effects": True}}
+        "name": "linear_fuel_hinge", "params": {"driver_effects": "race"}}
     assert not cross_race.same_by_construction("driver_effects", BASELINE, "full")   # it changes the world
     assert set(cross_race.SIMPLICITY) == set(ARMS) - set(cross_race.COVERAGE_ONLY)
 
@@ -406,12 +406,20 @@ def test_the_signed_stop_gain_bias_sits_beside_the_mae():
     assert per.loc[RACES[1], "n"] == 2 and per.loc[RACES[1], "n_stops"] == 2
 
 
-def test_field_stops_count_tyre_changes_of_the_cars_near_the_distance(syn):
+def test_field_stops_count_pit_in_laps_of_the_cars_near_the_distance(syn):
     f = cross_race.field_stops(syn.frame, syn.race)
     assert len(f) == syn.frame["driver"].nunique()   # every synthetic car finishes on the lead lap
     for _, r in f.iterrows():
         g = syn.frame[syn.frame["driver"] == r["driver"]]
         assert r["stops"] == int(g["pit_in"].sum()) and r["stops"] in (1, 2)
+    # the count is the pit-in laps, not the stints: a stint number that moves without a stop, or
+    # a pit-in on the car's last lap, is not a stop
+    odd = syn.frame.copy()
+    d00 = odd["driver"] == "D00"
+    odd.loc[d00 & (odd["lap"] > 5), "stint"] += 10
+    odd.loc[d00 & (odd["lap"] == syn.race.total_laps), "pit_in"] = True
+    before = f.set_index("driver").loc["D00", "stops"]
+    assert cross_race.field_stops(odd, syn.race).set_index("driver").loc["D00", "stops"] == before
     # a car that stops two laps short is in, three laps short is out
     frame = syn.frame[~((syn.frame["driver"] == "D00") & (syn.frame["lap"] > syn.race.total_laps - 2))
                       & ~((syn.frame["driver"] == "D01") & (syn.frame["lap"] > syn.race.total_laps - 3))]
@@ -463,6 +471,74 @@ def test_synthetic_races_never_go_into_the_committed_report(tmp_path, monkeypatc
     cross_race.guard_committed(tmp_path, ["2021_04_spain"])
 
 
+def test_a_fold_the_arm_cannot_replay_is_kept_as_a_fold_error(syn, monkeypatch):
+    def rejected(*a, **k):
+        raise ValueError("ALO: replay plan rejected: [\"Unknown compound 'SOFT'\"]")
+    monkeypatch.setattr(cross_race, "fold_tables", rejected)
+    loader = lambda unit, profile: syn   # noqa: E731
+    t = cross_race.unpack(cross_race.fold_job(SYN, "free_air", small_profile(), loader))
+    assert set(t) == {"fold_error"} and t["fold_error"]["arm"].tolist() == ["free_air"]
+    assert "replay plan rejected" in t["fold_error"]["error"].iloc[0]
+
+    def other(*a, **k):
+        raise ValueError("something else")
+    monkeypatch.setattr(cross_race, "fold_tables", other)
+    with pytest.raises(ValueError, match="something else"):
+        cross_race.fold_job(SYN, "free_air", small_profile(), loader)
+
+
+# --- held-out races -------------------------------------------------------------------------------
+HELD = "2099_05_synthetic"
+
+
+@pytest.fixture
+def eval_set(tmp_path):
+    path = tmp_path / "eval_set.json"
+    path.write_text(json.dumps({"races": [HELD, "2099_07_synthetic"]}))
+    return path
+
+
+def test_held_out_races_are_read_from_the_eval_set_file(eval_set, tmp_path):
+    assert cross_race.held_out_races(eval_set) == [HELD, "2099_07_synthetic"]
+    assert cross_race.held_out_races(tmp_path / "missing.json") == []
+    assert cross_race.split_held_out([SYN, HELD, "2021_04_spain"], eval_set) == ([SYN, "2021_04_spain"], [HELD])
+    assert cross_race.guard_held_out([SYN], eval_set) == []
+    assert cross_race.guard_held_out([SYN, HELD], eval_set, allow=True) == [HELD]
+    # the committed list holds out the report races
+    assert {"2019_06_monaco", "2023_07_spain"} <= set(cross_race.held_out_races())
+
+
+def test_the_runner_refuses_a_held_out_race_before_loading_it(eval_set, tmp_path, monkeypatch):
+    def no_load(*a, **k):
+        raise AssertionError("a held-out race was loaded")
+    monkeypatch.setattr(cross_race, "load_race", no_load)
+    with pytest.raises(ValueError, match="held out.*--allow-held-out"):
+        cross_race.run([SYN, HELD], small_profile(), tmp_path / "out", eval_set=eval_set)
+    assert not (tmp_path / "out").exists()
+    from src.sim import real_run
+    with pytest.raises(ValueError, match="held out"):
+        real_run.RealRun([HELD], small_profile(), tmp_path / "rr", eval_set=eval_set)
+
+
+def test_races_auto_skips_held_out_races_and_the_report_names_them(eval_set, tmp_path, monkeypatch):
+    from src.sim import real_run
+    seen = {}
+    monkeypatch.setattr(real_run, "cached_races", lambda: ([SYN, HELD], []))
+    monkeypatch.setattr(cross_race, "run", lambda races, *a, **kw: seen.update(races=races, **kw))
+    monkeypatch.setattr(cross_race, "report", lambda *a, **kw: tmp_path / "summary.md")
+    cross_race.main(["run", "--races", "auto", "--eval-set", str(eval_set), "--out", str(tmp_path)])
+    assert seen["races"] == [SYN] and seen["held_out_skipped"] == [HELD] and not seen["allow_held_out"]
+    cross_race.main(["run", "--races", "auto", "--allow-held-out", "--eval-set", str(eval_set), "--out", str(tmp_path)])
+    assert seen["races"] == [SYN, HELD] and seen["held_out_skipped"] == [] and seen["allow_held_out"]
+    held = {"eval_set": "data/eval_set.json", "listed": [HELD, "2099_07_synthetic"], "skipped": [HELD], "included": []}
+    line = cross_race.held_out_md(held)
+    assert f"Excluded from this run for that reason: {HELD}, 2099_07_synthetic" in line
+    assert f"--races auto skipped {HELD}" in line
+    allowed = cross_race.held_out_md({**held, "skipped": [], "included": [HELD]})
+    assert "Excluded from this run for that reason: 2099_07_synthetic." in allowed and "--allow-held-out: " + HELD in allowed
+    assert "predates" in cross_race.held_out_md(None)
+
+
 # --- end to end and resumability ------------------------------------------------------------------
 RUN_RACES = ["2021_04_spain", "2099_01_synthetic", "2099_02_synthetic"]
 
@@ -486,6 +562,7 @@ def run_dir(tmp_path_factory):
 def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     out, record, log = run_dir
     assert record["eligible"] == RUN_RACES and record["belief_choice"] in ARMS
+    assert record["held_out"]["skipped"] == [] and record["held_out"]["included"] == []   # none of them is held out
     assert record["s2_arm"] == f"{record['belief_choice']}__s2" and len(record["grid"]) == 1
     for r in RUN_RACES:
         assert (out / "races" / r / f"{r}.parquet").is_file()
@@ -534,7 +611,7 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     md = (out / "summary.md").read_text()
     assert "| SG mae | SG bias |" in md
     for heading in ("## Eligibility", "## Selection", "### Prior-sd fix", "### Tau grid", "## Coverage",
-                    "## Stop-gain per race", "## Stop-count check (lap 0)",
+                    "## Stop-gain per race", "## Stop-count check (lap 0)", "## Held-out races",
                     "## Gate and pairs", "## Current defaults", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):
         assert heading in md
     assert "PROVISIONAL: 3 eligible race(s), fewer than 8" in md and "the defaults stay" in md

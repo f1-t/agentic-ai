@@ -1,10 +1,14 @@
 # Cross-race calibration report (SPEC 0016)
 
-sim_code_version `465287c5c7fb`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
+sim_code_version `d517750065d4`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
 
 **PROVISIONAL: 1 eligible race(s), fewer than 8. The selection below is provisional and the defaults stay** (belief.yaml, world.yaml and the SimConfig defaults are unchanged).
 
 All G and stop-gain numbers are held out: each race's rows come from its own leave-one-race-out fold, and Spain is one race among the rest.
+
+## Held-out races
+
+data/eval_set.json holds out 2019_06_monaco, 2023_07_spain. Excluded from this run for that reason: 2019_06_monaco, 2023_07_spain.
 
 ## Eligibility
 
@@ -30,9 +34,9 @@ Drivers: eval.scenarios.eligible_drivers (laps 1..n with no gap, at most two lap
 | collinear_hold_hinge | configs/sim/arms/collinear_hold_hinge.yaml | 9df26c36bcde | ca1c878f0c90 | candidate |
 | collinear_hold_nonneg | configs/sim/arms/collinear_hold_nonneg.yaml | 3a9c5a90f3ee | ca9375a538eb | candidate |
 | collinear_hold_nonneg_hinge | configs/sim/arms/collinear_hold_nonneg_hinge.yaml | 3b25f5df12ff | ad2158a91ab3 | candidate |
-| driver_effects | configs/sim/arms/driver_effects.yaml | 3a0c54f914c8 | 95785571c73d | candidate |
-| driver_effects_nonneg | configs/sim/arms/driver_effects_nonneg.yaml | 2432ad0401c5 | 4694af89aa55 | candidate |
-| driver_effects_hinge | configs/sim/arms/driver_effects_hinge.yaml | 56e10509a9c5 | 18c65c855c3c | candidate |
+| driver_effects | configs/sim/arms/driver_effects.yaml | 07bba5f9196b | e74729616414 | candidate |
+| driver_effects_nonneg | configs/sim/arms/driver_effects_nonneg.yaml | e3086edc1423 | d1d8ab79e239 | candidate |
+| driver_effects_hinge | configs/sim/arms/driver_effects_hinge.yaml | ac2b6bd2d5da | 092feb106391 | candidate |
 
 
 ## Current defaults
@@ -96,9 +100,9 @@ Stage 2, against the stage-1 result wear_nonneg:
 | collinear_hold_hinge | candidate | 1 | 15.90 [-, -] | -7.44 | -3.22 [-, -] | -3.22 | 1.09 [-, -] | -0.90 | 0.09 [-, -] | 0.09 | no |
 | collinear_hold_nonneg | candidate | 1 | 16.65 [-, -] | -8.36 | -2.48 [-, -] | -2.48 | 0.96 [-, -] | -0.76 | -0.03 [-, -] | -0.03 | no |
 | collinear_hold_nonneg_hinge | candidate | 1 | 15.85 [-, -] | -7.49 | -3.27 [-, -] | -3.27 | 0.94 [-, -] | -0.75 | -0.05 [-, -] | -0.05 | no |
-| driver_effects | candidate | 1 | 12.75 [-, -] | -6.17 | -6.38 [-, -] | -6.38 | 1.23 [-, -] | -1.22 | 0.24 [-, -] | 0.24 | no |
-| driver_effects_nonneg | candidate | 1 | 12.75 [-, -] | -6.17 | -6.38 [-, -] | -6.38 | 1.21 [-, -] | -1.20 | 0.22 [-, -] | 0.22 | no |
-| driver_effects_hinge | candidate | 1 | 12.19 [-, -] | -5.62 | -6.93 [-, -] | -6.93 | 1.21 [-, -] | -1.20 | 0.22 [-, -] | 0.22 | no |
+| driver_effects | candidate | 1 | 12.44 [-, -] | -4.82 | -6.68 [-, -] | -6.68 | 1.00 [-, -] | -0.97 | 0.01 [-, -] | 0.01 | no |
+| driver_effects_nonneg | candidate | 1 | 12.44 [-, -] | -4.82 | -6.68 [-, -] | -6.68 | 0.98 [-, -] | -0.95 | -0.01 [-, -] | -0.01 | no |
+| driver_effects_hinge | candidate | 1 | 11.94 [-, -] | -4.32 | -7.18 [-, -] | -7.18 | 0.99 [-, -] | -0.96 | -0.00 [-, -] | -0.00 | no |
 
 
 Stage 1 result: wear_nonneg (the incumbent stays, provisional).
@@ -120,9 +124,9 @@ Decision for to_snapshot: **provisional choice wear_nonneg; the defaults stay**.
 | collinear_hold_hinge | candidate | 1 | 10.18 [-, -] | -0.27 | 0.00 [-, -] | 0.00 | 0.83 [-, -] | -0.77 | 0.00 [-, -] | 0.00 | no |
 | collinear_hold_nonneg | candidate | 1 | 10.18 [-, -] | -0.27 | 0.00 [-, -] | 0.00 | 0.83 [-, -] | -0.77 | 0.00 [-, -] | 0.00 | no |
 | collinear_hold_nonneg_hinge | candidate | 1 | 10.18 [-, -] | -0.27 | 0.00 [-, -] | 0.00 | 0.83 [-, -] | -0.77 | 0.00 [-, -] | 0.00 | no |
-| driver_effects | candidate | 1 | 11.54 [-, -] | -5.11 | 1.36 [-, -] | 1.36 | 1.16 [-, -] | -1.13 | 0.33 [-, -] | 0.33 | no |
-| driver_effects_nonneg | candidate | 1 | 11.54 [-, -] | -5.11 | 1.36 [-, -] | 1.36 | 1.16 [-, -] | -1.13 | 0.33 [-, -] | 0.33 | no |
-| driver_effects_hinge | candidate | 1 | 11.54 [-, -] | -5.11 | 1.36 [-, -] | 1.36 | 1.16 [-, -] | -1.13 | 0.33 [-, -] | 0.33 | no |
+| driver_effects | candidate | 1 | 10.18 [-, -] | -0.27 | 0.00 [-, -] | 0.00 | 0.83 [-, -] | -0.77 | 0.00 [-, -] | 0.00 | no |
+| driver_effects_nonneg | candidate | 1 | 10.18 [-, -] | -0.27 | 0.00 [-, -] | 0.00 | 0.83 [-, -] | -0.77 | 0.00 [-, -] | 0.00 | no |
+| driver_effects_hinge | candidate | 1 | 10.18 [-, -] | -0.27 | 0.00 [-, -] | 0.00 | 0.83 [-, -] | -0.77 | 0.00 [-, -] | 0.00 | no |
 
 
 Decision for pre_race: **provisional choice baseline; the defaults stay**.
@@ -180,9 +184,9 @@ Per window, race and arm, over the held-out stop-gain rows (one per real stop an
 | 2021_04_spain | collinear_hold_hinge | 336 | 37 | 1.73 | 0.84 | -0.90 | 1.09 |
 | 2021_04_spain | collinear_hold_nonneg | 336 | 37 | 1.73 | 0.98 | -0.76 | 0.96 |
 | 2021_04_spain | collinear_hold_nonneg_hinge | 336 | 37 | 1.73 | 0.99 | -0.75 | 0.94 |
-| 2021_04_spain | driver_effects | 336 | 37 | 1.73 | 0.52 | -1.22 | 1.23 |
-| 2021_04_spain | driver_effects_nonneg | 336 | 37 | 1.73 | 0.53 | -1.20 | 1.21 |
-| 2021_04_spain | driver_effects_hinge | 336 | 37 | 1.73 | 0.53 | -1.20 | 1.21 |
+| 2021_04_spain | driver_effects | 336 | 37 | 1.73 | 0.76 | -0.97 | 1.00 |
+| 2021_04_spain | driver_effects_nonneg | 336 | 37 | 1.73 | 0.78 | -0.95 | 0.98 |
+| 2021_04_spain | driver_effects_hinge | 336 | 37 | 1.73 | 0.77 | -0.96 | 0.99 |
 
 
 ### pre_race
@@ -199,14 +203,14 @@ Per window, race and arm, over the held-out stop-gain rows (one per real stop an
 | 2021_04_spain | collinear_hold_hinge | 336 | 37 | 1.73 | 0.97 | -0.77 | 0.83 |
 | 2021_04_spain | collinear_hold_nonneg | 336 | 37 | 1.73 | 0.97 | -0.77 | 0.83 |
 | 2021_04_spain | collinear_hold_nonneg_hinge | 336 | 37 | 1.73 | 0.97 | -0.77 | 0.83 |
-| 2021_04_spain | driver_effects | 336 | 37 | 1.73 | 0.60 | -1.13 | 1.16 |
-| 2021_04_spain | driver_effects_nonneg | 336 | 37 | 1.73 | 0.60 | -1.13 | 1.16 |
-| 2021_04_spain | driver_effects_hinge | 336 | 37 | 1.73 | 0.60 | -1.13 | 1.16 |
+| 2021_04_spain | driver_effects | 336 | 37 | 1.73 | 0.97 | -0.77 | 0.83 |
+| 2021_04_spain | driver_effects_nonneg | 336 | 37 | 1.73 | 0.97 | -0.77 | 0.83 |
+| 2021_04_spain | driver_effects_hinge | 336 | 37 | 1.73 | 0.97 | -0.77 | 0.83 |
 
 
 ## Stop-count check (lap 0)
 
-Per race: the field's stop counts (tyre changes of the cars within 2 laps of the distance, 'stops:cars') and their mode, against the reference's from lap 0 for the same cars (optimizer_bridge.optimize_batch on the arm's world: full window, one sample, up to 2 stops) and its mode; 2-1 is the best two-stop less the best one-stop remaining time over the cars (s; above 0 when one stop is quicker), median [min, max]. stop_counts.csv holds the rows.
+Per race: the field's stop counts (pit-in laps of the cars within 2 laps of the distance, 'stops:cars') and their mode, against the reference's from lap 0 for the same cars (optimizer_bridge.optimize_batch on the arm's world: full window, one sample, up to 2 stops) and its mode; 2-1 is the best two-stop less the best one-stop remaining time over the cars (s; above 0 when one stop is quicker), median [min, max]. stop_counts.csv holds the rows.
 
 | race | field (cars) | field stops | field mode | arm | reference stops | reference mode | match | 2-1 (s) |
 |---|---|---|---|---|---|---|---|---|
@@ -313,14 +317,14 @@ Per arm and window, over every held-out G row: the finishing-position gate (simu
 | collinear_hold_nonneg_hinge | to_snapshot | 0.70 | 1.81 | 112 | 0.42 |
 | collinear_hold_nonneg_hinge | pre_race | 0.78 | 1.52 | 112 | 0.50 |
 | driver_effects | full | 0.77 | 1.56 | 112 | 0.50 |
-| driver_effects | to_snapshot | 0.77 | 1.50 | 112 | 0.57 |
-| driver_effects | pre_race | 0.71 | 1.73 | 112 | 0.66 |
+| driver_effects | to_snapshot | 0.76 | 1.57 | 112 | 0.50 |
+| driver_effects | pre_race | 0.78 | 1.52 | 112 | 0.50 |
 | driver_effects_nonneg | full | 0.77 | 1.56 | 112 | 0.50 |
-| driver_effects_nonneg | to_snapshot | 0.77 | 1.52 | 112 | 0.57 |
-| driver_effects_nonneg | pre_race | 0.71 | 1.73 | 112 | 0.66 |
+| driver_effects_nonneg | to_snapshot | 0.77 | 1.56 | 112 | 0.51 |
+| driver_effects_nonneg | pre_race | 0.78 | 1.52 | 112 | 0.50 |
 | driver_effects_hinge | full | 0.79 | 1.58 | 112 | 0.38 |
-| driver_effects_hinge | to_snapshot | 0.77 | 1.47 | 112 | 0.57 |
-| driver_effects_hinge | pre_race | 0.71 | 1.73 | 112 | 0.66 |
+| driver_effects_hinge | to_snapshot | 0.77 | 1.54 | 112 | 0.50 |
+| driver_effects_hinge | pre_race | 0.78 | 1.52 | 112 | 0.50 |
 
 
 Pace gate per race (calibration.positions, simulated order, baseline config):
@@ -350,9 +354,9 @@ err_s = pred - real gain; the terms sum to it against each arm's own full-window
 | collinear_hold_hinge | 336 | -0.896 | 0.245 | -0.238 | -0.150 | 0.058 | -0.330 | 0.000 | -0.030 | -0.452 |
 | collinear_hold_nonneg | 336 | -0.756 | 0.445 | -0.389 | -0.526 | 0.079 | 0.000 | 0.000 | -0.027 | -0.338 |
 | collinear_hold_nonneg_hinge | 336 | -0.746 | 0.196 | -0.195 | 0.039 | 0.023 | -0.330 | 0.000 | -0.027 | -0.452 |
-| driver_effects | 336 | -1.217 | 0.536 | -0.539 | -1.247 | 0.178 | 0.000 | 0.000 | -0.047 | -0.098 |
-| driver_effects_nonneg | 336 | -1.200 | 0.531 | -0.535 | -1.226 | 0.174 | 0.000 | 0.000 | -0.047 | -0.098 |
-| driver_effects_hinge | 336 | -1.202 | 0.355 | -0.391 | -0.849 | 0.135 | -0.242 | 0.000 | -0.048 | -0.161 |
+| driver_effects | 336 | -0.973 | 0.440 | -0.445 | -0.968 | 0.145 | 0.000 | 0.000 | -0.047 | -0.098 |
+| driver_effects_nonneg | 336 | -0.953 | 0.434 | -0.439 | -0.943 | 0.140 | 0.000 | 0.000 | -0.047 | -0.098 |
+| driver_effects_hinge | 336 | -0.960 | 0.258 | -0.297 | -0.567 | 0.102 | -0.245 | 0.000 | -0.049 | -0.161 |
 
 
 ## Factor summary

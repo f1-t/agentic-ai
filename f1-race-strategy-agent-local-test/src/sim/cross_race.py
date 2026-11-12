@@ -1,7 +1,12 @@
 """Cross-race calibration report (SPEC 0016 with its amendment).
 
-    python -m src.sim.calibrate cross run --races 2021_04_spain [--synthetic 2] [--profile local] [--out DIR]
+    python -m src.sim.calibrate cross run --races {auto|2021_04_spain ...} [--allow-held-out] [--synthetic 2]
+                                          [--profile local] [--out DIR]
     python -m src.sim.calibrate cross report [--out DIR] [--race-features data/race_features.csv]
+
+Held-out races: a race data/eval_set.json lists is refused (guard_held_out, before anything
+about it is loaded) unless --allow-held-out; `--races auto` (every cached race,
+real_run.cached_races) skips them. The report's "Held-out races" section names them.
 
 `run` does, resumably (every unit is a jobs.run_task, skipped when its output is current):
   A  calibration.eligibility per race, written to eligibility.json; only eligible races go on,
@@ -385,13 +390,15 @@ def field_drivers(frame, total_laps: int, within=FIELD_WITHIN_LAPS) -> list[str]
 
 
 def field_stops(frame, race, within=FIELD_WITHIN_LAPS) -> pd.DataFrame:
-    """One row per field car (field_drivers): laps run, stops (tyre changes: its stints less
-    one) and starting compound."""
+    """One row per field car (field_drivers): laps run, stops (its pit-in laps before its last
+    lap: a stop needs a lap after it) and starting compound."""
     rows = []
     for d in field_drivers(frame, race.total_laps, within):
         g = frame[frame["driver"] == d].sort_values("lap")
-        rows.append({"race_id": race.race_id, "driver": d, "laps": int(g["lap"].max()),
-                     "stops": int(g["stint"].nunique() - 1), "start_compound": str(g["compound"].iloc[0])})
+        last = int(g["lap"].max())
+        stops = int((g["pit_in"].astype(bool) & (g["lap"] < last)).sum())
+        rows.append({"race_id": race.race_id, "driver": d, "laps": last, "stops": stops,
+                     "start_compound": str(g["compound"].iloc[0])})
     return pd.DataFrame(rows, columns=FIELD_STOP_COLUMNS)
 
 
@@ -509,11 +516,26 @@ def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=N
             "stop_gain": stop, "reference_stops": ref}
 
 
+FOLD_ERROR_COLUMNS = ["race_id", "arm", "error"]
+
+
 def fold_job(unit: str, arm: str, profile, loader=load_race, pool=None) -> pd.DataFrame:
-    """jobs h_fold --arm: the packed fold_tables, stamped with the arm and its config hash."""
+    """jobs h_fold --arm: the packed fold_tables, stamped with the arm and its config hash.
+
+    A fold the arm cannot replay (calibration's "replay plan rejected": the arm's world does not
+    model a compound the race ran, e.g. free_air on a compound with too few free-air laps) is
+    kept as a fold_error row instead of stopping the run; the arm is then compared on the
+    other races, and the report lists the fold."""
     data = loader(unit, profile)
     cfg = arm_config(arm, data.config)
-    return _stamped(pack(fold_tables(data, arm, profile, loader, pool)), data, cfg, profile, arm=arm)
+    try:
+        tables = fold_tables(data, arm, profile, loader, pool)
+    except ValueError as exc:
+        if "replay plan rejected" not in str(exc):
+            raise
+        tables = {"fold_error": pd.DataFrame([{"race_id": data.race_id, "arm": arm, "error": str(exc)}],
+                                             columns=FOLD_ERROR_COLUMNS)}
+    return _stamped(pack(tables), data, cfg, profile, arm=arm)
 
 
 # --- running ------------------------------------------------------------------------------
@@ -554,6 +576,42 @@ def guard_committed(out, races):
                          "pass --out a scratch directory")
 
 
+EVAL_SET = ROOT / "data" / "eval_set.json"   # the races held out for the final evaluation
+
+
+def held_out_races(path=EVAL_SET) -> list[str]:
+    """The canonical race ids `path` (data/eval_set.json, {"races": [...]}) holds out; none when
+    the file is absent. Model choices must not rest on them, so the cross-race runner leaves
+    them out."""
+    p = Path(path)
+    if not p.is_file():
+        return []
+    return sorted({canonical_race_id(r) for r in json.loads(p.read_text()).get("races", [])})
+
+
+def split_held_out(races, path=EVAL_SET) -> tuple[list[str], list[str]]:
+    """(the races not held out, the held-out ones), canonical ids in the given order. Reads
+    `path` only: nothing about a held-out race is loaded."""
+    held = set(held_out_races(path))
+    ids = [canonical_race_id(r) for r in races]
+    return [r for r in ids if r not in held], [r for r in ids if r in held]
+
+
+def guard_held_out(races, path=EVAL_SET, allow=False) -> list[str]:
+    """Refuse races `path` holds out unless `allow` (--allow-held-out); returns the held-out
+    races allowed in (none without `allow`)."""
+    _, held = split_held_out(races, path)
+    if held and not allow:
+        raise ValueError(f"{held} held out in {path}: the cross-race runner leaves held-out races out (model "
+                         "choices must not rest on them); drop them or pass --allow-held-out")
+    return held
+
+
+def _shown(path) -> str:
+    p = Path(path).resolve()
+    return p.relative_to(ROOT).as_posix() if p.is_relative_to(ROOT) else str(p)
+
+
 def eligibility_records(races, profile, log=print) -> list[dict]:
     """A: calibration.eligibility per race (canonical ids or aliases), with the race control
     messages when cached; each record gains race_id, and a note when the messages are missing."""
@@ -570,10 +628,14 @@ def eligibility_records(races, profile, log=print) -> list[dict]:
 
 
 def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid=True, n_jobs=None,
-        log=print, elig=None, runner=None) -> dict:
+        log=print, elig=None, runner=None, eval_set=EVAL_SET, allow_held_out=False, held_out_skipped=()) -> dict:
     """A, B and the three C stages over `races` (canonical ids or aliases; synthetic ids
     allowed outside CROSS_DIR, guard_committed). Writes eligibility.json and run.json under
     `out`; returns the run record.
+
+    A race `eval_set` (data/eval_set.json) holds out is refused before anything is loaded
+    (guard_held_out) unless `allow_held_out`. The record's "held_out" says what the file lists,
+    which of them `--races auto` skipped (`held_out_skipped`) and which were let in.
 
     `elig`: eligibility_records of `races` already computed (real_run), else computed here.
     `runner(items, phase)` runs one phase's units (phase races, arms, s2 or tau_grid) and
@@ -582,6 +644,9 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     run.json is removed, so nothing reads a half-finished run, and the record returned has
     `pending` (the labels) and `phase`. Rerunning resumes, as every unit is a jobs.run_task."""
     guard_committed(out, races)
+    allowed = guard_held_out(races, eval_set, allow_held_out)
+    held_out = {"eval_set": _shown(eval_set), "listed": held_out_races(eval_set),
+                "skipped": [canonical_race_id(r) for r in held_out_skipped], "included": allowed}
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     n_jobs = profile.parallel.n_jobs if n_jobs is None else n_jobs
@@ -613,7 +678,7 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     record = {"races": races, "eligible": eligible, "arms": list(ARMS), "profile": profile.name,
               "profile_hash": profile.hash, "sim_code_version": calibration.SIM_CODE_VERSION,
               "belief_bound": sel["bound"], "belief_choice": chosen, "s2_arm": None, "grid_arm": None, "grid": [],
-              "notes": []}
+              "notes": [], "held_out": held_out}
     if _holds_prior(chosen):
         record["notes"].append(f"{chosen} holds the prior: no shrinkage fit, so no prior-sd fix and no tau grid")
     else:
@@ -647,11 +712,12 @@ def race_outputs(out, races, profile) -> dict[str, dict[str, pd.DataFrame]]:
 
 
 def arm_outputs(out, arm, races, profile) -> dict[str, pd.DataFrame]:
-    """One arm's folds, concatenated: {"g", "factors", "stop_gain", "reference_stops"}, empty
-    frames when absent."""
+    """One arm's folds, concatenated: {"g", "factors", "stop_gain", "reference_stops",
+    "fold_error"}, empty frames when absent."""
     folds = _read(jobs.JOBS["h_fold"], races, profile, out, _args(races, arm=arm))
     cols = {"g": calibration.MIDRACE_COLUMNS, "factors": calibrators.FACTOR_ERROR_COLUMNS,
-            "stop_gain": calibration.STOP_GAIN_COLUMNS, "reference_stops": REFERENCE_STOP_COLUMNS}
+            "stop_gain": calibration.STOP_GAIN_COLUMNS, "reference_stops": REFERENCE_STOP_COLUMNS,
+            "fold_error": FOLD_ERROR_COLUMNS}
     return {t: (pd.concat([f[t] for f in folds.values() if t in f], ignore_index=True)
                 if any(t in f for f in folds.values()) else pd.DataFrame(columns=c)) for t, c in cols.items()}
 
@@ -1135,6 +1201,19 @@ def _selection_md(t: pd.DataFrame) -> str:
         "passes": col(lambda r: _fmt(bool(r["passes"])))}))
 
 
+def held_out_md(held) -> str:
+    """The report's held-out line from run.json's "held_out" (None for a run before the guard):
+    what eval_set.json lists, which of them this run left out for that reason (and which
+    --races auto skipped), and any let in with --allow-held-out."""
+    if held is None:
+        return "Not recorded: this run.json predates the held-out guard."
+    excluded = [r for r in held["listed"] if r not in held["included"]]
+    return (f"{held['eval_set']} holds out {', '.join(held['listed']) or 'no race'}. Excluded from this run for "
+            f"that reason: {', '.join(excluded) or 'none'}"
+            + (f" (--races auto skipped {', '.join(held['skipped'])})" if held["skipped"] else "") + "."
+            + (f" Run anyway with --allow-held-out: {', '.join(held['included'])}." if held["included"] else ""))
+
+
 def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BOOT) -> Path:
     """D and E from a run's outputs under `out` (run.json names the races and the profile).
     Refuses a run with a synthetic race when `out` is CROSS_DIR (guard_committed)."""
@@ -1185,6 +1264,8 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     md += ["All G and stop-gain numbers are held out: each race's rows come from its own leave-one-race-out "
            "fold, and Spain is one race among the rest.", ""]
 
+    md += ["## Held-out races", "", held_out_md(record.get("held_out")), ""]
+
     md += ["## Eligibility", "", "Drivers: eval.scenarios.eligible_drivers (laps 1..n with no gap, at most two laps "
            "down), the eval sampler's set.", ""]
     et = pd.DataFrame([{"race": e["race_id"], "eligible": e["eligible"], "drivers": e["n_finishers"],
@@ -1217,6 +1298,10 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
            "(full) and pre_race: G diff below 0 with its CI excluding 0, against the SimConfig default. Ties to "
            "the simpler arm. n/a: the same as the comparator in that window by construction (in the full window "
            "there is no calibrator and no shrinkage fit).", ""]
+    errors = [d["fold_error"] for d in sel["arm_data"].values() if len(d.get("fold_error", ()))]
+    if errors:
+        md += ["Folds not run (the arm cannot replay that race; its rows pair on the other races, so its "
+               "races column is lower):", "", md_table(pd.concat(errors, ignore_index=True)[FOLD_ERROR_COLUMNS]), ""]
     for w in windows:
         t = table[table["window"] == w]
         inc = incumbent(w)
@@ -1275,7 +1360,7 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
                 "race_id": "race", "n_stops": "stops", "real_gain_s": "real", "pred_gain_s": "pred",
                 "bias_s": "SG bias", "mae_s": "SG mae"})), ""]
 
-    md += ["## Stop-count check (lap 0)", "", f"Per race: the field's stop counts (tyre changes of the cars within "
+    md += ["## Stop-count check (lap 0)", "", f"Per race: the field's stop counts (pit-in laps of the cars within "
            f"{FIELD_WITHIN_LAPS} laps of the distance, 'stops:cars') and their mode, against the reference's from "
            "lap 0 for the same cars (optimizer_bridge.optimize_batch on the arm's world: full window, one sample, "
            f"up to {profile.sim.max_stops} stops) and its mode; 2-1 is the best two-stop less the best one-stop "
@@ -1342,7 +1427,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m src.sim.calibrate cross", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
     r = sub.add_parser("run", help="eligibility, per-race tables and LORO per arm (resumable)")
-    r.add_argument("--races", nargs="+", default=list(jobs.DEFAULT_RACES))
+    r.add_argument("--races", nargs="+", default=list(jobs.DEFAULT_RACES),
+                   help="race ids, or auto: every cached race (real_run.cached_races) less the held-out ones")
+    r.add_argument("--allow-held-out", action="store_true",
+                   help="run races data/eval_set.json holds out (refused without it; auto skips them)")
+    r.add_argument("--eval-set", default=str(EVAL_SET), help="the held-out race list (default data/eval_set.json)")
     r.add_argument("--synthetic", type=int, default=0, help="add this many synthetic races (pipeline test)")
     r.add_argument("--tau-multipliers", nargs="+", type=float, default=list(TAU_MULTIPLIERS))
     r.add_argument("--no-tau-grid", action="store_true")
@@ -1353,11 +1442,25 @@ def main(argv=None):
         p.add_argument("--race-features", default=str(RACE_FEATURES))
     args = ap.parse_args(argv)
     if args.command == "run":
-        races = list(args.races) + [f"2099_{i + 1:02d}_synthetic" for i in range(args.synthetic)]
+        if "auto" in args.races and len(args.races) > 1:
+            ap.error("--races takes auto or race ids, not both")
+        skipped = []
+        if args.races == ["auto"]:
+            from .real_run import cached_races
+            races, notes = cached_races()
+            for n in notes:
+                print(f"auto: {n}")
+            if not args.allow_held_out:
+                races, skipped = split_held_out(races, args.eval_set)
+                for r in skipped:
+                    print(f"auto: {r} held out in {args.eval_set}, skipped")
+        else:
+            races = list(args.races)
+        races += [f"2099_{i + 1:02d}_synthetic" for i in range(args.synthetic)]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             run(races, load_profile(args.profile), args.out, tuple(args.tau_multipliers), not args.no_tau_grid,
-                args.n_jobs)
+                args.n_jobs, eval_set=args.eval_set, allow_held_out=args.allow_held_out, held_out_skipped=skipped)
     path = report(args.out, load_profile(args.profile) if args.profile else None, args.race_features)
     print(f"written to {path}")
     return 0

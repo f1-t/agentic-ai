@@ -23,7 +23,7 @@
  ],
  "profile": "local",
  "profile_hash": "a0d0d34f2faa",
- "sim_code_version": "465287c5c7fb",
+ "sim_code_version": "d517750065d4",
  "belief_bound": "wear_nonneg",
  "belief_choice": "wear_nonneg",
  "s2_arm": "wear_nonneg__s2",
@@ -57,5 +57,14 @@
   "wear_nonneg__tau_2_2_1_1",
   "wear_nonneg__tau_2_2_2_1"
  ],
- "notes": []
+ "notes": [],
+ "held_out": {
+  "eval_set": "data/eval_set.json",
+  "listed": [
+   "2019_06_monaco",
+   "2023_07_spain"
+  ],
+  "skipped": [],
+  "included": []
+ }
 }

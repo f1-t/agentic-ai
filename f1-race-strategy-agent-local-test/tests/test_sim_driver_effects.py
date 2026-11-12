@@ -135,6 +135,44 @@ def test_the_practice_and_to_snapshot_windows_take_driver_effects():
     assert rep["n_drivers"] == 3 and rep["tau"] is None   # practice: drivers A, B, C, unpenalised
 
 
+def _prior_dump(model):
+    rep = {k: v for k, v in model.fit_report.items() if k != "driver_effects"}
+    return json.dumps({"coefs": model.coefs, "fuel": model.fuel_slope, "rep": rep}, sort_keys=True, default=str)
+
+
+@pytest.mark.parametrize("name", ["linear_fuel", "linear_fuel_hinge"])
+def test_race_mode_keeps_the_pooled_practice_prior_and_offsets_the_race_rows(name):
+    practice = synthetic_practice(coefs=TRUE, in_stint=True)
+    snap = Snapshot(race=RACE, driver="D00", laps_completed=30, compound="MEDIUM", tyre_age=5)
+
+    def fitted(window, mode):
+        params = {} if mode is None else {"driver_effects": mode}
+        cfg = SimConfig(fit_window=window, degradation={"name": name, "params": params})
+        return Simulator(confounded_frame(), cfg, practice).fitted_for(snap).degradation
+
+    off, race, every = (fitted("pre_race", m) for m in (None, "race", "all"))
+    assert _prior_dump(race) == _prior_dump(off)                # the practice prior is the option-off prior
+    assert race.fit_report["driver_effects"]["n_drivers"] == 0
+    assert _prior_dump(every) != _prior_dump(off) and every.fit_report["driver_effects"]["n_drivers"] == 3
+    # the race fits do get the offsets, for the drivers with race rows
+    for window in ("full", "to_snapshot"):
+        rep = fitted(window, "race").fit_report["driver_effects"]
+        assert rep["mode"] == "race" and rep["n_drivers"] == N_DRIVERS and abs(sum(rep["value"].values())) < 1e-9
+    assert wear(fitted("full", "race")) == wear(fitted("full", "all"))   # race rows only: the same fit
+    # a mixed frame: race mode leaves the practice rows (lap NaN) without an offset
+    mixed = pd.concat([confounded_frame(), practice.assign(lap=np.nan)], ignore_index=True)
+    assert fit(mixed, name, driver_effects="race").fit_report["driver_effects"]["n_drivers"] == N_DRIVERS
+    assert fit(mixed, name, driver_effects="all").fit_report["driver_effects"]["n_drivers"] == N_DRIVERS + 3
+
+
+def test_the_mode_values():
+    from src.sim.degradation import driver_effects_mode
+    assert [driver_effects_mode(v) for v in (None, False, "off", True, "all", "race")] == \
+        [None, None, None, "all", "all", "race"]
+    with pytest.raises(ValueError, match="driver_effects must be one of"):
+        fit(confounded_frame(), driver_effects="some")
+
+
 def test_driver_effects_need_a_driver_column_and_a_fuel_model():
     with pytest.raises(ValueError, match="driver column"):
         fit(confounded_frame().drop(columns=["driver"]), driver_effects=True)

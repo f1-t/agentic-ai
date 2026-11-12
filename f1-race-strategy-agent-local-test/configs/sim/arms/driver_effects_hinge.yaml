@@ -3,4 +3,4 @@
 degradation:
   name: linear_fuel_hinge
   params:
-    driver_effects: true
+    driver_effects: race

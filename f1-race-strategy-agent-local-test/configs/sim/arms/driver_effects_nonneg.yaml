@@ -3,5 +3,5 @@
 degradation:
   name: linear_fuel
   params:
-    driver_effects: true
+    driver_effects: race
     wear_lower_bound: 0.0
