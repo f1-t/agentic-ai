@@ -229,10 +229,12 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed (SPEC 0023, the R8 stint limit, sim_code_version `b6c3a15b4b30`, local profile:
-seed 0, 50 samples, two stops, default world): `data/references/v1/2e4cc6883431.parquet`,
-`data/references/d2/d7e7fc23c4bb.parquet` and `data/references/pilot1/5f9cb5978e74.parquet`.
-v1 re-scored on it (baselines and the recorded run): `reports/eval/v1_baselines_r8.csv`.
+Committed (SPEC 0023, the R8 stint limit at rank 1, sim_code_version `983fd6f4f2bf`, local
+profile: seed 0, 50 samples, two stops, default world): `data/references/v1/441a798fbebb.parquet`,
+`data/references/d2/182013ff1f42.parquet` and `data/references/pilot1/a4241208bfb7.parquet`.
+v1 re-scored on it (baselines and the recorded run): `reports/eval/v1_baselines_r8.csv`
+(scored at `b6c3a15b4b30`, before `stint_limit_rank`; a re-score at `983fd6f4f2bf` matches it
+in every column but the stamps).
 The record below is of the reference before R8.
 
 Before: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
