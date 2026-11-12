@@ -75,7 +75,7 @@ def test_ridge_recovers_a_linear_synthetic_map():
     x = rng.normal(size=(200, 2))
     rows = pd.DataFrame({"race_id": [f"2021_{i % 20 + 1:02d}_r{i % 20}" for i in range(200)], "season": 2021,
                          "k": 0, "f1": x[:, 0], "f2": x[:, 1], "target:pit_loss_s": 20 + 2 * x[:, 0] - x[:, 1]})
-    cal = CALIBRATORS.get("ridge")().fit(calibrators.CalibrationDataset(rows, {}))
+    cal = CALIBRATORS.get("ridge")(targets="all").fit(calibrators.CalibrationDataset(rows, {}))
     assert cal.report()["coef"]["pit_loss_s"] == pytest.approx([2.0, -1.0], abs=0.05)
 
 

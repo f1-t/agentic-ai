@@ -30,9 +30,10 @@ Registry:
   "shrinkage"  the to_snapshot fit of #13: the same prior with the SimConfig.shrinkage taus,
                penalised least squares on race laps up to k. The default, and the baseline
                a learned calibrator must beat.
-  "ridge"      the first learned candidate (SPEC 0024, RidgeCalibrator): per factor ridge on
-               the dataset features, alpha by inner leave-one-race-out, predictive sd floored
-               at shrinkage's tau; shrinkage's output for a factor it cannot fit. Not a default.
+  "ridge"      the first learned candidate (SPEC 0024, RidgeCalibrator): per degradation factor
+               (targets="all": event factors too) ridge on the dataset features, alpha by inner
+               leave-one-race-out, predictive sd floored at shrinkage's tau; shrinkage's output
+               for a factor it cannot fit. Not a default.
   "gbm", "mlp" learned candidates, registered stubs until the multi-race dataset exists:
                fit raises NotImplementedError.
   "fuel_config", "fuel_circuit_history", "fuel_circuit_features", "fuel_practice_longrun"
@@ -203,6 +204,10 @@ class _LearnedStub(Calibrator):
 # --- ridge (SPEC 0024) ----------------------------------------------------------------
 RIDGE_ALPHAS = (0.01, 0.1, 1.0, 10.0, 100.0, 1000.0)   # the inner leave-one-race-out grid, 10^-2 to 10^3
 RIDGE_MIN_RACES = 5          # a factor with fewer training races falls back to shrinkage's output
+# which hindsight factors ridge fits: "degradation" (base_delta, wear, fuel, hinge; the default:
+# shrinkage, the comparator, has no event priors, and event targets are sparse) or "all" (the
+# event factors too: pit_loss_s, sc/vsc_lap_factor, sc_pit_loss_factor, lap1_extra_s)
+RIDGE_TARGETS = ("degradation", "all")
 _SCALE_EPS = 1e-12
 
 
@@ -251,18 +256,45 @@ def _ridge_mean(m, x):
 
 
 def _ridge_sd(m, x):
-    """sqrt(sigma^2 + sigma^2 / n + z' Sigma z), Sigma = sigma^2 (Z'Z + alpha I)^-1 the ridge
-    posterior covariance of beta (prior beta ~ N(0, sigma^2 / alpha)), sigma^2 / n the free
-    intercept's variance."""
+    """sqrt(sigma^2 + sigma^2 / n_races + z' Sigma z), Sigma = sigma^2 (Z'Z + alpha I)^-1 the
+    ridge posterior covariance of beta (prior beta ~ N(0, sigma^2 / alpha)), sigma^2 / n_races
+    the free intercept's variance: every row of a race shares its target, so the effective
+    sample size of the mean is the races, not the rows."""
     z = _design(x, m)
     quad = np.einsum("ij,jk,ik->i", z, m["a_inv"], z)
-    return np.sqrt(m["sigma2"] * (1.0 + 1.0 / m["n_rows"] + quad))
+    return np.sqrt(m["sigma2"] * (1.0 + 1.0 / m["n_races"] + quad))
 
 
-def _numeric(frame: pd.DataFrame, columns) -> np.ndarray:
-    """The feature columns as floats; a column `frame` lacks, or a non-numeric value, is NaN."""
-    cols = [pd.to_numeric(frame[c], errors="coerce").to_numpy(dtype=float) if c in frame
-            else np.full(len(frame), np.nan) for c in columns]
+def _is_categorical(s: pd.Series) -> bool:
+    """A column with a non-null value that is not a number (circuit_type, say)."""
+    v = s.dropna()
+    if not len(v) or pd.api.types.is_bool_dtype(v) or pd.api.types.is_numeric_dtype(v):
+        return False
+    return bool(pd.to_numeric(v, errors="coerce").isna().any())
+
+
+def _categories(frame: pd.DataFrame, features) -> dict[str, list[str]]:
+    """{column: sorted categories} of the non-numeric feature columns, from `frame` (the training rows)."""
+    return {c: sorted({str(v) for v in frame[c].dropna()}) for c in features if c in frame and _is_categorical(frame[c])}
+
+
+def _columns(features, categories) -> list[str]:
+    """The design's raw column names: a numeric feature as is, a categorical one as column=category."""
+    return [n for c in features for n in ([f"{c}={k}" for k in categories[c]] if c in categories else [c])]
+
+
+def _matrix(frame: pd.DataFrame, features, categories) -> np.ndarray:
+    """The feature columns as floats. Numeric: a missing column or a non-numeric value is NaN.
+    Categorical: one 0/1 column per training category; an unknown or missing value is all zeros."""
+    cols = []
+    for c in features:
+        if c in categories:
+            v = frame[c] if c in frame else pd.Series(np.nan, index=frame.index)
+            s = v.map(lambda x: None if pd.isna(x) else str(x))
+            cols += [(s == k).to_numpy(dtype=float) for k in categories[c]]
+        else:
+            cols.append(pd.to_numeric(frame[c], errors="coerce").to_numpy(dtype=float) if c in frame
+                        else np.full(len(frame), np.nan))
     return np.column_stack(cols) if cols else np.zeros((len(frame), 0))
 
 
@@ -278,29 +310,39 @@ def context_features(ctx: "CalibrationContext") -> dict:
 class RidgeCalibrator(Calibrator):
     """Per-target ridge with a predictive sd, the first learned candidate (SPEC 0024).
 
-    fit: one ridge per target factor in the training set, on every dataset feature column
-    (build_dataset's: pre_total_laps, pre_pit_loss_s, the pre_* race features, resid_mean_s[c],
-    laps_so_far[c], sc_laps_so_far, vsc_laps_so_far, temp_trend_c_per_lap; a non-numeric value
-    counts as missing), median-imputed with a missing indicator per column, standardised, all
-    from the training rows. alpha from `alphas` by inner leave-one-race-out on the training
-    races only; sigma^2 the mean squared inner-LORO residual at that alpha. A factor with
-    fewer than `min_races` training races is not fitted.
+    fit: one ridge per target factor in the training set (`targets`: "degradation", the
+    default, fits base_delta_s, wear_s_per_lap, fuel_s_per_lap and hinge_s_per_lap; "all" the
+    event factors too), on every dataset feature column (build_dataset's: pre_total_laps,
+    pre_pit_loss_s, the pre_* race features, resid_mean_s[c], laps_so_far[c], sc_laps_so_far,
+    vsc_laps_so_far, temp_trend_c_per_lap). A numeric column is median-imputed with a missing
+    indicator; a non-numeric one (circuit_type, say) is one-hot over the training rows'
+    categories, an unknown or missing value all zeros. Then standardised; all from the
+    training rows. alpha from `alphas` by inner leave-one-race-out on the training races only;
+    sigma^2 the mean squared inner-LORO residual at that alpha. A factor with fewer than
+    `min_races` training races is not fitted.
 
     calibrate: shrinkage's output, with each factor ridge fitted replaced by (ridge mean,
     predictive sd); a degradation factor's sd is floored at shrinkage's tau for it, and as the
     engine takes one prior sd per degradation factor (degradation_prior), the sd of a factor
-    is the largest over its compounds. Event factors ridge fitted are added (sd drawn per
-    sample, plug-in (b)); shrinkage leaves them out, so there is no floor. Factors not fitted
-    keep shrinkage's output, listed in the diagnostics and report() under "fallback".
+    is the largest over its compounds. Under targets "all", event factors ridge fitted are
+    added (sd drawn per sample, plug-in (b)); shrinkage leaves them out, so there is no floor.
+    Factors not fitted keep shrinkage's output, listed in the diagnostics and report() under
+    "fallback". exclude_snapshot_driver is refused: the context would leave the snapshot
+    driver out of features that build_dataset computed over every driver.
     """
     name = "ridge"
     learned = True
 
-    def __init__(self, alphas=RIDGE_ALPHAS, min_races=RIDGE_MIN_RACES, **params):
+    def __init__(self, alphas=RIDGE_ALPHAS, min_races=RIDGE_MIN_RACES, targets="degradation", **params):
         super().__init__(**params)
+        if targets not in RIDGE_TARGETS:
+            raise ValueError(f"ridge targets {targets!r}: one of {RIDGE_TARGETS}")
         self.alphas = tuple(float(a) for a in alphas)
         self.min_races = int(min_races)
+        self.targets = targets
         self.features: list[str] = []
+        self.categories: dict[str, list[str]] = {}
+        self.columns: list[str] = []
         self.models: dict[str, dict] = {}
         self.fallback: dict[str, str] = {}
         self.inner_rmse: dict[str, dict] = {}
@@ -330,11 +372,15 @@ class RidgeCalibrator(Calibrator):
         if rows.empty or "race_id" not in rows:
             raise ValueError("calibrator 'ridge' needs training races; the training set is empty")
         self.features = list(train.feature_columns)
+        self.categories = _categories(rows, self.features)
+        self.columns = _columns(self.features, self.categories)
         self.train_races = sorted(rows["race_id"].unique())
         self.models, self.fallback, self.inner_rmse = {}, {}, {}
-        x_all = _numeric(rows, self.features)
+        x_all = _matrix(rows, self.features, self.categories)
         for col in train.target_columns:
             factor = col.split(":", 1)[1]
+            if not self._targeted(factor):
+                continue
             ok = rows[col].notna().to_numpy()
             races = rows["race_id"].to_numpy()[ok]
             n = len(set(races))
@@ -346,20 +392,28 @@ class RidgeCalibrator(Calibrator):
         self.fitted = True
         return self
 
+    def _targeted(self, factor: str) -> bool:
+        return self.targets == "all" or split_factor(factor)[0] in DEGRADATION_FACTORS
+
     def predict(self, frame: pd.DataFrame) -> dict[str, tuple[np.ndarray, np.ndarray]]:
         """{factor: (mean, predictive sd)} per row of `frame` (feature columns), no floor."""
-        x = _numeric(frame, self.features)
+        x = _matrix(frame, self.features, self.categories)
         return {f: (_ridge_mean(m, x), _ridge_sd(m, x)) for f, m in self.models.items()}
 
     # --- calibrate --------------------------------------------------------------------
     def calibrate(self, ctx):
         if not self.fitted:
             raise RuntimeError("calibrator 'ridge' is not fitted: call fit(train) first")
+        if ctx.config.exclude_snapshot_driver:
+            raise ValueError("calibrator 'ridge' does not support exclude_snapshot_driver: its features at k would "
+                             "leave the snapshot driver out, while build_dataset trained on every driver's laps; "
+                             "set exclude_snapshot_driver False")
         ref = ShrinkageCalibrator().calibrate(ctx)
         tau = {"hinge_s_per_lap": HINGE_TAU_S_PER_LAP, **ctx.config.shrinkage}
         pred = self.predict(pd.DataFrame([context_features(ctx)]))
         factors, used, fallback = dict(ref.factors), [], {}
-        for f in [*ref.factors, *(e for e in EVENT_BOUNDS if e not in ref.factors)]:
+        events = [e for e in EVENT_BOUNDS if e not in ref.factors] if self.targets == "all" else []
+        for f in [*ref.factors, *events]:
             if f in pred:
                 mean, sd = float(pred[f][0][0]), float(pred[f][1][0])
                 kind = split_factor(f)[0]
@@ -381,10 +435,11 @@ class RidgeCalibrator(Calibrator):
     # --- report, save, load -----------------------------------------------------------
     def report(self) -> dict:
         out = super().report()
-        out.update({"alphas": list(self.alphas), "min_races": self.min_races, "features": list(self.features),
+        out.update({"alphas": list(self.alphas), "min_races": self.min_races, "targets": self.targets,
+                    "features": list(self.features), "categories": {c: list(v) for c, v in self.categories.items()},
                     "train_races": list(self.train_races), "fallback": dict(self.fallback), "coef": {}, "factors": {}})
         for f, m in self.models.items():
-            kept = [self.features[i] for i in m["keep"]]
+            kept = [self.columns[i] for i in m["keep"]]
             design = kept + [f"missing:{kept[i]}" for i in m["missing"]]
             coef = m["beta"] / m["scale"]
             out["coef"][f] = [float(v) for v in coef]
@@ -417,7 +472,8 @@ class RidgeCalibrator(Calibrator):
     def state(self) -> dict:
         def enc(m):
             return {k: (np.asarray(v).tolist() if k in self._ARRAYS else v) for k, v in m.items()}
-        return {"features": self.features, "train_races": self.train_races, "fallback": self.fallback,
+        return {"features": self.features, "categories": self.categories, "columns": self.columns,
+                "train_races": self.train_races, "fallback": self.fallback,
                 "models": {f: enc(m) for f, m in self.models.items()},
                 "inner_rmse": {f: {f"{a!r}": v for a, v in r.items()} for f, r in self.inner_rmse.items()},
                 "fitted": self.fitted}
@@ -431,6 +487,8 @@ class RidgeCalibrator(Calibrator):
             out["a_inv"] = out["a_inv"].reshape(len(out["beta"]), len(out["beta"]))
             return out
         self.features, self.train_races = list(s["features"]), list(s["train_races"])
+        self.categories = {c: list(v) for c, v in s.get("categories", {}).items()}
+        self.columns = list(s.get("columns") or _columns(self.features, self.categories))
         self.fallback = dict(s["fallback"])
         self.models = {f: dec(m) for f, m in s["models"].items()}
         self.inner_rmse = {f: {float(a): v for a, v in r.items()} for f, r in s.get("inner_rmse", {}).items()}
@@ -442,7 +500,7 @@ class RidgeCalibrator(Calibrator):
         scaler, coefficients, posterior matrix, alpha, sigma^2)."""
         with open(path, "w") as f:
             json.dump({"name": self.name, "params": {"alphas": list(self.alphas), "min_races": self.min_races,
-                                                     **self.params},
+                                                     "targets": self.targets, **self.params},
                        "state": self.state()}, f, indent=1)
 
 

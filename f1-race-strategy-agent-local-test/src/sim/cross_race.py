@@ -22,7 +22,8 @@
 stop_gain.csv (gitignored), stop_gain_summary.csv, coverage_summary.csv, tau_grid.csv and
 arms.csv beside them, from what `run` left.
 
-Learned arms (LEARNED_ARMS, SPEC 0024: ridge) run only when asked (--learned), each fold trained
+Learned arms (LEARNED_ARMS, SPEC 0024: ridge, and ridge_all with the event factors as targets too)
+run only when asked (--learned), each fold trained
 on the eligible races outside it. They get rows beside the others (role LEARNED_ROLE, never
 chosen) and learned.csv / learned_fits.csv: SPEC H's table of none, shrinkage and the learned
 class (calibrators.selection_table) per pre_race and to_snapshot, and per factor which folds
@@ -94,7 +95,7 @@ COVERAGE_ONLY = ("posterior",)
 # learned calibrator arms (SPEC 0024), run only when asked (run(learned=...), --learned): each
 # trains per fold on the eligible races outside it. Reported beside none and shrinkage, in the
 # arm tables and in learned.csv (calibrators.selection_table), never chosen by the arm selection.
-LEARNED_ARMS = ("ridge",)
+LEARNED_ARMS = ("ridge", "ridge_all")
 LEARNED_ROLE = "learned (reported, not selected)"
 # simplest first: the tie-break among arms that pass
 SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air", "hinge",
