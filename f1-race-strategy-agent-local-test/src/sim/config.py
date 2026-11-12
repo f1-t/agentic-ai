@@ -174,6 +174,9 @@ class SimConfig(_Cfg):
     # the full race lap frame). Enforced by the "stint_limit" rule, so by simulate_batch,
     # optimize_batch's candidate filter and the agent's tools. None turns R8 off.
     stint_limit_margin_laps: int | None = Field(default=3, ge=0)
+    # R8: the limit is the age at least this many cars reached on the compound (the rank-th
+    # largest per-car maximum); 1 is the oldest tyre any car ran
+    stint_limit_rank: int = Field(default=1, ge=1)
 
     @classmethod
     def from_file(cls, path):

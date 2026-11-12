@@ -264,6 +264,26 @@ def test_the_limit_is_a_race_constant_whatever_the_fit_window():
     assert belief.validate(mid, plan) == world.validate(mid, plan) != []
 
 
+def test_stint_limit_rank_is_the_age_that_many_cars_reached():
+    """SimConfig.stint_limit_rank: the rank-th largest per-car maximum age on the compound.
+    A's two SOFT sets count once (its maximum, 30), so rank 2 is B's 25, not A's 29."""
+    import pandas as pd
+    from src.sim.rules import stint_limits
+    runs = {"A": [("SOFT", 30), ("SOFT", 29), ("MEDIUM", 12)], "B": [("SOFT", 25)], "C": [("SOFT", 20)],
+            "D": [("SOFT", 18), ("MEDIUM", 40)]}
+    frame = pd.DataFrame([{"driver": d, "compound": c, "tyre_age": a, "lap": a, "clean": True, "lap_time_s": 80.0}
+                          for d, sets in runs.items() for c, top in sets for a in range(1, top + 1)])
+    assert stint_limits(frame) == stint_limits(frame, 1) == {"MEDIUM": 40.0, "SOFT": 30.0}
+    assert stint_limits(frame, 2) == {"MEDIUM": 12.0, "SOFT": 25.0}
+    assert stint_limits(frame, 3) == {"MEDIUM": 12.0, "SOFT": 20.0}   # MEDIUM: 2 cars, its smallest maximum
+    assert stint_limits(frame, 5) == {"MEDIUM": 12.0, "SOFT": 18.0}
+    assert Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_rank=3)).stint_limits == \
+        {"MEDIUM": 12.0, "SOFT": 20.0}
+    assert SimConfig().stint_limit_rank == 1
+    with pytest.raises(ValueError, match="driver column"):
+        stint_limits(frame.drop(columns="driver"), 3)
+
+
 def test_a_fitted_hinge_does_not_exempt_a_compound():
     hinged = limit_sim(degradation="linear_fuel_hinge", hinge_knots={"MEDIUM": 10})
     assert hinged.fitted_for(start()).degradation.fit_report["hinge"]["MEDIUM"]["source"] == "fitted"

@@ -98,15 +98,24 @@ def two_compounds(ctx):
     return []
 
 
-def stint_limits(frame) -> dict[str, float]:
-    """R8: compound -> the oldest tyre age any car ran on it in `frame`, every lap counted.
-    Simulator computes it once from the full race lap frame, so the belief and the world (both
-    built on that frame) share it whatever their fit window: a hindsight race constant, like the
-    observed pit loss."""
+def stint_limits(frame, rank: int = 1) -> dict[str, float]:
+    """R8: compound -> the tyre age at least `rank` cars reached on it in `frame`, every lap
+    counted: the rank-th largest of the per-car maximum ages (SimConfig.stint_limit_rank).
+    Rank 1 is the oldest tyre any car ran. A compound fewer than `rank` cars ran takes its
+    smallest per-car maximum (the age every car on it reached); rank above 1 needs a driver
+    column. Simulator computes it once from the full race lap frame, so the belief and the
+    world (both built on that frame) share it whatever their fit window: a hindsight race
+    constant, like the observed pit loss."""
     if frame is None or "compound" not in frame or "tyre_age" not in frame:
         return {}
     f = frame[frame["compound"].notna() & frame["tyre_age"].notna()]
-    return {str(c): float(a) for c, a in f.groupby("compound")["tyre_age"].max().items()}
+    if rank == 1:
+        return {str(c): float(a) for c, a in f.groupby("compound")["tyre_age"].max().items()}
+    if "driver" not in f:
+        raise ValueError("stint_limit_rank above 1 needs a driver column in the race frame")
+    per_car = f.groupby(["compound", "driver"])["tyre_age"].max()
+    return {str(c): float(ages.sort_values(ascending=False).iloc[min(rank, len(ages)) - 1])
+            for c, ages in per_car.groupby(level="compound")}
 
 
 def _soonest_stop(snapshot) -> int:

@@ -65,7 +65,11 @@ optimizer return one plan.
 
 **R8 Stint limit.** Per compound, a stint ends at most at the oldest tyre age any car ran on
 that compound in this race plus `SimConfig.stint_limit_margin_laps` laps (default 3; `null`
-turns R8 off). The end age is `tyre_age + laps` for the current set and `start_age + laps`
+turns R8 off). `SimConfig.stint_limit_rank` (default 1) picks which car sets the age: the
+limit is the age at least that many cars reached, the rank-th largest of the per-car maximum
+ages on the compound, so 1 is the oldest tyre any car ran and 3 the age three cars reached
+(2023 Spain: HARD 50 at rank 1, 32 at rank 3). A compound fewer cars ran than the rank takes
+its smallest per-car maximum; a rank above 1 needs the frame's driver column. The end age is `tyre_age + laps` for the current set and `start_age + laps`
 for a later one. The limits are computed once per race from the full race lap frame
 (`rules.stint_limits`, `Simulator.stint_limits`, every lap counted, clean or not), which the
 belief and the world simulators are both built on, so both apply the same limits whatever
