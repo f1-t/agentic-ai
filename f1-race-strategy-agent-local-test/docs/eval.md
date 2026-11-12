@@ -60,7 +60,9 @@ turns it into the plan the world scores:
   `max_stops`. Every plan from a decision lies inside the space the reference searched, so
   an agent row with negative regret (beyond 1e-6 s) is a bug, and `summarize` warns
   (`AgentRegretWarning`). Baselines keep their exception: an actual three-stop can beat a
-  two-stop reference;
+  two-stop reference, and since SPEC 0023 B a baseline plan with a stint past the world's
+  tyre-age support (a `support_warnings` count above 0) can beat a reference that may not
+  plan it (see "Stint-length support");
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
 
@@ -227,10 +229,15 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
+Committed (SPEC 0023, sim_code_version `5d3a4ba8de4f`, local profile: seed 0, 50 samples,
+two stops, default world): `data/references/v1/2c8bbe2669e9.parquet` (155 KB),
+`data/references/d2/b1aba40f2d18.parquet` and `data/references/pilot1/a378977ee68b.parquet`,
+all with the stint-length support filter. The record below is of the reference before it.
+
+Before: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
 was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
 sim_code_version `21b81a57ea42`. From
-it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
+it, `score --require-reference` reproduced `reports/eval/v1_baselines_split.csv` row for
 row (every value column; the stamp columns `latency_s`, `sim_code_version`,
 `belief_config_hash` and `world_config_hash` are excluded, stamp-only drift under
 reports/calibration/README.md); the rows gain `regret_se_s` and
@@ -238,6 +245,22 @@ reports/calibration/README.md); the rows gain `regret_se_s` and
 the tie rule there. The rows also gain the near-tie columns, and in that world every
 optimal set is the reference alone (`opt_set_size` 1 on all 1320 rows), every pit-now
 call with both kinds of plan is decisive, and the set-based agreement equals the plain one.
+
+### Stint-length support (SPEC 0023 B)
+
+`optimize_batch`, so the reference, the decision continuations and the agent's tools, drops
+plans with a stint that ends more than `SimConfig.support_margin_laps` (default 3) laps past
+the oldest tyre the fit saw on its compound (`fit_report` `max_tyre_age`), unless that
+compound has a fitted hinge. The count is `diagnostics["support_dropped"]`; if every plan is
+dropped, the plans whose only unsupported stint is the current one and that pit soonest are
+kept (`support_filter` "current_stint"), else all of them ("unfiltered").
+`simulate_batch`'s `support_warnings` follow the same rule, so a row's `support_warnings`
+count is the number of stints the reference could not have planned. The world still prices
+those stints linearly, so a baseline running one can come in below the reference: on v1,
+fixed_one_stop does on 106 of 250 rows (down to -4.79 s). `support_margin_laps: null`
+restores the search and warnings from before. v1 under the filter:
+`reports/eval/v1_baselines_support.csv` (the committed `v1_baselines_split.csv` is from
+before it).
 
 ### Near ties (information only)
 

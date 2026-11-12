@@ -1,0 +1,13 @@
+{
+  "format": 2,
+  "hindsight": false,
+  "key": "a378977ee68b",
+  "max_stops": 2,
+  "n_samples": 50,
+  "n_scenarios": 25,
+  "scenario_set": "pilot1",
+  "seed": 0,
+  "set_digest": "b8bfe341cfd3508db556d77530d3347cf844f0b3fea1d3516b2b4595bd7414a3",
+  "sim_code_version": "5d3a4ba8de4f",
+  "world_config_hash": "e89808de8d37"
+}
