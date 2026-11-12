@@ -30,8 +30,10 @@ Registry:
   "shrinkage"  the to_snapshot fit of #13: the same prior with the SimConfig.shrinkage taus,
                penalised least squares on race laps up to k. The default, and the baseline
                a learned calibrator must beat.
-  "ridge", "gbm", "mlp"
-               learned candidates, registered stubs until the multi-race dataset exists:
+  "ridge"      the first learned candidate (SPEC 0024, RidgeCalibrator): per factor ridge on
+               the dataset features, alpha by inner leave-one-race-out, predictive sd floored
+               at shrinkage's tau; shrinkage's output for a factor it cannot fit. Not a default.
+  "gbm", "mlp" learned candidates, registered stubs until the multi-race dataset exists:
                fit raises NotImplementedError.
   "fuel_config", "fuel_circuit_history", "fuel_circuit_features", "fuel_practice_longrun"
                the race-pace prior candidates of SPEC 0020 (fuel_prior.py): shrinkage with
@@ -128,7 +130,16 @@ class Calibrator:
     def load(path) -> "Calibrator":
         with open(path) as f:
             data = json.load(f)
-        return CALIBRATORS.get(data["name"])(**data.get("params", {}))
+        cal = CALIBRATORS.get(data["name"])(**data.get("params", {}))
+        return cal.load_state(data["state"]) if "state" in data else cal
+
+    def fit_table(self) -> list[dict]:
+        """A learned class's fit, one row per target factor (FIT_COLUMNS); none for the others."""
+        return []
+
+    def metrics(self) -> dict:
+        """Flat numbers a training log records; none for a class with no fit."""
+        return {}
 
 
 def physics_means(ctx: CalibrationContext) -> dict[str, float]:
@@ -189,10 +200,250 @@ class _LearnedStub(Calibrator):
         raise NotImplementedError(f"calibrator {self.name!r} {NEEDS_DATA}")
 
 
+# --- ridge (SPEC 0024) ----------------------------------------------------------------
+RIDGE_ALPHAS = (0.01, 0.1, 1.0, 10.0, 100.0, 1000.0)   # the inner leave-one-race-out grid, 10^-2 to 10^3
+RIDGE_MIN_RACES = 5          # a factor with fewer training races falls back to shrinkage's output
+_SCALE_EPS = 1e-12
+
+
+def _design_fit(x: np.ndarray) -> dict:
+    """The design of raw feature rows `x` (NaN missing), from those rows only: columns with a
+    value somewhere kept, median-imputed, a missing indicator for each kept column with a NaN,
+    then standardised (a constant column keeps scale 1, so it stays 0 and gets no weight)."""
+    keep = np.flatnonzero(~np.isnan(x).all(axis=0)) if x.size else np.arange(x.shape[1])
+    sub = x[:, keep]
+    med = np.nanmedian(sub, axis=0) if len(keep) else np.zeros(0)
+    miss = np.flatnonzero(np.isnan(sub).any(axis=0))
+    d = {"keep": keep, "median": med, "missing": miss}
+    z = _design_raw(x, d)
+    mean = z.mean(axis=0) if len(z) else np.zeros(z.shape[1])
+    scale = z.std(axis=0) if len(z) else np.ones(z.shape[1])
+    scale = np.where(scale > _SCALE_EPS, scale, 1.0)
+    return {**d, "mean": mean, "scale": scale}
+
+
+def _design_raw(x, d):
+    sub = x[:, d["keep"]]
+    nan = np.isnan(sub)
+    filled = np.where(nan, d["median"], sub)
+    return np.hstack([filled, nan[:, d["missing"]].astype(float)])
+
+
+def _design(x, d):
+    return (_design_raw(x, d) - d["mean"]) / d["scale"]
+
+
+def _ridge_fit(x: np.ndarray, y: np.ndarray, races: np.ndarray, alpha: float) -> dict:
+    """One closed-form ridge on rows (x, y) of training races `races` (one id per row): the
+    design from these rows only, the intercept free, beta = (Z'Z + alpha I)^-1 Z'(y - ybar).
+    Every fit, the inner alpha search included, goes through here (the leakage test wraps it)."""
+    d = _design_fit(x)
+    z = _design(x, d)
+    y0 = float(y.mean())
+    a_inv = np.linalg.inv(z.T @ z + alpha * np.eye(z.shape[1]))
+    beta = a_inv @ (z.T @ (y - y0))
+    return {**d, "alpha": float(alpha), "intercept": y0, "beta": beta, "a_inv": a_inv, "n_rows": int(len(y)),
+            "n_races": int(len(set(races)))}
+
+
+def _ridge_mean(m, x):
+    return m["intercept"] + _design(x, m) @ m["beta"]
+
+
+def _ridge_sd(m, x):
+    """sqrt(sigma^2 + sigma^2 / n + z' Sigma z), Sigma = sigma^2 (Z'Z + alpha I)^-1 the ridge
+    posterior covariance of beta (prior beta ~ N(0, sigma^2 / alpha)), sigma^2 / n the free
+    intercept's variance."""
+    z = _design(x, m)
+    quad = np.einsum("ij,jk,ik->i", z, m["a_inv"], z)
+    return np.sqrt(m["sigma2"] * (1.0 + 1.0 / m["n_rows"] + quad))
+
+
+def _numeric(frame: pd.DataFrame, columns) -> np.ndarray:
+    """The feature columns as floats; a column `frame` lacks, or a non-numeric value, is NaN."""
+    cols = [pd.to_numeric(frame[c], errors="coerce").to_numpy(dtype=float) if c in frame
+            else np.full(len(frame), np.nan) for c in columns]
+    return np.column_stack(cols) if cols else np.zeros((len(frame), 0))
+
+
+def context_features(ctx: "CalibrationContext") -> dict:
+    """features_at's row from a CalibrationContext: the same columns from what is known at k."""
+    res = ctx.residuals_so_far
+    if res is None:
+        res = pd.DataFrame(columns=["compound", "resid_s"])
+    return _feature_row(ctx.race, ctx.race_features, ctx.laps_so_far, ctx.weather_so_far, ctx.k, res)
+
+
 @CALIBRATORS.register("ridge")
-class RidgeCalibrator(_LearnedStub):
-    """Per-target ridge with predictive sd. The first learned candidate (pipeline proof at 20 races)."""
+class RidgeCalibrator(Calibrator):
+    """Per-target ridge with a predictive sd, the first learned candidate (SPEC 0024).
+
+    fit: one ridge per target factor in the training set, on every dataset feature column
+    (build_dataset's: pre_total_laps, pre_pit_loss_s, the pre_* race features, resid_mean_s[c],
+    laps_so_far[c], sc_laps_so_far, vsc_laps_so_far, temp_trend_c_per_lap; a non-numeric value
+    counts as missing), median-imputed with a missing indicator per column, standardised, all
+    from the training rows. alpha from `alphas` by inner leave-one-race-out on the training
+    races only; sigma^2 the mean squared inner-LORO residual at that alpha. A factor with
+    fewer than `min_races` training races is not fitted.
+
+    calibrate: shrinkage's output, with each factor ridge fitted replaced by (ridge mean,
+    predictive sd); a degradation factor's sd is floored at shrinkage's tau for it, and as the
+    engine takes one prior sd per degradation factor (degradation_prior), the sd of a factor
+    is the largest over its compounds. Event factors ridge fitted are added (sd drawn per
+    sample, plug-in (b)); shrinkage leaves them out, so there is no floor. Factors not fitted
+    keep shrinkage's output, listed in the diagnostics and report() under "fallback".
+    """
     name = "ridge"
+    learned = True
+
+    def __init__(self, alphas=RIDGE_ALPHAS, min_races=RIDGE_MIN_RACES, **params):
+        super().__init__(**params)
+        self.alphas = tuple(float(a) for a in alphas)
+        self.min_races = int(min_races)
+        self.features: list[str] = []
+        self.models: dict[str, dict] = {}
+        self.fallback: dict[str, str] = {}
+        self.inner_rmse: dict[str, dict] = {}
+        self.train_races: list[str] = []
+
+    # --- fit --------------------------------------------------------------------------
+    def _fit_factor(self, x, y, races):
+        """(model, inner-LORO rmse per alpha): alpha by leave-one-race-out over `races` only."""
+        ids = sorted(set(races))
+        sse = {}
+        for a in self.alphas:
+            err = []
+            for r in ids:
+                out = races == r
+                m = _ridge_fit(x[~out], y[~out], races[~out], a)
+                err.append(y[out] - _ridge_mean(m, x[out]))
+            e = np.concatenate(err)
+            sse[a] = float((e ** 2).mean())
+        # the lowest inner error; a tie goes to the larger alpha (more shrinkage)
+        best = min(sorted(self.alphas, reverse=True), key=lambda a: sse[a])
+        m = _ridge_fit(x, y, races, best)
+        m["sigma2"] = sse[best]
+        return m, {a: math.sqrt(v) for a, v in sse.items()}
+
+    def fit(self, train: "CalibrationDataset") -> "RidgeCalibrator":
+        rows = train.rows
+        if rows.empty or "race_id" not in rows:
+            raise ValueError("calibrator 'ridge' needs training races; the training set is empty")
+        self.features = list(train.feature_columns)
+        self.train_races = sorted(rows["race_id"].unique())
+        self.models, self.fallback, self.inner_rmse = {}, {}, {}
+        x_all = _numeric(rows, self.features)
+        for col in train.target_columns:
+            factor = col.split(":", 1)[1]
+            ok = rows[col].notna().to_numpy()
+            races = rows["race_id"].to_numpy()[ok]
+            n = len(set(races))
+            if n < self.min_races:
+                self.fallback[factor] = f"{n} training race(s), under {self.min_races}"
+                continue
+            y = rows[col].to_numpy(dtype=float)[ok]
+            self.models[factor], self.inner_rmse[factor] = self._fit_factor(x_all[ok], y, races)
+        self.fitted = True
+        return self
+
+    def predict(self, frame: pd.DataFrame) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """{factor: (mean, predictive sd)} per row of `frame` (feature columns), no floor."""
+        x = _numeric(frame, self.features)
+        return {f: (_ridge_mean(m, x), _ridge_sd(m, x)) for f, m in self.models.items()}
+
+    # --- calibrate --------------------------------------------------------------------
+    def calibrate(self, ctx):
+        if not self.fitted:
+            raise RuntimeError("calibrator 'ridge' is not fitted: call fit(train) first")
+        ref = ShrinkageCalibrator().calibrate(ctx)
+        tau = {"hinge_s_per_lap": HINGE_TAU_S_PER_LAP, **ctx.config.shrinkage}
+        pred = self.predict(pd.DataFrame([context_features(ctx)]))
+        factors, used, fallback = dict(ref.factors), [], {}
+        for f in [*ref.factors, *(e for e in EVENT_BOUNDS if e not in ref.factors)]:
+            if f in pred:
+                mean, sd = float(pred[f][0][0]), float(pred[f][1][0])
+                kind = split_factor(f)[0]
+                if kind in DEGRADATION_FACTORS:
+                    sd = max(sd, float(tau[TAU_KEYS[kind]]))
+                factors[f] = (mean, sd)
+                used.append(f)
+            elif f in ref.factors:
+                fallback[f] = self.fallback.get(f, "not in the training targets")
+        for kind in DEGRADATION_FACTORS:   # one prior sd per degradation factor: the largest over compounds
+            keys = [k for k in factors if split_factor(k)[0] == kind]
+            if keys:
+                sd = max(factors[k][1] for k in keys)
+                factors.update({k: (factors[k][0], sd) for k in keys})
+        return CalibrationOutput(factors=factors, valid_until_lap=ctx.valid_until_lap, source=self.name,
+                                 diagnostics={"prior": "ridge", "ridge": used, "fallback": fallback,
+                                              "taus": ref.diagnostics.get("taus", {})})
+
+    # --- report, save, load -----------------------------------------------------------
+    def report(self) -> dict:
+        out = super().report()
+        out.update({"alphas": list(self.alphas), "min_races": self.min_races, "features": list(self.features),
+                    "train_races": list(self.train_races), "fallback": dict(self.fallback), "coef": {}, "factors": {}})
+        for f, m in self.models.items():
+            kept = [self.features[i] for i in m["keep"]]
+            design = kept + [f"missing:{kept[i]}" for i in m["missing"]]
+            coef = m["beta"] / m["scale"]
+            out["coef"][f] = [float(v) for v in coef]
+            out["factors"][f] = {"design": design, "intercept": float(m["intercept"] - coef @ m["mean"]),
+                                 "alpha": m["alpha"], "sigma": math.sqrt(m["sigma2"]), "n_rows": m["n_rows"],
+                                 "n_races": m["n_races"],
+                                 "inner_rmse": {f"{a:g}": v for a, v in self.inner_rmse.get(f, {}).items()}}
+        return out
+
+    def fit_table(self) -> list[dict]:
+        """One row per target factor: ridge (alpha, sigma, races) or the fallback and why."""
+        rep = self.report()["factors"]
+        rows = [{"factor": f, "status": "ridge", "alpha": r["alpha"], "sigma": r["sigma"], "n_races": r["n_races"],
+                 "n_rows": r["n_rows"], "reason": ""} for f, r in rep.items()]
+        rows += [{"factor": f, "status": "fallback", "alpha": np.nan, "sigma": np.nan, "n_races": np.nan,
+                  "n_rows": np.nan, "reason": why} for f, why in self.fallback.items()]
+        return sorted(rows, key=lambda r: r["factor"])
+
+    def metrics(self) -> dict:
+        """Flat numbers for a training log."""
+        out = {"n_train_races": len(self.train_races), "n_fitted": len(self.models), "n_fallback": len(self.fallback)}
+        for r in self.fit_table():
+            if r["status"] == "ridge":
+                out.update({f"{r['factor']}/alpha": r["alpha"], f"{r['factor']}/sigma": r["sigma"],
+                            f"{r['factor']}/n_races": r["n_races"]})
+        return out
+
+    _ARRAYS = ("keep", "median", "missing", "mean", "scale", "beta", "a_inv")
+
+    def state(self) -> dict:
+        def enc(m):
+            return {k: (np.asarray(v).tolist() if k in self._ARRAYS else v) for k, v in m.items()}
+        return {"features": self.features, "train_races": self.train_races, "fallback": self.fallback,
+                "models": {f: enc(m) for f, m in self.models.items()},
+                "inner_rmse": {f: {f"{a!r}": v for a, v in r.items()} for f, r in self.inner_rmse.items()},
+                "fitted": self.fitted}
+
+    def load_state(self, s: dict):
+        ints = ("keep", "missing")
+
+        def dec(m):
+            out = {k: (np.asarray(v, dtype=int if k in ints else float) if k in self._ARRAYS else v)
+                   for k, v in m.items()}
+            out["a_inv"] = out["a_inv"].reshape(len(out["beta"]), len(out["beta"]))
+            return out
+        self.features, self.train_races = list(s["features"]), list(s["train_races"])
+        self.fallback = dict(s["fallback"])
+        self.models = {f: dec(m) for f, m in s["models"].items()}
+        self.inner_rmse = {f: {float(a): v for a, v in r.items()} for f, r in s.get("inner_rmse", {}).items()}
+        self.fitted = bool(s["fitted"])
+        return self
+
+    def save(self, path):
+        """JSON: name, params, and the fit (feature list, per factor the design's medians and
+        scaler, coefficients, posterior matrix, alpha, sigma^2)."""
+        with open(path, "w") as f:
+            json.dump({"name": self.name, "params": {"alphas": list(self.alphas), "min_races": self.min_races,
+                                                     **self.params},
+                       "state": self.state()}, f, indent=1)
 
 
 @CALIBRATORS.register("gbm")
@@ -480,16 +731,21 @@ def residuals(model, frame, k) -> pd.DataFrame:
 
 def features_at(r: RaceInput, k: int, prior=None) -> dict:
     """Pre-race columns plus in-race summaries from laps <= k only."""
-    weather = getattr(r, "weather", None)
-    row = {"pre_total_laps": r.race.total_laps, "pre_pit_loss_s": r.race.pit_loss_s,
-           **{f"pre_{n}": v for n, v in (getattr(r, "features", None) or {}).items()}}
-    res = residuals(prior, r.frame, k)
-    known = _known_green(r.frame, k)
-    for c in sorted(r.race.compounds):
+    return _feature_row(r.race, getattr(r, "features", None), r.frame, getattr(r, "weather", None), k,
+                        residuals(prior, r.frame, k))
+
+
+def _feature_row(race: RaceParams, features, frame, weather, k, res) -> dict:
+    """features_at's columns from the race, its pre-race features, the lap frame, lap weather
+    and the residuals up to k (context_features builds the same row from a CalibrationContext)."""
+    row = {"pre_total_laps": race.total_laps, "pre_pit_loss_s": race.pit_loss_s,
+           **{f"pre_{n}": v for n, v in (features or {}).items()}}
+    known = _known_green(frame, k)
+    for c in sorted(race.compounds):
         rc = res.loc[res["compound"] == c, "resid_s"]
         row[f"resid_mean_s[{c}]"] = float(rc.mean()) if len(rc) else np.nan
         row[f"laps_so_far[{c}]"] = int((known["compound"] == c).sum())
-    seen = r.frame[r.frame["lap"] <= k]
+    seen = frame[frame["lap"] <= k]
     status = seen.groupby("lap")["track_status"].agg(lambda s: "".join(map(str, s)))
     row["sc_laps_so_far"] = int(status.str.contains("4").sum())
     row["vsc_laps_so_far"] = int(status.str.contains("[67]").sum())
@@ -580,6 +836,9 @@ def held_out(dataset: CalibrationDataset, fold: str) -> list[str]:
 
 FACTOR_ERROR_COLUMNS = ["fold", "race_id", "calibration_every", "window", "k", "factor", "mean", "sd", "target",
                         "err", "covered"]
+# a learned class's fit per fold and target factor (Calibrator.fit_table): ridge or fallback, and why
+FIT_COLUMNS = ["fold", "calibrator", "factor", "status", "alpha", "sigma", "n_races", "n_rows", "reason"]
+FOLD_SCHEMES = {"race": "leave-one-race-out", "season": "leave-one-season-out"}
 
 
 @dataclass
@@ -589,12 +848,16 @@ class LoroResult:
     rows: SPEC G midrace rows of the held-out races, with fold, calibrator and
     calibration_every columns. factor_errors: per (race, k, window, factor) the effective
     factor (mean, sd) against the hindsight target. folds: fold -> held-out and training races.
+    fits: a learned class's fit per fold and target factor (FIT_COLUMNS), empty for the others;
+    fitted: fold -> that fitted learned calibrator, to replay more of the fold with it.
     """
     calibrator: str
     protocol: str
     rows: pd.DataFrame
     factor_errors: pd.DataFrame
     folds: pd.DataFrame
+    fits: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=FIT_COLUMNS))
+    fitted: dict = field(default_factory=dict, repr=False)   # fold -> its fitted learned calibrator
 
     def targets(self) -> pd.DataFrame:
         """Per (calibration_every, window, factor): n, rmse, sse, bias, mean sd, 68 percent coverage."""
@@ -632,18 +895,27 @@ def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, 
                midrace_samples=1):
     from . import calibration
     from .engine import Simulator
-    rows, errs, fold_rows = [], [], []
+    rows, errs, fold_rows, fits, fitted = [], [], [], [], {}
     for fold, held in fold_map.items():
         train = dataset.subset([r for r in dataset.races if r not in held])
         fold_rows.append({"fold": fold, "held_out": " ".join(held), "train": " ".join(sorted(train.races))})
         cal = CALIBRATORS.get(name)(**(calibrator_params or {}))
-        if wandb_profile is not None and cal.learned:
-            from .compute import wandb_run
-            with wandb_run(wandb_profile, "h_fold", {"calibrator": name, "protocol": protocol, "fold": fold,
-                                                    "held_out": held, "train": sorted(train.races)}):
+        split = {"calibrator": name, "protocol": protocol, "fold_scheme": FOLD_SCHEMES[protocol], "fold": fold,
+                 "held_out": held, "train": sorted(train.races), "params": dict(calibrator_params or {})}
+        if cal.learned:
+            # logged: under a compute profile its wandb section, else by default (compute.training_run:
+            # WANDB_MODE, else online with a key, else offline), the split in the run config
+            from .compute import training_run, wandb_run
+            ctx = wandb_run(wandb_profile, "h_fold", split) if wandb_profile is not None else \
+                training_run("calibrator_fit", split)
+            with ctx as run:
                 cal.fit(train)
+                if run is not None:
+                    run.log(cal.metrics())
+            fitted[fold] = cal
         else:
             cal.fit(train)
+        fits += [{"fold": fold, "calibrator": name, **r} for r in cal.fit_table()]
         for rid in held:
             r = dataset.races[rid]
             race = r.race.model_copy(update={"race_id": rid})
@@ -681,7 +953,8 @@ def _run_folds(dataset, name, fold_map, protocol, cadences, windows, n_samples, 
                                              "window": window, "k": k, "factor": f, "mean": mean, "sd": sd,
                                              "target": target, "err": err, "covered": bool(abs(err) <= sd)})
     return LoroResult(name, protocol, pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(),
-                      pd.DataFrame(errs, columns=FACTOR_ERROR_COLUMNS), pd.DataFrame(fold_rows))
+                      pd.DataFrame(errs, columns=FACTOR_ERROR_COLUMNS), pd.DataFrame(fold_rows),
+                      pd.DataFrame(fits, columns=FIT_COLUMNS), fitted)
 
 
 def loro(dataset: CalibrationDataset, name: str, fold: str | None = None, *, cadences=(1,),
@@ -694,7 +967,8 @@ def loro(dataset: CalibrationDataset, name: str, fold: str | None = None, *, cad
     job's runner. The calibrator is fitted on the races outside the fold (wandb_profile, a
     compute profile, logs learned fits with the fold assignment), then each held-out race
     is replayed at every cadence in `cadences`. With one race the training set is empty and
-    the CIs are NaN: none and shrinkage need no training, learned classes raise.
+    the CIs are NaN: none and shrinkage need no training, learned classes raise. A learned
+    fit is logged to wandb by default (compute.training_run), with the split in the run config.
 
     `midrace_samples` above 1 replays each G row at that many samples, so the rows carry the
     interval columns (calibration.midrace); 1, the default, keeps the one-run replay. A

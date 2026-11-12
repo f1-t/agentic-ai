@@ -1,0 +1,5 @@
+# Training a learned calibrator (SPEC 0024): runtime requirements plus the training log.
+# compute.training_run logs each learned fit to wandb: WANDB_MODE when set, else online with
+# an API key, else offline (./wandb, `wandb sync` later). Without wandb nothing is logged.
+-r requirements.txt
+wandb>=0.17,<1
