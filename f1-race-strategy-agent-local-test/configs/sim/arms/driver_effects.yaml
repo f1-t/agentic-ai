@@ -1,0 +1,9 @@
+# Wear identification arm "driver_effects" (world and belief): linear_fuel with one pace offset
+# per driver in every degradation fit, summing to zero so each compound base stays the field
+# mean (degradation.py driver_effects). Faster cars run older tyres, so a pooled fit flattens
+# the wear slopes; the offsets take the car out of the tyre. Under to_snapshot the offsets
+# are shrunk toward 0 with the base tau. The engine's pace term is unchanged.
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: true

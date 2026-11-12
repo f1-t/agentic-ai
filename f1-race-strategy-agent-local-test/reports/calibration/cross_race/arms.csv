@@ -10,3 +10,6 @@ collinear_hold,configs/sim/arms/collinear_hold.yaml,7d4bd15481f1,2fc84b635d2e,li
 collinear_hold_hinge,configs/sim/arms/collinear_hold_hinge.yaml,9df26c36bcde,ca1c878f0c90,linear_fuel_hinge,shrinkage,candidate
 collinear_hold_nonneg,configs/sim/arms/collinear_hold_nonneg.yaml,3a9c5a90f3ee,ca9375a538eb,linear_fuel,shrinkage,candidate
 collinear_hold_nonneg_hinge,configs/sim/arms/collinear_hold_nonneg_hinge.yaml,3b25f5df12ff,ad2158a91ab3,linear_fuel_hinge,shrinkage,candidate
+driver_effects,configs/sim/arms/driver_effects.yaml,3a0c54f914c8,95785571c73d,linear_fuel,shrinkage,candidate
+driver_effects_nonneg,configs/sim/arms/driver_effects_nonneg.yaml,2432ad0401c5,4694af89aa55,linear_fuel,shrinkage,candidate
+driver_effects_hinge,configs/sim/arms/driver_effects_hinge.yaml,56e10509a9c5,18c65c855c3c,linear_fuel_hinge,shrinkage,candidate

@@ -209,6 +209,14 @@ def test_committed_arms_load_and_are_distinct():
         "name": "linear_fuel_hinge", "params": {"collinear_hold": 0.5}}
     assert t.set_index("arm").loc["posterior", "role"] == "coverage only"
     assert cross_race.arm_config("wear_nonneg").degradation.params == {"wear_lower_bound": 0.0}
+    assert cross_race.arm_config("driver_effects").degradation.model_dump() == {
+        "name": "linear_fuel", "params": {"driver_effects": True}}
+    assert cross_race.arm_config("driver_effects_nonneg").degradation.params == {"driver_effects": True,
+                                                                                "wear_lower_bound": 0.0}
+    assert cross_race.arm_config("driver_effects_hinge").degradation.model_dump() == {
+        "name": "linear_fuel_hinge", "params": {"driver_effects": True}}
+    assert not cross_race.same_by_construction("driver_effects", BASELINE, "full")   # it changes the world
+    assert set(cross_race.SIMPLICITY) == set(ARMS) - set(cross_race.COVERAGE_ONLY)
 
 
 def test_derived_arm_names():
@@ -373,6 +381,77 @@ def test_one_race_never_selects():
     assert not t["passes"].any() and t["g_diff_lo"].isna().all()
 
 
+# --- the signed stop-gain bias and the stop-count check --------------------------------------------
+def test_the_signed_stop_gain_bias_sits_beside_the_mae():
+    # race 1 under-predicts every gain by 0.5 s, race 2 over-predicts one by 0.2 and under-predicts one by 0.4
+    sg = {RACES[0]: [-0.5, -0.5, -0.5], RACES[1]: [0.2, -0.4]}
+    base = {r: [1.0] * len(e) for r, e in sg.items()}   # the comparator has the same stops (rows pair on them)
+    data = {BASELINE: arm(each(10.0), base), "driver_effects": arm(each(10.0), sg)}
+    t = cross_race.compare_arms(data, BASELINE, ["to_snapshot"], n_boot=100).set_index("arm")
+    r = t.loc["driver_effects"]
+    assert r["sg_bias"] == pytest.approx((-0.5 + (0.2 - 0.4) / 2) / 2)   # race-weighted signed mean
+    assert r["sg_mae"] == pytest.approx((0.5 + 0.3) / 2) and r["sg_bias"] < 0 < r["sg_mae"]
+    md = cross_race._selection_md(t.reset_index())
+    header = md.splitlines()[0].split(" | ")
+    assert header.index("SG bias") == header.index("SG mae") + 1
+    assert "| -0.30 |" in md
+    # per race: real and predicted means, the signed bias and the mae
+    rows = data["driver_effects"]["stop_gain"].assign(real_gain_s=1.5)
+    rows["pred_gain_s"] = rows["real_gain_s"] + rows["err_s"]
+    per = cross_race.stop_gain_by_race({"driver_effects": {"stop_gain": rows}}).set_index("race_id")
+    assert list(per.columns) == [c for c in cross_race.STOP_GAIN_RACE_COLUMNS if c != "race_id"]
+    assert per.loc[RACES[0], "bias_s"] == pytest.approx(-0.5) and per.loc[RACES[0], "mae_s"] == pytest.approx(0.5)
+    assert per.loc[RACES[1], "bias_s"] == pytest.approx(-0.1) and per.loc[RACES[1], "mae_s"] == pytest.approx(0.3)
+    assert per.loc[RACES[1], "pred_gain_s"] - per.loc[RACES[1], "real_gain_s"] == pytest.approx(-0.1)
+    assert per.loc[RACES[1], "n"] == 2 and per.loc[RACES[1], "n_stops"] == 2
+
+
+def test_field_stops_count_tyre_changes_of_the_cars_near_the_distance(syn):
+    f = cross_race.field_stops(syn.frame, syn.race)
+    assert len(f) == syn.frame["driver"].nunique()   # every synthetic car finishes on the lead lap
+    for _, r in f.iterrows():
+        g = syn.frame[syn.frame["driver"] == r["driver"]]
+        assert r["stops"] == int(g["pit_in"].sum()) and r["stops"] in (1, 2)
+    # a car that stops two laps short is in, three laps short is out
+    frame = syn.frame[~((syn.frame["driver"] == "D00") & (syn.frame["lap"] > syn.race.total_laps - 2))
+                      & ~((syn.frame["driver"] == "D01") & (syn.frame["lap"] > syn.race.total_laps - 3))]
+    drivers = cross_race.field_drivers(frame, syn.race.total_laps)
+    assert "D00" in drivers and "D01" not in drivers
+
+
+def test_stop_mode_takes_the_smaller_count_on_a_tie():
+    assert cross_race.stop_mode([2, 2, 1, 3]) == 2 and cross_race.stop_mode([1, 2]) == 1
+    assert cross_race.stop_mode([]) is None and cross_race._counts([2, 1, 2]) == "1:1 2:2"
+
+
+def test_the_reference_stop_count_from_lap_0(syn):
+    ref = cross_race.reference_stops(syn, syn.config, max_stops=2)
+    assert list(ref.columns) == cross_race.REFERENCE_STOP_COLUMNS
+    assert sorted(ref["driver"]) == cross_race.field_drivers(syn.frame, syn.race.total_laps)
+    assert ref["ref_stops"].isin([1, 2]).all()
+    gap = ref["best_2stop_s"] - ref["best_1stop_s"]
+    np.testing.assert_allclose(ref["two_less_one_s"], gap)
+    # the reference is the quicker of the two: one stop exactly when two stops are not quicker
+    assert ((ref["ref_stops"] == 1) == (gap >= 0)).all()
+    np.testing.assert_allclose(ref["ref_mean_s"], np.minimum(ref["best_1stop_s"], ref["best_2stop_s"]))
+
+
+def test_stop_count_table_sets_field_and_reference_modes_side_by_side():
+    field = pd.DataFrame({"race_id": "r", "driver": list("ABCD"), "laps": 50, "stops": [2, 2, 1, 2],
+                          "start_compound": "SOFT"})
+    ref = lambda stops, gaps: pd.DataFrame({"race_id": "r", "driver": list("ABCD"), "ref_stops": stops,  # noqa: E731
+                                            "two_less_one_s": gaps})
+    arm_data = {"baseline": {"reference_stops": ref([1, 1, 1, 2], [5.0, 4.0, 3.0, -1.0])},
+                "driver_effects": {"reference_stops": ref([2, 2, 1, 2], [-1.0, -2.0, 1.0, -0.5])},
+                "posterior": {"reference_stops": pd.DataFrame(columns=cross_race.REFERENCE_STOP_COLUMNS)}}
+    t = cross_race.stop_count_table({"r": {"field_stops": field}}, arm_data).set_index("arm")
+    assert list(t.index) == ["baseline", "driver_effects"]   # an arm without references is left out
+    assert (t["field_mode"] == 2).all() and (t["field_stops"] == "1:1 2:3").all() and (t["field_cars"] == 4).all()
+    assert t.loc["baseline", "ref_mode"] == 1 and not t.loc["baseline", "mode_match"]
+    assert t.loc["baseline", "ref_stops"] == "1:3 2:1" and t.loc["baseline", "two_less_one_s_median"] == 3.5
+    assert t.loc["driver_effects", "mode_match"] and t.loc["driver_effects", "two_less_one_s_max"] == 1.0
+
+
 def test_synthetic_races_never_go_into_the_committed_report(tmp_path, monkeypatch):
     monkeypatch.setattr(cross_race, "CROSS_DIR", tmp_path)
     (tmp_path / "run.json").write_text(json.dumps({"races": ["2021_04_spain", SYN]}))
@@ -413,7 +492,8 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
         for a in ARMS:
             assert (out / "h" / "arms" / a / f"{r}.parquet").is_file()
     tables = cross_race.unpack(pd.read_parquet(out / "races" / "2021_04_spain" / "2021_04_spain.parquet"))
-    assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "eligibility"} <= set(tables)
+    assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "eligibility",
+            "field_stops"} <= set(tables)
     assert {"clean_free", "clean_pack"} <= set(tables["by_kind"]["kind"])
     assert set(calibration.INTERVAL_COLUMNS) <= set(tables["g"].columns)
     assert set(tables["gate"]["mode"]) == {"simulated_order"}
@@ -440,8 +520,21 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     assert len(grid) == 1 and grid["sg_n"].iloc[0] > 0 and {"non_inferior", "passes", "g_diff_hi"} <= set(grid)
     gfold = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / record["grid"][0] / "2021_04_spain.parquet"))
     assert set(gfold["stop_gain"]["window"]) == {"to_snapshot"} and set(gfold["g"]["window"]) == {"to_snapshot"}
+    assert "reference_stops" not in gfold   # a derived arm changes to_snapshot only: no lap-0 reference
+    assert "reference_stops" not in fold     # nor a coverage-only one
+    ref = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / "driver_effects" / "2021_04_spain.parquet"))
+    assert ref["reference_stops"]["ref_stops"].isin([1, 2]).all()
+    counts = pd.read_csv(out / "stop_counts.csv")
+    assert set(counts["race_id"]) == set(RUN_RACES) and set(counts["arm"]) == set(ARMS) - {"posterior"}
+    assert {"field_mode", "ref_mode", "mode_match", "two_less_one_s_median"} <= set(counts)
+    by_race = pd.read_csv(out / "stop_gain_by_race.csv")
+    assert list(by_race.columns) == cross_race.STOP_GAIN_RACE_COLUMNS
+    assert set(by_race["race_id"]) == set(RUN_RACES) and {"to_snapshot", "full"} <= set(by_race["window"])
+    assert "sg_bias" in sel
     md = (out / "summary.md").read_text()
+    assert "| SG mae | SG bias |" in md
     for heading in ("## Eligibility", "## Selection", "### Prior-sd fix", "### Tau grid", "## Coverage",
+                    "## Stop-gain per race", "## Stop-count check (lap 0)",
                     "## Gate and pairs", "## Current defaults", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):
         assert heading in md
     assert "PROVISIONAL: 3 eligible race(s), fewer than 8" in md and "the defaults stay" in md

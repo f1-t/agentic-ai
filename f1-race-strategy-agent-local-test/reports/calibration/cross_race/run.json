@@ -16,11 +16,14 @@
   "collinear_hold",
   "collinear_hold_hinge",
   "collinear_hold_nonneg",
-  "collinear_hold_nonneg_hinge"
+  "collinear_hold_nonneg_hinge",
+  "driver_effects",
+  "driver_effects_nonneg",
+  "driver_effects_hinge"
  ],
  "profile": "local",
  "profile_hash": "a0d0d34f2faa",
- "sim_code_version": "b62094155bde",
+ "sim_code_version": "465287c5c7fb",
  "belief_bound": "wear_nonneg",
  "belief_choice": "wear_nonneg",
  "s2_arm": "wear_nonneg__s2",

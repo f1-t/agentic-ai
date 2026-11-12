@@ -1,0 +1,6 @@
+# Wear identification arm "driver_effects_hinge": driver_effects on linear_fuel_hinge, the
+# hinge at the default knot.
+degradation:
+  name: linear_fuel_hinge
+  params:
+    driver_effects: true

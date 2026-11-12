@@ -115,6 +115,21 @@ Practice rows with session and stint_start_min get one slope per session in the 
 start time, fitted with base and wear in the ordinary fits with a ridge toward 0
 (EVOLUTION_TAU_S_PER_MIN), so track evolution between runs is not read as tyre wear.
 The term is constant within a stint, so it is identified across stints only.
+
+`driver_effects` (SimConfig.degradation.params, default false; linear_fuel and
+linear_fuel_hinge only): one pace offset per driver in the fit's rows, in every fit path
+(full, practice, to_snapshot), so a field where the faster cars run the older tyres does not
+flatten the wear slopes. The offsets are constrained to sum to zero over the drivers, so
+each compound base stays the field mean: they enter as m - 1 orthonormal sum-to-zero
+contrasts (_driver_design), whose ridge penalty is the plain sum of squared offsets. The
+full and practice fits leave them unpenalised; the to_snapshot fit shrinks every offset
+toward 0 with tau shrinkage["driver_s"], else the base tau shrinkage["base_s"] (the
+calibrator's). They are nuisance parameters: the lap time a model returns has no driver term
+(the engine's pace offset is unchanged), and fit_report["cov"] and the posterior draws leave
+them out (the cov of the other parameters is their marginal posterior over the offsets).
+fit_report gains
+  driver_effects              {tau (None when unpenalised), n_drivers, value: {driver: s},
+                              sd: {driver: s}}, value summing to 0
 """
 import copy
 import warnings
@@ -140,6 +155,43 @@ def _compound_columns(d, comps):
         m = (d["compound"] == c).to_numpy(dtype=float)
         cols += [m, m * d["tyre_age"].to_numpy(dtype=float)]
     return cols
+
+
+def _sum_to_zero_basis(m):
+    """(m, m - 1) orthonormal Helmert contrasts: columns orthonormal and each summing to 0, so
+    u = Q v sums to 0 for any v and ||u||^2 = ||v||^2."""
+    Q = np.zeros((m, max(m - 1, 0)))
+    for j in range(1, m):
+        Q[:j, j - 1] = 1.0
+        Q[j, j - 1] = -float(j)
+        Q[:, j - 1] /= np.sqrt(j * (j + 1.0))
+    return Q
+
+
+def _driver_design(d):
+    """(drivers, contrast columns, Q) for driver_effects: the sorted drivers of the rows `d`
+    and the m - 1 columns (driver indicators) Q, Q from _sum_to_zero_basis (a row without a
+    driver gets 0, the field mean). No columns with fewer than two drivers."""
+    if "driver" not in d:
+        raise ValueError("driver_effects needs a driver column in the fit's rows")
+    drivers = sorted(d["driver"].dropna().unique())
+    Q = _sum_to_zero_basis(len(drivers))
+    if len(drivers) < 2:
+        return drivers, [], Q
+    idx = d["driver"].map({x: i for i, x in enumerate(drivers)}).to_numpy(dtype=float)
+    has = ~np.isnan(idx)
+    Z = np.zeros((len(d), Q.shape[1]))
+    Z[has] = Q[idx[has].astype(int)]
+    return drivers, [Z[:, j] for j in range(Z.shape[1])], Q
+
+
+def _driver_report(drivers, Q, v, cov_v, tau):
+    """fit_report["driver_effects"]: the offsets u = Q v and their sds sqrt(diag(Q cov_v Q'))."""
+    u = Q @ np.asarray(v, dtype=float) if Q.size else np.zeros(len(drivers))
+    var = np.diag(Q @ np.asarray(cov_v, dtype=float) @ Q.T) if Q.size else np.zeros(len(drivers))
+    return {"tau": None if tau is None else float(tau), "n_drivers": len(drivers),
+            "value": {x: float(a) for x, a in zip(drivers, u)},
+            "sd": {x: float(s) for x, s in zip(drivers, np.sqrt(np.clip(var, 0.0, None)))}}
 
 
 def _race_lap(d):
@@ -447,9 +499,9 @@ def _hold_columns(X, y, prec, beta0, hold, fallback_s2, n_comps, bound=None):
 
 
 def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects=False):
     """Penalised fit of the race rows toward `prior`. Returns (comps, beta, report).
-    `wear_lower_bound`: see the module docstring.
+    `wear_lower_bound` and `driver_effects`: see the module docstring.
 
     `divide_data_by_s2` (default False; SPEC 0017 G, the prior-sd fix): minimise
     ||y - X b||^2 / s2 + sum_j ((b_j - b0_j) / tau_j)^2 instead, so each tau is a prior sd in
@@ -471,7 +523,9 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
     ({compound: knot}, linear_fuel_hinge) a hinge column per compound with min_samples
     rows past its knot, the prior's support included, follows; its prior mean is the
     prior's hinge (0 when the prior has none) with tau shrinkage["hinge_s_per_lap"].
-    beta holds the hinge coefficients last; report["hinge"] has every compound.
+    beta holds the hinge coefficients after the fuel slope; report["hinge"] has every compound.
+    With `driver_effects` the driver contrasts follow, last, shrunk toward 0 with tau
+    shrinkage["driver_s"] (else shrinkage["base_s"]); report["driver_effects"] has the offsets.
     """
     race = data[data["clean"].to_numpy(dtype=bool) & ~np.isnan(_race_lap(data))]
     pc = dict(prior.coefs) if prior is not None else {}
@@ -504,6 +558,13 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
             cols.append(_hinge_column(d, c, knots[c]))
             beta0.append(float((getattr(prior, "hinges", None) or {}).get(c, 0.0)))
             prec.append(tau_hinge ** -2)
+    n_fixed = len(cols)   # the columns before the driver contrasts
+    if driver_effects:
+        tau_driver = float(shrinkage.get("driver_s", shrinkage["base_s"]))
+        drivers, dcols, Q = _driver_design(d)
+        cols += dcols
+        beta0 += [0.0] * len(dcols)
+        prec += [tau_driver ** -2] * len(dcols)
     X = np.column_stack(cols) if cols else np.empty((len(d), 0))
     beta0, prec = np.asarray(beta0, dtype=float), np.asarray(prec, dtype=float)
     tau = np.divide(1.0, np.sqrt(prec), out=np.full_like(prec, np.nan), where=prec > 0)
@@ -565,6 +626,8 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
         rep["data_term_s2"] = data_s2
     if hold_rep is not None:
         rep["collinear_hold"] = hold_rep
+    if driver_effects:
+        rep["driver_effects"] = _driver_report(drivers, Q, beta[n_fixed:], cov[n_fixed:, n_fixed:], tau_driver)
     return comps, beta, rep
 
 
@@ -746,7 +809,9 @@ class LinearDegradation(_ParameterDraws):
 
     @classmethod
     def fit(cls, data, min_samples=5, prior=None, shrinkage=None, base_delta=0.0, draw="none",
-            clip_wear_at_zero=False, wear_lower_bound=None, divide_data_by_s2=False, **_):
+            clip_wear_at_zero=False, wear_lower_bound=None, divide_data_by_s2=False, driver_effects=False, **_):
+        if driver_effects:
+            raise ValueError("driver_effects is a linear_fuel / linear_fuel_hinge option")
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, wear_lower_bound=wear_lower_bound,
                                        divide_data_by_s2=divide_data_by_s2)
@@ -819,14 +884,15 @@ class LinearFuelDegradation(_ParameterDraws):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False, **_):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects=False, **_):
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
                                        wear_lower_bound=wear_lower_bound, collinear_hold=collinear_hold,
-                                       divide_data_by_s2=divide_data_by_s2)
-            return cls(_coefs(comps, beta), float(beta[-1]), rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
+                                       divide_data_by_s2=divide_data_by_s2, driver_effects=driver_effects)
+            return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), rep).with_draw(draw, clip_wear_at_zero,
+                                                                                       wear_lower_bound)
         coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
-                                        wear_lower_bound=wear_lower_bound)
+                                        wear_lower_bound=wear_lower_bound, driver_effects=driver_effects)
         return cls(coefs, fuel, rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
 
     @property
@@ -838,14 +904,16 @@ class LinearFuelDegradation(_ParameterDraws):
         return base + slope * np.asarray(ages, dtype=float) + self.fuel_slope * np.asarray(laps, dtype=float)
 
 
-def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None, wear_lower_bound=None):
+def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None, wear_lower_bound=None,
+              driver_effects=False):
     """The unpenalised linear_fuel fit. Returns (coefs, fuel slope, hinges, report).
 
     With `hinge_knots` ({compound: knot}, linear_fuel_hinge) a hinge column follows the
     fuel column for each compound with min_samples fit rows past its knot; the others are
     dropped (hinge 0). hinges is {compound: s/lap} and the report gains "hinge"; without
-    knots hinges is None and the fit is exactly linear_fuel's. `wear_lower_bound`: see the
-    module docstring.
+    knots hinges is None and the fit is exactly linear_fuel's. `wear_lower_bound` and
+    `driver_effects` (unpenalised driver contrasts after the hinge columns, before the
+    evolution slopes): see the module docstring.
     """
     fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
     comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
@@ -861,6 +929,8 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
             rep["bounded"] = {}
         if hinge_knots is not None:
             rep["hinge"] = {}
+        if driver_effects:
+            rep["driver_effects"] = _driver_report([], np.zeros((0, 0)), [], np.zeros((0, 0)), None)
         return {}, fuel_prior, None if hinge_knots is None else {}, rep
     lap = _race_lap(d)
     race = ~np.isnan(lap)
@@ -872,10 +942,12 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     n_race = [int(((d["compound"] == c).to_numpy() & race).sum()) for c in comps]
     cols = _compound_columns(d, comps)
     hcols = [_hinge_column(d, c, hinge_knots[c]) for c in hinged]
+    drivers, dcols, Q = _driver_design(d) if driver_effects else ([], [], None)
     sessions, evo = evolution_columns(d)
-    k, h = 2 * len(comps), len(hinged)
+    k, h, nd = 2 * len(comps), len(hinged), len(dcols)
     fitted = any(n >= min_samples for n in n_race)
-    X = np.column_stack(cols + [lap] + hcols + evo) if fitted else np.column_stack(cols + hcols + evo)
+    X = (np.column_stack(cols + [lap] + hcols + dcols + evo) if fitted
+         else np.column_stack(cols + hcols + dcols + evo))
     target = y if fitted else y - fuel_prior * lap
     beta = _evolution_fit(X, target, len(evo))
     sd, res, cov = _posterior_sd(X, target, beta, _evolution_prec(X.shape[1], len(evo)))
@@ -884,13 +956,16 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         prec = _evolution_prec(X.shape[1], len(evo))
         beta, bound_fixed, (sd, res, cov), unconstrained = _bound_fit(
             X, target, prec, np.zeros(len(prec)), beta, (sd, res, cov), len(comps), wear_lower_bound, True)
+    j0 = k + 1 + h if fitted else k + h   # the first driver contrast
+    driver_rep = (_driver_report(drivers, Q, beta[j0:j0 + nd], cov[j0:j0 + nd, j0:j0 + nd], None)
+                  if driver_effects else None)
     if fitted:
-        fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1 + h:]
+        fuel, source, slopes = float(beta[k]), "fitted", beta[k + 1 + h + nd:]
         hinge, hinge_sd = beta[k + 1:k + 1 + h], sd[k + 1:k + 1 + h]
         sd = sd[:k + 1]
         colnames, fixed = _param_names(comps, True, hinged), {}
     else:
-        fuel, source, slopes = float(fuel_prior), "prior", beta[k + h:]
+        fuel, source, slopes = float(fuel_prior), "prior", beta[k + h + nd:]
         hinge, hinge_sd = beta[k:k + h], sd[k:k + h]
         sd = np.append(sd[:k], fixed_sd)  # the fuel slope is fixed at the prior: its tau
         colnames, fixed = _param_names(comps, False, hinged), {"fuel_s_per_lap": fixed_sd ** 2}
@@ -907,6 +982,8 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         for c, v, s in zip(hinged, hinge, hinge_sd):
             rep["hinge"][c] = _hinge_entry(v, s, "fitted", 1.0, hinge_knots[c], n_past[c])
         hinges = {c: rep["hinge"][c]["value"] for c in comps}
+    if driver_rep is not None:
+        rep["driver_effects"] = driver_rep
     return _apply_base_delta(_coefs(comps, beta), rep, base_delta), fuel, hinges, rep
 
 
@@ -935,17 +1012,18 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
-            clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False, **_):
+            clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False,
+            driver_effects=False, **_):
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound,
-                                       collinear_hold, divide_data_by_s2)
+                                       collinear_hold, divide_data_by_s2, driver_effects)
             hinges = {c: rep["hinge"][c]["value"] for c in comps}
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
                        rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots,
-                                             wear_lower_bound)
+                                             wear_lower_bound, driver_effects)
         return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep).with_draw(draw, clip_wear_at_zero,
                                                                                      wear_lower_bound)
 
