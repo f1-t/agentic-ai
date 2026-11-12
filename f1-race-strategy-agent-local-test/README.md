@@ -101,6 +101,8 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
 - **Deterministic ground truth:** `data/ground_truth.json` is produced by
   `legacy_tools.optimal_strategy()` (a brute-force over the simulator) and is re-derivable.
 - Runtime: a few minutes (one cached `session.load` + the agent's ~5–8 tool calls).
+- **Test suite:** `python -m pytest -q` skips the tests marked `slow` (pytest.ini); run the full set
+  with `python -m pytest -q -m "slow or not slow"` before any merge that touches `src/sim` or `src/eval`.
 
 ## Known limitations (baseline)
 

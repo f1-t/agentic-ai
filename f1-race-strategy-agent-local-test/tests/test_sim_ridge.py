@@ -361,6 +361,7 @@ def ridge_run_4(tmp_path_factory):
     return cross_run(tmp_path_factory, 4)
 
 
+@pytest.mark.slow
 def test_cross_run_with_6_synthetic_races_and_a_ridge_arm_completes(ridge_run):
     out = ridge_run
     record = json.loads((out / "run.json").read_text())
@@ -392,6 +393,7 @@ def test_cross_run_with_6_synthetic_races_and_a_ridge_arm_completes(ridge_run):
     assert "## Learned calibrators (SPEC 0024)" in md and "nothing is adopted" in md
 
 
+@pytest.mark.slow
 def test_with_3_training_races_every_ridge_factor_falls_back_to_shrinkage(ridge_run_4):
     out = ridge_run_4
     fits = pd.read_csv(out / "learned_fits.csv")
