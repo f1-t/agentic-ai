@@ -7,6 +7,7 @@ gap_ahead_s, car_ahead, gap_behind_s, free_air (gap_columns).
 practice_frame adds session, stint_len, lap_in_stint, session_time_min, stint_start_min
 and run_class, with lap NaN.
 """
+import logging
 import os
 
 import numpy as np
@@ -14,10 +15,17 @@ import pandas as pd
 
 from .config import FREE_AIR_GAP_S, HINGE_KNOT, LongRun   # HINGE_KNOT lives in config, shared with linear_fuel_hinge
 
+log = logging.getLogger(__name__)
+
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 LEGACY_OUTLIER_FACTOR = 1.07  # baseline rule: drop laps slower than 107% of the compound's fastest
 MIN_SCALE_S = 0.05            # floor on the robust residual scale, so noise free data cuts nothing
 EVOLUTION_TAU_S_PER_MIN = 0.02  # ridge toward 0 on the practice session evolution slopes
+
+
+# compounds practice_frame keeps (SPEC 0023 C): the dry race compounds, by name or Pirelli C-number.
+# Pirelli test tyres (TEST_UNKNOWN), wet tyres and UNKNOWN are dropped.
+DRY_RACE_COMPOUNDS = frozenset({"SOFT", "MEDIUM", "HARD", *(f"C{i}" for i in range(7))})
 
 
 WEATHER_COLUMNS = ["time_s", "air_temp_c", "track_temp_c", "humidity_pct", "pressure_hpa",
@@ -348,6 +356,9 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
       off_pace      its median timed lap is more than max_pace_gap_s from the session's
                     long-run reference: the median of the medians of the stints that pass
                     the first two tests, weighted by their timed laps.
+    Only laps on DRY_RACE_COMPOUNDS are kept: Pirelli test tyres (TEST_UNKNOWN) and wet
+    tyres are dropped, with one log warning per call giving the count per compound (a call is
+    one load; the compounds never reach the fit, so nothing downstream warns per plan).
     `run_class` holds the result. Only long-run timed laps are base laps. They are cleaned
     by robust_filter across all sessions together, with the race frame's reference model
     less the race lap term and plus a per session slope in `stint_start_min` (see
@@ -365,6 +376,12 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
                    ignore_index=True)
     started = df["start_s"].fillna(df["end_s"] - df["lap_time_s"])
     df["session_time_min"] = (started - started.groupby(df["session"]).transform("min")) / 60.0
+    other = df["compound"].notna() & ~df["compound"].isin(DRY_RACE_COMPOUNDS)
+    if other.any():
+        counts = df.loc[other, "compound"].value_counts().sort_index()
+        log.warning("practice_frame: dropped %d laps not on a dry race compound (%s)", int(other.sum()),
+                    ", ".join(f"{c}: {n}" for c, n in counts.items()))
+        df = df[~other].reset_index(drop=True)
     timed = _green(df) & df["session_time_min"].notna()
     sid = df.groupby(keys, dropna=False).ngroup()
     df["stint_len"] = timed.groupby(sid).transform("sum").astype(int)

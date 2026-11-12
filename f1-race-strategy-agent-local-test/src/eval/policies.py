@@ -23,6 +23,7 @@ from pathlib import Path
 from ..baselines import domain, policies
 from ..baselines.domain import PolicyUnavailable
 from ..sim.optimizer_bridge import from_contract, pace_for_crossover, to_contract
+from ..sim.rules import stint_limit_violations
 
 BASELINES = ("actual_strategy", "fixed_one_stop", "fixed_two_stop", "greedy_crossover")
 TRAJECTORY_DIR = Path(__file__).resolve().parents[2] / "reports" / "eval" / "trajectories"
@@ -54,7 +55,15 @@ def _bridged(choose):
         if plan.stints[0].laps == 0:
             raise PolicyUnavailable("The plan stops immediately; a first stint needs at least one lap "
                                     "(docs/rules.md R1).")
-        return Decision(to_contract(plan, scenario.snapshot, sources=belief.config.inventory_sources))
+        contract = to_contract(plan, scenario.snapshot, sources=belief.config.inventory_sources)
+        # R8 is a simulator rule the baselines do not plan around; a plan breaking it is
+        # unavailable, as the baselines' own rule violations are (docs/rules.md R8)
+        if "stint_limit" in belief.config.rules:
+            errors = stint_limit_violations(scenario.snapshot, contract, getattr(belief, "stint_limits", None),
+                                            belief.config.stint_limit_margin_laps)
+            if errors:
+                raise PolicyUnavailable(f"R8 stint limit: {'; '.join(errors)}")
+        return Decision(contract)
     return policy
 
 

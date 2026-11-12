@@ -19,7 +19,7 @@ from ..baselines import domain, policies
 from ..baselines.search import Evaluation, OptimizationResult, candidate_plans
 from ..contracts import Plan, PlanStint, Snapshot, StintRecord
 from .config import compound_class
-from .rules import laps_on_set
+from .rules import current_set_past_limit, laps_on_set, stint_limit_violations
 
 
 def from_contract(snapshot: Snapshot, sim) -> domain.Snapshot:
@@ -132,8 +132,9 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
 
     Candidates come from baselines.candidate_plans; plans with a zero-lap first stint are
     filtered out (R1) until candidate_plans takes a first-stint minimum. Rows the
-    simulator rejects are dropped and counted in `invalid`. The best plan follows the
-    baseline optimizer's tie-break.
+    simulator rejects are dropped and counted in `invalid`. Plans breaking the R8 stint limit
+    are filtered out before scoring and counted in diagnostics["stint_limit_dropped"]
+    (_stint_limit_filter). The best plan follows the baseline optimizer's tie-break.
 
     `return_times` (opt-in, off by default) adds the chosen plan's per-draw remaining times
     to diagnostics["times"], an (n_samples,) float array, and the next plan in the tie-break
@@ -144,7 +145,8 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     them for its paired standard errors and near-tie measurements."""
     state = from_contract(snapshot, sim)
     candidates = list(candidate_plans(state, max_stops))
-    plans = [p for p in candidates if p.stints[0].laps > 0]
+    nonzero = [p for p in candidates if p.stints[0].laps > 0]
+    plans, limit = _stint_limit_filter(snapshot, sim, nonzero)
     evals, contract_plans, assignments, batch = score_batch(
         snapshot, plans, sim, seed=seed, n_samples=n_samples, scenario=scenario, state=state)
     scored = [i for i, e in enumerate(evals) if e is not None]
@@ -153,7 +155,7 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     best = min(scored, key=lambda i: _key(evals[i], state))
     diagnostics = {"set_assignment": assignments[best], "seed": seed,
                    "n_samples": batch.times.shape[1],
-                   "zero_lap_first_stints": len(candidates) - len(plans)}
+                   "zero_lap_first_stints": len(candidates) - len(nonzero), **limit}
     if return_times:
         diagnostics["times"] = np.asarray(evals[best].seed_times_s, dtype=float)
         rest = [i for i in scored if i != best]
@@ -170,6 +172,24 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
         evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(scored),
         diagnostics=diagnostics,
     )
+
+
+def _stint_limit_filter(snapshot: Snapshot, sim, plans):
+    """(plans kept, diagnostics) of the R8 candidate filter (docs/rules.md): the plans whose
+    contract (sets assigned) breaks no stint limit, as rules.stint_limit checks it in
+    simulate_batch. diagnostics: stint_limit_dropped, the plans left out (like
+    zero_lap_first_stints), and stint_limit_fallback, True when the current set is already
+    past its limit at the snapshot, so the kept plans pit it at the soonest legal stop."""
+    margin, limits = sim.config.stint_limit_margin_laps, getattr(sim, "stint_limits", None)
+    if margin is None or not limits or "stint_limit" not in sim.config.rules:
+        return plans, {"stint_limit_dropped": 0, "stint_limit_fallback": False}
+    sources = sim.config.inventory_sources
+    # without an inventory every later stint is a new set (start_age 0), so the baseline plan
+    # itself carries the ages; with one, the sets to_contract assigns do
+    as_ages = (lambda p: p) if snapshot.sets_available is None else (lambda p: _to_contract(p, snapshot, sources)[0])
+    kept = [p for p in plans if not stint_limit_violations(snapshot, as_ages(p), limits, margin)]
+    return kept, {"stint_limit_dropped": len(plans) - len(kept),
+                  "stint_limit_fallback": current_set_past_limit(snapshot, limits, margin)}
 
 
 def as_continuation(sim, **kw):

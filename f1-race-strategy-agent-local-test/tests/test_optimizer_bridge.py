@@ -195,6 +195,138 @@ def test_no_feasible_plan(sim):
         optimize_batch(start().model_copy(update={"sets_available": []}), sim)
 
 
+# --- R8 stint limit (SPEC 0023 B, docs/rules.md) --------------------------------------
+# synthetic_frame's layout (every compound run up to age 20 in the race, so at the default
+# margin of 3 a stint may end at age 23) with a slow-wearing MEDIUM, so the unlimited
+# optimum runs one long MEDIUM stint
+def limit_frame():
+    import pandas as pd
+    return pd.DataFrame([{"compound": c, "tyre_age": age, "lap": start + age, "clean": True,
+                          "lap_time_s": base + slope * age}
+                         for c, (base, slope) in {"SOFT": (80.0, 0.10), "MEDIUM": (80.5, 0.01)}.items()
+                         for start in range(0, 30, 3) for age in range(1, 21)])
+
+
+def limit_sim(margin=3, degradation="linear", **kw):
+    return Simulator(limit_frame(), SimConfig(degradation={"name": degradation}, stint_limit_margin_laps=margin, **kw))
+
+
+def _ends(plan, snap):
+    return [(snap.tyre_age if j == 0 else s.start_age) + s.laps for j, s in enumerate(plan.stints)]
+
+
+def test_plans_past_the_stint_limit_are_dropped_counted_and_invalid():
+    on, off = limit_sim(), limit_sim(None)
+    assert on.stint_limits == {"MEDIUM": 20.0, "SOFT": 20.0}
+    a = optimize_batch(start(), on, return_times=True)
+    b = optimize_batch(start(), off, return_times=True)
+    assert max(_ends(b.plan, start())) > 23   # the unlimited optimum runs MEDIUM past 23
+    assert all(max(_ends(p, start())) <= 23 for p in a.diagnostics["searched"]["plans"])
+    beyond = [p for p in b.diagnostics["searched"]["plans"] if max(_ends(p, start())) > 23]
+    assert a.diagnostics["stint_limit_dropped"] == len(beyond) > 0
+    assert a.diagnostics["stint_limit_fallback"] is False
+    assert a.candidates_evaluated + len(beyond) == b.candidates_evaluated and a.invalid == b.invalid == 0
+    assert a.evaluation.mean_time_s > b.evaluation.mean_time_s
+    # the same rule makes simulate_batch reject exactly those plans, with an error to act on
+    batch = on.simulate_batch(start(), b.diagnostics["searched"]["plans"])
+    assert sum(not v for v in batch.valid) == len(beyond)
+    res = on.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]])
+    assert not res.valid and res.errors == [
+        "Stint 2 (MEDIUM) ends at tyre age 30, past the stint limit of 23 (the oldest MEDIUM tyre run "
+        "in this race, 20, + 3)."]
+    # support_warnings stay information only, at the fit's data range
+    inside = on.simulate(start(), [["SOFT", 22], ["MEDIUM", 20], ["SOFT", 8]])
+    assert inside.valid and inside.support_warnings == ["SOFT to age 22, observed up to 20"]
+
+
+def test_stint_limit_margin_none_restores_the_old_search():
+    off = limit_sim(None)
+    ours = optimize_batch(start(), off, n_samples=1)
+    theirs = optimize(from_contract(start(), off), adapter(off, start(), 1), (0,), 2)
+    assert ours.evaluation.plan == theirs.evaluation.plan
+    assert ours.evaluation.mean_time_s == pytest.approx(theirs.evaluation.mean_time_s, abs=1e-9)
+    assert ours.candidates_evaluated == theirs.candidates_evaluated
+    assert ours.diagnostics["stint_limit_dropped"] == 0 and ours.diagnostics["stint_limit_fallback"] is False
+    assert off.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).valid
+
+
+def test_the_limit_is_a_race_constant_whatever_the_fit_window():
+    """The belief (to_snapshot, practice prior) and the world (full) share the limits: they
+    come from the race frame, not from the window's fit."""
+    from test_sim import synthetic_practice
+    world = limit_sim()
+    belief = Simulator(limit_frame(), SimConfig(fit_window="to_snapshot", degradation={"name": "linear"}),
+                       synthetic_practice())
+    mid = Snapshot(race=RACE, driver="X", laps_completed=5, compound="SOFT", tyre_age=5)
+    fit = belief.fitted_for(mid)
+    assert fit is not belief and fit.stint_limits == world.stint_limits == {"MEDIUM": 20.0, "SOFT": 20.0}
+    plan = to_contract(Plan((Stint("SOFT", 15), Stint("MEDIUM", 30))), mid)
+    assert belief.validate(mid, plan) == world.validate(mid, plan) != []
+
+
+def test_stint_limit_rank_is_the_age_that_many_cars_reached():
+    """SimConfig.stint_limit_rank: the rank-th largest per-car maximum age on the compound.
+    A's two SOFT sets count once (its maximum, 30), so rank 2 is B's 25, not A's 29."""
+    import pandas as pd
+    from src.sim.rules import stint_limits
+    runs = {"A": [("SOFT", 30), ("SOFT", 29), ("MEDIUM", 12)], "B": [("SOFT", 25)], "C": [("SOFT", 20)],
+            "D": [("SOFT", 18), ("MEDIUM", 40)]}
+    frame = pd.DataFrame([{"driver": d, "compound": c, "tyre_age": a, "lap": a, "clean": True, "lap_time_s": 80.0}
+                          for d, sets in runs.items() for c, top in sets for a in range(1, top + 1)])
+    assert stint_limits(frame) == stint_limits(frame, 1) == {"MEDIUM": 40.0, "SOFT": 30.0}
+    assert stint_limits(frame, 2) == {"MEDIUM": 12.0, "SOFT": 25.0}
+    assert stint_limits(frame, 3) == {"MEDIUM": 12.0, "SOFT": 20.0}   # MEDIUM: 2 cars, its smallest maximum
+    assert stint_limits(frame, 5) == {"MEDIUM": 12.0, "SOFT": 18.0}
+    assert Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_rank=3)).stint_limits == \
+        {"MEDIUM": 12.0, "SOFT": 20.0}
+    assert SimConfig().stint_limit_rank == 1
+    with pytest.raises(ValueError, match="driver column"):
+        stint_limits(frame.drop(columns="driver"), 3)
+
+
+def test_a_fitted_hinge_does_not_exempt_a_compound():
+    hinged = limit_sim(degradation="linear_fuel_hinge", hinge_knots={"MEDIUM": 10})
+    assert hinged.fitted_for(start()).degradation.fit_report["hinge"]["MEDIUM"]["source"] == "fitted"
+    res = optimize_batch(start(), hinged, return_times=True)
+    assert all(max(_ends(p, start())) <= 23 for p in res.diagnostics["searched"]["plans"])
+    assert not hinged.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).valid
+
+
+def test_a_set_already_past_its_limit_pits_at_the_soonest_legal_stop():
+    old = Snapshot(race=RACE, driver="X", laps_completed=30, compound="SOFT", tyre_age=30)
+    sim = limit_sim()
+    res = optimize_batch(old, sim, return_times=True)
+    assert res.diagnostics["stint_limit_fallback"] is True
+    assert all(p.stints[0].laps == 1 for p in res.diagnostics["searched"]["plans"])
+    assert res.diagnostics["stint_limit_dropped"] == \
+        optimize_batch(old, limit_sim(None)).candidates_evaluated - res.candidates_evaluated > 0
+    assert sim.simulate(old, [["SOFT", 1], ["MEDIUM", 19]]).valid
+    err = sim.simulate(old, [["SOFT", 2], ["MEDIUM", 18]]).errors
+    assert len(err) == 1 and err[0].endswith("this set is already past it, so pit after 1 lap(s).")
+    # fewer laps left than the soonest stop plus a minimum stint: the set runs to the flag
+    late = Snapshot(race=RACE, driver="X", laps_completed=45, compound="SOFT", tyre_age=45)
+    assert sim.simulate(late, [["SOFT", 5]]).errors == ["A valid dry strategy must use at least two different compounds."]
+    # inside the limit now (age 18, limit 23) but no stop fits in the 7 laps left (minimum 8),
+    # and the flag is at age 25: the set runs to the flag, which is the only plan there is
+    tight = Snapshot(race=RACE, driver="X", laps_completed=43, compound="MEDIUM", tyre_age=18,
+                     stints=[StintRecord(compound="SOFT", laps=25, start_lap=1)])
+    assert sim.simulate(tight, [["MEDIUM", 7]]).valid
+    res = optimize_batch(tight, sim)
+    assert res.plan.as_pairs() == [["MEDIUM", 7]] and res.diagnostics["stint_limit_fallback"] is True
+
+
+def test_a_baseline_past_the_limit_is_unavailable():
+    from types import SimpleNamespace
+
+    from src.baselines.domain import PolicyUnavailable
+    from src.eval.policies import BASELINE_POLICIES
+    scenario = SimpleNamespace(snapshot=start(), actual_stints=[("SOFT", 20), ("MEDIUM", 30)])
+    with pytest.raises(PolicyUnavailable, match=r"R8 stint limit: Stint 2 \(MEDIUM\) ends at tyre age 30"):
+        BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(), 2)
+    assert BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(None), 2).plan.as_pairs() == \
+        [["SOFT", 20], ["MEDIUM", 30]]
+
+
 # --- as_continuation / pace_for_crossover -----------------------------------------
 def test_as_continuation_satisfies_compare(sim):
     snap = Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT", tyre_age=10,
@@ -254,7 +386,8 @@ def test_legacy_frame_reproduces_ground_truth(legacy):
 def test_spain_two_stop_search_is_fast():
     from src import legacy_tools as tools
     from src.sim.data import lap_frame, load_session
-    sim = Simulator(lap_frame(load_session(2021, "Spain").laps))
+    # the full search: the R8 stint limit leaves 1790 plans of this snapshot's 2156 (docs/rules.md)
+    sim = Simulator(lap_frame(load_session(2021, "Spain").laps), SimConfig(stint_limit_margin_laps=None))
     snap = Snapshot.at_start(tools._race_params(), "HAM", "SOFT")
     optimize_batch(snap, sim, n_samples=50)
     best = float("inf")

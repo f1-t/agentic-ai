@@ -337,14 +337,21 @@ def _deterministic_world_rows(scenario_set, sims, pols, n_samples):
 def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
     """The deterministic default world on a slice of v1: every optimal set is the reference
     alone, every pit-now call is decisive, the set-based agreement is the plain one, and the
-    summary table is the one without the near-tie columns."""
+    summary table is the one without the near-tie columns.
+
+    Without the R8 stint limit (docs/rules.md): with it, more references are two-stop plans,
+    and in this deterministic linear world a two-stop plan ties exactly with its later stints
+    swapped, so some optimal sets hold several exact ties."""
     from src.eval.score import race_simulators
     from src.sim.compute import load_profile
     profile = load_profile("local")
     v1 = ScenarioSet.load(SCENARIOS_V1)
     part = ScenarioSet(version="tv1", items=v1.items[::12])
     part.digest = part.compute_digest()
-    rows, old = _deterministic_world_rows(part, race_simulators(profile), resolve(["baselines"]),
+    from src.eval.score import BELIEF_CONFIG
+    belief = SimConfig.from_file(BELIEF_CONFIG).model_copy(update={"stint_limit_margin_laps": None})
+    sims = race_simulators(profile, belief, SimConfig(stint_limit_margin_laps=None))
+    rows, old = _deterministic_world_rows(part, sims, resolve(["baselines"]),
                                           profile.sim.n_samples)
     assert (rows["opt_set_size"] == 1).all()
     decisive = rows["pit_now_decisive"].dropna()

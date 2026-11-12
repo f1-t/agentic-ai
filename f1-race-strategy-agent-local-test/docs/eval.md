@@ -60,7 +60,9 @@ turns it into the plan the world scores:
   `max_stops`. Every plan from a decision lies inside the space the reference searched, so
   an agent row with negative regret (beyond 1e-6 s) is a bug, and `summarize` warns
   (`AgentRegretWarning`). Baselines keep their exception: an actual three-stop can beat a
-  two-stop reference;
+  two-stop reference. The R8 stint limit (docs/rules.md) binds every plan alike: the
+  reference and the continuation search only inside it, the world rejects a plan past it,
+  and a baseline plan past it is unavailable;
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
 
@@ -242,10 +244,18 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
+Committed (SPEC 0023, the R8 stint limit at rank 1, sim_code_version `983fd6f4f2bf`, local
+profile: seed 0, 50 samples, two stops, default world): `data/references/v1/441a798fbebb.parquet`,
+`data/references/d2/182013ff1f42.parquet` and `data/references/pilot1/a4241208bfb7.parquet`.
+v1 re-scored on it (baselines and the recorded run): `reports/eval/v1_baselines_r8.csv`
+(scored at `b6c3a15b4b30`, before `stint_limit_rank`; a re-score at `983fd6f4f2bf` matches it
+in every column but the stamps).
+The record below is of the reference before R8.
+
+Before: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
 was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
 sim_code_version `21b81a57ea42`. From
-it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
+it, `score --require-reference` reproduced `reports/eval/v1_baselines_split.csv` row for
 row (every value column; the stamp columns `latency_s`, `sim_code_version`,
 `belief_config_hash` and `world_config_hash` are excluded, stamp-only drift under
 reports/calibration/README.md); the rows gain `regret_se_s` and
@@ -253,6 +263,16 @@ reports/calibration/README.md); the rows gain `regret_se_s` and
 the tie rule there. The rows also gain the near-tie columns, and in that world every
 optimal set is the reference alone (`opt_set_size` 1 on all 1320 rows), every pit-now
 call with both kinds of plan is decisive, and the set-based agreement equals the plain one.
+
+Under R8 at the defaults (`reports/eval/v1_baselines_r8.csv`) that no longer holds: 6 of the
+264 v1 scenarios (30 of 1320 rows), all HAM, laps 0, 10, 11, 15, 20 and 25, have exact ties,
+`opt_set_size` 2 or 4. The references there are two-stops, and in this deterministic linear
+world two kinds of plan cost exactly the same: the later stints swapped (S22 M17 S27 against
+S22 S27 M17), and one SOFT lap moved between two SOFT stints that end at the same tyre age
+(from lap 0 on a 4-lap-old set, S22 M17 S27 against S23 M17 S26). R7 picks one: equal stop
+counts, then the earlier pit laps, so S22 M17 S27 (stops after laps 22 and 39). Every pit-now
+call is still decisive and the set-based stop agreement equals the plain one; the set-based
+first pit error is one lap lower on 8 rows.
 
 ### Near ties (information only)
 
@@ -262,8 +282,8 @@ race: the share of scenarios whose optimal set has more than one plan, the share
 pit-now call is decisive (of the scenarios with both a pit-now and a stay-out plan), and
 the stop agreement and mean first pit error against the reference and against the closest
 member of the optimal set. Nothing in the summary table or the headline metrics changes.
-Under the deterministic default world the view shows sets of size 1 and every call
-decisive.
+Under the deterministic default world the view shows every call decisive and sets of size
+1, except the exact ties R8 brings (above: 6 v1 scenarios with sets of 2 or 4).
 
 v1 under the default world with `events: {name: rate}` (default rates), 200 samples, belief
 default, baselines and the recorded run, from a cached reference:
