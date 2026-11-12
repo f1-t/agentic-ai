@@ -472,14 +472,11 @@ PHYSICS_MODULES = (
     "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
     # the fuel_* calibrators (SPEC 0020) set the fuel prior and its tau, which move lap times
     "fuel_prior",
-    # support_warnings is the stint-length support rule optimize_batch filters the search by
-    # (SPEC 0023 B), so it moves reference plans
-    "model_report",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
     "agent_tools",    # the agent's tools over the simulator (lands with #41)
-    "jobs", "compute", "calibrate", "race_ids",
+    "jobs", "compute", "calibrate", "model_report", "race_ids",
     # calibration builds the snapshots of the eval scenario sets (snapshot_at) and the
     # calibration reports; the sets are frozen by their digest once sampled, so a change here
     # cannot move a scored number through them.

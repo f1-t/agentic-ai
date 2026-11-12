@@ -266,11 +266,7 @@ def test_spain_baselines_score_end_to_end(tmp_path):
     s = ScenarioSet(version="t", items=items)
     rows = score_set(s, race_simulators(profile), resolve(["baselines"]), n_samples=1)
     assert set(rows["status"]) <= {"ok", "unavailable"}
-    # the reference searches only plans inside stint-length support (SPEC 0023 B); a baseline
-    # plan past it (a support warning in the world) can come in below the reference
-    ok = rows[rows.status == "ok"]
-    assert (ok.loc[ok["support_warnings"] == 0, "regret_s"] >= 0).all()
-    assert (ok["support_warnings"] == 0).any()
+    assert (rows.loc[rows.status == "ok", "regret_s"] >= 0).all()
     assert (summarize(rows).query("race_id == 'ALL'")["scored"] > 0).any()
 
 

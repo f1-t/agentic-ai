@@ -195,11 +195,11 @@ def test_no_feasible_plan(sim):
         optimize_batch(start().model_copy(update={"sets_available": []}), sim)
 
 
-# --- stint-length support filter (SPEC 0023 B) -------------------------------------
-# synthetic_frame's layout (every compound observed up to age 20, so at the default margin of
-# 3 a stint may end at age 23) with a slow-wearing MEDIUM, so the unfiltered optimum runs one
-# long MEDIUM stint
-def support_frame():
+# --- R8 stint limit (SPEC 0023 B, docs/rules.md) --------------------------------------
+# synthetic_frame's layout (every compound run up to age 20 in the race, so at the default
+# margin of 3 a stint may end at age 23) with a slow-wearing MEDIUM, so the unlimited
+# optimum runs one long MEDIUM stint
+def limit_frame():
     import pandas as pd
     return pd.DataFrame([{"compound": c, "tyre_age": age, "lap": start + age, "clean": True,
                           "lap_time_s": base + slope * age}
@@ -207,79 +207,97 @@ def support_frame():
                          for start in range(0, 30, 3) for age in range(1, 21)])
 
 
-def support_sim(margin=3, degradation="linear", **kw):
-    return Simulator(support_frame(), SimConfig(degradation={"name": degradation}, support_margin_laps=margin, **kw))
+def limit_sim(margin=3, degradation="linear", **kw):
+    return Simulator(limit_frame(), SimConfig(degradation={"name": degradation}, stint_limit_margin_laps=margin, **kw))
 
 
 def _ends(plan, snap):
     return [(snap.tyre_age if j == 0 else s.start_age) + s.laps for j, s in enumerate(plan.stints)]
 
 
-def test_plans_beyond_support_are_dropped_and_counted():
-    on, off = support_sim(), support_sim(None)
+def test_plans_past_the_stint_limit_are_dropped_counted_and_invalid():
+    on, off = limit_sim(), limit_sim(None)
+    assert on.stint_limits == {"MEDIUM": 20.0, "SOFT": 20.0}
     a = optimize_batch(start(), on, return_times=True)
     b = optimize_batch(start(), off, return_times=True)
-    # the unfiltered optimum runs MEDIUM past age 23; the filter takes it out of the search
-    assert max(_ends(b.plan, start())) > 23
+    assert max(_ends(b.plan, start())) > 23   # the unlimited optimum runs MEDIUM past 23
     assert all(max(_ends(p, start())) <= 23 for p in a.diagnostics["searched"]["plans"])
     beyond = [p for p in b.diagnostics["searched"]["plans"] if max(_ends(p, start())) > 23]
-    assert a.diagnostics["support_dropped"] == len(beyond) > 0
-    assert a.diagnostics["support_filter"] == "applied"
-    assert a.candidates_evaluated + len(beyond) == b.candidates_evaluated
-    assert a.invalid == b.invalid and a.evaluation.mean_time_s > b.evaluation.mean_time_s
-    # simulate_batch reports the same rule: warnings on exactly the dropped plans
+    assert a.diagnostics["stint_limit_dropped"] == len(beyond) > 0
+    assert a.diagnostics["stint_limit_fallback"] is False
+    assert a.candidates_evaluated + len(beyond) == b.candidates_evaluated and a.invalid == b.invalid == 0
+    assert a.evaluation.mean_time_s > b.evaluation.mean_time_s
+    # the same rule makes simulate_batch reject exactly those plans, with an error to act on
     batch = on.simulate_batch(start(), b.diagnostics["searched"]["plans"])
-    assert sum(bool(w) for w in batch.support_warnings) == len(beyond)
-    assert on.simulate(start(), b.plan).support_warnings
+    assert sum(not v for v in batch.valid) == len(beyond)
+    res = on.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]])
+    assert not res.valid and res.errors == [
+        "Stint 2 (MEDIUM) ends at tyre age 30, past the stint limit of 23 (the oldest MEDIUM tyre run "
+        "in this race, 20, + 3)."]
+    # support_warnings stay information only, at the fit's data range
+    inside = on.simulate(start(), [["SOFT", 22], ["MEDIUM", 20], ["SOFT", 8]])
+    assert inside.valid and inside.support_warnings == ["SOFT to age 22, observed up to 20"]
 
 
-def test_support_margin_none_restores_the_old_search():
-    """support_margin_laps=None is the search before the filter: the plain baseline optimizer
-    over the same scores, nothing dropped, and simulate_batch's margin-0 warnings."""
-    off = support_sim(None)
+def test_stint_limit_margin_none_restores_the_old_search():
+    off = limit_sim(None)
     ours = optimize_batch(start(), off, n_samples=1)
     theirs = optimize(from_contract(start(), off), adapter(off, start(), 1), (0,), 2)
     assert ours.evaluation.plan == theirs.evaluation.plan
     assert ours.evaluation.mean_time_s == pytest.approx(theirs.evaluation.mean_time_s, abs=1e-9)
     assert ours.candidates_evaluated == theirs.candidates_evaluated
-    assert ours.diagnostics["support_dropped"] == 0 and ours.diagnostics["support_filter"] == "off"
-    assert off.simulate(start(), [["SOFT", 22], ["MEDIUM", 28]]).support_warnings == [
-        "SOFT to age 22, observed up to 20", "MEDIUM to age 28, observed up to 20"]
-    assert support_sim().simulate(start(), [["SOFT", 22], ["MEDIUM", 28]]).support_warnings == [
-        "MEDIUM to age 28, observed up to 20"]
+    assert ours.diagnostics["stint_limit_dropped"] == 0 and ours.diagnostics["stint_limit_fallback"] is False
+    assert off.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).valid
 
 
-def test_a_fitted_hinge_keeps_the_plan():
-    """MEDIUM with a fitted hinge (knot 10, rows to age 20) has a shape past the oldest tyre,
-    so its long stints stay in the search; SOFT has no hinge and is still bounded."""
-    hinged = support_sim(degradation="linear_fuel_hinge", hinge_knots={"MEDIUM": 10})
-    rep = hinged.fitted_for(start()).degradation.fit_report["hinge"]
-    assert rep["MEDIUM"]["source"] == "fitted" and rep["SOFT"]["source"] == "dropped"
+def test_the_limit_is_a_race_constant_whatever_the_fit_window():
+    """The belief (to_snapshot, practice prior) and the world (full) share the limits: they
+    come from the race frame, not from the window's fit."""
+    from test_sim import synthetic_practice
+    world = limit_sim()
+    belief = Simulator(limit_frame(), SimConfig(fit_window="to_snapshot", degradation={"name": "linear"}),
+                       synthetic_practice())
+    mid = Snapshot(race=RACE, driver="X", laps_completed=5, compound="SOFT", tyre_age=5)
+    fit = belief.fitted_for(mid)
+    assert fit is not belief and fit.stint_limits == world.stint_limits == {"MEDIUM": 20.0, "SOFT": 20.0}
+    plan = to_contract(Plan((Stint("SOFT", 15), Stint("MEDIUM", 30))), mid)
+    assert belief.validate(mid, plan) == world.validate(mid, plan) != []
+
+
+def test_a_fitted_hinge_does_not_exempt_a_compound():
+    hinged = limit_sim(degradation="linear_fuel_hinge", hinge_knots={"MEDIUM": 10})
+    assert hinged.fitted_for(start()).degradation.fit_report["hinge"]["MEDIUM"]["source"] == "fitted"
     res = optimize_batch(start(), hinged, return_times=True)
-    plans = res.diagnostics["searched"]["plans"]
-    medium = [e for p in plans for s, e in zip(p.stints, _ends(p, start())) if s.compound == "MEDIUM"]
-    soft = [e for p in plans for s, e in zip(p.stints, _ends(p, start())) if s.compound == "SOFT"]
-    assert max(medium) > 23 and max(soft) <= 23
-    assert res.diagnostics["support_dropped"] > 0
-    assert hinged.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).support_warnings == []
+    assert all(max(_ends(p, start())) <= 23 for p in res.diagnostics["searched"]["plans"])
+    assert not hinged.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).valid
 
 
-def test_every_plan_dropped_keeps_the_soonest_pit_on_the_current_set():
-    """An old set already past support at the snapshot: every plan carries a warning on the
-    current stint, so the plans whose only warning is there and that pit soonest are kept."""
+def test_a_set_already_past_its_limit_pits_at_the_soonest_legal_stop():
     old = Snapshot(race=RACE, driver="X", laps_completed=30, compound="SOFT", tyre_age=30)
-    res = optimize_batch(old, support_sim(), return_times=True)
-    assert res.diagnostics["support_filter"] == "current_stint"
-    assert res.plan.stints[0].laps == 1
+    sim = limit_sim()
+    res = optimize_batch(old, sim, return_times=True)
+    assert res.diagnostics["stint_limit_fallback"] is True
     assert all(p.stints[0].laps == 1 for p in res.diagnostics["searched"]["plans"])
-    assert res.diagnostics["support_dropped"] == optimize_batch(old, support_sim(None)).candidates_evaluated \
-        - res.candidates_evaluated > 0
-    # only used sets left as well, so every later stint is past support too: nothing is dropped
-    used = old.model_copy(update={"sets_available": [TyreSet(compound="MEDIUM", laps_run=22, set_id="m22"),
-                                                     TyreSet(compound="SOFT", laps_run=22, set_id="s22")]})
-    res = optimize_batch(used, support_sim())
-    assert res.diagnostics["support_filter"] == "unfiltered" and res.diagnostics["support_dropped"] == 0
-    assert res.plan == optimize_batch(used, support_sim(None)).plan
+    assert res.diagnostics["stint_limit_dropped"] == \
+        optimize_batch(old, limit_sim(None)).candidates_evaluated - res.candidates_evaluated > 0
+    assert sim.simulate(old, [["SOFT", 1], ["MEDIUM", 19]]).valid
+    err = sim.simulate(old, [["SOFT", 2], ["MEDIUM", 18]]).errors
+    assert len(err) == 1 and err[0].endswith("this set is already past it, so pit after 1 lap(s).")
+    # fewer laps left than the soonest stop plus a minimum stint: the set runs to the flag
+    late = Snapshot(race=RACE, driver="X", laps_completed=45, compound="SOFT", tyre_age=45)
+    assert sim.simulate(late, [["SOFT", 5]]).errors == ["A valid dry strategy must use at least two different compounds."]
+
+
+def test_a_baseline_past_the_limit_is_unavailable():
+    from types import SimpleNamespace
+
+    from src.baselines.domain import PolicyUnavailable
+    from src.eval.policies import BASELINE_POLICIES
+    scenario = SimpleNamespace(snapshot=start(), actual_stints=[("SOFT", 20), ("MEDIUM", 30)])
+    with pytest.raises(PolicyUnavailable, match=r"R8 stint limit: Stint 2 \(MEDIUM\) ends at tyre age 30"):
+        BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(), 2)
+    assert BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(None), 2).plan.as_pairs() == \
+        [["SOFT", 20], ["MEDIUM", 30]]
 
 
 # --- as_continuation / pace_for_crossover -----------------------------------------
@@ -341,8 +359,8 @@ def test_legacy_frame_reproduces_ground_truth(legacy):
 def test_spain_two_stop_search_is_fast():
     from src import legacy_tools as tools
     from src.sim.data import lap_frame, load_session
-    # the full search, before the stint-length support filter drops plans (SPEC 0023 B)
-    sim = Simulator(lap_frame(load_session(2021, "Spain").laps), SimConfig(support_margin_laps=None))
+    # the full search: the R8 stint limit leaves 1790 plans of this snapshot's 2156 (docs/rules.md)
+    sim = Simulator(lap_frame(load_session(2021, "Spain").laps), SimConfig(stint_limit_margin_laps=None))
     snap = Snapshot.at_start(tools._race_params(), "HAM", "SOFT")
     optimize_batch(snap, sim, n_samples=50)
     best = float("inf")

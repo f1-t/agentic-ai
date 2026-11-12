@@ -18,9 +18,8 @@ import numpy as np
 from ..baselines import domain, policies
 from ..baselines.search import Evaluation, OptimizationResult, candidate_plans
 from ..contracts import Plan, PlanStint, Snapshot, StintRecord
-from . import model_report as _report
 from .config import compound_class
-from .rules import laps_on_set
+from .rules import current_set_past_limit, laps_on_set, stint_limit_violations
 
 
 def from_contract(snapshot: Snapshot, sim) -> domain.Snapshot:
@@ -133,11 +132,9 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
 
     Candidates come from baselines.candidate_plans; plans with a zero-lap first stint are
     filtered out (R1) until candidate_plans takes a first-stint minimum. Rows the
-    simulator rejects are dropped and counted in `invalid`. With SimConfig.support_margin_laps
-    set, legal plans with a stint past the fit's tyre-age support are dropped too and counted
-    in diagnostics["support_dropped"] (_support_filter, SPEC 0023 B); `candidates_evaluated`
-    and every return_times entry cover the plans kept. The best plan follows the baseline
-    optimizer's tie-break.
+    simulator rejects are dropped and counted in `invalid`. Plans breaking the R8 stint limit
+    are filtered out before scoring and counted in diagnostics["stint_limit_dropped"]
+    (_stint_limit_filter). The best plan follows the baseline optimizer's tie-break.
 
     `return_times` (opt-in, off by default) adds the chosen plan's per-draw remaining times
     to diagnostics["times"], an (n_samples,) float array, and the next plan in the tie-break
@@ -148,17 +145,17 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     them for its paired standard errors and near-tie measurements."""
     state = from_contract(snapshot, sim)
     candidates = list(candidate_plans(state, max_stops))
-    plans = [p for p in candidates if p.stints[0].laps > 0]
+    nonzero = [p for p in candidates if p.stints[0].laps > 0]
+    plans, limit = _stint_limit_filter(snapshot, sim, nonzero)
     evals, contract_plans, assignments, batch = score_batch(
         snapshot, plans, sim, seed=seed, n_samples=n_samples, scenario=scenario, state=state)
-    legal = [i for i, e in enumerate(evals) if e is not None]
-    if not legal:
+    scored = [i for i, e in enumerate(evals) if e is not None]
+    if not scored:
         raise domain.NoFeasiblePlan("No legal remaining plan exists within the future-stop limit.")
-    scored, support = _support_filter(snapshot, sim, legal, contract_plans)
     best = min(scored, key=lambda i: _key(evals[i], state))
     diagnostics = {"set_assignment": assignments[best], "seed": seed,
                    "n_samples": batch.times.shape[1],
-                   "zero_lap_first_stints": len(candidates) - len(plans), **support}
+                   "zero_lap_first_stints": len(candidates) - len(nonzero), **limit}
     if return_times:
         diagnostics["times"] = np.asarray(evals[best].seed_times_s, dtype=float)
         rest = [i for i in scored if i != best]
@@ -172,39 +169,27 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
             "mean_time_s": np.array([evals[i].mean_time_s for i in order], dtype=float),
             "times": np.array([evals[i].seed_times_s for i in order], dtype=float).reshape(len(order), -1)}
     return BatchOptimizationResult(
-        evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(legal),
+        evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(scored),
         diagnostics=diagnostics,
     )
 
 
-def _support_filter(snapshot: Snapshot, sim, legal, contract_plans):
-    """(kept indices, diagnostics) of the stint-length support filter (SPEC 0023 B).
-
-    With SimConfig.support_margin_laps set, a legal plan is dropped when one of its stints
-    ends more than that many laps past the oldest tyre the fit saw on its compound, unless
-    the compound has a fitted hinge (model_report.unsupported_stints, the rule
-    simulate_batch's support_warnings report). If that drops every plan (an old set already
-    past support at the snapshot), the plans whose only unsupported stint is the current one
-    are kept, those that pit soonest; if there are none, every legal plan is kept.
-
-    diagnostics: support_dropped (plans dropped, like zero_lap_first_stints) and
-    support_filter: "off" (margin None), "applied", "current_stint" (the fallback above) or
-    "unfiltered" (nothing supported, nothing dropped)."""
-    margin = sim.config.support_margin_laps
-    if margin is None:
-        return legal, {"support_dropped": 0, "support_filter": "off"}
-    model = sim.fitted_for(snapshot).degradation
-    flagged = {i: _report.unsupported_stints(model, snapshot, contract_plans[i], margin, skip_hinged=True)
-               for i in legal}
-    kept, mode = [i for i in legal if not flagged[i]], "applied"
-    if not kept:
-        current = [i for i in legal if all(j == 0 for j, _ in flagged[i])]
-        if current:
-            soonest = min(contract_plans[i].stints[0].laps for i in current)
-            kept, mode = [i for i in current if contract_plans[i].stints[0].laps == soonest], "current_stint"
-        else:
-            kept, mode = legal, "unfiltered"
-    return kept, {"support_dropped": len(legal) - len(kept), "support_filter": mode}
+def _stint_limit_filter(snapshot: Snapshot, sim, plans):
+    """(plans kept, diagnostics) of the R8 candidate filter (docs/rules.md): the plans whose
+    contract (sets assigned) breaks no stint limit, as rules.stint_limit checks it in
+    simulate_batch. diagnostics: stint_limit_dropped, the plans left out (like
+    zero_lap_first_stints), and stint_limit_fallback, True when the current set is already
+    past its limit at the snapshot, so the kept plans pit it at the soonest legal stop."""
+    margin, limits = sim.config.stint_limit_margin_laps, getattr(sim, "stint_limits", None)
+    if margin is None or not limits or "stint_limit" not in sim.config.rules:
+        return plans, {"stint_limit_dropped": 0, "stint_limit_fallback": False}
+    sources = sim.config.inventory_sources
+    # without an inventory every later stint is a new set (start_age 0), so the baseline plan
+    # itself carries the ages; with one, the sets to_contract assigns do
+    as_ages = (lambda p: p) if snapshot.sets_available is None else (lambda p: _to_contract(p, snapshot, sources)[0])
+    kept = [p for p in plans if not stint_limit_violations(snapshot, as_ages(p), limits, margin)]
+    return kept, {"stint_limit_dropped": len(plans) - len(kept),
+                  "stint_limit_fallback": current_set_past_limit(snapshot, limits, margin)}
 
 
 def as_continuation(sim, **kw):

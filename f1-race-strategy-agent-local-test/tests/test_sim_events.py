@@ -45,6 +45,10 @@ def synthetic_frame():
             for age in range(1, 21):
                 rows.append({"compound": comp, "tyre_age": age, "lap": start + age, "clean": True,
                              "lap_time_s": base + slope * age})
+    # R8 (docs/rules.md): one unclean lap per compound at age 100, so the stint limit, the oldest
+    # tyre any car ran in the race, never binds in this synthetic race; no fit reads unclean laps.
+    # The R8 tests build their own frame (test_optimizer_bridge.limit_frame).
+    rows += [{"compound": comp, "tyre_age": 100, "lap": 50, "clean": False, "lap_time_s": float("nan")} for comp in TRUE]
     return pd.DataFrame(rows)
 
 

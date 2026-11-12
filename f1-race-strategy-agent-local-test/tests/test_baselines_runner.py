@@ -46,7 +46,10 @@ def test_run_pipeline_offline_lap0():
     assert "fixed_two_stop" in rows
     assert "greedy_crossover" in rows
     assert rows["actual_strategy"]["status"] == "ok"
-    assert rows["fixed_one_stop"]["status"] == "ok"
+    assert rows["fixed_two_stop"]["status"] == "ok"
+    # HAM starts on a 3-lap-old SOFT: half the race on it passes the R8 stint limit (docs/rules.md)
+    assert rows["fixed_one_stop"]["status"] == "unavailable"
+    assert rows["fixed_one_stop"]["reason"].startswith("R8 stint limit: Stint 1 (SOFT)")
     assert rows["actual_strategy"]["regret_s"] >= 0.0
 
 
@@ -63,7 +66,9 @@ def test_run_pipeline_offline_midrace():
     assert res["optimizer_reference"]["plan"] is not None
     rows = {r["policy"]: r for r in res["results"]}
     assert rows["actual_strategy"]["status"] == "ok"
-    assert rows["fixed_one_stop"]["status"] == "ok"
+    # SOFT at age 31: one stop puts it past the R8 stint limit (docs/rules.md)
+    assert rows["fixed_one_stop"]["status"] == "unavailable"
+    assert rows["fixed_one_stop"]["reason"].startswith("R8 stint limit")
 
 
 def test_format_table_renders():

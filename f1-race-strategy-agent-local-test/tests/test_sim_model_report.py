@@ -32,7 +32,7 @@ def first_stint_race(drivers=("A", "B", "C"), pit=20, total=50):
 
 # --- fit_report sd -------------------------------------------------------------
 def test_sd_is_the_ols_standard_error_on_an_unpenalised_fit():
-    frame = noisy(synthetic_frame())
+    frame = noisy(synthetic_frame()[lambda d: d["clean"]])   # the fitted rows (synthetic_frame adds unclean R8 rows)
     rep = Simulator(frame, SimConfig(degradation={"name": "linear"})).degradation.fit_report
     design, rss = {}, 0.0
     for comp in TRUE:
@@ -208,8 +208,7 @@ def test_extrapolation_flag_beyond_the_observed_age():
 
 # --- support warnings ----------------------------------------------------------
 def test_support_warning_per_stint_beyond_the_synthetic_support():
-    # margin 0: every stint past the oldest seen (the support filter off, SPEC 0023 B)
-    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "linear"}, support_margin_laps=None))
+    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "linear"}))
     assert s.simulate(start(), [["SOFT", 20], ["MEDIUM", 20], ["SOFT", 10]]).support_warnings == []
     res = s.simulate(start(), [["SOFT", 25], ["MEDIUM", 25]])
     assert res.valid and res.support_warnings == ["SOFT to age 25, observed up to 20",

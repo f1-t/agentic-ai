@@ -113,6 +113,7 @@ class SimConfig(_Cfg):
     hazard_effects: HazardEffects = Field(default_factory=HazardEffects)
     rules: list[str] = Field(default_factory=lambda: [
         "first_stint_matches", "lap_sum", "known_compounds", "min_stint", "two_compounds", "inventory",
+        "stint_limit",
     ])
     inventory_sources: list[str] = Field(default_factory=lambda: ["observed", "inferred", "assumed"])
     min_samples: int = 5      # clean laps needed before a compound is modelled
@@ -168,12 +169,11 @@ class SimConfig(_Cfg):
     # fit_report, one vector per sample shared by every plan (engine LAP_NOISE_STREAM).
     # The degradation parameter draw is the model's `draw` param (degradation.py).
     lap_noise: Literal["none", "residual"] = "none"
-    # stint-length support (SPEC 0023 B): laps a stint may run past the oldest tyre the fit saw
-    # on its compound. optimizer_bridge.optimize_batch (so the eval reference and the agent's
-    # continuations) drops plans with a stint beyond it unless that compound has a fitted hinge,
-    # and simulate_batch's support_warnings use the same rule. None turns the filter off and
-    # restores the old search and warnings (every stint past the oldest seen is flagged).
-    support_margin_laps: int | None = Field(default=3, ge=0)
+    # R8 stint limit (docs/rules.md, SPEC 0023 B): a stint may end at most this many laps past
+    # the oldest tyre age any car ran on its compound in this race (Simulator.stint_limits, from
+    # the full race lap frame). Enforced by the "stint_limit" rule, so by simulate_batch,
+    # optimize_batch's candidate filter and the agent's tools. None turns R8 off.
+    stint_limit_margin_laps: int | None = Field(default=3, ge=0)
 
     @classmethod
     def from_file(cls, path):

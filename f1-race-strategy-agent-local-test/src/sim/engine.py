@@ -15,7 +15,7 @@ from .config import SimConfig, class_names, compound_class
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
 from .hazard import HAZARD
-from .rules import RuleContext, apply_inventory, check
+from .rules import RuleContext, apply_inventory, check, stint_limits
 from .track import TRACK
 from .traffic import TRAFFIC
 
@@ -186,6 +186,7 @@ class Simulator:
                  race_features: dict | None = None, calibrator=None):
         self.config = config or SimConfig()
         self.laps, self.practice, self.pace = laps, practice, pace
+        self.stint_limits = stint_limits(laps)   # R8, from the full race frame; shared by fitted_for copies
         self.weather, self.race_features = weather, race_features
         spec = self.config.calibrator
         self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
@@ -360,7 +361,7 @@ class Simulator:
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
         fit = self.fitted_for(snapshot)
-        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config))
+        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config, self.stint_limits))
 
     # --- public API ----------------------------------------------------------
     def model_report(self, snapshot: Snapshot, ages=None,
@@ -398,9 +399,8 @@ class Simulator:
             parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
             errors.append(errs)
         out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
-        margin, skip_hinged = _report.support_rule(self.config)
-        out.support_warnings = [_report.support_warnings(self.degradation, snapshot, p, margin, skip_hinged)
-                                if ok else [] for p, ok in zip(parsed, out.valid)]
+        out.support_warnings = [_report.support_warnings(self.degradation, snapshot, p) if ok else []
+                                for p, ok in zip(parsed, out.valid)]
 
         n = n_samples or self.config.n_samples
         laps = np.arange(snapshot.laps_completed + 1, snapshot.race.total_laps + 1)

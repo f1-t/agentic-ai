@@ -29,6 +29,8 @@ def frame_for(true):
             for age in range(1, 21):
                 rows.append({"compound": comp, "tyre_age": age, "lap": first + age, "clean": True,
                              "lap_time_s": base + slope * age})
+    # the race's R8 rows, as in test_sim.synthetic_frame: belief and world share the race's limits
+    rows += [{"compound": comp, "tyre_age": 100, "lap": 50, "clean": False, "lap_time_s": float("nan")} for comp in true]
     return pd.DataFrame(rows)
 
 
