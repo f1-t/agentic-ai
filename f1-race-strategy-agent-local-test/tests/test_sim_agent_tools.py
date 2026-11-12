@@ -325,7 +325,12 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
     """At HAM lap 20 the sampling spread alone would claim certainty (|gap| > 2 sd); the
     calibration error says the gap is inside the model's error."""
     snap = calibration.snapshot_at(spain.frame, spain.race, "HAM", 20)
-    out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1})
+    # the continuations without the stint-length support filter (SPEC 0023 B): at lap 20 the
+    # belief has seen SOFT to age 24 and MEDIUM to 22, and the filtered continuations spread
+    # the gap past the claim this test is about
+    sim = agent_tools.belief_simulator(
+        snap, config=agent_tools.belief_config().model_copy(update={"support_margin_laps": None}))
+    out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1}, sim=sim)
     assert abs(out["gap_mean_s"]) > 2 * out["gap_std_s"]
     assert out["within_sim_error"] is True and out["confidence_basis"] == "model error"
     assert out["calibration_error_s"] > 2 * out["gap_std_s"]

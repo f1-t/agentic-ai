@@ -168,6 +168,12 @@ class SimConfig(_Cfg):
     # fit_report, one vector per sample shared by every plan (engine LAP_NOISE_STREAM).
     # The degradation parameter draw is the model's `draw` param (degradation.py).
     lap_noise: Literal["none", "residual"] = "none"
+    # stint-length support (SPEC 0023 B): laps a stint may run past the oldest tyre the fit saw
+    # on its compound. optimizer_bridge.optimize_batch (so the eval reference and the agent's
+    # continuations) drops plans with a stint beyond it unless that compound has a fitted hinge,
+    # and simulate_batch's support_warnings use the same rule. None turns the filter off and
+    # restores the old search and warnings (every stint past the oldest seen is flagged).
+    support_margin_laps: int | None = Field(default=3, ge=0)
 
     @classmethod
     def from_file(cls, path):

@@ -208,7 +208,8 @@ def test_extrapolation_flag_beyond_the_observed_age():
 
 # --- support warnings ----------------------------------------------------------
 def test_support_warning_per_stint_beyond_the_synthetic_support():
-    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "linear"}))
+    # margin 0: every stint past the oldest seen (the support filter off, SPEC 0023 B)
+    s = Simulator(synthetic_frame(), SimConfig(degradation={"name": "linear"}, support_margin_laps=None))
     assert s.simulate(start(), [["SOFT", 20], ["MEDIUM", 20], ["SOFT", 10]]).support_warnings == []
     res = s.simulate(start(), [["SOFT", 25], ["MEDIUM", 25]])
     assert res.valid and res.support_warnings == ["SOFT to age 25, observed up to 20",

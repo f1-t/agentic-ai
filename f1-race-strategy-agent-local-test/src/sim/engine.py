@@ -398,8 +398,9 @@ class Simulator:
             parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
             errors.append(errs)
         out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
-        out.support_warnings = [_report.support_warnings(self.degradation, snapshot, p) if ok else []
-                                for p, ok in zip(parsed, out.valid)]
+        margin, skip_hinged = _report.support_rule(self.config)
+        out.support_warnings = [_report.support_warnings(self.degradation, snapshot, p, margin, skip_hinged)
+                                if ok else [] for p, ok in zip(parsed, out.valid)]
 
         n = n_samples or self.config.n_samples
         laps = np.arange(snapshot.laps_completed + 1, snapshot.race.total_laps + 1)

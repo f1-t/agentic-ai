@@ -365,10 +365,37 @@ def pace_practice(data: jobs.RaceData):
     return (p if p is not None and len(p) else None), []
 
 
+WEAR_CHECK_MIN_LAPS = 8   # stints with at least this many clean laps enter the within-stint slope
+
+
+def wear_check(frame, model, min_laps=WEAR_CHECK_MIN_LAPS) -> pd.DataFrame:
+    """SPEC 0023 A diagnostic, one row per compound the model fits: its fitted wear (the pooled
+    fit) against the median within-stint wear. Within-stint: per (driver, stint) with at least
+    `min_laps` clean laps (green, no in or out lap), the least-squares slope of lap time on tyre
+    age, less the model's fuel slope (within a stint age and lap number move together, so the
+    raw slope is wear plus fuel). A gap between the two columns shows wear the pooled fit
+    under- or over-identifies."""
+    fuel = float(getattr(model, "fuel_slope", 0.0) or 0.0)
+    clean = frame[frame["clean"].astype(bool)]
+    slopes = {}
+    for (_, _), s in clean.groupby(["driver", "stint"]):
+        ages = s["tyre_age"].to_numpy(dtype=float)
+        if len(s) >= min_laps and np.ptp(ages) > 0 and s["compound"].nunique() == 1:
+            slope = np.polyfit(ages, s["lap_time_s"].to_numpy(dtype=float), 1)[0]
+            slopes.setdefault(s["compound"].iloc[0], []).append(slope - fuel)
+    rows = [{"compound": c, "fitted_wear_s_per_lap": float(wear),
+             "within_stint_wear_s_per_lap": float(np.median(slopes[c])) if c in slopes else np.nan,
+             "n_stints": len(slopes.get(c, [])), "fuel_s_per_lap": fuel}
+            for c, (_, wear) in sorted(model.coefs.items())]
+    return pd.DataFrame(rows, columns=["compound", "fitted_wear_s_per_lap", "within_stint_wear_s_per_lap",
+                                       "n_stints", "fuel_s_per_lap"])
+
+
 def race_tables(data: jobs.RaceData, profile, messages=None, practice=None, notes=()) -> dict[str, pd.DataFrame]:
     """SPEC 0016 B for one race under its own config: replay, summary, by_kind, periods, gate, g,
-    hindsight and eligibility tables. `practice` feeds the pace gate (pace_practice); its notes
-    go in the summary row."""
+    hindsight and eligibility tables, plus wear_check (SPEC 0023 A: fitted against within-stint
+    wear per compound). `practice` feeds the pace gate (pace_practice); its notes go in the
+    summary row."""
     frame, race, cfg = data.frame, data.race, data.config
     full = Simulator(frame, cfg, data.practice)
     table, summary, by_kind = calibration.run(full, frame, race)
@@ -388,6 +415,7 @@ def race_tables(data: jobs.RaceData, profile, messages=None, practice=None, note
         "gate": gate,
         "g": g,
         "hindsight": pd.DataFrame({"factor": list(hind), "value": list(hind.values())}),
+        "wear_check": wear_check(frame, full.degradation),
         "eligibility": pd.DataFrame([{k: json.dumps(v) if isinstance(v, (list, dict)) else v
                                       for k, v in elig.items()}]),
     }

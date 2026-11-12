@@ -144,13 +144,39 @@ def fuel_wear_corr(rep) -> dict[str, float] | None:
     return out
 
 
-def support_warnings(model, snapshot: Snapshot, plan: Plan) -> list[str]:
-    """One string per stint whose end age exceeds the oldest tyre the fit saw on its compound."""
+def hinged_compounds(model) -> set[str]:
+    """Compounds whose degradation model carries a hinge (linear_fuel_hinge, fit_report
+    "hinge" with a source other than "dropped"): wear may steepen past the knot, so the model
+    has a shape for ages beyond the oldest tyre seen."""
+    hinge = (getattr(model, "fit_report", None) or {}).get("hinge") or {}
+    return {c for c, e in hinge.items() if e.get("source") != "dropped"}
+
+
+def unsupported_stints(model, snapshot: Snapshot, plan: Plan, margin=0, skip_hinged=False) -> list[tuple[int, str]]:
+    """(stint index, warning) per stint whose end age exceeds the oldest tyre the fit saw on
+    its compound by more than `margin` laps; with `skip_hinged`, compounds with a fitted
+    hinge (hinged_compounds) are never flagged."""
     rep = getattr(model, "fit_report", None) or {}
+    skip = hinged_compounds(model) if skip_hinged else set()
     out = []
     for j, s in enumerate(plan.stints):
         end = (snapshot.tyre_age if j == 0 else s.start_age) + s.laps
         seen = _observed(rep, s.compound)
-        if seen is not None and end > seen:
-            out.append(f"{s.compound} to age {end}, observed up to {seen:g}")
+        if seen is not None and end > seen + margin and s.compound not in skip:
+            out.append((j, f"{s.compound} to age {end}, observed up to {seen:g}"))
     return out
+
+
+def support_rule(config) -> tuple[int, bool]:
+    """(margin, skip_hinged) for SimConfig.support_margin_laps: the margin with hinged
+    compounds exempt, or (0, False), every stint past the oldest seen, when it is None."""
+    margin = getattr(config, "support_margin_laps", None)
+    return (0, False) if margin is None else (int(margin), True)
+
+
+def support_warnings(model, snapshot: Snapshot, plan: Plan, margin=0, skip_hinged=False) -> list[str]:
+    """One string per stint whose end age exceeds the oldest tyre the fit saw on its compound
+    by more than `margin` laps (unsupported_stints). Simulator.simulate_batch passes
+    support_rule(config), so with SimConfig.support_margin_laps set these are exactly the
+    stints optimizer_bridge.optimize_batch refuses to plan."""
+    return [w for _, w in unsupported_stints(model, snapshot, plan, margin, skip_hinged)]

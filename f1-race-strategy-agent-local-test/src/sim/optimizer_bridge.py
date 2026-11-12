@@ -18,6 +18,7 @@ import numpy as np
 from ..baselines import domain, policies
 from ..baselines.search import Evaluation, OptimizationResult, candidate_plans
 from ..contracts import Plan, PlanStint, Snapshot, StintRecord
+from . import model_report as _report
 from .config import compound_class
 from .rules import laps_on_set
 
@@ -132,8 +133,11 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
 
     Candidates come from baselines.candidate_plans; plans with a zero-lap first stint are
     filtered out (R1) until candidate_plans takes a first-stint minimum. Rows the
-    simulator rejects are dropped and counted in `invalid`. The best plan follows the
-    baseline optimizer's tie-break.
+    simulator rejects are dropped and counted in `invalid`. With SimConfig.support_margin_laps
+    set, legal plans with a stint past the fit's tyre-age support are dropped too and counted
+    in diagnostics["support_dropped"] (_support_filter, SPEC 0023 B); `candidates_evaluated`
+    and every return_times entry cover the plans kept. The best plan follows the baseline
+    optimizer's tie-break.
 
     `return_times` (opt-in, off by default) adds the chosen plan's per-draw remaining times
     to diagnostics["times"], an (n_samples,) float array, and the next plan in the tie-break
@@ -147,13 +151,14 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     plans = [p for p in candidates if p.stints[0].laps > 0]
     evals, contract_plans, assignments, batch = score_batch(
         snapshot, plans, sim, seed=seed, n_samples=n_samples, scenario=scenario, state=state)
-    scored = [i for i, e in enumerate(evals) if e is not None]
-    if not scored:
+    legal = [i for i, e in enumerate(evals) if e is not None]
+    if not legal:
         raise domain.NoFeasiblePlan("No legal remaining plan exists within the future-stop limit.")
+    scored, support = _support_filter(snapshot, sim, legal, contract_plans)
     best = min(scored, key=lambda i: _key(evals[i], state))
     diagnostics = {"set_assignment": assignments[best], "seed": seed,
                    "n_samples": batch.times.shape[1],
-                   "zero_lap_first_stints": len(candidates) - len(plans)}
+                   "zero_lap_first_stints": len(candidates) - len(plans), **support}
     if return_times:
         diagnostics["times"] = np.asarray(evals[best].seed_times_s, dtype=float)
         rest = [i for i in scored if i != best]
@@ -167,9 +172,39 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
             "mean_time_s": np.array([evals[i].mean_time_s for i in order], dtype=float),
             "times": np.array([evals[i].seed_times_s for i in order], dtype=float).reshape(len(order), -1)}
     return BatchOptimizationResult(
-        evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(scored),
+        evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(legal),
         diagnostics=diagnostics,
     )
+
+
+def _support_filter(snapshot: Snapshot, sim, legal, contract_plans):
+    """(kept indices, diagnostics) of the stint-length support filter (SPEC 0023 B).
+
+    With SimConfig.support_margin_laps set, a legal plan is dropped when one of its stints
+    ends more than that many laps past the oldest tyre the fit saw on its compound, unless
+    the compound has a fitted hinge (model_report.unsupported_stints, the rule
+    simulate_batch's support_warnings report). If that drops every plan (an old set already
+    past support at the snapshot), the plans whose only unsupported stint is the current one
+    are kept, those that pit soonest; if there are none, every legal plan is kept.
+
+    diagnostics: support_dropped (plans dropped, like zero_lap_first_stints) and
+    support_filter: "off" (margin None), "applied", "current_stint" (the fallback above) or
+    "unfiltered" (nothing supported, nothing dropped)."""
+    margin = sim.config.support_margin_laps
+    if margin is None:
+        return legal, {"support_dropped": 0, "support_filter": "off"}
+    model = sim.fitted_for(snapshot).degradation
+    flagged = {i: _report.unsupported_stints(model, snapshot, contract_plans[i], margin, skip_hinged=True)
+               for i in legal}
+    kept, mode = [i for i in legal if not flagged[i]], "applied"
+    if not kept:
+        current = [i for i in legal if all(j == 0 for j, _ in flagged[i])]
+        if current:
+            soonest = min(contract_plans[i].stints[0].laps for i in current)
+            kept, mode = [i for i in current if contract_plans[i].stints[0].laps == soonest], "current_stint"
+        else:
+            kept, mode = legal, "unfiltered"
+    return kept, {"support_dropped": len(legal) - len(kept), "support_filter": mode}
 
 
 def as_continuation(sim, **kw):

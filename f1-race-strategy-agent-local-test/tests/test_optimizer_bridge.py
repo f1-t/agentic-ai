@@ -195,6 +195,93 @@ def test_no_feasible_plan(sim):
         optimize_batch(start().model_copy(update={"sets_available": []}), sim)
 
 
+# --- stint-length support filter (SPEC 0023 B) -------------------------------------
+# synthetic_frame's layout (every compound observed up to age 20, so at the default margin of
+# 3 a stint may end at age 23) with a slow-wearing MEDIUM, so the unfiltered optimum runs one
+# long MEDIUM stint
+def support_frame():
+    import pandas as pd
+    return pd.DataFrame([{"compound": c, "tyre_age": age, "lap": start + age, "clean": True,
+                          "lap_time_s": base + slope * age}
+                         for c, (base, slope) in {"SOFT": (80.0, 0.10), "MEDIUM": (80.5, 0.01)}.items()
+                         for start in range(0, 30, 3) for age in range(1, 21)])
+
+
+def support_sim(margin=3, degradation="linear", **kw):
+    return Simulator(support_frame(), SimConfig(degradation={"name": degradation}, support_margin_laps=margin, **kw))
+
+
+def _ends(plan, snap):
+    return [(snap.tyre_age if j == 0 else s.start_age) + s.laps for j, s in enumerate(plan.stints)]
+
+
+def test_plans_beyond_support_are_dropped_and_counted():
+    on, off = support_sim(), support_sim(None)
+    a = optimize_batch(start(), on, return_times=True)
+    b = optimize_batch(start(), off, return_times=True)
+    # the unfiltered optimum runs MEDIUM past age 23; the filter takes it out of the search
+    assert max(_ends(b.plan, start())) > 23
+    assert all(max(_ends(p, start())) <= 23 for p in a.diagnostics["searched"]["plans"])
+    beyond = [p for p in b.diagnostics["searched"]["plans"] if max(_ends(p, start())) > 23]
+    assert a.diagnostics["support_dropped"] == len(beyond) > 0
+    assert a.diagnostics["support_filter"] == "applied"
+    assert a.candidates_evaluated + len(beyond) == b.candidates_evaluated
+    assert a.invalid == b.invalid and a.evaluation.mean_time_s > b.evaluation.mean_time_s
+    # simulate_batch reports the same rule: warnings on exactly the dropped plans
+    batch = on.simulate_batch(start(), b.diagnostics["searched"]["plans"])
+    assert sum(bool(w) for w in batch.support_warnings) == len(beyond)
+    assert on.simulate(start(), b.plan).support_warnings
+
+
+def test_support_margin_none_restores_the_old_search():
+    """support_margin_laps=None is the search before the filter: the plain baseline optimizer
+    over the same scores, nothing dropped, and simulate_batch's margin-0 warnings."""
+    off = support_sim(None)
+    ours = optimize_batch(start(), off, n_samples=1)
+    theirs = optimize(from_contract(start(), off), adapter(off, start(), 1), (0,), 2)
+    assert ours.evaluation.plan == theirs.evaluation.plan
+    assert ours.evaluation.mean_time_s == pytest.approx(theirs.evaluation.mean_time_s, abs=1e-9)
+    assert ours.candidates_evaluated == theirs.candidates_evaluated
+    assert ours.diagnostics["support_dropped"] == 0 and ours.diagnostics["support_filter"] == "off"
+    assert off.simulate(start(), [["SOFT", 22], ["MEDIUM", 28]]).support_warnings == [
+        "SOFT to age 22, observed up to 20", "MEDIUM to age 28, observed up to 20"]
+    assert support_sim().simulate(start(), [["SOFT", 22], ["MEDIUM", 28]]).support_warnings == [
+        "MEDIUM to age 28, observed up to 20"]
+
+
+def test_a_fitted_hinge_keeps_the_plan():
+    """MEDIUM with a fitted hinge (knot 10, rows to age 20) has a shape past the oldest tyre,
+    so its long stints stay in the search; SOFT has no hinge and is still bounded."""
+    hinged = support_sim(degradation="linear_fuel_hinge", hinge_knots={"MEDIUM": 10})
+    rep = hinged.fitted_for(start()).degradation.fit_report["hinge"]
+    assert rep["MEDIUM"]["source"] == "fitted" and rep["SOFT"]["source"] == "dropped"
+    res = optimize_batch(start(), hinged, return_times=True)
+    plans = res.diagnostics["searched"]["plans"]
+    medium = [e for p in plans for s, e in zip(p.stints, _ends(p, start())) if s.compound == "MEDIUM"]
+    soft = [e for p in plans for s, e in zip(p.stints, _ends(p, start())) if s.compound == "SOFT"]
+    assert max(medium) > 23 and max(soft) <= 23
+    assert res.diagnostics["support_dropped"] > 0
+    assert hinged.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).support_warnings == []
+
+
+def test_every_plan_dropped_keeps_the_soonest_pit_on_the_current_set():
+    """An old set already past support at the snapshot: every plan carries a warning on the
+    current stint, so the plans whose only warning is there and that pit soonest are kept."""
+    old = Snapshot(race=RACE, driver="X", laps_completed=30, compound="SOFT", tyre_age=30)
+    res = optimize_batch(old, support_sim(), return_times=True)
+    assert res.diagnostics["support_filter"] == "current_stint"
+    assert res.plan.stints[0].laps == 1
+    assert all(p.stints[0].laps == 1 for p in res.diagnostics["searched"]["plans"])
+    assert res.diagnostics["support_dropped"] == optimize_batch(old, support_sim(None)).candidates_evaluated \
+        - res.candidates_evaluated > 0
+    # only used sets left as well, so every later stint is past support too: nothing is dropped
+    used = old.model_copy(update={"sets_available": [TyreSet(compound="MEDIUM", laps_run=22, set_id="m22"),
+                                                     TyreSet(compound="SOFT", laps_run=22, set_id="s22")]})
+    res = optimize_batch(used, support_sim())
+    assert res.diagnostics["support_filter"] == "unfiltered" and res.diagnostics["support_dropped"] == 0
+    assert res.plan == optimize_batch(used, support_sim(None)).plan
+
+
 # --- as_continuation / pace_for_crossover -----------------------------------------
 def test_as_continuation_satisfies_compare(sim):
     snap = Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT", tyre_age=10,
@@ -254,7 +341,8 @@ def test_legacy_frame_reproduces_ground_truth(legacy):
 def test_spain_two_stop_search_is_fast():
     from src import legacy_tools as tools
     from src.sim.data import lap_frame, load_session
-    sim = Simulator(lap_frame(load_session(2021, "Spain").laps))
+    # the full search, before the stint-length support filter drops plans (SPEC 0023 B)
+    sim = Simulator(lap_frame(load_session(2021, "Spain").laps), SimConfig(support_margin_laps=None))
     snap = Snapshot.at_start(tools._race_params(), "HAM", "SOFT")
     optimize_batch(snap, sim, n_samples=50)
     best = float("inf")
