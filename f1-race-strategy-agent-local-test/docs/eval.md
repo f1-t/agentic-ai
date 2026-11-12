@@ -130,6 +130,21 @@ set once the split exists, a Spain debug set say: no race is refused, the set is
 the split existed. Report numbers come only from sets with `development: false`; `score`
 prints one line naming which kind of set it scored.
 
+### The registered split (dataset 3)
+
+The cache holds 2021 Spain plus a 2018-25 sample: the 2023 and 2024 races already there and
+eight drawn with `random.seed(2026)` from the 173 races of 2018-25. Real-run discovery finds
+11; the three sprint weekends (2024 Austria, 2024 Sao Paulo, 2025 Qatar) are cached but left
+out with a note, since the practice prior reads FP2 and FP3 (`calibrate.PRACTICE_SESSIONS`).
+Of the 11, 2024 Monaco (lap-1 red flag) and 2024 Britain (wet) are not eligible.
+
+`data/eval_set.json` holds out **2019 Monaco and 2023 Spain**. 2019 Monaco was drawn with the
+same seed from the six newly cached eligible races, before any numbers, and kept although
+track position dominates there. 2021 Spain stays out of the split: the simulator was tuned on
+it. **d3** (`data/scenarios/d3.json`, 50 scenarios: 25 per race, seed 0) is the report set
+over that split; its 2023 Spain scenarios are d2's, and so are their baseline numbers. d2
+keeps the digest of the one-race split it was sampled under.
+
 ## Metrics
 
 For each scenario the optimizer (`optimizer_bridge.optimize_batch`, Quan's search scored by

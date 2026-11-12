@@ -75,8 +75,9 @@ def cached_races(cache_dir=None) -> tuple[list[str], list[str]]:
     """(canonical ids, notes) of every race in the FastF1 cache: an event directory
     <cache>/<season>/<date>_<Event_Name>/ holding a *_Race session directory, named by
     race_ids.make_race_id_from_schedule from the cached season schedule (data.season_schedule),
-    offline. Sorted by season and round; an event the schedule does not name, or a season
-    without a cached schedule, is left out with a note."""
+    offline. Sorted by season and round; an event the schedule does not name, a season
+    without a cached schedule, or a sprint weekend (no FP2 or FP3 for the practice prior,
+    calibrate.PRACTICE_SESSIONS; sprint support is its own change) is left out with a note."""
     from .data import CACHE_DIR, season_schedule
     cache = Path(cache_dir or CACHE_DIR)
     ids, notes = [], []
@@ -95,7 +96,9 @@ def cached_races(cache_dir=None) -> tuple[list[str], list[str]]:
         by_name = {str(r["EventName"]).replace(" ", "_"): r for _, r in schedule.iterrows()}
         for d in events:
             name = d.name.split("_", 1)[1] if "_" in d.name else d.name
-            if name in by_name:
+            if name in by_name and any(s.is_dir() and s.name.endswith("_Sprint") for s in d.iterdir()):
+                notes.append(f"{season_dir.name}/{d.name}: sprint weekend (no FP2/FP3 practice prior), left out")
+            elif name in by_name:
                 ids.append(make_race_id_from_schedule(by_name[name], schedule, season))
             else:
                 notes.append(f"{season_dir.name}/{d.name}: not in the {season} event schedule, left out")
