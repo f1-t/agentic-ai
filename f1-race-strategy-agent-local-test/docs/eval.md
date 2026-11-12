@@ -60,7 +60,9 @@ turns it into the plan the world scores:
   `max_stops`. Every plan from a decision lies inside the space the reference searched, so
   an agent row with negative regret (beyond 1e-6 s) is a bug, and `summarize` warns
   (`AgentRegretWarning`). Baselines keep their exception: an actual three-stop can beat a
-  two-stop reference;
+  two-stop reference. The R8 stint limit (docs/rules.md) binds every plan alike: the
+  reference and the continuation search only inside it, the world rejects a plan past it,
+  and a baseline plan past it is unavailable;
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
 
@@ -227,10 +229,16 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
+Committed (SPEC 0023, the R8 stint limit, sim_code_version `b6c3a15b4b30`, local profile:
+seed 0, 50 samples, two stops, default world): `data/references/v1/2e4cc6883431.parquet`,
+`data/references/d2/d7e7fc23c4bb.parquet` and `data/references/pilot1/5f9cb5978e74.parquet`.
+v1 re-scored on it (baselines and the recorded run): `reports/eval/v1_baselines_r8.csv`.
+The record below is of the reference before R8.
+
+Before: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
 was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
 sim_code_version `21b81a57ea42`. From
-it, `score --require-reference` reproduces `reports/eval/v1_baselines_split.csv` row for
+it, `score --require-reference` reproduced `reports/eval/v1_baselines_split.csv` row for
 row (every value column; the stamp columns `latency_s`, `sim_code_version`,
 `belief_config_hash` and `world_config_hash` are excluded, stamp-only drift under
 reports/calibration/README.md); the rows gain `regret_se_s` and
