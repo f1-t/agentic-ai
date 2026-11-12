@@ -58,10 +58,17 @@ def smoke(tmp_path_factory):
 
 
 def test_cached_races_are_the_committed_spain_cache():
-    # 2023 has its event schedule cached (dataset 2); the 2024 race folders do not yet,
-    # so discovery leaves them out with a note.
-    assert real_run.cached_races() == (["2021_04_spain", "2023_01_bahrain", "2023_07_spain"], [
-        "2024: no cached event schedule, its 3 race(s) left out",
+    # Every cached season has its event schedule in the sqlite (dataset 3 added a seeded
+    # 2018-25 sample); the sprint weekends have no FP2/FP3 practice prior, so discovery
+    # leaves them out with a note until the simulator supports them.
+    assert real_run.cached_races() == ([
+        "2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir", "2021_04_spain",
+        "2022_02_saudi_arabia", "2023_01_bahrain", "2023_07_spain", "2024_07_emilia_romagna",
+        "2024_08_monaco", "2024_12_united_kingdom", "2025_11_austria",
+    ], [
+        "2024/2024-06-30_Austrian_Grand_Prix: sprint weekend (no FP2/FP3 practice prior), left out",
+        "2024/2024-11-03_S\u00e3o_Paulo_Grand_Prix: sprint weekend (no FP2/FP3 practice prior), left out",
+        "2025/2025-11-30_Qatar_Grand_Prix: sprint weekend (no FP2/FP3 practice prior), left out",
     ])
 
 

@@ -131,21 +131,21 @@ def test_stats_from_periods_counts_and_laps_at_risk():
 
 
 def test_circuit_info_map_features_and_unknown():
-    ids = ["2021_04_spain", "2023_06_monaco", "2024_08_monaco", "2024_02_atlantis"]
-    c = er.circuit_info(ids).set_index("race_id")   # 2021 and 2023 schedules are cached, 2024 is not
+    ids = ["2021_04_spain", "2023_06_monaco", "2017_06_monaco", "2017_02_atlantis"]
+    c = er.circuit_info(ids).set_index("race_id")   # 2021 and 2023 schedules are cached, 2017 is not
     assert tuple(c.loc["2021_04_spain"]) == ("catalunya", "permanent")
     assert tuple(c.loc["2023_06_monaco"]) == ("monaco", "street")          # from the cached schedule's Location
-    assert tuple(c.loc["2024_08_monaco"]) == ("monaco", er.UNKNOWN)       # the race id never names the circuit
-    assert tuple(c.loc["2024_02_atlantis"]) == ("atlantis", er.UNKNOWN)
+    assert tuple(c.loc["2017_06_monaco"]) == ("monaco", er.UNKNOWN)       # the race id never names the circuit
+    assert tuple(c.loc["2017_02_atlantis"]) == ("atlantis", er.UNKNOWN)
     monaco = pd.DataFrame({"RoundNumber": [6], "EventName": ["Monaco Grand Prix"], "Country": ["Monaco"],
                            "Location": ["Monte Carlo"]})
     c = er.circuit_info(ids, schedule=lambda season: monaco if season == 2023 else None).set_index("race_id")
     assert tuple(c.loc["2023_06_monaco"]) == ("monaco", "street")
-    feats = pd.DataFrame({"race_id": ["2021_Spain", "2024_02_atlantis"], "circuit": ["x", ""],
+    feats = pd.DataFrame({"race_id": ["2021_Spain", "2017_02_atlantis"], "circuit": ["x", ""],
                           "circuit_type": ["Street", "permanent"]})
     c = er.circuit_info(ids, feats).set_index("race_id")
     assert tuple(c.loc["2021_04_spain"]) == ("x", "street")            # alias, lower-cased
-    assert tuple(c.loc["2024_02_atlantis"]) == ("atlantis", "permanent")   # blank circuit keeps the slug
+    assert tuple(c.loc["2017_02_atlantis"]) == ("atlantis", "permanent")   # blank circuit keeps the slug
 
 
 def test_load_falls_back_to_factors_then_nothing(tmp_path):
