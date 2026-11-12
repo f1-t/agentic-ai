@@ -247,6 +247,16 @@ the tie rule there. The rows also gain the near-tie columns, and in that world e
 optimal set is the reference alone (`opt_set_size` 1 on all 1320 rows), every pit-now
 call with both kinds of plan is decisive, and the set-based agreement equals the plain one.
 
+Under R8 at the defaults (`reports/eval/v1_baselines_r8.csv`) that no longer holds: 6 of the
+264 v1 scenarios (30 of 1320 rows), all HAM, laps 0, 10, 11, 15, 20 and 25, have exact ties,
+`opt_set_size` 2 or 4. The references there are two-stops, and in this deterministic linear
+world two kinds of plan cost exactly the same: the later stints swapped (S22 M17 S27 against
+S22 S27 M17), and one SOFT lap moved between two SOFT stints that end at the same tyre age
+(from lap 0 on a 4-lap-old set, S22 M17 S27 against S23 M17 S26). R7 picks one: equal stop
+counts, then the earlier pit laps, so S22 M17 S27 (stops after laps 22 and 39). Every pit-now
+call is still decisive and the set-based stop agreement equals the plain one; the set-based
+first pit error is one lap lower on 8 rows.
+
 ### Near ties (information only)
 
 `python -m src.eval report` prints, below the existing tables, a near-tie view when the rows
@@ -255,8 +265,8 @@ race: the share of scenarios whose optimal set has more than one plan, the share
 pit-now call is decisive (of the scenarios with both a pit-now and a stay-out plan), and
 the stop agreement and mean first pit error against the reference and against the closest
 member of the optimal set. Nothing in the summary table or the headline metrics changes.
-Under the deterministic default world the view shows sets of size 1 and every call
-decisive.
+Under the deterministic default world the view shows every call decisive and sets of size
+1, except the exact ties R8 brings (above: 6 v1 scenarios with sets of 2 or 4).
 
 v1 under the default world with `events: {name: rate}` (default rates), 200 samples, belief
 default, baselines and the recorded run, from a cached reference:
