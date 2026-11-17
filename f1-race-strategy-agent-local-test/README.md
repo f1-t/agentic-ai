@@ -111,6 +111,28 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
   rather than on one exact plan.
 - Single race, single driver. See the proposal's "Limitations and Next Steps".
 
+## Autonomous bird's-eye race demo
+
+Run the local browser interface (no model API key required):
+
+```bash
+cd f1-race-strategy-agent-local-test
+python scripts/run_game_demo.py
+# Open http://127.0.0.1:8000
+```
+
+Choose a race distance, start/pause/reset the race, watch the autonomous field and live
+classification, and use **Record video** → **Stop & save** to download a WebM recording in
+browsers that support canvas capture. Otherwise use QuickTime Player or your OS screen recorder.
+The demo is local and does not transmit video or race data.
+
+The field's lightweight autonomous controllers manage speed through corners, tire wear,
+traffic, overtakes and a simple pit window. It is a visual/gameplay prototype, not an
+FIA-grade vehicle model or an EA-level commercial simulator. Without generated GPS geometry,
+the default track is clearly labeled illustrative. To add real GPS-derived centerlines, first
+run `python scripts/build_track_geometries.py` when network access is available; generated
+circuits then appear in the interface's circuit selector.
+
 ## Model backends (Anthropic or local Hugging Face)
 
 The agent loop is provider-neutral. `src/agent.py` owns the F1 plan -> tool -> observe
