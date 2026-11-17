@@ -111,6 +111,42 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
   rather than on one exact plan.
 - Single race, single driver. See the proposal's "Limitations and Next Steps".
 
+## Bird's-eye driving engine and real circuit geometry
+
+`src/game/` adds a deterministic, fixed-step 2D driving core that can be rendered by a
+browser or desktop frontend. It models car speed/acceleration/braking, steering and lateral
+offset, cornering grip, track edges, lap progress, elapsed time, and simple car-to-car
+contact. The engine takes a sampled centerline and exposes renderer-friendly telemetry:
+
+```python
+from src.game import Action, GameEngine, load_race_track
+
+track = load_race_track("2024_04_japan")
+game = GameEngine(track, laps=5, dt=0.02)
+game.add_car("HAM", speed_mps=20)
+game.step({"HAM": Action(throttle=1.0, steering=0.0)})
+print(game.telemetry()["HAM"])
+```
+
+The strategy simulator remains authoritative for race strategy and lap-time predictions;
+`src.game.evaluate_strategy(...)` exposes its per-lap result for a HUD/replay overlay.
+The game engine is a lightweight game-physics model, not an FIA-grade vehicle simulation.
+
+Circuit geometry is generated from FastF1 race-lap GPS telemetry (the fastest available lap
+per layout) and saved as season-specific JSON in `data/tracks/`. Build the 2021–2025
+catalog when network access is available:
+
+```bash
+python scripts/build_track_geometries.py
+```
+
+The script handles unavailable sessions and records their details in
+`data/tracks/manifest.json`. Geometries cite the session, driver, lap and FastF1 source; no
+synthetic or hand-drawn files are represented as real circuit data. Race IDs are resolved
+through the existing `event_rates.circuit_info` schedule mapping, so a race slug is not
+mistaken for a circuit ID. Track data is not bundled in this branch because the checkout has
+no GPS telemetry and the runtime environment denied the external data request.
+
 ## Model backends (Anthropic or local Hugging Face)
 
 The agent loop is provider-neutral. `src/agent.py` owns the F1 plan -> tool -> observe
