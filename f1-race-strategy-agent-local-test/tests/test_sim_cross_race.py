@@ -504,8 +504,8 @@ def test_held_out_races_are_read_from_the_eval_set_file(eval_set, tmp_path):
     assert cross_race.split_held_out([SYN, HELD, "2021_04_spain"], eval_set) == ([SYN, "2021_04_spain"], [HELD])
     assert cross_race.guard_held_out([SYN], eval_set) == []
     assert cross_race.guard_held_out([SYN, HELD], eval_set, allow=True) == [HELD]
-    # the committed list holds out the report races
-    assert {"2019_06_monaco", "2023_07_spain"} <= set(cross_race.held_out_races())
+    # the committed list holds out the report races (docs/eval.md "The registered split")
+    assert cross_race.held_out_races() == REGISTERED
 
 
 def test_the_runner_refuses_a_held_out_race_before_loading_it(eval_set, tmp_path, monkeypatch):
@@ -537,6 +537,46 @@ def test_races_auto_skips_held_out_races_and_the_report_names_them(eval_set, tmp
     allowed = cross_race.held_out_md({**held, "skipped": [], "included": [HELD]})
     assert "Excluded from this run for that reason: 2099_07_synthetic." in allowed and "--allow-held-out: " + HELD in allowed
     assert "predates" in cross_race.held_out_md(None)
+
+
+# --- the registered split's four held-out races (docs/eval.md "The registered split") ----------
+REGISTERED = ["2019_06_monaco", "2020_16_sakhir", "2024_11_austria", "2025_11_austria"]
+
+
+@pytest.mark.parametrize("race", REGISTERED)
+def test_the_committed_split_refuses_each_held_out_race_in_cross_run_and_real_run(race, tmp_path, monkeypatch):
+    # data/eval_set.json as committed; the guard reads only that file: nothing about the race loads
+    def no_load(*a, **k):
+        raise AssertionError(f"held-out race {race} was loaded")
+    monkeypatch.setattr(cross_race, "load_race", no_load)
+    monkeypatch.setattr(cross_race, "eligibility_records", no_load)
+    monkeypatch.setattr(jobs, "load_race", no_load)
+    assert set(cross_race.held_out_races()) == set(REGISTERED)
+    with pytest.raises(ValueError, match="held out.*--allow-held-out"):
+        cross_race.run(["2021_04_spain", race], small_profile(), tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+    from src.sim import real_run
+    with pytest.raises(ValueError, match="held out"):
+        real_run.RealRun([race], small_profile(), tmp_path / "rr")
+
+
+def test_races_auto_leaves_all_four_held_out_races_out_of_both_commands(tmp_path, monkeypatch):
+    from src.sim import real_run
+    cached = ["2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir", "2021_04_spain",
+              "2024_11_austria", "2025_11_austria", "2025_23_qatar"]
+    monkeypatch.setattr(real_run, "cached_races", lambda: (cached, []))
+    seen = {}
+    monkeypatch.setattr(cross_race, "run", lambda races, *a, **kw: seen.update(races=races, **kw))
+    monkeypatch.setattr(cross_race, "report", lambda *a, **kw: tmp_path / "summary.md")
+    cross_race.main(["run", "--races", "auto", "--out", str(tmp_path)])
+    assert seen["races"] == ["2019_10_united_kingdom", "2021_04_spain", "2025_23_qatar"]
+    assert sorted(seen["held_out_skipped"]) == REGISTERED and not seen["allow_held_out"]
+
+    ran = {}
+    monkeypatch.setattr(real_run, "execute", lambda run: ran.setdefault("run", run))
+    real_run.main(["--races", "auto", "--out", str(tmp_path / "rr")])
+    assert ran["run"].races == ["2019_10_united_kingdom", "2021_04_spain", "2025_23_qatar"]
+    assert sorted(ran["run"].held_out_skipped) == REGISTERED
 
 
 # --- end to end and resumability ------------------------------------------------------------------
