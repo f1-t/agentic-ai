@@ -244,7 +244,7 @@ def test_h_fold_logs_the_fold_assignment_to_wandb(tmp_path, fake_load, monkeypat
 def test_h_fold_with_a_learned_stub_says_it_needs_data(tmp_path, fake_load):
     p = small(compute.load_profile("local"))
     with pytest.raises(NotImplementedError, match="needs the multi-race dataset"):
-        jobs.run_task(jobs.JOBS["h_fold"], R0, p, tmp_path, h_args(tmp_path, "ridge", R0, R1))
+        jobs.run_task(jobs.JOBS["h_fold"], R0, p, tmp_path, h_args(tmp_path, "gbm", R0, R1))
 
 
 def test_h_fold_folds_subsample_and_loso():

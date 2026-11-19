@@ -1,13 +1,16 @@
-"""Shared pytest setup: every collected test runs offline.
+"""Shared pytest setup: every collected test runs offline and logs nothing to wandb.
 
 A test that resolves a remote host name or opens a connection to a remote address fails
 with NetworkBlocked, instead of quietly depending on the internet (FastF1, an LLM API).
 Loopback and Unix sockets stay allowed, so worker pools and local servers keep working.
 Race data comes from the committed cache/ in offline mode.
 """
+import os
 import socket
 
 import pytest
+
+os.environ["WANDB_MODE"] = "disabled"   # set at import too, before any worker process starts (compute.training_run reads it)
 
 _LOCAL_NAMES = {None, "", "localhost", "::1", "0.0.0.0"}
 
@@ -46,3 +49,10 @@ def _block_network(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
     monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _wandb_disabled():
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("WANDB_MODE", "disabled")
+        yield
