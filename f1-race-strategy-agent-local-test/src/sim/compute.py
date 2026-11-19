@@ -165,3 +165,80 @@ def wandb_run(profile: ComputeProfile, job: str, config: dict | None = None):
         yield run
     finally:
         run.finish()
+
+
+# --- learned calibrator training log (SPEC 0024) ------------------------------------------
+TRAINING_PROJECT = "f1-strategy-sim"
+WANDB_MODES = ("online", "offline", "disabled")
+_NOTED: set = set()
+
+
+def _note_once(msg: str):
+    """One line on stderr per message per process."""
+    if msg not in _NOTED:
+        _NOTED.add(msg)
+        import sys
+        print(msg, file=sys.stderr)
+
+
+def _wandb_host() -> str:
+    from urllib.parse import urlparse
+    return urlparse(os.environ.get("WANDB_BASE_URL") or "https://api.wandb.ai").hostname or "api.wandb.ai"
+
+
+def has_wandb_login(env=None, netrc_path=None) -> bool:
+    """Whether a wandb API key is available without asking: WANDB_API_KEY, or a netrc entry
+    for the wandb host (what `wandb login` writes). Only presence is checked; the key is never read out."""
+    env = os.environ if env is None else env
+    if env.get("WANDB_API_KEY"):
+        return True
+    import netrc
+    try:
+        auth = netrc.netrc(netrc_path).authenticators(_wandb_host())
+    except (OSError, netrc.NetrcParseError):
+        return False
+    return bool(auth and auth[2])
+
+
+def training_mode(env=None, netrc_path=None) -> tuple[str, str | None]:
+    """(wandb mode, note or None) for a learned calibrator fit: WANDB_MODE when set ("dryrun"
+    is offline), else online with a login, else offline with a note saying so."""
+    env = os.environ if env is None else env
+    mode = (env.get("WANDB_MODE") or "").strip().lower()
+    if mode == "dryrun":
+        mode = "offline"
+    if mode in WANDB_MODES:
+        return mode, None
+    if mode:
+        return "offline", f"wandb: WANDB_MODE={mode!r} is not one of {WANDB_MODES}; logging calibrator training offline"
+    if has_wandb_login(env, netrc_path):
+        return "online", None
+    return "offline", "wandb: no login or API key; logging calibrator training offline (wandb sync later)"
+
+
+@contextlib.contextmanager
+def training_run(job: str, config: dict | None = None, project: str = TRAINING_PROJECT):
+    """A wandb run for one learned calibrator fit, yielding the run or None; on by default.
+
+    The mode is training_mode(): WANDB_MODE ("disabled" logs nothing and imports nothing),
+    else online when an API key is available, else offline (one line on stderr says so). It
+    never prompts: wandb.init gets the mode explicitly, and online only with a key. Without wandb
+    installed (requirements-train.txt) one line says so and nothing is logged."""
+    mode, note = training_mode()
+    if mode == "disabled":
+        yield None
+        return
+    try:
+        import wandb
+    except ImportError:
+        _note_once("wandb is not installed (requirements-train.txt): calibrator training is not logged")
+        yield None
+        return
+    if note:
+        _note_once(note)
+    run = wandb.init(project=project, mode=mode, job_type=job, config=config or {},
+                     settings=wandb.Settings(silent=True, console="off"))
+    try:
+        yield run
+    finally:
+        run.finish()
