@@ -203,7 +203,7 @@ Scenario sets under the split:
 
 ### Sprint weekends
 
-A sprint weekend has one practice session, FP1, and a Sprint on Saturday. The practice prior
+A sprint weekend (2023 on) has one practice session, FP1, and a Sprint on Saturday. The practice prior
 reads the FP sessions a weekend has plus the Sprint (`calibrate.practice_sessions`, from the
 cached event schedule): FP1 and the Sprint on a sprint weekend, for both the degradation prior
 (`calibrate._practice`) and the pace offsets (`pace.load_practice`, as `cross_race` and the
@@ -214,6 +214,13 @@ and the cached references are untouched. Real-run
 discovery (`real_run.cached_races`) now lists the three cached sprint weekends, 2024 Austria,
 2024 Sao Paulo and 2025 Qatar, where it used to leave them out with a note. Listing is not
 loading: 2024 Austria is held out, and 2024 Sao Paulo is not eligible.
+
+- On a sprint weekend both the prior and the pace offsets read FP1 + Sprint: FP1 is the only
+  practice session, and the Sprint alone would tie a driver's pace to where they ran in the
+  train. This choice was fixed before any sprint race was evaluated.
+- 2021-2022 sprint weekends are not supported. They had FP1 and FP2 and no FP3; the cached
+  schedules name their Sprint session "Sprint", so `practice_sessions` would give FP1, FP2 and
+  the Sprint, but none of those weekends is cached and that path has never been run or tested.
 
 **2025 Qatar is used for calibration only and is never sampled into an eval set.** The
 weekend had a mandated maximum of 25 laps per tyre set. Race control messages do not state
