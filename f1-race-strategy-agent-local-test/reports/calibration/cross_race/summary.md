@@ -1,6 +1,6 @@
 # Cross-race calibration report (SPEC 0016)
 
-sim_code_version `d517750065d4`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
+sim_code_version `1dcf46ad75aa`, profile `local` (`a0d0d34f2faa`), 1 race(s) considered, 1 eligible.
 
 **PROVISIONAL: 1 eligible race(s), fewer than 8. The selection below is provisional and the defaults stay** (belief.yaml, world.yaml and the SimConfig defaults are unchanged).
 
@@ -23,20 +23,20 @@ Drivers: eval.scenarios.eligible_drivers (laps 1..n with no gap, at most two lap
 
 | arm | file | file_sha256 | config_hash | role |
 |---|---|---|---|---|
-| baseline | configs/sim/arms/baseline.yaml | 766d61c22308 | 07dc9587709d | baseline |
-| none | configs/sim/arms/none.yaml | d77eeb468f4e | 5a22044bf2a0 | candidate |
-| hinge | configs/sim/arms/hinge.yaml | b9085ee335a7 | 42527df9536f | candidate |
-| free_air | configs/sim/arms/free_air.yaml | 009c6574e84e | 5a1e15595f9c | candidate |
-| hinge_free | configs/sim/arms/hinge_free.yaml | c4ca78e1e412 | 672fa97a83df | candidate |
-| posterior | configs/sim/arms/posterior.yaml | c3d0f8d509a6 | cd7e99df6e50 | coverage only |
-| wear_nonneg | configs/sim/arms/wear_nonneg.yaml | 3bfbe0f44583 | e7c0d34bdef9 | candidate |
-| collinear_hold | configs/sim/arms/collinear_hold.yaml | 7d4bd15481f1 | 2fc84b635d2e | candidate |
-| collinear_hold_hinge | configs/sim/arms/collinear_hold_hinge.yaml | 9df26c36bcde | ca1c878f0c90 | candidate |
-| collinear_hold_nonneg | configs/sim/arms/collinear_hold_nonneg.yaml | 3a9c5a90f3ee | ca9375a538eb | candidate |
-| collinear_hold_nonneg_hinge | configs/sim/arms/collinear_hold_nonneg_hinge.yaml | 3b25f5df12ff | ad2158a91ab3 | candidate |
-| driver_effects | configs/sim/arms/driver_effects.yaml | 07bba5f9196b | e74729616414 | candidate |
-| driver_effects_nonneg | configs/sim/arms/driver_effects_nonneg.yaml | e3086edc1423 | d1d8ab79e239 | candidate |
-| driver_effects_hinge | configs/sim/arms/driver_effects_hinge.yaml | ac2b6bd2d5da | 092feb106391 | candidate |
+| baseline | configs/sim/arms/baseline.yaml | 766d61c22308 | 09c60db53ac9 | baseline |
+| none | configs/sim/arms/none.yaml | d77eeb468f4e | c21867b18d98 | candidate |
+| hinge | configs/sim/arms/hinge.yaml | b9085ee335a7 | 1ee2292dea4b | candidate |
+| free_air | configs/sim/arms/free_air.yaml | 009c6574e84e | 3afc89e95dfb | candidate |
+| hinge_free | configs/sim/arms/hinge_free.yaml | c4ca78e1e412 | 4fbae6a0611c | candidate |
+| posterior | configs/sim/arms/posterior.yaml | c3d0f8d509a6 | 8d3efb3fa4c3 | coverage only |
+| wear_nonneg | configs/sim/arms/wear_nonneg.yaml | 3bfbe0f44583 | 554b5cde4eb3 | candidate |
+| collinear_hold | configs/sim/arms/collinear_hold.yaml | 7d4bd15481f1 | 2355a5d0d875 | candidate |
+| collinear_hold_hinge | configs/sim/arms/collinear_hold_hinge.yaml | 9df26c36bcde | 6ecc8ae2eb5b | candidate |
+| collinear_hold_nonneg | configs/sim/arms/collinear_hold_nonneg.yaml | 3a9c5a90f3ee | 1ea598aeee9f | candidate |
+| collinear_hold_nonneg_hinge | configs/sim/arms/collinear_hold_nonneg_hinge.yaml | 3b25f5df12ff | 8b8148ea63e3 | candidate |
+| driver_effects | configs/sim/arms/driver_effects.yaml | 07bba5f9196b | ab43a7163fed | candidate |
+| driver_effects_nonneg | configs/sim/arms/driver_effects_nonneg.yaml | e3086edc1423 | 52b00c05fc37 | candidate |
+| driver_effects_hinge | configs/sim/arms/driver_effects_hinge.yaml | ac2b6bd2d5da | 63f1e6a5248a | candidate |
 
 
 ## Current defaults
@@ -45,9 +45,9 @@ Each window's incumbent: the arm its config carries now. Every comparison is inc
 
 | window | incumbent | config_hash | source | set by | matches the config |
 |---|---|---|---|---|---|
-| to_snapshot | wear_nonneg | e7c0d34bdef9 | a priori | configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the stop-gain check) | yes |
-| full | baseline | 07dc9587709d | default | SimConfig defaults (configs/sim/world.yaml adds traffic only) | yes |
-| pre_race | baseline | 07dc9587709d | default | SimConfig defaults | yes |
+| to_snapshot | wear_nonneg | 554b5cde4eb3 | a priori | configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the stop-gain check) | yes |
+| full | baseline | 09c60db53ac9 | default | SimConfig defaults (configs/sim/world.yaml adds traffic only) | yes |
+| pre_race | baseline | 09c60db53ac9 | default | SimConfig defaults | yes |
 
 
 ## Selection
@@ -216,19 +216,19 @@ Note: the reference search covers at most max_stops = 2 stops (the profile's sim
 
 | race | field (cars) | field stops | field mode | arm | reference stops | reference mode | match | 2-1 (s) |
 |---|---|---|---|---|---|---|---|---|
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | baseline | 1:19 | 1 | no | 5.41 [4.24, 7.63] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | none | 1:19 | 1 | no | 5.41 [4.24, 7.63] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | hinge | 1:19 | 1 | no | 5.77 [3.91, 9.04] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | free_air | 2:19 | 2 | yes | -4.39 [-5.98, -1.34] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | hinge_free | 1:19 | 1 | no | 24.32 [21.22, 24.61] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | wear_nonneg | 1:19 | 1 | no | 5.41 [4.24, 7.63] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold | 1:19 | 1 | no | 5.41 [4.24, 7.63] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold_hinge | 1:19 | 1 | no | 5.77 [3.91, 9.04] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold_nonneg | 1:19 | 1 | no | 5.41 [4.24, 7.63] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold_nonneg_hinge | 1:19 | 1 | no | 5.77 [3.91, 9.04] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | driver_effects | 1:9 2:10 | 2 | yes | -0.17 [-1.48, 2.34] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | driver_effects_nonneg | 1:9 2:10 | 2 | yes | -0.17 [-1.48, 2.34] |
-| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | driver_effects_hinge | 1:9 2:10 | 2 | yes | -3.62 [-6.47, 1.48] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | baseline | 1:18 2:1 | 1 | no | 1.97 [-0.40, 6.09] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | none | 1:18 2:1 | 1 | no | 1.97 [-0.40, 6.09] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | hinge | 1:18 2:1 | 1 | no | 2.46 [-1.81, 8.61] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | free_air | 2:19 | 2 | yes | -4.50 [-6.34, -1.34] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | hinge_free | 1:12 2:7 | 1 | no | 0.67 [-2.83, 5.67] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | wear_nonneg | 1:18 2:1 | 1 | no | 1.97 [-0.40, 6.09] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold | 1:18 2:1 | 1 | no | 1.97 [-0.40, 6.09] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold_hinge | 1:18 2:1 | 1 | no | 2.46 [-1.81, 8.61] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold_nonneg | 1:18 2:1 | 1 | no | 1.97 [-0.40, 6.09] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | collinear_hold_nonneg_hinge | 1:18 2:1 | 1 | no | 2.46 [-1.81, 8.61] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | driver_effects | 1:9 2:10 | 2 | yes | -1.12 [-3.13, 2.22] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | driver_effects_nonneg | 1:9 2:10 | 2 | yes | -1.12 [-3.13, 2.22] |
+| 2021_04_spain | 19 | 1:2 2:16 3:1 | 2 | driver_effects_hinge | 1:9 2:10 | 2 | yes | -3.99 [-7.68, 1.48] |
 
 
 ## Coverage (intervals at the profile's n_samples; only the posterior arm has a width)

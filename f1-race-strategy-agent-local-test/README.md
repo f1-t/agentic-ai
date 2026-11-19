@@ -101,6 +101,8 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
 - **Deterministic ground truth:** `data/ground_truth.json` is produced by
   `legacy_tools.optimal_strategy()` (a brute-force over the simulator) and is re-derivable.
 - Runtime: a few minutes (one cached `session.load` + the agent's ~5–8 tool calls).
+- **Test suite:** `python -m pytest -q` skips the tests marked `slow` (pytest.ini); run the full set
+  with `python -m pytest -q -m "slow or not slow"` before any merge that touches `src/sim` or `src/eval`.
 
 ## Known limitations (baseline)
 
@@ -110,6 +112,37 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
   softer compound; the test therefore grades on being *within 1% of the optimum*
   rather than on one exact plan.
 - Single race, single driver. See the proposal's "Limitations and Next Steps".
+
+## Autonomous bird's-eye race demo
+
+Run the local browser interface (a provider key is not needed just to view the heuristic visualization; using the real strategist button requires the configured model backend):
+
+```bash
+cd f1-race-strategy-agent-local-test
+python scripts/run_game_demo.py
+# Open http://127.0.0.1:8000
+```
+
+Choose a race distance, start/pause/reset the visualization, watch its illustrative car
+field and classification, and use **Record video** → **Stop & save** to download a WebM
+recording in browsers that support canvas capture. Otherwise use QuickTime Player or your OS
+screen recorder. Video is recorded locally. The strategist button sends the selected historical
+snapshot and prompt to the provider configured for this project.
+
+The moving field is a lightweight JavaScript visualization only; its car motion, tire wear,
+and pit behavior are not the project's AI or strategy simulator. The **Project Strategy Agent**
+panel runs the same `src.agent.run_agent` loop used by the project, with the selected validated
+historical snapshot and the normal strategy tools. It displays the agent's actual submitted
+decision, rationale, confidence, risks, and tool names. This requires the configured provider
+(`LLM_BACKEND`, credentials/model settings); clicking the button may consume provider quota.
+The agent's recommendation is deliberately separate from the moving animation—it does not
+control those cars. The visualization is not an FIA-grade vehicle model or an EA-level
+commercial simulator.
+
+The bundled snapshot selector includes only contract-format snapshots under `data/snapshots`.
+To add official GPS centerlines, run `python scripts/build_track_geometries.py` when network
+access is available; generated circuits appear in the circuit selector. Without generated
+geometry, the default loop is clearly labeled illustrative.
 
 ## Model backends (Anthropic or local Hugging Face)
 

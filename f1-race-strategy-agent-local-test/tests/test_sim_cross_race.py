@@ -504,8 +504,9 @@ def test_held_out_races_are_read_from_the_eval_set_file(eval_set, tmp_path):
     assert cross_race.split_held_out([SYN, HELD, "2021_04_spain"], eval_set) == ([SYN, "2021_04_spain"], [HELD])
     assert cross_race.guard_held_out([SYN], eval_set) == []
     assert cross_race.guard_held_out([SYN, HELD], eval_set, allow=True) == [HELD]
-    # the committed list holds out the report races
-    assert {"2019_06_monaco", "2023_07_spain"} <= set(cross_race.held_out_races())
+    # by default the runner reads the committed list (whatever it holds out)
+    assert cross_race.EVAL_SET == cross_race.ROOT / "data" / "eval_set.json"
+    assert cross_race.held_out_races() == cross_race.held_out_races(cross_race.EVAL_SET)
 
 
 def test_the_runner_refuses_a_held_out_race_before_loading_it(eval_set, tmp_path, monkeypatch):
@@ -550,11 +551,21 @@ def small_profile():
                                 "parallel": p.parallel.model_copy(update={"n_jobs": 1})})
 
 
+RUN_HELD_OUT = ["2099_09_synthetic"]   # a temporary eval_set: the run does not depend on the committed split
+
+
+def run_eval_set(out: Path) -> Path:
+    path = Path(out).parent / f"{Path(out).name}_eval_set.json"
+    path.write_text(json.dumps({"races": RUN_HELD_OUT}))
+    return path
+
+
 @pytest.fixture(scope="module")
 def run_dir(tmp_path_factory):
     out = tmp_path_factory.mktemp("cross")
     log = []
-    record = cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append)
+    record = cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append,
+                            eval_set=run_eval_set(out))
     cross_race.report(out, small_profile(), n_boot=50)
     return out, record, log
 
@@ -562,15 +573,17 @@ def run_dir(tmp_path_factory):
 def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     out, record, log = run_dir
     assert record["eligible"] == RUN_RACES and record["belief_choice"] in ARMS
-    assert record["held_out"]["skipped"] == [] and record["held_out"]["included"] == []   # none of them is held out
+    assert record["held_out"]["listed"] == RUN_HELD_OUT and record["held_out"]["included"] == []   # none is run
+    assert f"Excluded from this run for that reason: {RUN_HELD_OUT[0]}" in (out / "summary.md").read_text()
     assert record["s2_arm"] == f"{record['belief_choice']}__s2" and len(record["grid"]) == 1
     for r in RUN_RACES:
         assert (out / "races" / r / f"{r}.parquet").is_file()
         for a in ARMS:
             assert (out / "h" / "arms" / a / f"{r}.parquet").is_file()
     tables = cross_race.unpack(pd.read_parquet(out / "races" / "2021_04_spain" / "2021_04_spain.parquet"))
-    assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "eligibility",
-            "field_stops"} <= set(tables)
+    assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "wear_check",
+            "eligibility", "field_stops"} <= set(tables)
+    assert list(tables["wear_check"]["compound"]) == ["MEDIUM", "SOFT"]
     assert {"clean_free", "clean_pack"} <= set(tables["by_kind"]["kind"])
     assert set(calibration.INTERVAL_COLUMNS) <= set(tables["g"].columns)
     assert set(tables["gate"]["mode"]) == {"simulated_order"}
@@ -624,13 +637,15 @@ def test_rerun_skips_everything_and_a_missing_unit_reruns_alone(run_dir):
     path = out / "h" / "arms" / "hinge" / "2099_01_synthetic.parquet"
     before, table = path.read_bytes(), pd.read_parquet(path)
     log = []
-    again = cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append)
+    again = cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append,
+                           eval_set=run_eval_set(out))
     status = [x for x in log if x.startswith("  ")]
     assert status and all(x.endswith(": skipped") for x in status)
     assert again == record and path.read_bytes() == before
     jobs._meta_path(path).unlink()   # an interrupted task: the output without its meta
     log = []
-    cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append)
+    cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append,
+                   eval_set=run_eval_set(out))
     done = [x for x in log if x.endswith(": done")]
     assert done == ["  h_fold/hinge 2099_01_synthetic: done"]
     pd.testing.assert_frame_equal(pd.read_parquet(path), table)   # the rerun gives the same rows
@@ -662,3 +677,22 @@ def test_eligibility_json_lists_every_race(run_dir):
     out, _, _ = run_dir
     elig = json.loads((out / "eligibility.json").read_text())
     assert [e["race_id"] for e in elig] == RUN_RACES and all(e["eligible"] for e in elig)
+
+
+def test_wear_check_reads_within_stint_wear_net_of_fuel():
+    """SPEC 0023 A: per (driver, stint) of 8+ clean laps, the slope on tyre age less the fuel
+    slope; short stints and unclean laps stay out."""
+    from types import SimpleNamespace
+    rows = []
+    for d, (stint, n, start) in enumerate([(1, 12, 0), (2, 10, 15), (1, 5, 0)]):
+        for age in range(1, n + 1):
+            lap = start + age
+            rows.append({"driver": f"D{d}", "stint": stint, "compound": "SOFT", "tyre_age": age, "lap": lap,
+                         "clean": True, "lap_time_s": 80.0 + (0.05 + 0.01 * d) * age - 0.04 * lap})
+    rows.append({**rows[0], "lap_time_s": 99.0, "clean": False})
+    model = SimpleNamespace(coefs={"SOFT": (80.0, 0.03), "MEDIUM": (81.0, 0.02)}, fuel_slope=-0.04)
+    t = cross_race.wear_check(pd.DataFrame(rows), model).set_index("compound")
+    assert t.loc["SOFT", "fitted_wear_s_per_lap"] == pytest.approx(0.03)
+    assert t.loc["SOFT", "within_stint_wear_s_per_lap"] == pytest.approx(0.055)   # median of 0.05, 0.06
+    assert t.loc["SOFT", "n_stints"] == 2 and t.loc["MEDIUM", "n_stints"] == 0
+    assert np.isnan(t.loc["MEDIUM", "within_stint_wear_s_per_lap"])

@@ -1,7 +1,8 @@
 """Cross-race calibration report (SPEC 0016 with its amendment).
 
     python -m src.sim.calibrate cross run --races {auto|2021_04_spain ...} [--allow-held-out] [--synthetic 2]
-                                          [--profile local] [--out DIR]
+                                          [--learned ridge] [--profile local] [--out DIR]
+    python -m src.sim.calibrate cross run --races --synthetic 4 --learned ridge --out /tmp/dir   # synthetic only
     python -m src.sim.calibrate cross report [--out DIR] [--race-features data/race_features.csv]
 
 Held-out races: a race data/eval_set.json lists is refused (guard_held_out, before anything
@@ -28,6 +29,13 @@ gain, signed bias and mae per window, race and arm), stop_counts.csv (the stop-c
 the field's stop counts against the reference's from lap 0 under each committed arm's world,
 B's field_stops against C's reference_stops), coverage_summary.csv, tau_grid.csv and arms.csv
 beside them, from what `run` left.
+
+Learned arms (LEARNED_ARMS, SPEC 0024: ridge, and ridge_all with the event factors as targets too)
+run only when asked (--learned), each fold trained
+on the eligible races outside it. They get rows beside the others (role LEARNED_ROLE, never
+chosen) and learned.csv / learned_fits.csv: SPEC H's table of none, shrinkage and the learned
+class (calibrators.selection_table) per pre_race and to_snapshot, and per factor which folds
+fitted a ridge and which fell back to shrinkage.
 
 Arms are overlays on each race's config, frozen before the run; arms.csv records each arm's
 file hash and its config hash on SimConfig() (a cached race's config). A derived arm is named
@@ -94,6 +102,11 @@ ARMS = ("baseline", "none", "hinge", "free_air", "hinge_free", "posterior", "wea
         "driver_effects", "driver_effects_nonneg", "driver_effects_hinge")
 BASELINE = "baseline"
 COVERAGE_ONLY = ("posterior",)
+# learned calibrator arms (SPEC 0024), run only when asked (run(learned=...), --learned): each
+# trains per fold on the eligible races outside it. Reported beside none and shrinkage, in the
+# arm tables and in learned.csv (calibrators.selection_table), never chosen by the arm selection.
+LEARNED_ARMS = ("ridge", "ridge_all")
+LEARNED_ROLE = "learned (reported, not selected)"
 # simplest first: the tie-break among arms that pass
 SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air",
               "driver_effects", "driver_effects_nonneg", "hinge", "collinear_hold_hinge", "collinear_hold_nonneg_hinge",
@@ -114,8 +127,8 @@ def parse_arm(name: str) -> tuple[str, bool, tuple | None]:
     """(committed arm, prior-sd fix on, tau multipliers or None) of an arm name."""
     parts = name.split("__")
     base, s2, tau = parts[0], False, None
-    if base not in ARMS:
-        raise KeyError(f"unknown arm {base!r}; arms: {list(ARMS)}")
+    if base not in ARMS and base not in LEARNED_ARMS:
+        raise KeyError(f"unknown arm {base!r}; arms: {list(ARMS)}, learned: {list(LEARNED_ARMS)}")
     for p in parts[1:]:
         if p == S2:
             s2 = True
@@ -174,7 +187,8 @@ def arms_table(names=ARMS) -> pd.DataFrame:
         rows.append({"arm": n, "file": f"configs/sim/arms/{base}.yaml", "file_sha256": _sha12(path.read_bytes()),
                      "config_hash": calibration.config_hash(cfg), "degradation": cfg.degradation.name,
                      "calibrator": cfg.calibrator.name,
-                     "role": "coverage only" if base in COVERAGE_ONLY else "baseline" if n == BASELINE else "candidate"})
+                     "role": "coverage only" if base in COVERAGE_ONLY else "baseline" if n == BASELINE
+                     else LEARNED_ROLE if base in LEARNED_ARMS else "candidate"})
     return pd.DataFrame(rows)
 
 
@@ -431,10 +445,37 @@ def reference_stops(data: jobs.RaceData, cfg: SimConfig, max_stops: int, within=
     return pd.DataFrame(rows, columns=REFERENCE_STOP_COLUMNS)
 
 
+WEAR_CHECK_MIN_LAPS = 8   # stints with at least this many clean laps enter the within-stint slope
+
+
+def wear_check(frame, model, min_laps=WEAR_CHECK_MIN_LAPS) -> pd.DataFrame:
+    """SPEC 0023 A diagnostic, one row per compound the model fits: its fitted wear (the pooled
+    fit) against the median within-stint wear. Within-stint: per (driver, stint) with at least
+    `min_laps` clean laps (green, no in or out lap), the least-squares slope of lap time on tyre
+    age, less the model's fuel slope (within a stint age and lap number move together, so the
+    raw slope is wear plus fuel). A gap between the two columns shows wear the pooled fit
+    under- or over-identifies."""
+    fuel = float(getattr(model, "fuel_slope", 0.0) or 0.0)
+    clean = frame[frame["clean"].astype(bool)]
+    slopes = {}
+    for (_, _), s in clean.groupby(["driver", "stint"]):
+        ages = s["tyre_age"].to_numpy(dtype=float)
+        if len(s) >= min_laps and np.ptp(ages) > 0 and s["compound"].nunique() == 1:
+            slope = np.polyfit(ages, s["lap_time_s"].to_numpy(dtype=float), 1)[0]
+            slopes.setdefault(s["compound"].iloc[0], []).append(slope - fuel)
+    rows = [{"compound": c, "fitted_wear_s_per_lap": float(wear),
+             "within_stint_wear_s_per_lap": float(np.median(slopes[c])) if c in slopes else np.nan,
+             "n_stints": len(slopes.get(c, [])), "fuel_s_per_lap": fuel}
+            for c, (_, wear) in sorted(model.coefs.items())]
+    return pd.DataFrame(rows, columns=["compound", "fitted_wear_s_per_lap", "within_stint_wear_s_per_lap",
+                                       "n_stints", "fuel_s_per_lap"])
+
+
 def race_tables(data: jobs.RaceData, profile, messages=None, practice=None, notes=()) -> dict[str, pd.DataFrame]:
     """SPEC 0016 B for one race under its own config: replay, summary, by_kind, periods, gate, g,
-    hindsight, eligibility and field_stops (the stop-count check's field) tables. `practice`
-    feeds the pace gate (pace_practice); its notes go in the summary row."""
+    hindsight, eligibility and field_stops (the stop-count check's field) tables, plus wear_check
+    (SPEC 0023 A: fitted against within-stint wear per compound). `practice` feeds the pace gate
+    (pace_practice); its notes go in the summary row."""
     frame, race, cfg = data.frame, data.race, data.config
     full = Simulator(frame, cfg, data.practice)
     table, summary, by_kind = calibration.run(full, frame, race)
@@ -454,6 +495,7 @@ def race_tables(data: jobs.RaceData, profile, messages=None, practice=None, note
         "gate": gate,
         "g": g,
         "hindsight": pd.DataFrame({"factor": list(hind), "value": list(hind.values())}),
+        "wear_check": wear_check(frame, full.degradation),
         "eligibility": pd.DataFrame([{k: json.dumps(v) if isinstance(v, (list, dict)) else v
                                       for k, v in elig.items()}]),
         "field_stops": field_stops(frame, race),
@@ -505,15 +547,21 @@ def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=N
     stops = []
     if base not in COVERAGE_ONLY:   # a grid arm too: a fit at each k, no sampling
         hind = Simulator(data.frame, cfg.model_copy(update={"fit_window": "full"}), data.practice).degradation
+        cal = next(iter(res.fitted.values()), None)   # a learned calibrator: the fold's fit, else the config's
         for w in windows:
-            sim = Simulator(data.frame, cfg.model_copy(update={"fit_window": w}), data.practice)
+            sim = Simulator(data.frame, cfg.model_copy(update={"fit_window": w}), data.practice, calibrator=cal)
             stops.append(calibration.stop_gain(sim, data.frame, data.race, hind, all_ks))
     stop = pd.concat(stops, ignore_index=True) if stops else pd.DataFrame(columns=calibration.STOP_GAIN_COLUMNS)
-    # the stop-count check: a committed arm's world at lap 0 (a derived arm changes to_snapshot only)
-    ref = (reference_stops(data, cfg, profile.sim.max_stops) if base not in COVERAGE_ONLY and arm == base
-           else pd.DataFrame(columns=REFERENCE_STOP_COLUMNS))
-    return {"g": res.rows.drop(columns=["calibration_every"], errors="ignore"), "factors": res.factor_errors,
-            "stop_gain": stop, "reference_stops": ref}
+    tables = {"g": res.rows.drop(columns=["calibration_every"], errors="ignore"), "factors": res.factor_errors,
+              "stop_gain": stop}
+    if len(res.fits):   # a learned calibrator's fit: per factor ridge or fallback, and why
+        tables["fits"] = res.fits
+    # the stop-count check: a committed arm's world at lap 0 (a derived arm changes to_snapshot only,
+    # a learned arm its calibrator only)
+    tables["reference_stops"] = (reference_stops(data, cfg, profile.sim.max_stops)
+                                 if base not in COVERAGE_ONLY and base not in LEARNED_ARMS and arm == base
+                                 else pd.DataFrame(columns=REFERENCE_STOP_COLUMNS))
+    return tables
 
 
 FOLD_ERROR_COLUMNS = ["race_id", "arm", "error"]
@@ -628,7 +676,8 @@ def eligibility_records(races, profile, log=print) -> list[dict]:
 
 
 def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid=True, n_jobs=None,
-        log=print, elig=None, runner=None, eval_set=EVAL_SET, allow_held_out=False, held_out_skipped=()) -> dict:
+        log=print, elig=None, runner=None, learned=(), eval_set=EVAL_SET, allow_held_out=False,
+        held_out_skipped=()) -> dict:
     """A, B and the three C stages over `races` (canonical ids or aliases; synthetic ids
     allowed outside CROSS_DIR, guard_committed). Writes eligibility.json and run.json under
     `out`; returns the run record.
@@ -636,6 +685,10 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     A race `eval_set` (data/eval_set.json) holds out is refused before anything is loaded
     (guard_held_out) unless `allow_held_out`. The record's "held_out" says what the file lists,
     which of them `--races auto` skipped (`held_out_skipped`) and which were let in.
+
+    `learned`: LEARNED_ARMS to run beside the committed arms (SPEC 0024), each fold trained on
+    the eligible races outside it; the record's "arms" lists them. They are reported, never
+    chosen, so the belief choice, the prior-sd fix and the tau grid do not depend on them.
 
     `elig`: eligibility_records of `races` already computed (real_run), else computed here.
     `runner(items, phase)` runs one phase's units (phase races, arms, s2 or tau_grid) and
@@ -647,6 +700,10 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     allowed = guard_held_out(races, eval_set, allow_held_out)
     held_out = {"eval_set": _shown(eval_set), "listed": held_out_races(eval_set),
                 "skipped": [canonical_race_id(r) for r in held_out_skipped], "included": allowed}
+    unknown = [a for a in learned if a not in LEARNED_ARMS]
+    if unknown:
+        raise KeyError(f"unknown learned arm(s) {unknown}; learned arms: {list(LEARNED_ARMS)}")
+    arms = [*ARMS, *dict.fromkeys(learned)]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     n_jobs = profile.parallel.n_jobs if n_jobs is None else n_jobs
@@ -670,12 +727,12 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
 
     pending = step([("cross_race", r, profile, str(out), _args(eligible, profile=profile.name)) for r in eligible],
                    "races")
-    pending += step(_fold_items(ARMS, eligible, profile, out), "arms")
+    pending += step(_fold_items(arms, eligible, profile, out), "arms")
     if pending:
         return halt("races and arms", pending)
     sel = selection_tables(out, eligible, profile)
     chosen = sel["chosen"].get(BELIEF_WINDOW, BASELINE)
-    record = {"races": races, "eligible": eligible, "arms": list(ARMS), "profile": profile.name,
+    record = {"races": races, "eligible": eligible, "arms": arms, "profile": profile.name,
               "profile_hash": profile.hash, "sim_code_version": calibration.SIM_CODE_VERSION,
               "belief_bound": sel["bound"], "belief_choice": chosen, "s2_arm": None, "grid_arm": None, "grid": [],
               "notes": [], "held_out": held_out}
@@ -712,12 +769,12 @@ def race_outputs(out, races, profile) -> dict[str, dict[str, pd.DataFrame]]:
 
 
 def arm_outputs(out, arm, races, profile) -> dict[str, pd.DataFrame]:
-    """One arm's folds, concatenated: {"g", "factors", "stop_gain", "reference_stops",
-    "fold_error"}, empty frames when absent."""
+    """One arm's folds, concatenated: {"g", "factors", "stop_gain", "fits", "reference_stops",
+    "fold_error"}, empty frames when absent (fits: a learned arm's per fold fit)."""
     folds = _read(jobs.JOBS["h_fold"], races, profile, out, _args(races, arm=arm))
     cols = {"g": calibration.MIDRACE_COLUMNS, "factors": calibrators.FACTOR_ERROR_COLUMNS,
-            "stop_gain": calibration.STOP_GAIN_COLUMNS, "reference_stops": REFERENCE_STOP_COLUMNS,
-            "fold_error": FOLD_ERROR_COLUMNS}
+            "stop_gain": calibration.STOP_GAIN_COLUMNS, "fits": calibrators.FIT_COLUMNS,
+            "reference_stops": REFERENCE_STOP_COLUMNS, "fold_error": FOLD_ERROR_COLUMNS}
     return {t: (pd.concat([f[t] for f in folds.values() if t in f], ignore_index=True)
                 if any(t in f for f in folds.values()) else pd.DataFrame(columns=c)) for t, c in cols.items()}
 
@@ -832,7 +889,8 @@ def compare_arms(arm_data: dict[str, dict], comparator: str, windows, n_boot=N_B
             bw = base["stop_gain"][base["stop_gain"]["window"] == window] if len(base["stop_gain"]) else base["stop_gain"]
             sg = paired(sw, bw, SG_KEYS, "err_s", n_boot)
             role = ("comparator" if arm == comparator else "coverage only" if parse_arm(arm)[0] in COVERAGE_ONLY
-                    else NA_ROLE if same_by_construction(arm, comparator, window) else "candidate")
+                    else NA_ROLE if same_by_construction(arm, comparator, window)
+                    else LEARNED_ROLE if parse_arm(arm)[0] in LEARNED_ARMS else "candidate")
             row = {"stage": stage, "window": window, "arm": arm, "comparator": comparator, "rule": rule_for(window),
                    "role": role, "n_races": g["n_races"], "g_n": g["n_rows"],
                    **{f"g_{k}": v for k, v in g.items() if k not in ("n_rows", "n_races")},
@@ -894,10 +952,11 @@ def belief_selection(arm_data, n_boot=N_BOOT) -> tuple[pd.DataFrame, str, str]:
     return pd.concat([s1, s2], ignore_index=True), bound, choose(s2, BELIEF_WINDOW, bound)
 
 
-def selection_tables(out, races, profile, n_boot=N_BOOT) -> dict:
+def selection_tables(out, races, profile, n_boot=N_BOOT, arms=ARMS) -> dict:
     """The selection over the committed arms: {"table", "chosen": {window: arm}, "bound", "arm_data"}.
-    The belief window in two stages (belief_selection), the others against their incumbent."""
-    arm_data = {a: arm_outputs(out, a, races, profile) for a in ARMS}
+    The belief window in two stages (belief_selection), the others against their incumbent.
+    Learned arms in `arms` get rows beside the others with LEARNED_ROLE, never chosen."""
+    arm_data = {a: arm_outputs(out, a, races, profile) for a in arms}
     windows = list(profile.g.windows)
     parts, chosen, bound = [], {}, incumbent(BELIEF_WINDOW)
     for w in windows:
@@ -1214,6 +1273,70 @@ def held_out_md(held) -> str:
             + (f" Run anyway with --allow-held-out: {', '.join(held['included'])}." if held["included"] else ""))
 
 
+LEARNED_WINDOWS = ("pre_race", "to_snapshot")
+
+
+def _as_loro(name: str, d: dict) -> "calibrators.LoroResult":
+    """An arm's fold outputs as the LoroResult calibrators.selection_table reads (cadence 1)."""
+    return calibrators.LoroResult(name, "race", d["g"].assign(calibration_every="1"), d["factors"], pd.DataFrame(),
+                                  d.get("fits", pd.DataFrame(columns=calibrators.FIT_COLUMNS)))
+
+
+def learned_table(arm_data: dict, learned, windows, n_boot=N_BOOT) -> pd.DataFrame:
+    """SPEC H's selection table (calibrators.selection_table) per window in LEARNED_WINDOWS:
+    none, shrinkage (the baseline arm) and each learned arm side by side, with G mae_offset at
+    horizons 20-40 and its race-bootstrap CI, per factor rmse and 68 percent coverage, and the
+    rule's decision. One row per (window, calibrator)."""
+    parts = []
+    for w in (w for w in LEARNED_WINDOWS if w in windows):
+        results = {"none": _as_loro("none", arm_data["none"]), "shrinkage": _as_loro("shrinkage", arm_data[BASELINE]),
+                   **{a: _as_loro(a, arm_data[a]) for a in learned}}
+        t = calibrators.selection_table(results, window=w, n_boot=n_boot)
+        arm = {"none": "none", "shrinkage": BASELINE, **{a: a for a in learned}}
+        parts.append(t.rename_axis("calibrator").reset_index()
+                     .assign(window=w, arm=lambda x: x["calibrator"].map(arm)))
+    if not parts:
+        return pd.DataFrame(columns=["window", "calibrator", "arm"])
+    t = pd.concat(parts, ignore_index=True)
+    return t[["window", "calibrator", "arm", *[c for c in t if c not in ("window", "calibrator", "arm")]]]
+
+
+def learned_fits(arm_data: dict, learned) -> pd.DataFrame:
+    """Per learned arm and target factor over its folds: how many folds fitted a ridge and how
+    many fell back to shrinkage (and why), the median alpha and sigma of the fitted ones."""
+    rows = []
+    for a in learned:
+        f = arm_data[a]["fits"]
+        for factor, part in (f.groupby("factor", sort=True) if len(f) else []):
+            ok = part[part["status"] == "ridge"]
+            rows.append({"arm": a, "factor": factor, "folds": int(len(part)), "ridge": int(len(ok)),
+                         "fallback": int(len(part) - len(ok)),
+                         "alpha_median": float(ok["alpha"].astype(float).median()) if len(ok) else np.nan,
+                         "sigma_median": float(ok["sigma"].astype(float).median()) if len(ok) else np.nan,
+                         "fallback_reasons": "; ".join(sorted(set(part.loc[part["status"] != "ridge", "reason"])))})
+    return pd.DataFrame(rows, columns=["arm", "factor", "folds", "ridge", "fallback", "alpha_median", "sigma_median",
+                                       "fallback_reasons"])
+
+
+def learned_md(table: pd.DataFrame, fits: pd.DataFrame, provisional: bool) -> list[str]:
+    md = ["## Learned calibrators (SPEC 0024)", "",
+          "SPEC H's selection table per window: none and shrinkage (the baseline arm) are always reported beside "
+          "each learned calibrator. G mae_offset_s at horizons 20-40 with its race-bootstrap 95% CI; a learned "
+          "calibrator is adopted only when its CI upper end is below shrinkage's CI lower end. Learned arms are "
+          "never chosen by the arm selection above."
+          + (" **Provisional: too few races; nothing is adopted and the defaults stay.**" if provisional else ""), ""]
+    if len(table):
+        show = pd.DataFrame({"window": table["window"], "calibrator": table["calibrator"], "kind": table["kind"],
+                             "races": table["n_races"],
+                             "G mae 20-40": [_ci(a, b, c) for a, b, c in zip(table["mae_offset_s"],
+                                                                            table["mae_offset_ci_lo"],
+                                                                            table["mae_offset_ci_hi"])],
+                             "decision": table["decision"]})
+        md += [md_table(show), ""]
+    md += ["Per factor fit over the folds (fallback: shrinkage's output for that factor):", "", md_table(fits, 3), ""]
+    return md
+
+
 def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BOOT) -> Path:
     """D and E from a run's outputs under `out` (run.json names the races and the profile).
     Refuses a run with a synthetic race when `out` is CROSS_DIR (guard_committed)."""
@@ -1226,11 +1349,19 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     outputs = race_outputs(out, eligible, profile)
     factors = factors_table(outputs, features_path)
     factors.to_csv(out / "factors.csv", index=False)
-    arms_table(ARMS).to_csv(out / "arms.csv", index=False)
-    sel = selection_tables(out, eligible, profile, n_boot)
+    arms = record.get("arms") or list(ARMS)
+    learned = [a for a in arms if parse_arm(a)[0] in LEARNED_ARMS]
+    arms_table(arms).to_csv(out / "arms.csv", index=False)
+    sel = selection_tables(out, eligible, profile, n_boot, arms)
     table, chosen = sel["table"], sel["chosen"]
     s2 = s2_table(out, eligible, profile, record["belief_choice"], n_boot) if record.get("s2_arm") else pd.DataFrame()
     provisional = len(eligible) < MIN_RACES
+    if learned:
+        learned_t = learned_table(sel["arm_data"], learned, list(profile.g.windows), n_boot).assign(
+            provisional=provisional)
+        learned_t.to_csv(out / "learned.csv", index=False)
+        fits_t = learned_fits(sel["arm_data"], learned)
+        fits_t.to_csv(out / "learned_fits.csv", index=False)
     selection = pd.concat([table, s2], ignore_index=True).assign(provisional=provisional)
     selection.to_csv(out / "selection.csv", index=False)
     grid = tau_table(out, eligible, profile, record.get("grid") or [], n_boot)
@@ -1279,7 +1410,7 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     if notes:
         md += ["Notes: " + " ".join(notes), ""]
 
-    md += ["## Arms", "", md_table(arms_table(ARMS)[["arm", "file", "file_sha256", "config_hash", "role"]]), ""]
+    md += ["## Arms", "", md_table(arms_table(arms)[["arm", "file", "file_sha256", "config_hash", "role"]]), ""]
 
     md += ["## Current defaults", "", "Each window's incumbent: the arm its config carries now. Every comparison "
            "is incumbent-first, so a change in either direction has to pass the window's rule.", "",
@@ -1381,6 +1512,8 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
     else:
         md += ["Not run.", ""]
 
+    if learned:
+        md += learned_md(learned_t, fits_t, provisional)
     md += ["## Coverage (intervals at the profile's n_samples; only the posterior arm has a width)", ""]
     cov = _coverage(sel["arm_data"], [BASELINE, *COVERAGE_ONLY], min(n_boot, 500))
     md += [md_table(cov), ""]
@@ -1430,12 +1563,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m src.sim.calibrate cross", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
     r = sub.add_parser("run", help="eligibility, per-race tables and LORO per arm (resumable)")
-    r.add_argument("--races", nargs="+", default=list(jobs.DEFAULT_RACES),
-                   help="race ids, or auto: every cached race (real_run.cached_races) less the held-out ones")
+    r.add_argument("--races", nargs="*", default=list(jobs.DEFAULT_RACES),
+                   help="race ids, or auto: every cached race (real_run.cached_races) less the held-out ones; "
+                        "given with none (--races --synthetic N), synthetic races only")
     r.add_argument("--allow-held-out", action="store_true",
                    help="run races data/eval_set.json holds out (refused without it; auto skips them)")
     r.add_argument("--eval-set", default=str(EVAL_SET), help="the held-out race list (default data/eval_set.json)")
     r.add_argument("--synthetic", type=int, default=0, help="add this many synthetic races (pipeline test)")
+    r.add_argument("--learned", nargs="+", default=[], choices=list(LEARNED_ARMS),
+                   help="learned calibrator arms to run beside the committed arms (reported, never chosen)")
     r.add_argument("--tau-multipliers", nargs="+", type=float, default=list(TAU_MULTIPLIERS))
     r.add_argument("--no-tau-grid", action="store_true")
     r.add_argument("--n-jobs", type=int, help="default: the profile's parallel.n_jobs")
@@ -1460,10 +1596,13 @@ def main(argv=None):
         else:
             races = list(args.races)
         races += [f"2099_{i + 1:02d}_synthetic" for i in range(args.synthetic)]
+        if not races:
+            ap.error("no races: give --races ids or --synthetic N")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             run(races, load_profile(args.profile), args.out, tuple(args.tau_multipliers), not args.no_tau_grid,
-                args.n_jobs, eval_set=args.eval_set, allow_held_out=args.allow_held_out, held_out_skipped=skipped)
+                args.n_jobs, learned=tuple(args.learned), eval_set=args.eval_set,
+                allow_held_out=args.allow_held_out, held_out_skipped=skipped)
     path = report(args.out, load_profile(args.profile) if args.profile else None, args.race_features)
     print(f"written to {path}")
     return 0

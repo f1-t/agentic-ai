@@ -14,6 +14,7 @@ class RuleContext:
     plan: Plan
     modelled: set
     config: object = None   # SimConfig when available
+    stint_limits: dict | None = None   # R8: compound -> oldest tyre age run in this race (stint_limits)
 
 
 @RULES.register("first_stint_matches")
@@ -95,6 +96,78 @@ def two_compounds(ctx):
     if len(used) < 2:
         return ["A valid dry strategy must use at least two different compounds."]
     return []
+
+
+def stint_limits(frame, rank: int = 1) -> dict[str, float]:
+    """R8: compound -> the tyre age at least `rank` cars reached on it in `frame`, every lap
+    counted: the rank-th largest of the per-car maximum ages (SimConfig.stint_limit_rank).
+    Rank 1 is the oldest tyre any car ran. A compound fewer than `rank` cars ran takes its
+    smallest per-car maximum (the age every car on it reached); rank above 1 needs a driver
+    column. Simulator computes it once from the full race lap frame, so the belief and the
+    world (both built on that frame) share it whatever their fit window: a hindsight race
+    constant, like the observed pit loss."""
+    if frame is None or "compound" not in frame or "tyre_age" not in frame:
+        return {}
+    f = frame[frame["compound"].notna() & frame["tyre_age"].notna()]
+    if rank == 1:
+        return {str(c): float(a) for c, a in f.groupby("compound")["tyre_age"].max().items()}
+    if "driver" not in f:
+        raise ValueError("stint_limit_rank above 1 needs a driver column in the race frame")
+    per_car = f.groupby(["compound", "driver"])["tyre_age"].max()
+    return {str(c): float(ages.sort_values(ascending=False).iloc[min(rank, len(ages)) - 1])
+            for c, ages in per_car.groupby(level="compound")}
+
+
+def _soonest_stop(snapshot) -> int:
+    """Laps the current set must still run before a stop is legal (R1, R2)."""
+    return max(1, snapshot.race.min_stint_laps - laps_on_set(snapshot))
+
+
+def current_set_past_limit(snapshot, limits, margin) -> bool:
+    """R8 fallback: the current set cannot keep inside its limit. Either it cannot reach its
+    soonest legal stop inside the limit, or no legal stop fits in the laps left (the next
+    stint would be below the minimum) and running to the flag passes the limit."""
+    seen = (limits or {}).get(snapshot.compound)
+    if margin is None or seen is None:
+        return False
+    soonest, limit = _soonest_stop(snapshot), seen + margin
+    no_stop = snapshot.remaining_laps < soonest + snapshot.race.min_stint_laps
+    return snapshot.tyre_age + soonest > limit or (no_stop and snapshot.tyre_age + snapshot.remaining_laps > limit)
+
+
+def stint_limit_violations(snapshot, plan, limits, margin) -> list[str]:
+    """R8 stint limit (docs/rules.md): every stint ends at most at the oldest tyre age run on
+    its compound in this race (`limits`, stint_limits) plus `margin` laps. A compound no car
+    ran in the race has no limit. Fallback: when the current set is already past its limit at
+    the snapshot (current_set_past_limit), the first stint may run to the soonest legal stop,
+    or to the flag when no legal stop fits in the laps left. None `margin` turns R8 off.
+    `plan` is a contracts.Plan or anything whose stints have compound and laps (start_age 0
+    when absent, a new set)."""
+    if margin is None or not limits:
+        return []
+    out = []
+    past = current_set_past_limit(snapshot, limits, margin)
+    soonest = _soonest_stop(snapshot)
+    for j, s in enumerate(plan.stints):
+        seen = limits.get(s.compound)
+        if seen is None:
+            continue
+        end = (snapshot.tyre_age if j == 0 else getattr(s, "start_age", 0)) + s.laps
+        if end <= seen + margin:
+            continue
+        if j == 0 and past and (s.laps <= soonest or (len(plan.stints) == 1 and
+                                                      snapshot.remaining_laps < soonest + snapshot.race.min_stint_laps)):
+            continue
+        hint = f"; this set is already past it, so pit after {soonest} lap(s)" if j == 0 and past else ""
+        out.append(f"Stint {j + 1} ({s.compound}) ends at tyre age {end:g}, past the stint limit of "
+                   f"{seen + margin:g} (the oldest {s.compound} tyre run in this race, {seen:g}, + {margin}){hint}.")
+    return out
+
+
+@RULES.register("stint_limit")
+def stint_limit(ctx):
+    return stint_limit_violations(ctx.snapshot, ctx.plan, ctx.stint_limits,
+                                  getattr(ctx.config, "stint_limit_margin_laps", None))
 
 
 def assign_sets(snapshot, plan, sources=None):

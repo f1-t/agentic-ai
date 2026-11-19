@@ -251,7 +251,9 @@ def test_an_accepted_first_proposal_is_the_unbounded_draw():
     out = {}
     for params in ({"draw": "posterior"}, {"draw": "posterior", "wear_lower_bound": 0.0}):
         f = noisy_frame(sd=3.0, seed=3)
-        s = Simulator(f[f["lap"] <= 10], SimConfig(degradation={"name": "linear_fuel", "params": params}))
+        # R8 off: a frame cut at lap 10 runs no tyre past age 10 (docs/rules.md R8)
+        s = Simulator(f[f["lap"] <= 10], SimConfig(degradation={"name": "linear_fuel", "params": params},
+                                                   stint_limit_margin_laps=None))
         out[len(params)] = (s, s.simulate_batch(snap, [ONE, TWO], seed=3, n_samples=200).times)
     (free_sim, a), (sim, b) = out[1], out[2]
     z = batch_normals(3, DEGRADATION_STREAM, 200, sim.degradation.n_params)
@@ -268,7 +270,8 @@ def test_an_accepted_first_proposal_is_the_unbounded_draw():
 
 def test_bounded_batch_rows_do_not_depend_on_the_batch_size():
     assert DEGRADATION_RETRY_STREAM not in (DEGRADATION_STREAM, LAP_NOISE_STREAM, 1)
-    s = Simulator(first_stints(), SimConfig(degradation={"name": "linear_fuel",
+    # R8 off: first_stints runs no tyre past age 24 (docs/rules.md R8)
+    s = Simulator(first_stints(), SimConfig(stint_limit_margin_laps=None, degradation={"name": "linear_fuel",
                                                          "params": {"draw": "posterior", "wear_lower_bound": 0.0}},
                                             lap_noise="residual"))
     snap = Snapshot(race=RACE, driver="X", laps_completed=20, compound="SOFT", tyre_age=20)
@@ -304,7 +307,8 @@ def test_default_none_is_the_unbounded_fit_and_draw():
     out = []
     for params in ({"draw": "posterior"}, {"draw": "posterior", "wear_lower_bound": None}):
         s = Simulator(frame, SimConfig(degradation={"name": "linear_fuel", "params": params}, lap_noise="residual",
-                                       fit_window="to_snapshot"), synthetic_practice(coefs=FLAT))
+                                       fit_window="to_snapshot", stint_limit_margin_laps=None),   # as above
+                      synthetic_practice(coefs=FLAT))
         fit = s.fitted_for(snap)
         assert fit.degradation.draw_tries == 1 and fit.degradation.wear_lower_bound is None
         assert not {"bounded", "unconstrained", "draw_stats"} & set(fit.degradation.fit_report)

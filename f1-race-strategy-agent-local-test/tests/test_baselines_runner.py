@@ -46,7 +46,11 @@ def test_run_pipeline_offline_lap0():
     assert "fixed_two_stop" in rows
     assert "greedy_crossover" in rows
     assert rows["actual_strategy"]["status"] == "ok"
+    assert rows["fixed_two_stop"]["status"] == "ok"
+    # HAM starts on a 4-lap-old SOFT: S33 > M33 ends it at 37, past the R8 stint limit of 35
+    # (docs/rules.md), so the eval wrapper moves the stop to the last legal lap
     assert rows["fixed_one_stop"]["status"] == "ok"
+    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 31], ["MEDIUM", 35]]
     assert rows["actual_strategy"]["regret_s"] >= 0.0
 
 
@@ -63,7 +67,29 @@ def test_run_pipeline_offline_midrace():
     assert res["optimizer_reference"]["plan"] is not None
     rows = {r["policy"]: r for r in res["results"]}
     assert rows["actual_strategy"]["status"] == "ok"
+    # SOFT at age 31: the plain one stop runs it past the R8 stint limit of 35 (docs/rules.md);
+    # the eval wrapper pits it at age 35, and fixed_two_stop, not limit-aware, is invalid
     assert rows["fixed_one_stop"]["status"] == "ok"
+    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 4], ["MEDIUM", 35]]
+    assert rows["fixed_two_stop"]["status"] == "invalid"
+    assert "past the stint limit of 35" in rows["fixed_two_stop"]["reason"]
+
+
+def test_run_pipeline_agent_row_carries_submitted_in_grace(monkeypatch):
+    from src.baselines import runner
+
+    rec = {"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": 0.6, "rationale": "r", "key_risks": []}
+    trajectory = [{"tool": "get_race_snapshot", "phase": "evidence"},
+                  {"tool": "submit_recommendation", "phase": "grace", "output": {"accepted": True}}]
+    def fake_run_agent(*args, stats, **kwargs):
+        stats.update(evidence_calls=1)
+        return rec, trajectory
+    monkeypatch.setattr(runner, "run_agent", fake_run_agent)
+    res = run_pipeline(race_id="2021_04_spain", driver="HAM", lap=27, verbose=False, max_stops=2, seed=0)
+    rows = {r["policy"]: r for r in res["results"]}
+    assert rows["agent"]["submitted_in_grace"] is True and rows["agent"]["tool_calls"] == 2
+    assert rows["agent"]["evidence_calls"] == 1
+    assert rows["fixed_one_stop"]["submitted_in_grace"] is None and rows["fixed_one_stop"]["evidence_calls"] is None
 
 
 def test_format_table_renders():

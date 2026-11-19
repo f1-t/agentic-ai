@@ -16,6 +16,7 @@ load_dotenv()
 
 DEFAULT_MAX_STEPS = 10
 DEFAULT_MAX_TOOL_CALLS = 24
+DEFAULT_SUBMIT_GRACE_STEPS = 2
 
 SYSTEM_PROMPT = """You are a Formula 1 race strategist making a MID-RACE decision from a snapshot in time.
 
@@ -116,22 +117,31 @@ def _usage(raw):
 
 
 def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=None,
-              max_tool_calls=None, log_path=None, stats=None):
+              max_tool_calls=None, log_path=None, stats=None, submit_grace_steps=None):
     """Run one decision episode. Returns ``(recommendation, trajectory)``.
 
     ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot.
     tools.set_snapshot keeps a contract for the tools and shows the model its
     RaceSnapshot.from_contract view. Every attempted tool call, including
-    invalid calls and submission attempts, is logged. When ``stats`` is a dict it receives
-    ``steps`` and, if the backend reports usage, the summed ``input_tokens`` and
-    ``output_tokens`` (None when it does not).
+    invalid calls, refused calls and submission attempts, is logged with its ``phase``.
+    Each tool-results message ends with the turn and evidence-call counts. When the
+    ``max_steps`` evidence turns end without an accepted submission, up to
+    ``submit_grace_steps`` (AGENT_SUBMIT_GRACE_STEPS, default 2) grace turns follow that
+    offer only submit_recommendation; evidence calls in them are refused. An evidence call
+    identical to one already run this episode (same tool and arguments) is refused without
+    using budget: the tools are deterministic for a snapshot. When ``stats`` is a dict it
+    receives ``steps`` (grace turns included), ``evidence_calls`` (the evidence calls that
+    ran: no submissions, no refused calls) and, if the backend reports usage, the summed
+    ``input_tokens`` and ``output_tokens`` (None when it does not).
     """
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
-    stats.update(steps=0, input_tokens=None, output_tokens=None)
+    stats.update(steps=0, evidence_calls=0, input_tokens=None, output_tokens=None)
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))
+    if submit_grace_steps is None:
+        submit_grace_steps = int(os.environ.get("AGENT_SUBMIT_GRACE_STEPS", DEFAULT_SUBMIT_GRACE_STEPS))
     log_path = log_path or os.environ.get("AGENT_TRAJECTORY_LOG")
     episode_id = os.environ.get("AGENT_EPISODE_ID") or f"ep_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}"
     api_tools = _api_tools()
@@ -139,13 +149,25 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     messages = [{"role": "user", "content": prompt + "\n\nRace snapshot:\n" + json.dumps(snapshot.to_dict(), ensure_ascii=False)}]
     trajectory = []
     tool_calls_used = 0
+    run_calls = {}   # (tool, sorted-key arguments) -> call_index of the evidence call that ran
 
     if verbose:
         model_name = getattr(backend, "model", getattr(backend, "model_id", "unknown"))
         print(f"  [backend] {backend.name}: {model_name}")
 
-    for step in range(1, max_steps + 1):
-        turn = backend.run_turn(system_prompt=SYSTEM_PROMPT, messages=messages, tools=api_tools, max_tokens=4000)
+    def grace_note(step):
+        # from the last evidence turn on: the turns are spent, only a submission is left
+        grace_left = max_steps + submit_grace_steps - step
+        if step < max_steps or grace_left <= 0:
+            return None
+        return (f"The evidence turns are spent; no further evidence calls will run. You MUST submit a "
+                f"recommendation now with submit_recommendation, from the evidence above "
+                f"({grace_left} submission turn{'s' if grace_left != 1 else ''} left).")
+
+    for step in range(1, max_steps + submit_grace_steps + 1):
+        phase = "evidence" if step <= max_steps else "grace"
+        turn = backend.run_turn(system_prompt=SYSTEM_PROMPT, messages=messages,
+                                tools=api_tools if phase == "evidence" else [SUBMIT_TOOL], max_tokens=4000)
         stats["steps"] = step
         used = _usage(turn.raw)
         if used is not None:
@@ -153,7 +175,10 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                 if n is not None:
                     stats[key] = (stats[key] or 0) + n
         if not turn.tool_calls:
-            messages.append({"role": "user", "content": "No tool call was detected. Respond with a valid tool call; submit if you have enough evidence."})
+            content = "No tool call was detected. Respond with a valid tool call; submit if you have enough evidence."
+            if (spent := grace_note(step)):
+                content += " " + spent
+            messages.append({"role": "user", "content": content})
             continue
 
         if backend.name == "anthropic":
@@ -163,20 +188,33 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
 
         results = []
         for call in turn.tool_calls:
-            if tool_calls_used >= max_tool_calls:
-                messages.append({"role": "user", "content": "Tool-call budget exhausted. Submit your best recommendation now."})
-                break
-            tool_calls_used += 1
             args = dict(call.arguments)
+            rec = None
+            # A submission is always processed and never counts against the evidence budget;
+            # the budget guard applies to evidence tools only. A grace turn runs no evidence, and
+            # an evidence call identical to one already run is refused without using budget.
+            key = (call.name, json.dumps(args, sort_keys=True, default=str))
             if call.name == "submit_recommendation":
                 rec, error = _normalise_submission(args)
                 out = {"accepted": error is None} if error is None else {"error": error, "recoverable": True}
+            elif phase == "grace":
+                out = {"error": "Evidence turns are spent; call not run. Submit your recommendation now with "
+                                "submit_recommendation.", "recoverable": True}
+            elif tool_calls_used >= max_tool_calls:
+                out = {"error": "Tool-call budget exhausted; call not run. Submit your best recommendation now.",
+                       "recoverable": True}
+            elif key in run_calls:
+                out = {"error": f"Identical to call {run_calls[key]}. Its result is above. Change the arguments or submit.",
+                       "recoverable": True}
             else:
-                rec = None
+                tool_calls_used += 1
+                stats["evidence_calls"] = tool_calls_used
+                run_calls[key] = len(trajectory) + 1
                 out = _dispatch(call.name, args)
 
-            event = {"episode_id": episode_id, "step": step, "call_index": tool_calls_used, "tool": call.name,
-                     "input": args, "output": out, "error": out.get("error") if isinstance(out, dict) else None}
+            event = {"episode_id": episode_id, "step": step, "phase": phase, "call_index": len(trajectory) + 1,
+                     "tool": call.name, "input": args, "output": out,
+                     "error": out.get("error") if isinstance(out, dict) else None}
             trajectory.append(event)
             _append_log(log_path, {**event, "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
             if verbose:
@@ -190,12 +228,26 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             else:
                 results.append({"tool": call.name, "result": out})
 
-        if tool_calls_used >= max_tool_calls:
-            # One final model turn is allowed to submit without additional evidence calls.
-            messages.append({"role": "user", "content": "Evidence budget is exhausted. You MUST call submit_recommendation now; do not call any other tool."})
-        elif backend.name == "anthropic":
-            messages.append({"role": "user", "content": results})
+        # Once the evidence budget is spent the turn's results are kept and the model is told to
+        # submit; a later submission is still accepted, further evidence calls are refused.
+        must_submit = "Evidence budget is exhausted. You MUST call submit_recommendation now; do not call any other tool."
+        notes = []
+        if phase == "evidence":
+            notes.append(f"Turn {step} of {max_steps}. Evidence calls used {tool_calls_used} of {max_tool_calls}.")
+            if step == max_steps - 1:
+                notes.append("One evidence turn is left after this one.")
+            if tool_calls_used >= max_tool_calls:
+                notes.append(must_submit)
+        if (spent := grace_note(step)):
+            notes.append(spent)
+        note = " ".join(notes)
+        if backend.name == "anthropic":
+            content = results + ([{"type": "text", "text": note}] if note else [])
+            messages.append({"role": "user", "content": content})
         else:
-            messages.append({"role": "user", "content": "Tool results:\n" + json.dumps(results, ensure_ascii=False)})
+            content = "Tool results:\n" + json.dumps(results, ensure_ascii=False)
+            if note:
+                content += "\n\n" + note
+            messages.append({"role": "user", "content": content})
 
     return None, trajectory

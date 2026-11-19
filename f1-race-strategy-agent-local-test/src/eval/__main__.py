@@ -128,13 +128,20 @@ def main(argv=None):
 
     if args.command == "reference":
         if args.check:
-            stale = stale_references(args.reference_dir)
+            found = stale_references(args.reference_dir)
             from ..sim.calibration import SIM_CODE_VERSION
-            from .reference import REFERENCE_FORMAT
+            from .reference import REFERENCE_FORMAT, expected_stale
+            stale = [(p, m) for p, m in found if expected_stale(p) is None]
+            expected = [(p, m) for p, m in found if expected_stale(p) is not None]
             print(f"{len(stale)} cached references with a sim_code_version other than {SIM_CODE_VERSION} "
                   f"or a format older than {REFERENCE_FORMAT}" + (":" if stale else ""))
             for path, meta in stale:
                 print(f"  {path}  sim_code_version {meta.get('sim_code_version')}  format {meta.get('format', 1)}")
+            if expected:
+                print(f"{len(expected)} expected stale (docs/eval.md):")
+                for path, meta in expected:
+                    print(f"  {path}  sim_code_version {meta.get('sim_code_version')}  format "
+                          f"{meta.get('format', 1)}: {expected_stale(path)}")
             return 0
         if args.scenarios is None:
             ap.error("reference needs --scenarios (or --check)")

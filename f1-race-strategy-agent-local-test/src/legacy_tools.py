@@ -158,10 +158,11 @@ def _get_simulator():
     global _simulator
     if _simulator is None:
         # baseline filter and model, so ground truth and the graded test keep their numbers;
-        # lap1_extra_s is pinned to 0 for the same reason
+        # lap1_extra_s is pinned to 0 and the R8 stint limit is off for the same reason
         frame = lap_frame(_load_session().laps, OUTLIER_FACTOR)
         _simulator = Simulator(frame, SimConfig(degradation={"name": "linear"},
-                                                effects=EventEffects(lap1_extra_s=0.0)))
+                                                effects=EventEffects(lap1_extra_s=0.0),
+                                                stint_limit_margin_laps=None))
     return _simulator
 
 
