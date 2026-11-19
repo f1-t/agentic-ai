@@ -265,7 +265,16 @@ profile: seed 0, 50 samples, two stops, default world): `data/references/v1/441a
 They were rebuilt from scratch after main was merged in (#61) and are byte-identical. v1
 re-scored on them (baselines with the limit-aware wrapper, and the recorded run):
 `reports/eval/v1_baselines_r8.csv`; pilot1 and d2 baselines: `pilot1_baselines_r8.csv` and
-`d2_baselines_r8.csv` ("Result files" below). The record below is of the reference before R8.
+`d2_baselines_r8.csv` ("Result files" below).
+
+**Stale until the next rebuild (expected).** Merging main with #69 (the `_ParameterDraws._plan`
+fix in degradation.py) and #60 moved the physics version to `24af1cd92d22`, so `reference
+--check` lists these three references as stale. That is expected: one rebuild of v1, pilot1
+and d2 is planned after more PRs land, and the `*_r8` result files were scored on the
+references above at `983fd6f4f2bf` and were not rerun. Until then `score --require-reference`
+on v1, pilot1 or d2 fails with a missing reference rather than scoring on stale ones.
+
+The record below is of the reference before R8.
 
 Before: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
 was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
@@ -365,9 +374,9 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | v1, baselines + recorded run | `reports/eval/v1_baselines_r8.csv` (R8 rank 1, margin 3, limit-aware baselines) | `v1_baselines_split.csv` (Milestone 2: belief/world split, before R8); `v1_baselines.csv` (before the split) |
 | v1, world traffic on | none under R8 yet | `v1_world_baselines.csv` (before R8) |
 | pilot1, baselines | `reports/eval/pilot1_baselines_r8.csv` | `pilot1.csv` baseline rows (Milestone 2, before R8) |
-| pilot1, live agent | `pilot1.csv` agent rows (Milestone 2, before R8; no agent rerun since) | |
+| pilot1, live agent | `pilot1.csv` agent rows (Milestone 2, before R8; the cited ones) | `pilot1_fix*.csv` is a follow-up rerun after #59, not a replacement (below) |
 | d2, baselines | `reports/eval/d2_baselines_r8.csv` | `d2.csv` baseline rows (Milestone 2, before R8) |
-| d2, live agent | `d2.csv` agent rows (Milestone 2, before R8; no agent rerun since) | |
+| d2, live agent | `d2.csv` agent rows (Milestone 2, before R8; the cited ones) | `d2_fix*.csv` is a follow-up rerun after #59, not a replacement (below) |
 | d3 | none: d3 is rebuilt and scored at the final evaluation | `d3_baselines.csv` (before R8; its reference is the expected stale one) |
 
 Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
@@ -400,7 +409,8 @@ baselines, against the Milestone 2 table (`v1_baselines_split.csv`, before R8). 
   usually followed by a second crossover stop, a two-stop against mostly one-stop references.
 - No row has negative regret.
 
-On the rows scored ok both times (mean of R8 minus M2, 95% cluster-bootstrap interval over
+On the rows scored ok both times, Milestone 2 being `v1_baselines_split.csv` (not the older
+`v1_baselines.csv`) (mean of R8 minus M2, 95% cluster-bootstrap interval over
 (race, driver), `eval.compare.cluster_bootstrap`, 2000 draws):
 
 | policy | n | mean regret M2 | R8 | R8 - M2 | 95% CI |
