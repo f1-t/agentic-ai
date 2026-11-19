@@ -100,7 +100,7 @@ def test_practice_rows_have_no_gap_and_are_free_air():
 # Re-pinned with stable_bytes (rounded floats) on the current default outputs.
 # MAIN_DIGEST is batch_digest(...)[1] run on origin/main 940f61d, on the frames without the gap
 # columns (which main does not have)
-MAIN_DIGEST = "18d10ae7e455b0b77f4aa564f9208debc33eb9e05e61abefdc26361b3cd41541"
+MAIN_DIGEST = "b2fa5275f7d5e080ab602e812c58011231b61c33c93b83d940a203a0448dfee6"
 
 
 def with_columns(frame, seed=0):
@@ -118,6 +118,20 @@ def stable_bytes(a):
     return np.ascontiguousarray(a).tobytes()
 
 
+def stable_text(x):
+    """repr of a nested report with every float rounded as stable_bytes does (numpy values and
+    containers included), so text hashing does not see the last bits either."""
+    if isinstance(x, dict):
+        return "{" + ",".join(f"{k!r}:{stable_text(v)}" for k, v in sorted(x.items(), key=lambda kv: str(kv[0]))) + "}"
+    if isinstance(x, (list, tuple)):
+        return "[" + ",".join(stable_text(v) for v in x) + "]"
+    if isinstance(x, (float, np.floating)):
+        return repr(float(np.round(x, 9) + 0.0))
+    if isinstance(x, np.ndarray):
+        return stable_text(x.tolist())
+    return repr(x)
+
+
 def batch_digest(make):
     """sha256 over fits, model reports and batches under each window; `make(frame)` adapts the
     race frame (identity, or with_columns)."""
@@ -132,10 +146,10 @@ def batch_digest(make):
                 snap = at_lap(k) if k else Snapshot.at_start(RACE, "X", "SOFT")
                 fit = sim.fitted_for(snap)
                 # cov and fuel_wear_corr (SPEC 0017) came after main's digest; nothing else moved
-                h.update(repr(sorted((k, v) for k, v in fit.degradation.fit_report.items() if k != "cov")).encode())
+                h.update(stable_text({k: v for k, v in fit.degradation.fit_report.items() if k != "cov"}).encode())
                 h.update(stable_bytes([fit.ref_lap_s]))
-                h.update(sim.model_report(snap, calibration_summary=None).model_dump_json(
-                    exclude={"fuel_wear_corr"}).encode())
+                h.update(stable_text(sim.model_report(snap, calibration_summary=None).model_dump(
+                    mode="json", exclude={"fuel_wear_corr"})).encode())
                 b = sim.simulate_batch(snap, [[["SOFT", 50 - k]]] if k >= 30 else plans, seed=3, n_samples=20)
                 for a in (b.times, b.pit_loss, b.dnf, b.big_loss):
                     h.update(stable_bytes(a))
