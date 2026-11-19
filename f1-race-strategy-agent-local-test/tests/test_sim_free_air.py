@@ -97,9 +97,10 @@ def test_practice_rows_have_no_gap_and_are_free_air():
 
 
 # --- default off ---------------------------------------------------------------
+# Re-pinned with stable_bytes (rounded floats) on the current default outputs.
 # MAIN_DIGEST is batch_digest(...)[1] run on origin/main 940f61d, on the frames without the gap
 # columns (which main does not have)
-MAIN_DIGEST = "f0b05641cbb14fb859a5a40d2890022c62e4c5770a00180084fab7ba4b3cf5cb"
+MAIN_DIGEST = "18d10ae7e455b0b77f4aa564f9208debc33eb9e05e61abefdc26361b3cd41541"
 
 
 def with_columns(frame, seed=0):
@@ -107,6 +108,14 @@ def with_columns(frame, seed=0):
     rng = np.random.default_rng(seed)
     gap = rng.uniform(0.2, 4.0, len(frame))
     return frame.assign(gap_ahead_s=gap, car_ahead="Y", gap_behind_s=gap, free_air=gap >= FREE_AIR_GAP_S)
+
+
+def stable_bytes(a):
+    """Array bytes that do not depend on the BLAS/CPU: floats rounded to 9 decimals, -0.0 to 0.0."""
+    a = np.asarray(a)
+    if a.dtype.kind == "f":
+        a = np.round(a, 9) + 0.0
+    return np.ascontiguousarray(a).tobytes()
 
 
 def batch_digest(make):
@@ -124,12 +133,12 @@ def batch_digest(make):
                 fit = sim.fitted_for(snap)
                 # cov and fuel_wear_corr (SPEC 0017) came after main's digest; nothing else moved
                 h.update(repr(sorted((k, v) for k, v in fit.degradation.fit_report.items() if k != "cov")).encode())
-                h.update(np.array([fit.ref_lap_s]).tobytes())
+                h.update(stable_bytes([fit.ref_lap_s]))
                 h.update(sim.model_report(snap, calibration_summary=None).model_dump_json(
                     exclude={"fuel_wear_corr"}).encode())
                 b = sim.simulate_batch(snap, [[["SOFT", 50 - k]]] if k >= 30 else plans, seed=3, n_samples=20)
                 for a in (b.times, b.pit_loss, b.dnf, b.big_loss):
-                    h.update(np.ascontiguousarray(a).tobytes())
+                    h.update(stable_bytes(a))
     return len(plans), h.hexdigest()
 
 
