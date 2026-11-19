@@ -235,7 +235,8 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
               max_stops: int = 2, items=None, ref_sims=(), warn: bool = True,
               references: ReferenceStore | None = None) -> pd.DataFrame:
     """Rows for every scenario (or `items`), stamped with the set's version and digest, both
-    simulators' config hashes, the belief's fit window and the code version.
+    simulators' config hashes, the belief's fit window, the world's R8 stint_limit_rank and
+    stint_limit_margin_laps (None: R8 off) and the code version.
     `sim_for(race_id, role)` returns the race's Simulator for role "belief" or "world"
     (race_simulators). config_hash leaves fit_window out, so belief_window says which
     window the policies planned on. `ref_sims` are more sim_for (E, optional): their world
@@ -254,6 +255,8 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
                  "belief_config_hash": calibration.config_hash(belief.config),
                  "world_config_hash": calibration.config_hash(world.config),
                  "belief_window": belief.config.fit_window,
+                 "stint_limit_rank": world.config.stint_limit_rank,
+                 "stint_limit_margin_laps": world.config.stint_limit_margin_laps,
                  "sim_code_version": calibration.SIM_CODE_VERSION}
         if alts:
             stamp["ref_world_config_hashes"] = ";".join(calibration.config_hash(a.config) for a in alts)
@@ -357,13 +360,30 @@ def check_agent_regret(rows: pd.DataFrame) -> pd.DataFrame:
     return bad
 
 
+SUMMARY_STAMPS = ("stint_limit_rank", "stint_limit_margin_laps")
+
+
+def _stamps(g: pd.DataFrame) -> dict:
+    """The SUMMARY_STAMPS the rows carry, each as its one value (NaN when R8 is off, the
+    distinct values joined by ";" if rows of several settings are summarized together)."""
+    out = {}
+    for col in SUMMARY_STAMPS:
+        if col in g:
+            vals = sorted(g[col].dropna().unique().tolist())
+            out[col] = np.nan if not vals else vals[0] if len(vals) == 1 else ";".join(map(str, vals))
+    return out
+
+
 def summarize(rows: pd.DataFrame) -> pd.DataFrame:
-    """One row per (race, policy), then one per policy over every race with race_id "ALL".
+    """One row per (race, policy), then one per policy over every race with race_id "ALL",
+    with the R8 stamps (SUMMARY_STAMPS) when the rows carry them, so tables scored at
+    different stint_limit_rank or margin can be told apart side by side.
     Agent rows below the reference raise an AgentRegretWarning (check_agent_regret)."""
     check_agent_regret(rows)
-    out = [{"race_id": race, "policy": pol, **_summary(g)}
+    out = [{"race_id": race, "policy": pol, **_summary(g), **_stamps(g)}
            for (race, pol), g in rows.groupby(["race_id", "policy"], sort=True)]
-    out += [{"race_id": "ALL", "policy": pol, **_summary(g)} for pol, g in rows.groupby("policy", sort=True)]
+    out += [{"race_id": "ALL", "policy": pol, **_summary(g), **_stamps(g)}
+            for pol, g in rows.groupby("policy", sort=True)]
     return pd.DataFrame(out)
 
 

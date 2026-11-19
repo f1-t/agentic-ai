@@ -63,6 +63,38 @@ compound tuple (Quan's key). The additive model scores stint orders identically 
 Spain, S28/S28/M10 and S28/M10/S28 tie exactly), so this is the convention that makes the
 optimizer return one plan.
 
+**R8 Stint limit.** Per compound, a stint ends at most at the oldest tyre age any car ran on
+that compound in this race plus `SimConfig.stint_limit_margin_laps` laps (default 3; `null`
+turns R8 off). `SimConfig.stint_limit_rank` (default 1) picks which car sets the age: the
+limit is the age at least that many cars reached, the rank-th largest of the per-car maximum
+ages on the compound, so 1 is the oldest tyre any car ran and 3 the age three cars reached
+(2023 Spain: HARD 50 at rank 1, 32 at rank 3). A compound fewer cars ran than the rank takes
+its smallest per-car maximum; a rank above 1 needs the frame's driver column. The end age is `tyre_age + laps` for the current set and `start_age + laps`
+for a later one. The limits are computed once per race from the full race lap frame
+(`rules.stint_limits`, `Simulator.stint_limits`, every lap counted, clean or not), which the
+belief and the world simulators are both built on, so both apply the same limits whatever
+their fit window. A compound no car ran in the race has no limit. There is no exemption for
+a degradation model with a hinge: past the last observed age a hinge is still a straight
+line. If the current set cannot keep inside its limit (it cannot reach its soonest legal
+stop, R1 and R2, inside the limit, or no legal stop fits in the laps left and the flag is
+past the limit), the first stint may run to that soonest stop, or to the flag when no legal
+stop fits; `optimize_batch` records this
+as `diagnostics["stint_limit_fallback"]`. The limit is a hindsight race constant, in the
+same class as the observed pit loss: it reads the whole race, including laps after the
+snapshot. An as-of source (earlier seasons at the circuit, Pirelli guidance) can replace
+it later without changing where the rule is enforced.
+
+The baseline policies in `src/baselines` do not know R8 and are unchanged. The eval wrapper
+(`src/eval/policies.py`, `_bridged`) makes two of them limit-aware when their plan breaks
+it: `fixed_one_stop` keeps its compounds and moves the first stop earlier, to the last lap at
+which the whole plan passes every rule; `greedy_crossover` takes a forced stop on the lap its
+set would pass the limit (it reads a prohibitive lap time past the limit, so its own
+crossover test fires there whenever a stop is allowed). `actual_strategy` and
+`fixed_two_stop` are not adjusted. Every baseline plan is then scored by the world, which
+checks every rule, so one that still breaks R8 is an `invalid` row, the status an agent's
+plan past the limit gets. With `stint_limit_margin_laps: null` the baselines are their own
+plans, as before R8.
+
 ## Where each rule lives
 
 | Rule | Simulator | Baseline optimizer | Bridge |
@@ -74,6 +106,7 @@ optimizer return one plan.
 | R5 | `Simulator`, `SimConfig` | `Snapshot.pit_loss_s` is a legacy field | `optimize_batch` scores with the simulator only |
 | R6 | `simulate_batch` | `optimize(seeds=...)` | `optimize_batch` reports `seeds = (0, ..., n-1)`, batch seed in `diagnostics["seed"]` |
 | R7 | `compare` ranks by mean only (`best` is the lowest mean) | `optimize`'s tie-break key | `optimize_batch` uses the same key (`_key`) |
+| R8 | `stint_limit` (a validity rule, as R1-R4: a plan past a limit is invalid, with an error the agent's tools return) | not modelled (`src/baselines` unchanged); the eval wrapper (`eval.policies`) makes `fixed_one_stop` and `greedy_crossover` limit-aware, and a baseline plan still past a limit is invalid | `optimize_batch` filters the candidates, counted in `diagnostics["stint_limit_dropped"]` |
 
 `laps_on_set` is the laps since the last recorded stop, capped by the set's age when the
 stint history does not add up.

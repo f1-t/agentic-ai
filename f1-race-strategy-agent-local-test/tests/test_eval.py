@@ -265,7 +265,9 @@ def test_spain_baselines_score_end_to_end(tmp_path):
     items, _ = sample_race(data.frame, data.race, drivers=["HAM", "VER"], max_per_race=6)
     s = ScenarioSet(version="t", items=items)
     rows = score_set(s, race_simulators(profile), resolve(["baselines"]), n_samples=1)
-    assert set(rows["status"]) <= {"ok", "unavailable"}
+    assert set(rows["status"]) <= {"ok", "unavailable", "invalid"}
+    # a baseline plan is invalid only when it is still past the R8 stint limit (docs/rules.md)
+    assert rows.loc[rows.status == "invalid", "reason"].str.contains("past the stint limit").all()
     assert (rows.loc[rows.status == "ok", "regret_s"] >= 0).all()
     assert (summarize(rows).query("race_id == 'ALL'")["scored"] > 0).any()
 

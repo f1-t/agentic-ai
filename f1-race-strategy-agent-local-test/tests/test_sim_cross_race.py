@@ -413,7 +413,9 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
         for a in ARMS:
             assert (out / "h" / "arms" / a / f"{r}.parquet").is_file()
     tables = cross_race.unpack(pd.read_parquet(out / "races" / "2021_04_spain" / "2021_04_spain.parquet"))
-    assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "eligibility"} <= set(tables)
+    assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "wear_check",
+            "eligibility"} <= set(tables)
+    assert list(tables["wear_check"]["compound"]) == ["MEDIUM", "SOFT"]
     assert {"clean_free", "clean_pack"} <= set(tables["by_kind"]["kind"])
     assert set(calibration.INTERVAL_COLUMNS) <= set(tables["g"].columns)
     assert set(tables["gate"]["mode"]) == {"simulated_order"}
@@ -491,3 +493,22 @@ def test_eligibility_json_lists_every_race(run_dir):
     out, _, _ = run_dir
     elig = json.loads((out / "eligibility.json").read_text())
     assert [e["race_id"] for e in elig] == RUN_RACES and all(e["eligible"] for e in elig)
+
+
+def test_wear_check_reads_within_stint_wear_net_of_fuel():
+    """SPEC 0023 A: per (driver, stint) of 8+ clean laps, the slope on tyre age less the fuel
+    slope; short stints and unclean laps stay out."""
+    from types import SimpleNamespace
+    rows = []
+    for d, (stint, n, start) in enumerate([(1, 12, 0), (2, 10, 15), (1, 5, 0)]):
+        for age in range(1, n + 1):
+            lap = start + age
+            rows.append({"driver": f"D{d}", "stint": stint, "compound": "SOFT", "tyre_age": age, "lap": lap,
+                         "clean": True, "lap_time_s": 80.0 + (0.05 + 0.01 * d) * age - 0.04 * lap})
+    rows.append({**rows[0], "lap_time_s": 99.0, "clean": False})
+    model = SimpleNamespace(coefs={"SOFT": (80.0, 0.03), "MEDIUM": (81.0, 0.02)}, fuel_slope=-0.04)
+    t = cross_race.wear_check(pd.DataFrame(rows), model).set_index("compound")
+    assert t.loc["SOFT", "fitted_wear_s_per_lap"] == pytest.approx(0.03)
+    assert t.loc["SOFT", "within_stint_wear_s_per_lap"] == pytest.approx(0.055)   # median of 0.05, 0.06
+    assert t.loc["SOFT", "n_stints"] == 2 and t.loc["MEDIUM", "n_stints"] == 0
+    assert np.isnan(t.loc["MEDIUM", "within_stint_wear_s_per_lap"])
