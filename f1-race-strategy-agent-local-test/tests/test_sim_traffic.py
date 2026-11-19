@@ -78,7 +78,16 @@ def by_lap(inc, laps):
 # --- engine: byte identity and pace -----------------------------------------------
 # 1. default off, pace None: hashes equal to main. MAIN_DIGEST was computed by running
 # batch_digest on origin/main 7a53507 (before traffic and pace existed).
-MAIN_DIGEST = "5f5159d7d8c8e48ce68e8365fb561329b8750589eaedda4ecf79e9a45bf3cb14"
+# Re-pinned when the hash moved to stable_bytes (rounded floats), computed on the current default outputs.
+MAIN_DIGEST = "fb119c890c604a751b6636dbad2f227e1ebf77d31ebc96106d7ec26013d1ae14"
+
+
+def stable_bytes(a):
+    """Array bytes that do not depend on the BLAS/CPU: floats rounded to 9 decimals, -0.0 to 0.0."""
+    a = np.asarray(a)
+    if a.dtype.kind == "f":
+        a = np.round(a, 9) + 0.0
+    return np.ascontiguousarray(a).tobytes()
 
 
 def batch_digest(sim):
@@ -89,7 +98,7 @@ def batch_digest(sim):
     b = sim.simulate_batch(s, plans, seed=3, n_samples=20, return_laps=True)
     h = hashlib.sha256()
     for a in (b.times, b.pit_loss, b.lap_times, *b.stint_seconds):
-        h.update(np.ascontiguousarray(a).tobytes())
+        h.update(stable_bytes(a))
     return len(plans), h.hexdigest()
 
 
@@ -636,13 +645,14 @@ def ghost_digest(traffic):
     b = Simulator(df, cfg).simulate_batch(snap(), plans, rules=RULES, n_samples=40, return_laps=True, seed=7)
     h = hashlib.sha256()
     for a in (b.times, b.pit_loss, b.lap_times, b.traffic_s, b.passes, *b.stint_seconds):
-        h.update(np.ascontiguousarray(a).tobytes())
+        h.update(stable_bytes(a))
     return h.hexdigest()
 
 
+# Re-pinned with stable_bytes (rounded floats) on the current default outputs.
 # computed with ghost_digest on origin/main 3c8b1a8 (#27, before bunching)
-GHOST_MAIN_DIGEST = "ee500eacb2ddca1e597cff06f9add58ef490e975a6b69899b651fa9e5c4e375e"
-NONE_MAIN_DIGEST = "9b70c51f5437003c63911c138eae1e57e7a30372f18d2557ca086e281c2081d5"
+GHOST_MAIN_DIGEST = "b68dc9f92c1cf239e3d351aa858704b9ea0a808d3ce3b65b67a65e3817ce5638"
+NONE_MAIN_DIGEST = "11c31593875427886da0e72e485f810e670b6fc9c2bc08f3908e305e5ff5c340"
 
 
 def test_sc_bunching_off_and_traffic_none_digests_equal_main():

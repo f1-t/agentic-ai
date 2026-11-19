@@ -657,7 +657,13 @@ class _ParameterDraws:
             return cached[2]
         names = cov["names"]
         m = np.array(cov["matrix"], dtype=float).reshape(len(names), len(names))
-        bad = np.isnan(m).any(axis=1) | np.isnan(m).any(axis=0)
+        # A parameter is bad when its whole row or column is NaN (or its variance is). Testing "any
+        # NaN in the row or column" would flag every parameter, because the bad row puts a NaN in
+        # every column. A stray NaN entry marks both of its parameters.
+        nan = np.isnan(m) | np.isnan(m).T
+        whole = nan.all(axis=1) | np.isnan(np.diag(m))
+        stray = nan & ~whole[:, None] & ~whole[None, :]
+        bad = whole | stray.any(axis=1)
         if bad.any():
             warnings.warn(f"NaN posterior covariance for {[n for n, b in zip(names, bad) if b]}: "
                           "drawn at their estimate", NaNCovarianceWarning, stacklevel=4)
