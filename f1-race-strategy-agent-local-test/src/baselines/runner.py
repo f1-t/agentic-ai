@@ -132,11 +132,11 @@ def run_pipeline(
     world = sim_for(scenario.race_id, "world")
     belief = sim_for(scenario.race_id, "belief")
 
-    rec, trajectory = None, []
+    rec, trajectory, stats = None, [], {}
     if run_llm_agent:
         steps = max_steps or profile.agent.max_steps
         rec, trajectory = run_agent(
-            view, question=question, verbose=verbose, max_steps=steps
+            view, question=question, verbose=verbose, max_steps=steps, stats=stats
         )
 
     policies = dict(BASELINE_POLICIES)
@@ -145,7 +145,7 @@ def run_pipeline(
         def make_agent_policy(submission, tool_count, in_grace):
             def policy(sc, sim, stops_limit):
                 dec = Decision(None, submission=submission, tool_calls=tool_count,
-                               submitted_in_grace=in_grace)
+                               submitted_in_grace=in_grace, evidence_calls=stats.get("evidence_calls"))
                 dec.agent_decisions = True
                 return dec
 

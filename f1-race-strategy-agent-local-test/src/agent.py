@@ -130,12 +130,13 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     offer only submit_recommendation; evidence calls in them are refused. An evidence call
     identical to one already run this episode (same tool and arguments) is refused without
     using budget: the tools are deterministic for a snapshot. When ``stats`` is a dict it
-    receives ``steps`` (grace turns included) and, if the backend reports usage, the summed
+    receives ``steps`` (grace turns included), ``evidence_calls`` (the evidence calls that
+    ran: no submissions, no refused calls) and, if the backend reports usage, the summed
     ``input_tokens`` and ``output_tokens`` (None when it does not).
     """
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
-    stats.update(steps=0, input_tokens=None, output_tokens=None)
+    stats.update(steps=0, evidence_calls=0, input_tokens=None, output_tokens=None)
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))
@@ -207,6 +208,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                        "recoverable": True}
             else:
                 tool_calls_used += 1
+                stats["evidence_calls"] = tool_calls_used
                 run_calls[key] = len(trajectory) + 1
                 out = _dispatch(call.name, args)
 

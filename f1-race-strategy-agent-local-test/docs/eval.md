@@ -84,7 +84,9 @@ any scenario of any race (the lap-0 same-race guard is gone):
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
 - the submission is scored as a decision (above); `tool_calls` is the trajectory length
-  (every attempted call: refused ones and submission attempts included),
+  (every attempted call: refused ones and submission attempts included), `evidence_calls`
+  the evidence calls that actually ran (no submissions, no calls refused for the budget,
+  as a repeat or in a grace turn),
   `input_tokens` and `output_tokens` the backend's reported usage (blank when it reports
   none); a backend exception is an `error` row, not a crash;
 - each trajectory event has a `phase`: `evidence` for the `max_steps` turns, `grace` for
@@ -163,7 +165,8 @@ policy's plan is scored by the world under the same draws (docs/rules.md R6).
 | `invalid_rate` | invalid plans / (ok + invalid). Invalid: a rule broken (docs/rules.md) or no plan submitted. |
 | `stop_agreement` | share of scored plans with the optimizer's number of future stops |
 | `first_pit_error` | \|first pit lap - optimizer's first pit lap\|; 0 when neither stops, blank when only one does |
-| `latency_s`, `tool_calls`, `input_tokens`, `output_tokens` | per decision, when the policy reports them |
+| `latency_s`, `tool_calls`, `input_tokens`, `output_tokens` | per decision, when the policy reports them. `tool_calls` counts every call the agent attempted, refused calls and submission attempts included |
+| `evidence_calls` | agent rows: the evidence calls that ran (no submissions, no refused calls); summary `mean_evidence_calls` beside `mean_tool_calls` |
 | `pit_now_opt` | the world optimizer's first stop is at the end of this lap (`opt_first_pit_lap == laps_completed + 1`) |
 | `submitted_in_grace` | agent rows: the submission came in a grace turn, after the evidence turns ran out (blank for other policies) |
 | `decision`, `p_pit` | agent rows only: PIT or STAY_OUT, and the stated probability that pitting now is right (`confidence` for PIT, `1 - confidence` for STAY_OUT) |

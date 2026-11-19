@@ -173,7 +173,7 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
         if not isinstance(decision, Decision):
             decision = Decision(decision)
         row.update(latency_s=perf_counter() - started, tool_calls=decision.tool_calls,
-                   input_tokens=decision.input_tokens, output_tokens=decision.output_tokens,
+                   evidence_calls=decision.evidence_calls, input_tokens=decision.input_tokens, output_tokens=decision.output_tokens,
                    submitted_in_grace=decision.submitted_in_grace)
         if decision.error is not None:
             rows.append({**row, "status": "error", "reason": decision.error})
@@ -321,6 +321,7 @@ def _summary(g: pd.DataFrame) -> dict:
         "mean_first_pit_error": mean("first_pit_error"),
         "mean_latency_s": g_mean("latency_s"),
         "mean_tool_calls": g_mean("tool_calls"),
+        "mean_evidence_calls": g_mean("evidence_calls"),
         "mean_input_tokens": g_mean("input_tokens"),
         "mean_output_tokens": g_mean("output_tokens"),
     }

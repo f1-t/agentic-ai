@@ -273,6 +273,19 @@ def test_an_identical_evidence_call_is_refused_without_using_budget(monkeypatch)
     assert "Evidence calls used 2 of 2." in backend.seen[-1][-1]["content"]
 
 
+def test_evidence_calls_count_only_the_calls_that_ran(monkeypatch):
+    ran = stub_dispatch(monkeypatch)
+    stats = {}
+    backend = RecordingBackend([
+        ModelTurn(tool_calls=[tc("estimate_pit_loss"), tc("estimate_pit_loss")]),            # ran, repeat
+        ModelTurn(tool_calls=[tc("get_race_snapshot"), tc("get_model_report"),                # ran, budget
+                              tc("submit_recommendation", {**SUBMIT, "decision": "MAYBE"})]),  # rejected
+        ModelTurn(tool_calls=[tc("get_model_report"), tc("submit_recommendation", SUBMIT)])])  # grace
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=2, max_tool_calls=2, stats=stats)
+    assert rec is not None and len(traj) == 7
+    assert stats["evidence_calls"] == len(ran) == 2
+
+
 def test_the_status_line_counts_turns_and_calls(monkeypatch):
     stub_dispatch(monkeypatch)
     backend = RecordingBackend([evidence_turn(2), evidence_turn(1), evidence_turn(1), submit_turn()])
