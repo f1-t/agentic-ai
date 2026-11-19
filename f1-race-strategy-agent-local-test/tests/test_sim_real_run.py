@@ -59,17 +59,14 @@ def smoke(tmp_path_factory):
 
 def test_cached_races_are_the_committed_spain_cache():
     # Every cached season has its event schedule in the sqlite (dataset 3 added a seeded
-    # 2018-25 sample); the sprint weekends have no FP2/FP3 practice prior, so discovery
-    # leaves them out with a note until the simulator supports them.
+    # 2018-25 sample). Sprint weekends are listed (their practice prior reads FP1 and the
+    # Sprint). Discovery reads directory names and schedules only: no race is loaded.
     assert real_run.cached_races() == ([
         "2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir", "2021_04_spain",
         "2022_02_saudi_arabia", "2023_01_bahrain", "2023_07_spain", "2024_07_emilia_romagna",
-        "2024_08_monaco", "2024_12_united_kingdom", "2025_11_austria",
-    ], [
-        "2024/2024-06-30_Austrian_Grand_Prix: sprint weekend (no FP2/FP3 practice prior), left out",
-        "2024/2024-11-03_S\u00e3o_Paulo_Grand_Prix: sprint weekend (no FP2/FP3 practice prior), left out",
-        "2025/2025-11-30_Qatar_Grand_Prix: sprint weekend (no FP2/FP3 practice prior), left out",
-    ])
+        "2024_08_monaco", "2024_11_austria", "2024_12_united_kingdom", "2024_21_brazil",
+        "2025_11_austria", "2025_23_qatar",
+    ], [])
 
 
 def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smoke):

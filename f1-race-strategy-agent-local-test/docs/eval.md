@@ -194,6 +194,30 @@ Scenario sets under the split:
   (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
   it until the final run.
 
+### Sprint weekends
+
+A sprint weekend has one practice session, FP1, and a Sprint on Saturday. The practice prior
+reads the FP sessions a weekend has plus the Sprint (`calibrate.practice_sessions`, from the
+cached event schedule): FP1 and the Sprint on a sprint weekend, for both the degradation prior
+(`calibrate._practice`) and the pace offsets (`pace.load_practice`, as `cross_race` and the
+`calibrate` commands call it). A conventional weekend reads what it always did, FP1-FP3 for
+the prior and FP2-FP3 for the pace offsets, and its practice frame is unchanged (checked frame
+for frame on 2021 Spain and 2023 Bahrain). No physics module changed, so `SIM_CODE_VERSION`
+and the cached references are untouched. Real-run
+discovery (`real_run.cached_races`) now lists the three cached sprint weekends, 2024 Austria,
+2024 Sao Paulo and 2025 Qatar, where it used to leave them out with a note. Listing is not
+loading: 2024 Austria is held out, and 2024 Sao Paulo is not eligible.
+
+**2025 Qatar is used for calibration only and is never sampled into an eval set.** The
+weekend had a mandated maximum of 25 laps per tyre set. Race control messages do not state
+it (it was set before the event), but the stint data does: no car ran a lap on a tyre older
+than 25 laps on any compound in FP1, the Sprint or the race; 29 of the 61 race stints end at
+exactly 25 laps of tyre life; 16 cars pitted under the lap-7 safety car and 15 of them pitted
+again on lap 32, 25 laps later, to finish the 57 laps on a second 25-lap set. Rules R1-R8 have
+no rule for a stint cap, so a recommendation scored there could break a rule the race had.
+`build_set` refuses it (`scenarios.CALIBRATION_ONLY`) in every mode, `--development`
+included.
+
 ## Metrics
 
 For each scenario the optimizer (`optimizer_bridge.optimize_batch`, Quan's search scored by

@@ -76,7 +76,7 @@ import numpy as np
 import pandas as pd
 
 from ..contracts import RaceParams
-from . import calibration, calibrators, jobs, pace
+from . import calibrate, calibration, calibrators, jobs, pace
 from .compute import load_profile
 from .config import EventModel, SimConfig
 from .engine import Simulator
@@ -369,10 +369,12 @@ def free_air_share(frame) -> float:
 
 def pace_practice(data: jobs.RaceData):
     """(practice frame or None, notes) for the pace gate: pace.load_practice for a cached race,
-    which leaves out a wet FP2 or FP3; a synthetic race's own FP2 and FP3 (always dry)."""
+    its FP2 and FP3 (FP1 and the Sprint on a sprint weekend) less a wet one; a synthetic race's
+    own FP2 and FP3 (always dry)."""
     if not is_synthetic(data.race_id):
         season, rnd, _ = parse_race_id(data.race_id)
-        return pace.load_practice(season, rnd, long_run=data.config.long_run)
+        sessions = calibrate.practice_sessions(season, rnd, pace.PRACTICE_SESSIONS)
+        return pace.load_practice(season, rnd, sessions, long_run=data.config.long_run)
     p = data.practice
     if p is not None and "session" in p:
         p = p[p["session"].isin(pace.PRACTICE_SESSIONS)]
