@@ -14,6 +14,7 @@ from test_sim_pace import practice_laps
 
 CONVENTIONAL = ["Practice 1", "Practice 2", "Practice 3", "Qualifying", "Race"]
 SPRINT = ["Practice 1", "Sprint Qualifying", "Sprint", "Qualifying", "Race"]
+SPRINT_2021_22 = ["Practice 1", "Qualifying", "Practice 2", "Sprint", "Race"]   # the cached 2021-22 layout
 HAS_QATAR = (Path(data.CACHE_DIR) / "2025" / "2025-11-30_Qatar_Grand_Prix").is_dir()
 
 
@@ -22,6 +23,8 @@ HAS_QATAR = (Path(data.CACHE_DIR) / "2025" / "2025-11-30_Qatar_Grand_Prix").is_d
     (CONVENTIONAL, pace.PRACTICE_SESSIONS, ("FP2", "FP3")),
     (SPRINT, calibrate.PRACTICE_SESSIONS, ("FP1", "Sprint")),
     (SPRINT, pace.PRACTICE_SESSIONS, ("FP1", "Sprint")),
+    (SPRINT_2021_22, calibrate.PRACTICE_SESSIONS, ("FP1", "FP2", "Sprint")),
+    (SPRINT_2021_22, pace.PRACTICE_SESSIONS, ("FP1", "FP2", "Sprint")),
     (None, calibrate.PRACTICE_SESSIONS, ("FP1", "FP2", "FP3")),   # schedule not cached: unchanged
 ])
 def test_a_sprint_weekend_reads_fp1_and_the_sprint_and_a_conventional_one_is_unchanged(monkeypatch, names,
