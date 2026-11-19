@@ -5,7 +5,9 @@
 `belief` is the belief simulator (docs/eval.md "Who sees what"): fitted only on what is
 known at the snapshot. Policies plan on it; the world simulator that scores them and plans
 the reference is not passed in. The four baselines are Quan's reference policies
-(src/baselines) run through the optimizer bridge on the belief's fit. `recorded_policy`
+(src/baselines) run through the optimizer bridge on the belief's fit; under the R8 stint
+limit this wrapper makes fixed_one_stop and greedy_crossover limit-aware (_bridged), with
+src/baselines unchanged. `recorded_policy`
 replays plans saved from earlier agent runs, and `agent_policy` (an AgentPolicy) asks the
 live agent loop (src/agent.py) through whatever LLM_BACKEND is configured, at any lap of any
 race: it sees the scenario's snapshot through RaceSnapshot.from_contract, and its
@@ -46,34 +48,85 @@ class Decision:
     submission: dict | None = None
 
 
-def _bridged(choose):
+PAST_LIMIT_S = 1e6   # the lap time greedy_crossover sees on a set past its R8 limit
+
+
+def _stint_limit(belief):
+    """(limits, margin) of R8 when the belief applies it, else None (docs/rules.md R8)."""
+    margin, limits = belief.config.stint_limit_margin_laps, getattr(belief, "stint_limits", None)
+    if margin is None or not limits or "stint_limit" not in belief.config.rules:
+        return None
+    return limits, margin
+
+
+def _bridged(choose, within_limit=None):
     """A baseline that plans on the bridge's small snapshot of the belief's fit and returns a
-    contracts.Plan."""
+    contracts.Plan.
+
+    R8 (docs/rules.md) is a simulator rule the baselines in src/baselines do not plan around,
+    and they stay unchanged: the adjustment lives here, in the eval wrapper. When the
+    baseline's plan breaks R8, `within_limit(scenario, state, belief, max_stops, plan, limit)`
+    gives the policy's limit-aware plan (a baselines Plan, or None when there is none), which
+    replaces it. Whatever plan comes out is scored by the world, which checks every rule, so a
+    baseline plan that still breaks R8 is an invalid row, as an agent's is. With R8 off
+    (stint_limit_margin_laps None) the plan is the baseline's own."""
     def policy(scenario, belief, max_stops):
-        state = from_contract(scenario.snapshot, belief)
+        snap = scenario.snapshot
+        state = from_contract(snap, belief)
         plan = choose(scenario, state, belief, max_stops)
         if plan.stints[0].laps == 0:
             raise PolicyUnavailable("The plan stops immediately; a first stint needs at least one lap "
                                     "(docs/rules.md R1).")
-        contract = to_contract(plan, scenario.snapshot, sources=belief.config.inventory_sources)
-        # R8 is a simulator rule the baselines do not plan around; a plan breaking it is
-        # unavailable, as the baselines' own rule violations are (docs/rules.md R8)
-        if "stint_limit" in belief.config.rules:
-            errors = stint_limit_violations(scenario.snapshot, contract, getattr(belief, "stint_limits", None),
-                                            belief.config.stint_limit_margin_laps)
-            if errors:
-                raise PolicyUnavailable(f"R8 stint limit: {'; '.join(errors)}")
-        return Decision(contract)
+        sources = belief.config.inventory_sources
+        contract = to_contract(plan, snap, sources=sources)
+        limit = _stint_limit(belief)
+        if limit is None or not stint_limit_violations(snap, contract, *limit):
+            return Decision(contract)
+        adjusted = None
+        if within_limit is not None:
+            try:
+                adjusted = within_limit(scenario, state, belief, max_stops, plan, limit)
+            except PolicyUnavailable:
+                adjusted = None
+        if adjusted is None or adjusted.stints[0].laps == 0 or adjusted == plan:
+            return Decision(contract, meta={"stint_limit_adjusted": False})
+        return Decision(to_contract(adjusted, snap, sources=sources), meta={"stint_limit_adjusted": True})
     return policy
+
+
+def _one_stop_within_limit(scenario, state, belief, max_stops, plan, limit):
+    """fixed_one_stop under R8: the same compounds, the first stop moved earlier, to the last
+    lap at which the whole plan passes every rule on the belief; None when no lap does."""
+    snap, sources = scenario.snapshot, belief.config.inventory_sources
+    (first, second), remaining = plan.stints, state.remaining_laps
+    for laps in range(first.laps - 1, 0, -1):
+        moved = domain.Plan((domain.Stint(first.compound, laps), domain.Stint(second.compound, remaining - laps)))
+        if not belief.validate(snap, to_contract(moved, snap, sources=sources)):
+            return moved
+    return None
+
+
+def _crossover_within_limit(scenario, state, belief, max_stops, plan, limit):
+    """greedy_crossover under R8: the same policy with a stop forced on the lap its set would
+    pass the limit. It reads the belief's pace, except that a lap on a set older than its
+    limit costs PAST_LIMIT_S, so the crossover test fires there whenever a stop is allowed
+    (a stop left, R2). A set already past its limit pits at its first legal stop."""
+    limits, margin = limit
+    pace = pace_for_crossover(belief, scenario.snapshot)
+
+    def bounded(compound, age):
+        seen = limits.get(compound)
+        return PAST_LIMIT_S if seen is not None and age > seen + margin else pace(compound, age)
+    return policies.greedy_crossover(state, bounded, max_stops)
 
 
 BASELINE_POLICIES = {
     "actual_strategy": _bridged(lambda sc, st, sim, m: policies.actual_strategy(
         st, [domain.Stint(c, n) for c, n in sc.actual_stints])),
-    "fixed_one_stop": _bridged(lambda sc, st, sim, m: policies.fixed_one_stop(st)),
+    "fixed_one_stop": _bridged(lambda sc, st, sim, m: policies.fixed_one_stop(st), _one_stop_within_limit),
     "fixed_two_stop": _bridged(lambda sc, st, sim, m: policies.fixed_two_stop(st)),
     "greedy_crossover": _bridged(lambda sc, st, belief, m: policies.greedy_crossover(
-        st, pace_for_crossover(belief, sc.snapshot), m)),
+        st, pace_for_crossover(belief, sc.snapshot), m), _crossover_within_limit),
 }
 
 

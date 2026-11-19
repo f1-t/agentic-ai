@@ -84,6 +84,17 @@ same class as the observed pit loss: it reads the whole race, including laps aft
 snapshot. An as-of source (earlier seasons at the circuit, Pirelli guidance) can replace
 it later without changing where the rule is enforced.
 
+The baseline policies in `src/baselines` do not know R8 and are unchanged. The eval wrapper
+(`src/eval/policies.py`, `_bridged`) makes two of them limit-aware when their plan breaks
+it: `fixed_one_stop` keeps its compounds and moves the first stop earlier, to the last lap at
+which the whole plan passes every rule; `greedy_crossover` takes a forced stop on the lap its
+set would pass the limit (it reads a prohibitive lap time past the limit, so its own
+crossover test fires there whenever a stop is allowed). `actual_strategy` and
+`fixed_two_stop` are not adjusted. Every baseline plan is then scored by the world, which
+checks every rule, so one that still breaks R8 is an `invalid` row, the status an agent's
+plan past the limit gets. With `stint_limit_margin_laps: null` the baselines are their own
+plans, as before R8.
+
 ## Where each rule lives
 
 | Rule | Simulator | Baseline optimizer | Bridge |
@@ -95,7 +106,7 @@ it later without changing where the rule is enforced.
 | R5 | `Simulator`, `SimConfig` | `Snapshot.pit_loss_s` is a legacy field | `optimize_batch` scores with the simulator only |
 | R6 | `simulate_batch` | `optimize(seeds=...)` | `optimize_batch` reports `seeds = (0, ..., n-1)`, batch seed in `diagnostics["seed"]` |
 | R7 | `compare` ranks by mean only (`best` is the lowest mean) | `optimize`'s tie-break key | `optimize_batch` uses the same key (`_key`) |
-| R8 | `stint_limit` (a validity rule, as R1-R4: a plan past a limit is invalid, with an error the agent's tools return) | not modelled; the eval marks a baseline plan past a limit unavailable (`eval.policies`) | `optimize_batch` filters the candidates, counted in `diagnostics["stint_limit_dropped"]` |
+| R8 | `stint_limit` (a validity rule, as R1-R4: a plan past a limit is invalid, with an error the agent's tools return) | not modelled (`src/baselines` unchanged); the eval wrapper (`eval.policies`) makes `fixed_one_stop` and `greedy_crossover` limit-aware, and a baseline plan still past a limit is invalid | `optimize_batch` filters the candidates, counted in `diagnostics["stint_limit_dropped"]` |
 
 `laps_on_set` is the laps since the last recorded stop, capped by the set's age when the
 stint history does not add up.

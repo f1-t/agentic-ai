@@ -315,16 +315,99 @@ def test_a_set_already_past_its_limit_pits_at_the_soonest_legal_stop():
     assert res.plan.as_pairs() == [["MEDIUM", 7]] and res.diagnostics["stint_limit_fallback"] is True
 
 
-def test_a_baseline_past_the_limit_is_unavailable():
+def _scenario(snap, actual=()):
     from types import SimpleNamespace
+    return SimpleNamespace(snapshot=snap, actual_stints=list(actual))
 
-    from src.baselines.domain import PolicyUnavailable
+
+def test_a_baseline_past_the_limit_is_invalid_as_the_agent_is():
+    """A baseline plan still past R8 goes to the world and comes back an invalid row with the
+    R8 error, the status an agent's plan gets; it is not unavailable."""
     from src.eval.policies import BASELINE_POLICIES
-    scenario = SimpleNamespace(snapshot=start(), actual_stints=[("SOFT", 20), ("MEDIUM", 30)])
-    with pytest.raises(PolicyUnavailable, match=r"R8 stint limit: Stint 2 \(MEDIUM\) ends at tyre age 30"):
-        BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(), 2)
+    from src.eval.score import score_scenario
+    scenario = _scenario(start(), [("SOFT", 20), ("MEDIUM", 30)])
+    scenario.scenario_id, scenario.race_id, scenario.driver, scenario.lap = "syn:X:00", "syn", "X", 0
+    decision = BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(), 2)
+    assert decision.plan.as_pairs() == [["SOFT", 20], ["MEDIUM", 30]]
     assert BASELINE_POLICIES["actual_strategy"](scenario, limit_sim(None), 2).plan.as_pairs() == \
         [["SOFT", 20], ["MEDIUM", 30]]
+    # 50 laps on two 23-lap limits: no one-stop is legal, so fixed_one_stop stays past it too
+    rows = {r["policy"]: r for r in score_scenario(scenario, limit_sim(), {
+        p: BASELINE_POLICIES[p] for p in ("actual_strategy", "fixed_one_stop")}, n_samples=1)}
+    for policy in ("actual_strategy", "fixed_one_stop"):
+        assert rows[policy]["status"] == "invalid"
+        assert "past the stint limit of 23" in rows[policy]["reason"]
+
+
+def test_fixed_one_stop_moves_its_stop_to_the_last_legal_lap():
+    """Under R8 the eval wrapper keeps fixed_one_stop's compounds and moves the first stop
+    earlier, to the last lap at which the whole plan passes every rule."""
+    from src.eval.policies import BASELINE_POLICIES
+    used = _scenario(Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT", tyre_age=15))
+    off = BASELINE_POLICIES["fixed_one_stop"](used, limit_sim(None), 2)
+    assert off.plan.as_pairs() == [["SOFT", 20], ["MEDIUM", 20]] and off.meta == {}
+    on = limit_sim(10)   # limit 30: the SOFT set at 15 may run 15 more laps
+    moved = BASELINE_POLICIES["fixed_one_stop"](used, on, 2)
+    assert moved.plan.as_pairs() == [["SOFT", 15], ["MEDIUM", 25]]
+    assert moved.meta == {"stint_limit_adjusted": True} and on.validate(used.snapshot, moved.plan) == []
+    # a plan already inside the limit is the baseline's own
+    assert BASELINE_POLICIES["fixed_one_stop"](_scenario(start()), on, 2).plan.as_pairs() == \
+        [["SOFT", 25], ["MEDIUM", 25]]
+
+
+def test_greedy_crossover_takes_a_forced_stop_at_the_limit():
+    """A SOFT that barely wears never crosses over, so greedy_crossover runs it to the
+    mandatory stop. Under R8 the wrapper forces the stop on the lap the set would pass its
+    limit (23); with no stop left for the rest of the race the plan stays past it, invalid."""
+    import pandas as pd
+
+    from src.eval.policies import BASELINE_POLICIES
+    frame = pd.DataFrame([{"compound": c, "tyre_age": age, "lap": s + age, "clean": True, "lap_time_s": b + k * age}
+                          for c, (b, k) in {"SOFT": (80.0, 0.01), "MEDIUM": (81.0, 0.01)}.items()
+                          for s in range(0, 30, 3) for age in range(1, 21)])
+
+    def sim(margin):
+        return Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_margin_laps=margin))
+    policy, scenario = BASELINE_POLICIES["greedy_crossover"], _scenario(start())
+    assert policy(scenario, sim(None), 2).plan.as_pairs() == [["SOFT", 42], ["MEDIUM", 8]]
+    forced = policy(scenario, sim(3), 2)
+    assert forced.plan.as_pairs() == [["SOFT", 23], ["MEDIUM", 8], ["SOFT", 19]]
+    assert forced.meta == {"stint_limit_adjusted": True} and sim(3).validate(start(), forced.plan) == []
+    one = policy(scenario, sim(3), 1)
+    assert one.plan.as_pairs() == [["SOFT", 23], ["MEDIUM", 27]]
+    assert sim(3).validate(start(), one.plan) == [
+        "Stint 2 (MEDIUM) ends at tyre age 27, past the stint limit of 23 (the oldest MEDIUM tyre run "
+        "in this race, 20, + 3)."]
+
+
+@pytest.mark.parametrize("name", ["actual_strategy", "fixed_one_stop", "fixed_two_stop", "greedy_crossover"])
+@pytest.mark.parametrize("snap", [start(), Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT",
+                                                    tyre_age=15)], ids=["start", "lap10"])
+def test_with_r8_off_the_baselines_are_their_own_plans(name, snap):
+    """stint_limit_margin_laps None: every eval baseline is src/baselines' plan through the
+    bridge, as before R8."""
+    from src.baselines import policies as raw
+    from src.baselines.domain import PolicyUnavailable
+    from src.baselines.domain import Stint as DStint
+    from src.eval.policies import BASELINE_POLICIES
+    off = limit_sim(None)
+    actual = [("SOFT", 20), ("MEDIUM", 30)]
+    state = from_contract(snap, off)
+    plans = {"actual_strategy": lambda: raw.actual_strategy(state, [DStint(c, n) for c, n in actual]),
+             "fixed_one_stop": lambda: raw.fixed_one_stop(state), "fixed_two_stop": lambda: raw.fixed_two_stop(state),
+             "greedy_crossover": lambda: raw.greedy_crossover(state, pace_for_crossover(off, snap), 2)}
+    try:
+        want = plans[name]()
+    except PolicyUnavailable:
+        with pytest.raises(PolicyUnavailable):
+            BASELINE_POLICIES[name](_scenario(snap, actual), off, 2)
+        return
+    if want.stints[0].laps == 0:
+        with pytest.raises(PolicyUnavailable, match="stops immediately"):
+            BASELINE_POLICIES[name](_scenario(snap, actual), off, 2)
+        return
+    got = BASELINE_POLICIES[name](_scenario(snap, actual), off, 2)
+    assert got.plan == to_contract(want, snap) and got.meta == {}
 
 
 # --- as_continuation / pace_for_crossover -----------------------------------------

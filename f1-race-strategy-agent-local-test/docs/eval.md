@@ -61,8 +61,12 @@ turns it into the plan the world scores:
   an agent row with negative regret (beyond 1e-6 s) is a bug, and `summarize` warns
   (`AgentRegretWarning`). Baselines keep their exception: an actual three-stop can beat a
   two-stop reference. The R8 stint limit (docs/rules.md) binds every plan alike: the
-  reference and the continuation search only inside it, the world rejects a plan past it,
-  and a baseline plan past it is unavailable;
+  reference and the continuation search only inside it, and the world rejects a plan past
+  it as invalid, a baseline's as an agent's. The eval wrapper (`eval.policies._bridged`, not
+  `src/baselines`, which is unchanged) makes `fixed_one_stop` and `greedy_crossover`
+  limit-aware first (docs/rules.md R8): fixed_one_stop moves its first stop to the last
+  legal lap, greedy_crossover takes a forced stop on the lap its set would pass the limit;
+
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
 
@@ -185,7 +189,11 @@ e.g. an API error; not counted as invalid), `no_reference` (no legal plan exists
 Each row is stamped with the scenario set version and digest, `belief_config_hash`,
 `world_config_hash`, `belief_window`, `sim_code_version`, the seed and `n_samples` (and
 `ref_world_config_hashes` with `--world-configs`). Rows scored before the split carry one
-`config_hash` instead.
+`config_hash` instead. Rows also carry the world's R8 settings, `stint_limit_rank` and
+`stint_limit_margin_laps` (blank: R8 off), and `summarize` copies both into every summary
+row (`score.SUMMARY_STAMPS`; values joined by `;` if rows of two settings are summarized
+together), so a rank-1 and a rank-3 table can be shown side by side. Files scored before
+the stamps have neither column.
 
 ## Reference cache
 
@@ -199,6 +207,13 @@ python -m src.eval reference --scenarios data/scenarios/v1.json [--world-config 
     [--hindsight] [--seed 0] [--n-samples N] [--max-stops K]
 python -m src.eval reference --check        # cached references from another sim_code_version
 ```
+
+**Expected exception: d3.** d3 is rebuilt at the final evaluation. Until then its cached
+reference (`data/references/d3/9f933a611bea.parquet`, sim_code_version `b62094155bde`) is
+stale on purpose and is neither rebuilt nor rescored. `reference --check` lists it apart,
+under "expected stale (docs/eval.md)" with that reason, and does not count it as stale
+(`reference.EXPECTED_STALE`). `stale_references` still returns it, so a real run's
+references stage rebuilds it when that run is made.
 
 It writes `data/references/<set version>/<key>.parquet`, with the inputs in `<key>.json`
 beside it, where `key = sha256(set digest, world config hash, sim_code_version, seed,
@@ -247,10 +262,10 @@ gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 Committed (SPEC 0023, the R8 stint limit at rank 1, sim_code_version `983fd6f4f2bf`, local
 profile: seed 0, 50 samples, two stops, default world): `data/references/v1/441a798fbebb.parquet`,
 `data/references/d2/182013ff1f42.parquet` and `data/references/pilot1/a4241208bfb7.parquet`.
-v1 re-scored on it (baselines and the recorded run): `reports/eval/v1_baselines_r8.csv`
-(scored at `b6c3a15b4b30`, before `stint_limit_rank`; a re-score at `983fd6f4f2bf` matches it
-in every column but the stamps).
-The record below is of the reference before R8.
+They were rebuilt from scratch after main was merged in (#61) and are byte-identical. v1
+re-scored on them (baselines with the limit-aware wrapper, and the recorded run):
+`reports/eval/v1_baselines_r8.csv`; pilot1 and d2 baselines: `pilot1_baselines_r8.csv` and
+`d2_baselines_r8.csv` ("Result files" below). The record below is of the reference before R8.
 
 Before: `data/references/v1/396dff32d244.parquet` (135 KB, format 2; the format-1 file
 was 16 KB, and keeping every searched plan would be 595 KB), v1 under the default world (local profile: seed 0, 50 samples, two stops) at
@@ -341,9 +356,83 @@ that commit. Then
 rebuild the report references (`python -m src.eval reference ...`) and check
 `python -m src.eval reference --check` lists nothing.
 
-## Current numbers (v1, deterministic)
+## Result files
 
-The current table is `reports/eval/v1_baselines_split.csv` (summary
+Which committed table is current. Every current file has its `*_summary.csv` beside it.
+
+| set | current | superseded (kept as the record) |
+| --- | --- | --- |
+| v1, baselines + recorded run | `reports/eval/v1_baselines_r8.csv` (R8 rank 1, margin 3, limit-aware baselines) | `v1_baselines_split.csv` (Milestone 2: belief/world split, before R8); `v1_baselines.csv` (before the split) |
+| v1, world traffic on | none under R8 yet | `v1_world_baselines.csv` (before R8) |
+| pilot1, baselines | `reports/eval/pilot1_baselines_r8.csv` | `pilot1.csv` baseline rows (Milestone 2, before R8) |
+| pilot1, live agent | `pilot1.csv` agent rows (Milestone 2, before R8; no agent rerun since) | |
+| d2, baselines | `reports/eval/d2_baselines_r8.csv` | `d2.csv` baseline rows (Milestone 2, before R8) |
+| d2, live agent | `d2.csv` agent rows (Milestone 2, before R8; no agent rerun since) | |
+| d3 | none: d3 is rebuilt and scored at the final evaluation | `d3_baselines.csv` (before R8; its reference is the expected stale one) |
+
+Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
+under R8.
+
+## Current numbers (v1, R8, deterministic)
+
+`reports/eval/v1_baselines_r8.csv`: `python -m src.eval score --scenarios data/scenarios/v1.json
+--policies baselines --recorded data/eval/baseline_agent_sample_run.json --require-reference
+--out reports/eval/v1_baselines_r8.csv`, at R8 rank 1 and margin 3, with the limit-aware
+baselines, against the Milestone 2 table (`v1_baselines_split.csv`, before R8). Overall:
+
+| policy | scored / invalid / unavailable, M2 | R8 | mean regret s, M2 | R8 | median, M2 | R8 | p90, M2 | R8 | stop agreement, M2 | R8 | first-pit error, M2 | R8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fixed_one_stop | 250 / 0 / 14 | 250 / 0 / 14 | 4.95 | 4.33 | 3.01 | 2.14 | 13.60 | 13.45 | 0.90 | 0.86 | 6.80 | 4.67 |
+| actual_strategy | 199 / 0 / 65 | 199 / 0 / 65 | 6.72 | 5.49 | 7.11 | 5.33 | 14.52 | 12.06 | 0.57 | 0.61 | 9.98 | 6.66 |
+| fixed_two_stop | 211 / 0 / 53 | 197 / 14 / 53 | 12.95 | 11.55 | 9.25 | 8.46 | 21.18 | 21.18 | 0.00 | 0.03 | 8.77 | 4.96 |
+| greedy_crossover | 185 / 0 / 79 | 165 / 20 / 79 | 11.91 | 8.97 | 11.54 | 8.40 | 20.14 | 20.14 | 0.70 | 0.15 | 13.73 | 2.77 |
+| baseline agent (recorded) | 1 / 0 / 263 | 1 / 0 / 263 | 6.29 | 2.05 | | | | | 0.00 | 1.00 | 13.00 | 6.00 |
+
+- The unavailable rows are exactly Milestone 2's (a zero-lap first stint, a real stint
+  under v1's 10-lap minimum, no recorded decision); R8 makes none. The rows the first
+  version of #61 marked unavailable for R8 now come out as follows. fixed_one_stop: 91 of 91
+  scored. greedy_crossover: 109 of 129 scored and 20 invalid (past the limit with no stop
+  left). fixed_two_stop: 14 invalid (not limit-aware).
+- HAM lap 0: fixed_one_stop's S33 > M33 ends the 4-lap-old SOFT at 37, past 35; the wrapper
+  gives S31 > M35 (regret 0.40 s). greedy_crossover's S10 > M10 > S46 becomes
+  S4 > M3 > S59, still past the limit with no stop left: invalid.
+- greedy_crossover's stop agreement falls (0.70 to 0.15) because the forced stop is
+  usually followed by a second crossover stop, a two-stop against mostly one-stop references.
+- No row has negative regret.
+
+On the rows scored ok both times (mean of R8 minus M2, 95% cluster-bootstrap interval over
+(race, driver), `eval.compare.cluster_bootstrap`, 2000 draws):
+
+| policy | n | mean regret M2 | R8 | R8 - M2 | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| fixed_one_stop | 250 | 4.95 | 4.33 | -0.63 | [-0.84, -0.51] |
+| actual_strategy | 199 | 6.72 | 5.49 | -1.23 | [-1.58, -0.85] |
+| fixed_two_stop | 197 | 13.19 | 11.55 | -1.64 | [-1.95, -1.34] |
+| greedy_crossover | 165 | 11.47 | 8.97 | -2.51 | [-3.93, -0.95] |
+| baseline agent (recorded) | 1 | 6.29 | 2.05 | -4.24 | |
+
+pilot1 and d2 baselines under R8 (`pilot1_baselines_r8.csv`, `d2_baselines_r8.csv`) against the
+baseline rows of their Milestone 2 files, scored / invalid / unavailable and mean regret s:
+
+| set | policy | M2 | R8 | mean regret M2 | R8 |
+| --- | --- | --- | --- | --- | --- |
+| pilot1 | fixed_one_stop | 25 / 0 / 0 | 25 / 0 / 0 | 5.28 | 4.66 |
+| pilot1 | actual_strategy | 25 / 0 / 0 | 25 / 0 / 0 | 10.68 | 8.91 |
+| pilot1 | fixed_two_stop | 25 / 0 / 0 | 22 / 3 / 0 | 16.19 | 15.65 |
+| pilot1 | greedy_crossover | 14 / 0 / 11 | 12 / 2 / 11 | 23.77 | 11.87 |
+| d2 | fixed_one_stop | 25 / 0 / 0 | 24 / 1 / 0 | 8.13 | 8.09 |
+| d2 | actual_strategy | 23 / 0 / 2 | 23 / 0 / 2 | 7.95 | 7.59 |
+| d2 | fixed_two_stop | 25 / 0 / 0 | 25 / 0 / 0 | 23.02 | 22.58 |
+| d2 | greedy_crossover | 0 / 4 / 21 | 1 / 3 / 21 | | 47.70 |
+
+d2's fixed_one_stop invalid row breaks the limit in its second (SOFT) stint, which moving
+the stop earlier cannot fix. d2's four greedy_crossover invalid rows on main were
+TEST_UNKNOWN plans; under R8 three are invalid for the limit. No pilot1 or d2 row has
+negative regret.
+
+## Milestone 2 numbers (v1, deterministic, before R8)
+
+The Milestone 2 table is `reports/eval/v1_baselines_split.csv` (summary
 `reports/eval/v1_baselines_split_summary.csv`; `python -m src.eval report
 reports/eval/v1_baselines_split.csv` prints it): belief `to_snapshot`, world the default
 SimConfig with the full window. `reports/eval/v1_baselines.csv` is kept as the record from
@@ -420,6 +509,28 @@ fractions of a place) and where the field is close, after an SC, which is exactl
 SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
 `final_position_mean`, not instead of the time regret.
 
+## Limitations
+
+- **The world is fitted on hindsight.** It reads every race lap (`full` window); only the
+  belief is held to the laps up to the snapshot (above, "Who sees what").
+- **The R8 stint limit reads the whole race, so the belief side sees that much hindsight.**
+  `rules.stint_limits` takes the oldest tyre age run on each compound over the full race lap
+  frame, laps after the snapshot included, and the belief applies the same limits as the
+  world. So the baselines' limit-aware adjustment, the belief's continuation search and the
+  agent's rule errors all know a race-wide constant that nobody at the snapshot could know.
+  It is the same class of hindsight as the observed pit loss; an as-of source (earlier
+  seasons, Pirelli guidance) can replace it later (docs/rules.md R8).
+- **The R8 rank moves the results.** At rank 3 instead of 1, 9 of d2's 13 references at laps
+  0 to 20 are two-stops instead of 0. Rows and summaries carry `stint_limit_rank` and
+  `stint_limit_margin_laps` so both can be shown; the committed tables are rank 1.
+- **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
+  actual_strategy unavailable on 65 scenarios.
+- **The belief's SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml);
+  the default world draws no events. Position regret has the traffic limits of
+  docs/traffic.md.
+- **d3 is rebuilt at the final evaluation**; its committed reference and baselines predate R8
+  ("Reference cache").
+
 ## Running on Sol
 
 `python -m src.eval jobs` installs the eval runner and hands everything after `--` to
@@ -462,8 +573,11 @@ committed Spain cache for the v1 set and an end-to-end baseline run.
 eval split, `run-all` with two spawned workers, the agent policy, the snapshot contract and
 the minimum-stint rule. `tests/test_eval_reference.py` covers the reference cache (key
 stability, cached against computed rows, `--check` across code versions, hindsight
-events), `regret_se_s` on a world with known per-draw differences, and `within_mc` at
-N = 1 against the tie rule. No test calls a model.
+events, the d3 exception), `regret_se_s` on a world with known per-draw differences,
+`within_mc` at N = 1 against the tie rule, and the R8 stamps on rows and summaries.
+`tests/test_optimizer_bridge.py` covers the limit-aware baselines (fixed_one_stop's moved
+stop, greedy_crossover's forced stop, a plan still past the limit scored invalid, and every
+baseline unchanged with R8 off). No test calls a model.
 
 ## Live agent runs for the Milestone 2 report
 
