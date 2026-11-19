@@ -122,7 +122,8 @@ set `development: false`. Without it a set is `development: true`.
 
 - **v1 is the development set**: sampled before the split, from the race we tuned on.
   Its numbers are for debugging the harness and the baselines, not for the report.
-- **v2, sampled from the eval races, is the report set**: the numbers the report quotes.
+- **A set sampled from the eval races is the report set**: the numbers the report quotes.
+  Today that is d4, still to be built (see "The registered split" below).
 
 `scenarios --development` (`build_set(..., development=True)`) still samples a development
 set once the split exists, a Spain debug set say: no race is refused, the set is marked
@@ -130,20 +131,68 @@ set once the split exists, a Spain debug set say: no race is refused, the set is
 the split existed. Report numbers come only from sets with `development: false`; `score`
 prints one line naming which kind of set it scored.
 
-### The registered split (dataset 3)
+### The registered split
 
-The cache holds 2021 Spain plus a 2018-25 sample: the 2023 and 2024 races already there and
-eight drawn with `random.seed(2026)` from the 173 races of 2018-25. Real-run discovery finds
-11; the three sprint weekends (2024 Austria, 2024 Sao Paulo, 2025 Qatar) are cached but left
-out with a note, since the practice prior reads FP2 and FP3 (`calibrate.PRACTICE_SESSIONS`).
-Of the 11, 2024 Monaco (lap-1 red flag) and 2024 Britain (wet) are not eligible.
+The cache holds 2021 Spain plus a 2018-25 sample (dataset 3): the 2023 and 2024 races already
+there and eight drawn with `random.seed(2026)` from the 173 races of 2018-25, 14 race weekends
+in all. Of these, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
+red flag) are not eligible.
 
-`data/eval_set.json` holds out **2019 Monaco and 2023 Spain**. 2019 Monaco was drawn with the
-same seed from the six newly cached eligible races, before any numbers, and kept although
-track position dominates there. 2021 Spain stays out of the split: the simulator was tuned on
-it. **d3** (`data/scenarios/d3.json`, 50 scenarios: 25 per race, seed 0) is the report set
-over that split; its 2023 Spain scenarios are d2's, and so are their baseline numbers. d2
-keeps the digest of the one-race split it was sampled under.
+`data/eval_set.json` holds out four races: **2019 Monaco, 2020 Sakhir, 2025 Austria and 2024
+Austria**. Nothing loads them until the final run: no exploratory commands, no fits, no test
+that asserts on their content. The eligibility record for 2024 Austria below is the one
+exception.
+
+| race id | role |
+|---|---|
+| 2019_06_monaco, 2020_16_sakhir, 2025_11_austria, 2024_11_austria | held out (`data/eval_set.json`) |
+| 2021_04_spain | development and calibration: the simulator was tuned on it |
+| 2023_07_spain | calibration (held out under the previous split, see below) |
+| 2023_01_bahrain, 2019_10_united_kingdom, 2022_02_saudi_arabia, 2024_07_emilia_romagna | calibration |
+| 2025_23_qatar | calibration only, never sampled into an eval scenario set |
+| 2024_08_monaco, 2024_12_united_kingdom, 2024_21_brazil | not eligible |
+
+How the four were chosen:
+
+- **Sarah's draw, extended.** The pool is the six newly cached eligible races, in season and
+  round order. Sarah's registered draw took one race from it; the same draw with k raised
+  from 1 to 3 gives three:
+
+  ```python
+  pool = ["2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir",
+          "2022_02_saudi_arabia", "2024_07_emilia_romagna", "2025_11_austria"]
+  random.seed(2026); random.sample(pool, 3)   # ['2019_06_monaco', '2020_16_sakhir', '2025_11_austria']
+  ```
+
+  With k=1 the same seed returns `['2019_06_monaco']`, Sarah's draw. 2019 Monaco is kept
+  although track position dominates there.
+- **2024 Austria is added** because it is the one eligible race no run has ever loaded. It is a
+  sprint weekend, so real-run discovery left it out until sprint weekends were supported.
+  Eligibility facts only, from the race session, with no model run: dry, no red flag, 19
+  eligible drivers, HARD, MEDIUM and SOFT raced, 71 laps.
+- **2023 Spain moves to calibration.** It was the held-out report race of d2 and d3, and it was
+  used to diagnose the simulator after Milestone 2, so it can no longer be held out.
+
+Disclosure. 2020 Sakhir and 2025 Austria were two of the seven races in the leave-one-race-out
+comparison of Nov 12 that pointed to driver effects with the hinge and to rule R8, so they
+informed those choices before being held out. 2019 Monaco and 2024 Austria informed nothing.
+The agent has never been run on any of the four. (2019 Monaco is half of d3, below: its 25 d3
+scenarios have references and baseline rows, `data/references/d3/` and
+`reports/eval/d3_baselines*.csv`, from before this split; no simulator choice rests on them.)
+
+Scenario sets under the split:
+
+- **d2** (`data/scenarios/d2.json`, 25 scenarios of 2023 Spain) and **d3**
+  (`data/scenarios/d3.json`, 50 scenarios: 25 each of 2019 Monaco and 2023 Spain, seed 0) were
+  sampled under the earlier splits, and each keeps the `eval_set_digest` of the file it was
+  sampled under (d2 the one-race split `{"races": ["2023_07_spain"]}`, d3 the two-race split
+  of 2019 Monaco and 2023 Spain). Both are records: they still load and are not regenerated.
+  d3 is the Milestone-era set and is no longer the report set. Since half of it is a held-out
+  race, no new references, baselines or agent runs are made on d3.
+- **d4** is the report set: the four held-out races, 25 scenarios each, seed 0,
+  `development: false`. Its scenario file is built only after sprint-weekend support lands
+  (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
+  it until the final run.
 
 ## Metrics
 
