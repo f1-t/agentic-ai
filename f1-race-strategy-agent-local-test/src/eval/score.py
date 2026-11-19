@@ -173,7 +173,8 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
         if not isinstance(decision, Decision):
             decision = Decision(decision)
         row.update(latency_s=perf_counter() - started, tool_calls=decision.tool_calls,
-                   input_tokens=decision.input_tokens, output_tokens=decision.output_tokens)
+                   input_tokens=decision.input_tokens, output_tokens=decision.output_tokens,
+                   submitted_in_grace=decision.submitted_in_grace)
         if decision.error is not None:
             rows.append({**row, "status": "error", "reason": decision.error})
             continue

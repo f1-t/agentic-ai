@@ -1,3 +1,4 @@
+import itertools
 import json
 import os
 import tempfile
@@ -56,7 +57,7 @@ def test_invalid_plan_recovery_and_logging():
 
 def test_step_budget_stops_run():
     backend = ScriptedBackend([ModelTurn(tool_calls=[tc("get_race_snapshot")])])
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=1)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=1, submit_grace_steps=0)
     assert rec is None
     assert len(traj) == 1
 
@@ -67,19 +68,25 @@ SUBMIT = {"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": .6,
 
 
 class RecordingBackend(ScriptedBackend):
-    """ScriptedBackend that keeps a copy of the messages it was shown on each turn."""
+    """ScriptedBackend that keeps a copy of the messages and the tools it was shown on each turn."""
     def __init__(self, turns, name="test"):
         super().__init__(turns)
         self.name = name
         self.seen = []
+        self.offered = []   # the tool names offered on each turn
 
     def run_turn(self, **kwargs):
         self.seen.append(list(kwargs["messages"]))
+        self.offered.append([t["name"] for t in kwargs["tools"]])
         return super().run_turn(**kwargs)
 
 
+_PROBE = itertools.count()
+
+
 def evidence_turn(n):
-    return ModelTurn(tool_calls=[ToolCall(f"e{i}", "get_race_snapshot", {}) for i in range(n)])
+    # distinct arguments (dropped by _dispatch), so the repeat guard leaves these calls alone
+    return ModelTurn(tool_calls=[ToolCall(f"e{i}", "get_race_snapshot", {"probe": next(_PROBE)}) for i in range(n)])
 
 
 def counting_dispatch(monkeypatch):
@@ -168,3 +175,132 @@ def test_a_turn_that_spends_the_budget_keeps_its_results_anthropic():
     assert json.loads(content[0]["content"])["driver"] == "TST"
     assert "budget exhausted" in json.loads(content[1]["content"])["error"]
     assert "MUST call submit_recommendation" in content[2]["text"]
+
+
+# --- the turn budget: a status line, a submission grace, a repeat guard -------------------------
+ALL_TOOLS = [t["name"] for t in tools.TOOL_SPECS] + ["submit_recommendation"]
+SPENT = "evidence turns are spent"
+
+
+def submit_turn(args=SUBMIT):
+    return ModelTurn(tool_calls=[tc("submit_recommendation", args)])
+
+
+def stub_dispatch(monkeypatch):
+    """_dispatch replaced by a stub that records the calls it runs and returns their count."""
+    calls = []
+
+    def dispatch(name, args):
+        calls.append((name, args))
+        return {"ran": len(calls)}
+    monkeypatch.setattr(agent, "_dispatch", dispatch)
+    return calls
+
+
+def test_a_submission_in_the_grace_is_accepted(monkeypatch, tmp_path):
+    stub_dispatch(monkeypatch)
+    path = tmp_path / "trajectory.jsonl"
+    backend = RecordingBackend([evidence_turn(1) for _ in range(10)] + [submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=10, log_path=path)
+    assert rec is not None and rec["decision"] == "STAY_OUT"
+    assert [t["phase"] for t in traj] == ["evidence"] * 10 + ["grace"]
+    assert traj[-1]["step"] == 11 and traj[-1]["output"] == {"accepted": True}
+    assert backend.offered[:10] == [ALL_TOOLS] * 10 and backend.offered[10] == ["submit_recommendation"]
+    assert SPENT in backend.seen[10][-1]["content"]          # what the model read before the grace turn
+    rows = [json.loads(x) for x in path.read_text().splitlines()]
+    assert [r["phase"] for r in rows] == [t["phase"] for t in traj]
+
+
+def test_the_grace_offers_only_the_submission_and_refuses_evidence(monkeypatch):
+    ran = stub_dispatch(monkeypatch)
+    backend = RecordingBackend([evidence_turn(1) for _ in range(3)] + [evidence_turn(1), submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=3)
+    assert rec is not None
+    assert len(ran) == 3                                     # the grace turn's evidence call never ran
+    refused = traj[3]
+    assert refused["phase"] == "grace" and refused["tool"] == "get_race_snapshot"
+    assert "Evidence turns are spent" in refused["error"] and refused["output"]["recoverable"] is True
+    assert backend.offered[3:] == [["submit_recommendation"]] * 2
+    assert traj[-1]["phase"] == "grace" and traj[-1]["step"] == 5
+
+
+def test_an_invalid_submission_in_the_grace_gets_its_error_and_the_next_turn(monkeypatch):
+    stub_dispatch(monkeypatch)
+    backend = RecordingBackend([evidence_turn(1), evidence_turn(1),
+                                submit_turn({**SUBMIT, "decision": "MAYBE"}), submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=2)
+    assert rec is not None and rec["decision"] == "STAY_OUT"
+    assert [t["phase"] for t in traj] == ["evidence", "evidence", "grace", "grace"]
+    assert traj[2]["error"] == "decision must be PIT or STAY_OUT"
+    last = backend.seen[-1][-1]["content"]
+    assert "decision must be PIT or STAY_OUT" in last and SPENT in last and "1 submission turn left" in last
+
+
+def test_no_submission_at_all_returns_none_after_the_grace(monkeypatch):
+    ran = stub_dispatch(monkeypatch)
+    stats = {}
+    # exactly max_steps + grace turns: a 13th run_turn would raise StopIteration
+    backend = RecordingBackend([evidence_turn(1) for _ in range(12)])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=10, stats=stats)
+    assert rec is None
+    assert len(traj) == 12 and len(ran) == 10 and stats["steps"] == 12
+    assert [t["phase"] for t in traj[10:]] == ["grace", "grace"]
+    assert all("Evidence turns are spent" in t["error"] for t in traj[10:])
+
+
+def test_the_grace_length_comes_from_the_environment(monkeypatch):
+    stub_dispatch(monkeypatch)
+    monkeypatch.setenv("AGENT_SUBMIT_GRACE_STEPS", "1")
+    backend = RecordingBackend([evidence_turn(1), evidence_turn(1)])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=1)
+    assert rec is None and len(backend.seen) == 2
+
+
+def test_an_identical_evidence_call_is_refused_without_using_budget(monkeypatch):
+    ran = stub_dispatch(monkeypatch)
+    first = {"ages": {"MEDIUM": 30, "SOFT": 10}}
+    same = {"ages": {"SOFT": 10, "MEDIUM": 30}}            # the same call once the keys are sorted
+    backend = RecordingBackend([
+        ModelTurn(tool_calls=[tc("get_model_report", first)]),
+        ModelTurn(tool_calls=[tc("get_model_report", same), tc("get_model_report", {"ages": {"MEDIUM": 31}})]),
+        submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_tool_calls=2)
+    assert rec is not None
+    assert ran == [("get_model_report", first), ("get_model_report", {"ages": {"MEDIUM": 31}})]
+    assert traj[1]["output"] == {"error": "Identical to call 1. Its result is above. Change the arguments or submit.",
+                                 "recoverable": True}
+    assert traj[2]["output"] == {"ran": 2}                  # the repeat did not spend the last call
+    assert "Evidence calls used 2 of 2." in backend.seen[-1][-1]["content"]
+
+
+def test_the_status_line_counts_turns_and_calls(monkeypatch):
+    stub_dispatch(monkeypatch)
+    backend = RecordingBackend([evidence_turn(2), evidence_turn(1), evidence_turn(1), submit_turn()])
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3, max_tool_calls=24)
+    assert rec is not None
+    after = [seen[-1]["content"] for seen in backend.seen[1:]]   # the message closing turns 1, 2, 3
+    assert after[0].endswith("\n\nTurn 1 of 3. Evidence calls used 2 of 24.")
+    assert after[1].endswith("\n\nTurn 2 of 3. Evidence calls used 3 of 24. One evidence turn is left after this one.")
+    assert "Turn 3 of 3. Evidence calls used 4 of 24." in after[2] and SPENT in after[2]
+    assert "2 submission turns left" in after[2]
+
+
+def test_the_status_line_and_the_grace_on_the_anthropic_path(monkeypatch):
+    stub_dispatch(monkeypatch)
+
+    def turn(calls):
+        return ModelTurn(tool_calls=calls, raw=SimpleNamespace(content=[{"type": "tool_use", "id": c.id} for c in calls]))
+    backend = RecordingBackend([turn([ToolCall("a1", "get_race_snapshot", {})]),
+                                turn([ToolCall("g1", "estimate_pit_loss", {}),
+                                      ToolCall("g2", "submit_recommendation", {**SUBMIT, "decision": "MAYBE"})]),
+                                turn([ToolCall("g3", "submit_recommendation", SUBMIT)])], name="anthropic")
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=1)
+    assert rec is not None and [t["phase"] for t in traj] == ["evidence", "grace", "grace", "grace"]
+    assert backend.offered == [ALL_TOOLS, ["submit_recommendation"], ["submit_recommendation"]]
+    first = backend.seen[1][-1]["content"]
+    assert [b["type"] for b in first] == ["tool_result", "text"] and first[0]["tool_use_id"] == "a1"
+    assert first[1]["text"].startswith("Turn 1 of 1. Evidence calls used 1 of 24.") and SPENT in first[1]["text"]
+    grace = backend.seen[2][-1]["content"]
+    assert [b.get("tool_use_id") for b in grace] == ["g1", "g2", None]   # every tool_use is answered
+    assert "Evidence turns are spent" in json.loads(grace[0]["content"])["error"]
+    assert "1 submission turn left" in grace[2]["text"]

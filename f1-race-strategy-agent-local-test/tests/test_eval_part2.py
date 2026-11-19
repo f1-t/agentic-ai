@@ -328,9 +328,10 @@ def test_agent_policy_rows_are_decisions_with_trajectories(tmp_path):
     assert rows["broken"]["status"] == "error" and "backend down" in rows["broken"]["reason"]
 
 
-def test_agent_policy_budget_comes_from_the_profile(tmp_path):
+def test_agent_policy_budget_comes_from_the_profile(tmp_path, monkeypatch):
     from src.sim.compute import load_profile
 
+    monkeypatch.setenv("AGENT_SUBMIT_GRACE_STEPS", "0")   # the step limit alone; the grace is tested below
     profile = load_profile("local")
     assert profile.agent.max_steps == 10
     small = profile.model_copy(update={"agent": profile.agent.model_copy(update={"max_steps": 1})})
@@ -338,6 +339,23 @@ def test_agent_policy_budget_comes_from_the_profile(tmp_path):
     d = AgentPolicy(set_name="b", profile=small, log_dir=tmp_path, backend=turns)(scenario(mid_race()), None, 2)
     assert d.submission is None and d.tool_calls == 1 and d.meta["steps"] == 1   # out of steps
     assert resolve(["agent"], set_name="v1", profile=small)["agent"].set_name == "v1"
+
+
+def test_agent_rows_say_whether_the_submission_came_in_the_grace(tmp_path):
+    world = Simulator(synthetic_frame(), SimConfig(degradation=LIN))
+    sc = scenario(mid_race(), "syn:X:10")
+    pols = {"late": AgentPolicy(set_name="g", max_steps=1, log_dir=tmp_path,
+                                backend=Scripted(("get_race_snapshot", {}), submit())),
+            "on_time": AgentPolicy(set_name="g", max_steps=2, log_dir=tmp_path / "o",
+                                   backend=Scripted(("get_race_snapshot", {}), submit())),
+            "not_agent": lambda sc, belief, m: Decision(None)}
+    rows = {r["policy"]: r for r in score_scenario(sc, world, pols)}
+    assert rows["late"]["status"] == "ok" and rows["late"]["submitted_in_grace"] is True
+    assert rows["late"]["tool_calls"] == 2
+    assert rows["on_time"]["status"] == "ok" and rows["on_time"]["submitted_in_grace"] is False
+    assert rows["not_agent"]["submitted_in_grace"] is None
+    log = tmp_path / "g" / "syn_X_10.jsonl"
+    assert [json.loads(x)["phase"] for x in log.read_text().splitlines()] == ["evidence", "grace"]
 
 
 def test_grade_decision_reports_validity_and_regret():
