@@ -5,7 +5,7 @@ from typing import Any
 
 from ..agent import run_agent
 from ..contracts import Snapshot as ContractSnapshot
-from ..eval.policies import BASELINE_POLICIES, Decision
+from ..eval.policies import BASELINE_POLICIES, Decision, submitted_in_grace
 from ..eval.scenarios import Scenario
 from ..eval.score import race_simulators, score_scenario
 from ..sim import agent_tools, calibration, jobs
@@ -132,19 +132,20 @@ def run_pipeline(
     world = sim_for(scenario.race_id, "world")
     belief = sim_for(scenario.race_id, "belief")
 
-    rec, trajectory = None, []
+    rec, trajectory, stats = None, [], {}
     if run_llm_agent:
         steps = max_steps or profile.agent.max_steps
         rec, trajectory = run_agent(
-            view, question=question, verbose=verbose, max_steps=steps
+            view, question=question, verbose=verbose, max_steps=steps, stats=stats
         )
 
     policies = dict(BASELINE_POLICIES)
     if run_llm_agent and rec is not None:
 
-        def make_agent_policy(submission, tool_count):
+        def make_agent_policy(submission, tool_count, in_grace):
             def policy(sc, sim, stops_limit):
-                dec = Decision(None, submission=submission, tool_calls=tool_count)
+                dec = Decision(None, submission=submission, tool_calls=tool_count,
+                               submitted_in_grace=in_grace, evidence_calls=stats.get("evidence_calls"))
                 dec.agent_decisions = True
                 return dec
 
@@ -152,7 +153,7 @@ def run_pipeline(
             return policy
 
         policies = {
-            "agent": make_agent_policy(rec, len(trajectory)),
+            "agent": make_agent_policy(rec, len(trajectory), submitted_in_grace(rec, trajectory)),
             **BASELINE_POLICIES,
         }
 

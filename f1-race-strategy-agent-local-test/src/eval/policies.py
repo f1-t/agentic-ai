@@ -34,7 +34,11 @@ class Decision:
     policy produced no plan (an invalid decision). `submission` is an agent decision
     (PIT or STAY_OUT, eval.decisions) given in place of a plan: the scorer expands it on
     the belief simulator into an action plus a continuation. `error` marks a failure of the
-    policy itself (an API error, say), which is reported apart from invalid plans."""
+    policy itself (an API error, say), which is reported apart from invalid plans.
+    `submitted_in_grace` is True when an agent's submission came in a grace turn after its
+    evidence turns ran out (src/agent.py), False for any other agent run, None otherwise.
+    `tool_calls` counts every attempted call; `evidence_calls` only the evidence calls that
+    ran (no submissions, no refused calls)."""
 
     plan: object
     tool_calls: int | None = None
@@ -43,6 +47,14 @@ class Decision:
     error: str | None = None
     meta: dict = field(default_factory=dict)
     submission: dict | None = None
+    submitted_in_grace: bool | None = None
+    evidence_calls: int | None = None
+
+
+def submitted_in_grace(rec, trajectory) -> bool:
+    """True when run_agent's accepted submission (the trajectory's last event) came in a
+    grace turn."""
+    return rec is not None and bool(trajectory) and trajectory[-1].get("phase") == "grace"
 
 
 def _bridged(choose):
@@ -96,9 +108,11 @@ class AgentPolicy:
     RaceSnapshot.from_contract view. run_agent gets max_steps (profile.agent.max_steps
     unless given) and logs its trajectory to <log_dir>/<set_name>/<scenario_id>.jsonl, ":"
     in the id written "_" (a rerun replaces the file). The submission goes back as Decision.submission, which the scorer expands on
-    the belief (eval.decisions.to_plan). tool_calls is the trajectory's length, tokens are
-    the backend's reported usage (None when it reports none), and a backend exception is a
-    status "error" row, not a crash. `backend` is for tests; None takes LLM_BACKEND."""
+    the belief (eval.decisions.to_plan). tool_calls is the trajectory's length: every
+    attempted call, refused ones (budget, repeat, grace) and submission attempts included;
+    evidence_calls counts only the evidence calls that ran. submitted_in_grace says the submission came in a grace turn. Tokens are the backend's
+    reported usage (None when it reports none), and a backend exception is a status "error"
+    row, not a crash. `backend` is for tests; None takes LLM_BACKEND."""
 
     agent_decisions = True
 
@@ -126,6 +140,8 @@ class AgentPolicy:
                             output_tokens=stats.get("output_tokens"))
         return Decision(None, submission=rec, tool_calls=len(trajectory), input_tokens=stats.get("input_tokens"),
                         output_tokens=stats.get("output_tokens"),
+                        submitted_in_grace=submitted_in_grace(rec, trajectory),
+                        evidence_calls=stats.get("evidence_calls"),
                         meta={"submitted": rec is not None, "steps": stats.get("steps"), "trajectory": str(path)})
 
 
