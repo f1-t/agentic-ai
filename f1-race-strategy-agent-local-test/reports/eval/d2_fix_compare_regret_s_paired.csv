@@ -1,0 +1,3 @@
+metric,reference,policy,paired,clusters,reference_mean,policy_mean,mean_diff,ci_low,ci_high,reference_wins,ties,policy_wins
+regret_s,agent,fixed_one_stop,20,15,3.8538082030889087,8.635990538400426,-4.782182335311518,-9.294176143756756,0.19293050098311662,12,0,8
+regret_s,agent,actual_strategy,18,15,3.490817413995185,8.358320971441977,-4.867503557446791,-8.933453843917732,-1.5558200434525795,9,5,4
