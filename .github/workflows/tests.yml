@@ -31,4 +31,4 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Run offline tests
-        run: python -m pytest -q
+        run: python -m pytest -q -m "slow or not slow"

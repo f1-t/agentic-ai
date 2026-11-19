@@ -592,6 +592,16 @@ data/scenarios/pilot1.json --policies baselines agent`, and the paired intervals
 actual_strategy`. The model is not deterministic at this temperature: identical inputs gave 5 of
 10 submissions on Case B. The pilot set is a development set, not a report-set estimate.
 
+**Reruns after the submission-budget fix (#59).** `reports/eval/pilot1_fix*.csv`,
+`reports/eval/d2_fix*.csv`, `reports/eval/case_b/fix_run_01..10.json` and
+`reports/eval/trajectories/{pilot1_fix,d2_fix}/` and `trajectories/case_b/fix_run_*.jsonl` are the
+same runs with the same settings (qwen3-30b-a3b on Voyager, default temperature, seed 0,
+`n_samples` 50, `max_stops` 2), repeated after #59 made a submission always accepted and
+outside the 24-call evidence budget. The `*_fix.csv` files hold only the agent rows; the
+`*_fix_combined.csv` files add the unchanged baseline rows of the Milestone 2 files (the
+reference columns match row for row) and are the input to `*_fix_compare_regret_s_*`. The
+Milestone 2 files above stay the cited ones; the reruns are a follow-up measurement.
+
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
 the run was produced at), or run one fresh episode with `--live`, which writes `case_b/live_<time>.*`.
