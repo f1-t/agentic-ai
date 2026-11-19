@@ -173,12 +173,17 @@ How the four were chosen:
 - **2023 Spain moves to calibration.** It was the held-out report race of d2 and d3, and it was
   used to diagnose the simulator after Milestone 2, so it can no longer be held out.
 
-Disclosure. 2020 Sakhir and 2025 Austria were two of the seven races in the leave-one-race-out
-comparison of Nov 12 that pointed to driver effects with the hinge and to rule R8, so they
-informed those choices before being held out. 2019 Monaco and 2024 Austria informed nothing.
-The agent has never been run on any of the four. (2019 Monaco is half of d3, below: its 25 d3
-scenarios have references and baseline rows, `data/references/d3/` and
-`reports/eval/d3_baselines*.csv`, from before this split; no simulator choice rests on them.)
+Disclosure: what each held-out race has been exposed to.
+
+- **2019 Monaco:** references and the four baselines were scored once on Nov 11 under the
+  pre-R8 simulator (Sarah's dataset 3 commit 4a8477c; `reports/eval/d3_baselines.csv` has 100
+  Monaco rows at sim_code_version b62094155bde and no agent rows) and reported. No agent run.
+  No modelling choice used those numbers.
+- **2020 Sakhir and 2025 Austria:** two of the seven races in the leave-one-race-out comparison
+  of Nov 12 that pointed to driver effects with the hinge and to rule R8, so they informed
+  those choices before being held out. No eval scenarios, no baselines, no agent run.
+- **2024 Austria:** nothing at all. Eligibility facts only.
+- **All four:** the agent has never been run on any of them.
 
 Scenario sets under the split:
 
@@ -188,11 +193,13 @@ Scenario sets under the split:
   sampled under (d2 the one-race split `{"races": ["2023_07_spain"]}`, d3 the two-race split
   of 2019 Monaco and 2023 Spain). Both are records: they still load and are not regenerated.
   d3 is the Milestone-era set and is no longer the report set. Since half of it is a held-out
-  race, no new references, baselines or agent runs are made on d3.
+  race, no new references, baselines or agent runs are made on d3. Its Monaco baseline rows
+  stay in the repo as they are, are not regenerated, and are superseded by d4 at the final run.
 - **d4** is the report set: the four held-out races, 25 scenarios each, seed 0,
   `development: false`. Its scenario file is built only after sprint-weekend support lands
   (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
-  it until the final run.
+  it until the final run. d4's Monaco scenarios may coincide with d3's, since both sample 25
+  per race at seed 0; the final run will state whether they do.
 
 ## Metrics
 
