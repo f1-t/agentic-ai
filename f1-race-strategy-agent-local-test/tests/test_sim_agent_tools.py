@@ -257,7 +257,8 @@ def test_within_sim_error_and_its_basis(syn, monkeypatch):
 
 def test_evaluate_action_errors_and_edges(syn):
     sim, snap = syn
-    bad = agent_tools.evaluate_action(snap, {"action": "pit", "compound": "HARD"}, sim=sim, profile=PROFILE)
+    # SUPERSOFT: a compound nobody models (the compound proxy prices HARD, MEDIUM and SOFT)
+    bad = agent_tools.evaluate_action(snap, {"action": "pit", "compound": "SUPERSOFT"}, sim=sim, profile=PROFILE)
     assert bad["valid"] is False and bad["error"]
     early = syn_snap(k=2)   # 2 laps on the set: a pit now is a 3-lap stint, below the 8-lap minimum
     out = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)

@@ -51,6 +51,34 @@ def _block_network(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
 
 
+def _set_proxy_default(enabled):
+    from src.sim.config import CompoundProxy
+    field = CompoundProxy.model_fields["enabled"]
+    if field.default != enabled:
+        field.default = enabled
+        CompoundProxy.model_rebuild(force=True)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """`pytest.mark.compound_proxy_off` (a module's pytestmark, or one test's): SimConfig's
+    default compound_proxy.enabled is False while the test runs, its fixtures included (set
+    here, before any fixture of the test is built), so a config built without naming it is the
+    simulator as it was before proxying (src/sim/proxy.py), bit for bit. The modules that carry
+    it test other mechanics on synthetic two-compound races (SOFT and MEDIUM, no HARD) and pin
+    those compounds' fits, reports and limits; with the proxy on, every such race would also
+    price HARD by the cross-race step. The proxy itself is tested with its default on
+    (tests/test_sim_proxy.py), and the unmarked tests run on the default. A config that names
+    compound_proxy keeps what it names. In-process only: a spawned worker sees the real
+    default."""
+    _set_proxy_default(item.get_closest_marker("compound_proxy_off") is None)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item, nextitem):
+    _set_proxy_default(True)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _wandb_disabled():
     with pytest.MonkeyPatch.context() as mp:

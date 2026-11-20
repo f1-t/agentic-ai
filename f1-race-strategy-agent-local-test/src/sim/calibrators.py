@@ -818,8 +818,8 @@ def _feature_row(race: RaceParams, features, frame, weather, k, res) -> dict:
 
 def hindsight_targets(r: RaceInput) -> dict[str, float]:
     """The race's factors measured with the whole race: the full-window fit (base over the
-    practice fit with no base delta, wear, hinge for a model with one, fuel) and the
-    calibration.run observations."""
+    practice fit with no base delta, wear, hinge for a model with one, fuel) of the compounds
+    with race laps (a proxied compound is left out) and the calibration.run observations."""
     from . import calibration
     from .engine import Simulator
     cfg = r.config.model_copy(update={"fit_window": "full", "exclude_snapshot_driver": False})
@@ -827,7 +827,12 @@ def hindsight_targets(r: RaceInput) -> dict[str, float]:
     raw = full.physics_prior()
     deg = full.degradation
     out = {}
+    # a compound the world prices by proxy (proxy.py) has no race laps behind it: not a target
+    from .proxy import proxied
+    borrowed = proxied(deg.fit_report)
     for c, (b, w) in deg.coefs.items():
+        if c in borrowed:
+            continue
         if raw is not None and c in raw.coefs:
             out[factor_name("base_delta_s", c)] = b - raw.coefs[c][0]
         out[factor_name("wear_s_per_lap", c)] = w

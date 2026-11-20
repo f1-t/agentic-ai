@@ -1,0 +1,3 @@
+arm,rows,plan_changed,invalid_in_true_world,cost_mean_s,cost_median_s,cost_max_s,laps_more,laps_fewer,laps_same
+cross_race_step,47,40,3,3.4545634896604414,2.008180788340269,13.523503718745815,12,24,11
+blend,47,41,3,3.5668256805995084,2.008180788340269,13.523503718745815,11,26,10

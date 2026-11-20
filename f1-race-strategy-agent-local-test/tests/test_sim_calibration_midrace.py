@@ -133,6 +133,9 @@ def test_k0_full_rows_equal_run_on_the_spain_shape():
     pd.testing.assert_series_equal(rows["err_s"], table["err_s"], check_names=False)
 
 
+# exact only on the synthetic compounds' own fits: with the proxy on, a compound short of race
+# laps at k is re-priced by a blend that includes the cross-race step from real races
+@pytest.mark.compound_proxy_off
 def test_pred_remaining_exact_on_noise_free_data_at_every_k(frame):
     rows = calibration.midrace(factory(frame), frame, RACE, laps_k=list(range(0, 50)), windows=WINDOWS)
     assert len(rows) == 3 * 2 * 50
@@ -241,6 +244,7 @@ def test_drivers_without_a_lap_k_row_are_skipped(frame):
     assert sorted(zip(rows["k"], rows["driver"])) == [(20, "AAA"), (20, "BBB"), (25, "AAA")]
 
 
+@pytest.mark.compound_proxy_off   # with the proxy on, the step from SOFT prices MEDIUM
 def test_unmodellable_plan_is_nan_and_counted(frame):
     """A window that knows only SOFT cannot replay a MEDIUM stint."""
     soft_only = synthetic_practice(coefs={"SOFT": (80.0, 0.10)})

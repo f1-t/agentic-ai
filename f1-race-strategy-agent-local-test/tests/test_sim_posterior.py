@@ -12,6 +12,10 @@ from src.sim.engine import DEGRADATION_STREAM, EVENT_STREAM, LAP_NOISE_STREAM, S
 from test_sim import FUEL, RACE, TRUE, synthetic_frame, synthetic_practice
 from test_sim_position import race_frame
 
+# synthetic two-compound races (SOFT, MEDIUM): the mechanics here are pinned without the
+# compound proxy, which would also price HARD by the cross-race step (tests/conftest.py)
+pytestmark = pytest.mark.compound_proxy_off
+
 POST = {"name": "linear_fuel", "params": {"draw": "posterior"}}
 ONE, TWO = [["SOFT", 20], ["MEDIUM", 30]], [["SOFT", 15], ["MEDIUM", 20], ["SOFT", 15]]
 

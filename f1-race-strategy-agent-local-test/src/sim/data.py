@@ -400,6 +400,31 @@ def practice_frame(sessions, long_run: LongRun | None = None, k_resid=2.5, n_ite
     return df[[c for c in df.columns if c not in extra] + extra]
 
 
+QUALIFYING_SEGMENTS = ("Q1", "Q2", "Q3")
+
+
+def qualifying_frame(laps):
+    """Qualifying laps for the tier-3 compound gap (proxy.qualifying_gaps): driver, compound,
+    lap_time_s, segment (Q1, Q2, Q3 from FastF1's split_qualifying_sessions; None when the split
+    is not available) and a `timed` flag: a lap time, no pit in or out, a dry race compound,
+    and a track status free of yellow, SC, red and VSC (only "1" or empty). Which timed laps are
+    push laps is the gap fit's business (it trims slow laps against its own model)."""
+    df = _columns(laps)
+    segment = pd.Series([None] * len(laps), index=laps.index, dtype=object)
+    try:
+        parts = laps.split_qualifying_sessions()
+    except Exception:   # no session status in the cache: one segment for the whole session
+        parts = []
+    for name, part in zip(QUALIFYING_SEGMENTS, parts):
+        if part is not None and len(part):
+            segment.loc[part.index] = name
+    df["segment"] = segment.to_numpy()
+    status = df["track_status"].fillna("").astype(str)
+    df["timed"] = (df["lap_time_s"].notna() & ~df["pit_in"] & ~df["pit_out"]
+                   & df["compound"].isin(DRY_RACE_COMPOUNDS) & status.isin(["1", "", "nan"]))
+    return df[["driver", "compound", "lap_time_s", "segment", "end_s", "timed"]]
+
+
 def race_stints(frame, driver):
     """Actual stints for a driver as (compound, laps, start_age, first_lap)."""
     g = frame[frame["driver"] == driver].sort_values("lap")

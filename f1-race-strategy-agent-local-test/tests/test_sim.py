@@ -13,6 +13,10 @@ from src.sim.engine import FIT_CACHE_SIZE
 from src.sim.events import Scenario
 from src.sim.registry import Registry
 
+# synthetic two-compound races (SOFT, MEDIUM): the mechanics here are pinned without the
+# compound proxy, which would also price HARD by the cross-race step (tests/conftest.py)
+pytestmark = pytest.mark.compound_proxy_off
+
 TRUE = {"SOFT": (80.0, 0.10), "MEDIUM": (82.0, 0.03)}
 FUEL = -0.04
 RACE = RaceParams(race_id="syn", total_laps=50, pit_loss_s=20.0, min_stint_laps=8,

@@ -1,0 +1,3 @@
+race_id,compound,source,limit_age,margin,cap_end_age,oldest_practice_session,oldest_practice_driver,longest_practice_run_laps
+2021_04_spain,HARD,practice,18.0,3,21.0,FP1,LEC,13
+2022_02_saudi_arabia,SOFT,practice,18.0,3,21.0,FP1,GAS,12

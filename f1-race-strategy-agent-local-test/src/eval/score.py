@@ -49,6 +49,12 @@ optimizer's, and
 world runs without traffic (the default world config) or traffic cannot be placed (no
 elapsed_s), since without ghosts there is no field to finish among.
 
+With the world's compound proxy on (SimConfig.compound_proxy, sim/proxy.py, docs/eval.md
+"Proxied compounds") every row carries opt_proxied_compounds and every ok row
+proxied_compounds: the reference's and the plan's compounds that the world prices by proxy
+(no race laps behind them), sorted and joined by ";", "" for none. With it off neither
+column exists.
+
 Row status: ok, invalid (the plan broke a rule or no plan was submitted), unavailable (the
 policy does not apply to this scenario), error (the policy itself failed, an API error say),
 no_reference (no legal plan exists for the optimizer).
@@ -64,7 +70,7 @@ import numpy as np
 import pandas as pd
 
 from ..baselines.domain import NoFeasiblePlan, PolicyUnavailable
-from ..sim import calibration, traffic
+from ..sim import calibration, proxy, traffic
 from ..sim.optimizer_bridge import optimize_batch
 from . import decisions
 from .policies import Decision
@@ -122,6 +128,22 @@ def references_agree(plan, other, snapshot, within: int = REF_AGREE_LAPS) -> boo
     return len(a) == len(b) and (not a or abs(a[0] - b[0]) <= within)
 
 
+def proxied_compounds(world, snapshot) -> dict | None:
+    """{compound: {"pace", "wear"} sources} the world prices by proxy at this snapshot
+    (sim.proxy.proxied), None when the world's compound_proxy is off (the rows then carry no
+    proxy columns, as before proxying)."""
+    px = getattr(getattr(world, "config", None), "compound_proxy", None)
+    if px is None or not px.enabled:
+        return None
+    fit = world.fitted_for(snapshot) if hasattr(world, "fitted_for") else world
+    return proxy.proxied(getattr(getattr(fit, "degradation", None), "fit_report", None))
+
+
+def _on_proxy(plan, borrowed) -> str:
+    """The plan's compounds that the world prices by proxy, sorted and joined by ";" ("" for none)."""
+    return ";".join(sorted({s.compound for s in plan.stints} & set(borrowed)))
+
+
 def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 0,
                    n_samples: int | None = None, max_stops: int = 2, ref_worlds=(),
                    reference: Reference | None = None) -> list[dict]:
@@ -156,6 +178,10 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
     ref_pos = None
     if world.config.traffic.name != "none":   # D: the reference's positions, same draws
         ref_pos = _positions(world, snap, world.simulate_batch(snap, [opt.plan], seed=seed, n_samples=n), 0)
+    # SimConfig.compound_proxy: the compounds the world prices by proxy (no race laps behind them)
+    borrowed = proxied_compounds(world, snap)
+    if borrowed is not None:
+        base["opt_proxied_compounds"] = _on_proxy(opt.plan, borrowed)
     base.update(n_samples=n, opt_plan=json.dumps(opt.plan.as_pairs()), opt_num_stops=opt.plan.num_stops,
                 opt_first_pit_lap=ref_pits[0] if ref_pits else None, opt_time_s=ref,
                 pit_now_opt=opt.pit_now_opt,
@@ -211,6 +237,8 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
         regret = 0.0 if abs(mean - ref) < REGRET_TOL_S else mean - ref
         se = paired_se(batch.times[0], opt.times)
         stop_agree_set, first_pit_error_set = set_agreement(opt, res.num_stops, res.pit_laps, _first_pit_error)
+        if borrowed is not None:
+            row["proxied_compounds"] = _on_proxy(batch.plans[0], borrowed)
         rows.append({**row, "status": "ok", "plan": json.dumps(batch.plans[0].as_pairs()),
                      "num_stops": res.num_stops, "first_pit_lap": res.pit_laps[0] if res.pit_laps else None,
                      "time_s": mean, "std_s": res.remaining.std_s, "regret_s": regret,
@@ -297,7 +325,7 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
             config = belief_config if role == "belief" else world_config or data.config
-            cache[race_id, role] = Simulator(data.frame, config, data.practice)
+            cache[race_id, role] = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
         return cache[race_id, role]
     return sim_for
 

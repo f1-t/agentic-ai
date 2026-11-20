@@ -202,6 +202,16 @@ def _practice(season, gp, long_run=None):
     return practice_frame({kind: load_session(season, gp, kind).laps for kind in sessions}, long_run=long_run)
 
 
+def _qualifying(season, gp):
+    """data.qualifying_frame of the weekend's qualifying (the tier-3 pace of an unraced
+    compound, proxy.py), None when the session is not in the cache."""
+    from .data import qualifying_frame
+    try:
+        return qualifying_frame(load_session(season, gp, "Q").laps)
+    except Exception:   # not cached, or no laps
+        return None
+
+
 PACE_SESSIONS_HELP = (f"comma-separated session ids; default {','.join(pace.PRACTICE_SESSIONS)}, "
                       "or FP1,Sprint on a sprint weekend (practice_sessions)")
 

@@ -472,6 +472,8 @@ PHYSICS_MODULES = (
     "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
     # the fuel_* calibrators (SPEC 0020) set the fuel prior and its tau, which move lap times
     "fuel_prior",
+    # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their R8 limit
+    "proxy",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -487,6 +489,9 @@ NON_PHYSICS = (
     # the real-run orchestration (SPEC 0021): sequences the stage commands, writes a manifest
     # and Slurm scripts; it runs the simulator only through those stages
     "real_run",
+    # estimates the proxy's tier-5 table into configs/sim/compound_steps.json (read through
+    # SimConfig.compound_proxy.steps, so config_hash covers the numbers) and runs its validation
+    "compound_steps",
 )
 
 
