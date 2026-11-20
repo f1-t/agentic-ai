@@ -149,7 +149,9 @@ class RealRun:
                  periods=event_rates.NEUTRALISED_PERIODS, race_features=cross_race.RACE_FEATURES,
                  reference_dir=None, tau_multipliers=cross_race.TAU_MULTIPLIERS, tau_grid=True, n_boot=None,
                  slurm_dir=SLURM_DIR, log=print, eval_set=cross_race.EVAL_SET, allow_held_out=False,
-                 held_out_skipped=()):
+                 held_out_skipped=(), arms=None, stop_check=True):
+        """`arms` and `stop_check` go to cross_race.run (pipeline tests: a few arms, no lap-0
+        stop-count check); the defaults are the real run."""
         from ..eval.reference import REFERENCE_DIR
         self.races = [canonical_race_id(r) for r in races]
         # a held-out race (data/eval_set.json) is refused here, before its eligibility loads it
@@ -162,6 +164,7 @@ class RealRun:
         self.periods, self.race_features = Path(periods), Path(race_features)
         self.reference_dir = Path(reference_dir or REFERENCE_DIR)
         self.tau_multipliers, self.tau_grid, self.n_boot = tuple(tau_multipliers), tau_grid, n_boot
+        self.arms, self.stop_check = (None if arms is None else list(arms)), stop_check
         self.slurm = profile.scheduler == "slurm"
         self.slurm_dir = Path(slurm_dir)
         self.run_dir = self.out / RUN_SUBDIR
@@ -272,6 +275,10 @@ def stage_cross_race(run: RealRun):
     stage, out = "cross_race", run.out / "cross_race"
     inputs = {"eligible": value_input(run.eligible), "races": value_input(run.races),
               "tau_multipliers": value_input(list(run.tau_multipliers)), "tau_grid": value_input(run.tau_grid)}
+    if run.arms is not None:   # only when set, so a default run's fingerprint is as before
+        inputs["arms"] = value_input(run.arms)
+    if not run.stop_check:
+        inputs["stop_check"] = value_input(False)
     if run.elig is None:
         return run.skip(stage, inputs, "no eligibility table (the eligibility stage was skipped)")
     if not run.eligible:
@@ -282,7 +289,8 @@ def stage_cross_race(run: RealRun):
     emitter = SlurmEmitter(run.run_dir / "slurm", run.profile_ref, run.slurm_dir) if run.slurm else None
     record = cross_race.run(run.races, run.profile, out, run.tau_multipliers, run.tau_grid, log=run.log,
                             elig=run.elig, runner=emitter, eval_set=run.eval_set,
-                            allow_held_out=run.allow_held_out, held_out_skipped=run.held_out_skipped)
+                            allow_held_out=run.allow_held_out, held_out_skipped=run.held_out_skipped,
+                            arms=run.arms, stop_check=run.stop_check)
     if record.get("pending"):
         run.log("\nSubmit these from f1-race-strategy-agent-local-test/ (nothing has been submitted), then rerun "
                 "this command once they finish:\n\n" + "\n".join(f"  {c}" for c in emitter.commands) + "\n")

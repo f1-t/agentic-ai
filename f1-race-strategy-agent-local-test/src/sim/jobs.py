@@ -325,7 +325,8 @@ class HFold(Job):
         profile's cadences (SimConfig.calibration_every). Writes <unit>.rmse.json beside the rows."""
         if getattr(args, "arm", None):
             from . import cross_race
-            return cross_race.fold_job(unit, args.arm, profile, race_loader(args), _race_ids(args.pool or args.races))
+            return cross_race.fold_job(unit, args.arm, profile, race_loader(args), _race_ids(args.pool or args.races),
+                                       stop_check=getattr(args, "stop_check", True))
         pool = _race_ids(args.pool or args.races)
         data = [replace(load_race(r, profile), race_id=r) for r in pool]
         dataset = calibrators.build_dataset(data, laps_k=lambda d: laps_k_for(d.frame, d.race.total_laps, profile))
