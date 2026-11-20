@@ -58,6 +58,10 @@ NEAR_TIE_SE = 2.0      # a plan is in the optimal set when its gap to the refere
 NO_STOP = -1           # plan_first_pit_lap of a plan that makes no stop
 STORE_GAP_S = 10.0     # a searched plan is stored when its gap is <= max(STORE_GAP_S, STORE_SE * SE),
 STORE_SE = 5.0         # plus the best pit-now and best stay-out plans
+# set versions whose stale references are expected (docs/eval.md "Reference cache"): `reference
+# --check` lists them apart, with the reason, rather than as stale. stale_references still
+# returns them, so a real run's references stage rebuilds them when it is run.
+EXPECTED_STALE = {"d3": "d3 is rebuilt at the final evaluation"}
 
 
 class ReferenceMissing(LookupError):
@@ -338,6 +342,12 @@ def stale_references(root=REFERENCE_DIR, code_version: str | None = None) -> lis
         if meta.get("sim_code_version") != code_version or meta.get("format", 1) < REFERENCE_FORMAT:
             out.append((side.with_suffix(".parquet"), meta))
     return out
+
+
+def expected_stale(path) -> str | None:
+    """The reason a stale reference at `path` (data/references/<set version>/<key>.parquet)
+    is expected (EXPECTED_STALE), None when it is not."""
+    return EXPECTED_STALE.get(Path(path).parent.name)
 
 
 def summarize_references(refs) -> dict:

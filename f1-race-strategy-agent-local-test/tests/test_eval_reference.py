@@ -142,6 +142,45 @@ def test_check_finds_a_reference_from_another_code_version(scenario_set, world, 
     assert "000000000000.parquet" in out and "ffffffffffff" in out and path.name not in out
 
 
+def test_check_lists_d3_apart_as_an_expected_exception(scenario_set, world, tmp_path, capsys):
+    """d3 is rebuilt at the final evaluation (docs/eval.md): `reference --check` lists its stale
+    reference apart, with the reason, and counts no stale reference otherwise.
+    stale_references still returns it, for the real run's references stage."""
+    from src.eval.reference import EXPECTED_STALE, expected_stale
+    (path, _), = build_references(scenario_set, lambda race_id, role: world, n_samples=4, root=tmp_path)
+    meta = json.loads(path.with_suffix(".json").read_text())
+    (tmp_path / "d3").mkdir()
+    old = tmp_path / "d3" / "111111111111.json"
+    old.write_text(json.dumps({**meta, "sim_code_version": "eeeeeeeeeeee", "key": "111111111111"}))
+    assert [p for p, _ in stale_references(tmp_path)] == [old.with_suffix(".parquet")]
+    assert expected_stale(old.with_suffix(".parquet")) == EXPECTED_STALE["d3"] == \
+        "d3 is rebuilt at the final evaluation"
+    assert expected_stale(path) is None
+    assert main(["reference", "--check", "--reference-dir", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("0 cached references with a sim_code_version other than")
+    assert "1 expected stale (docs/eval.md):" in out and "111111111111.parquet" in out
+    assert out.rstrip().endswith("d3 is rebuilt at the final evaluation")
+
+
+def test_rows_and_summaries_carry_the_stint_limit_stamps(scenario_set, flat):
+    """stint_limit_rank and stint_limit_margin_laps are stamped on every row and carried into
+    each summary row, so tables scored at two settings can be told apart; R8 off is None on
+    the rows and NaN in the summary."""
+    probe = {"probe": _fixed([["SOFT", 20], ["MEDIUM", 20]])}
+    rows = score_set(scenario_set, lambda race_id, role: flat, probe, n_samples=1)
+    assert (rows["stint_limit_rank"] == 1).all() and (rows["stint_limit_margin_laps"] == 3).all()
+    table = summarize(rows)
+    assert (table["stint_limit_rank"] == 1).all() and (table["stint_limit_margin_laps"] == 3).all()
+    off = Simulator(flat.laps, flat.config.model_copy(update={"stint_limit_margin_laps": None,
+                                                              "stint_limit_rank": 3}))
+    rows_off = score_set(scenario_set, lambda race_id, role: off, probe, n_samples=1)
+    assert rows_off["stint_limit_margin_laps"].isna().all() and (rows_off["stint_limit_rank"] == 3).all()
+    both = summarize(pd.concat([rows, rows_off]))
+    assert set(both["stint_limit_rank"]) == {"1;3"}
+    assert summarize(rows_off)["stint_limit_margin_laps"].isna().all()
+
+
 def test_hindsight_fixes_the_events_to_the_record(scenario_set, world):
     scenario = scenario_set.items[0]
     events = recorded_events(world, scenario.snapshot)
@@ -337,14 +376,21 @@ def _deterministic_world_rows(scenario_set, sims, pols, n_samples):
 def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
     """The deterministic default world on a slice of v1: every optimal set is the reference
     alone, every pit-now call is decisive, the set-based agreement is the plain one, and the
-    summary table is the one without the near-tie columns."""
+    summary table is the one without the near-tie columns.
+
+    Without the R8 stint limit (docs/rules.md): with it, more references are two-stop plans,
+    and in this deterministic linear world a two-stop plan ties exactly with its later stints
+    swapped, so some optimal sets hold several exact ties."""
     from src.eval.score import race_simulators
     from src.sim.compute import load_profile
     profile = load_profile("local")
     v1 = ScenarioSet.load(SCENARIOS_V1)
     part = ScenarioSet(version="tv1", items=v1.items[::12])
     part.digest = part.compute_digest()
-    rows, old = _deterministic_world_rows(part, race_simulators(profile), resolve(["baselines"]),
+    from src.eval.score import BELIEF_CONFIG
+    belief = SimConfig.from_file(BELIEF_CONFIG).model_copy(update={"stint_limit_margin_laps": None})
+    sims = race_simulators(profile, belief, SimConfig(stint_limit_margin_laps=None))
+    rows, old = _deterministic_world_rows(part, sims, resolve(["baselines"]),
                                           profile.sim.n_samples)
     assert (rows["opt_set_size"] == 1).all()
     decisive = rows["pit_now_decisive"].dropna()
