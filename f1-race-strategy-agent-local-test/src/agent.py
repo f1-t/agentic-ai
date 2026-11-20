@@ -128,15 +128,17 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     ``max_steps`` evidence turns end without an accepted submission, up to
     ``submit_grace_steps`` (AGENT_SUBMIT_GRACE_STEPS, default 2) grace turns follow that
     offer only submit_recommendation; evidence calls in them are refused. An evidence call
-    identical to one already run this episode (same tool and arguments) is refused without
-    using budget: the tools are deterministic for a snapshot. When ``stats`` is a dict it
-    receives ``steps`` (grace turns included), ``evidence_calls`` (the evidence calls that
-    ran: no submissions, no refused calls) and, if the backend reports usage, the summed
+    identical to one already run this episode (same tool and arguments) gets the cached
+    result of that call, error included, with ``repeat_of`` (its call_index) added, also once
+    the budget is spent; it uses no budget: the tools are deterministic for a snapshot. When
+    ``stats`` is a dict it receives ``steps`` (grace turns included), ``evidence_calls`` (the
+    evidence calls that ran: no submissions, no refused calls, no repeats), ``repeat_calls``
+    (the repeats served from the cache) and, if the backend reports usage, the summed
     ``input_tokens`` and ``output_tokens`` (None when it does not).
     """
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
-    stats.update(steps=0, evidence_calls=0, input_tokens=None, output_tokens=None)
+    stats.update(steps=0, evidence_calls=0, repeat_calls=0, input_tokens=None, output_tokens=None)
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))
@@ -149,7 +151,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     messages = [{"role": "user", "content": prompt + "\n\nRace snapshot:\n" + json.dumps(snapshot.to_dict(), ensure_ascii=False)}]
     trajectory = []
     tool_calls_used = 0
-    run_calls = {}   # (tool, sorted-key arguments) -> call_index of the evidence call that ran
+    run_calls = {}   # (tool, sorted-key arguments) -> (call_index, output) of the evidence call that ran
 
     if verbose:
         model_name = getattr(backend, "model", getattr(backend, "model_id", "unknown"))
@@ -189,10 +191,11 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
         results = []
         for call in turn.tool_calls:
             args = dict(call.arguments)
-            rec = None
+            rec = repeat_of = None
             # A submission is always processed and never counts against the evidence budget;
-            # the budget guard applies to evidence tools only. A grace turn runs no evidence, and
-            # an evidence call identical to one already run is refused without using budget.
+            # the budget guard applies to evidence tools only. A grace turn runs no evidence. An
+            # evidence call identical to one already run gets that call's cached result, with
+            # repeat_of, without using budget, even once the budget is spent.
             key = (call.name, json.dumps(args, sort_keys=True, default=str))
             if call.name == "submit_recommendation":
                 rec, error = _normalise_submission(args)
@@ -200,21 +203,25 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             elif phase == "grace":
                 out = {"error": "Evidence turns are spent; call not run. Submit your recommendation now with "
                                 "submit_recommendation.", "recoverable": True}
+            elif key in run_calls:
+                repeat_of, cached = run_calls[key]
+                stats["repeat_calls"] += 1
+                # a copy, so the cached output (and the first call's event) stays as it was
+                out = {**cached, "repeat_of": repeat_of} if isinstance(cached, dict) else {"result": cached, "repeat_of": repeat_of}
             elif tool_calls_used >= max_tool_calls:
                 out = {"error": "Tool-call budget exhausted; call not run. Submit your best recommendation now.",
-                       "recoverable": True}
-            elif key in run_calls:
-                out = {"error": f"Identical to call {run_calls[key]}. Its result is above. Change the arguments or submit.",
                        "recoverable": True}
             else:
                 tool_calls_used += 1
                 stats["evidence_calls"] = tool_calls_used
-                run_calls[key] = len(trajectory) + 1
                 out = _dispatch(call.name, args)
+                run_calls[key] = (len(trajectory) + 1, out)
 
             event = {"episode_id": episode_id, "step": step, "phase": phase, "call_index": len(trajectory) + 1,
                      "tool": call.name, "input": args, "output": out,
                      "error": out.get("error") if isinstance(out, dict) else None}
+            if repeat_of is not None:
+                event["repeat_of"] = repeat_of
             trajectory.append(event)
             _append_log(log_path, {**event, "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
             if verbose:

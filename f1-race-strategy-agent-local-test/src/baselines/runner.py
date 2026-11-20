@@ -145,7 +145,8 @@ def run_pipeline(
         def make_agent_policy(submission, tool_count, in_grace):
             def policy(sc, sim, stops_limit):
                 dec = Decision(None, submission=submission, tool_calls=tool_count,
-                               submitted_in_grace=in_grace, evidence_calls=stats.get("evidence_calls"))
+                               submitted_in_grace=in_grace, evidence_calls=stats.get("evidence_calls"),
+                               repeat_calls=stats.get("repeat_calls"))
                 dec.agent_decisions = True
                 return dec
 
