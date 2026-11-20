@@ -25,6 +25,10 @@ race we tuned on. build_set(..., development=True) (`scenarios --development`) s
 development set while the split exists, a debug set of any race: no refusal, and the digest
 is still recorded so the set shows the split existed. Report numbers come from sets with
 development=False only.
+
+A race in CALIBRATION_ONLY is refused by build_set in every mode, development included: it
+calibrates the simulator but is never sampled into a scenario set (docs/eval.md "Sprint
+weekends").
 """
 from __future__ import annotations
 
@@ -167,6 +171,16 @@ class OutsideEvalSet(ValueError):
     """A race asked for while the eval split is registered is not in it."""
 
 
+# Races used for calibration only, never sampled into a scenario set, with the reason.
+CALIBRATION_ONLY = {
+    "2025_23_qatar": "a mandated maximum of 25 laps per tyre set, which no rule in R1-R8 models",
+}
+
+
+class CalibrationOnly(ValueError):
+    """A race asked for is in CALIBRATION_ONLY."""
+
+
 def load_eval_set(path=None) -> tuple[list[str], str] | None:
     """(canonical race ids, sha256 of the file) of the registered eval split, None when the
     file does not exist. `path` defaults to data/eval_set.json."""
@@ -203,10 +217,15 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     a race outside it raises OutsideEvalSet before anything is sampled, and the set is a
     report set (development False) stamped with sampling["eval_set_digest"]. Without it the
     set is a development set. `development` True asks for a development set while the split
-    exists: any race is sampled and the digest is still recorded."""
+    exists: any race is sampled and the digest is still recorded. A CALIBRATION_ONLY race
+    raises CalibrationOnly in either mode, before anything is sampled."""
     from ..sim import jobs
     from ..sim.compute import load_profile
 
+    banned = [r for r in map(canonical_race_id, race_ids) if r in CALIBRATION_ONLY]
+    if banned:
+        raise CalibrationOnly("; ".join(f"{r} is used for calibration only and never sampled into a scenario "
+                                        f"set: {CALIBRATION_ONLY[r]}" for r in banned))
     registered = load_eval_set(eval_set)
     split = {}
     if registered is not None:

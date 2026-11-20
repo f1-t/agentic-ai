@@ -85,7 +85,7 @@ import pandas as pd
 from ..contracts import RaceParams
 from . import calibration, pace
 from .config import SimConfig
-from .data import lap_frame, load_session, practice_frame, session_results
+from .data import CACHE_DIR, lap_frame, load_session, practice_frame, session_results
 from .engine import Simulator
 
 DEFAULT_PIT_LOSS_S = 22.0
@@ -158,10 +158,60 @@ def _provenance(rows):
     return out
 
 
+# --- practice sessions per weekend ------------------------------------------------------------
+# Kept here, outside the physics modules (calibration.PHYSICS_MODULES), so a conventional
+# weekend's inputs and SIM_CODE_VERSION are untouched by sprint support.
+FP_SESSIONS = {"Practice 1": "FP1", "Practice 2": "FP2", "Practice 3": "FP3"}   # schedule name -> id
+SPRINT = "Sprint"
+
+
+def weekend_sessions(season, gp, cache_dir=CACHE_DIR):
+    """The event's session names ("Practice 1", ..., "Sprint", "Qualifying", "Race") from the
+    cached event schedule, offline: no session is loaded. None when the schedule is not
+    cached or does not name the event."""
+    import fastf1
+    fastf1.set_log_level("ERROR")
+    fastf1.Cache.configure(cache_dir=cache_dir)
+    fastf1.Cache.offline_mode(True)
+    try:
+        event = fastf1.get_event(int(season), gp)
+    except Exception:   # not in the offline cache, or no such event
+        return None
+    if event is None or not len(event):
+        return None
+    names = (event.get(f"Session{i}") for i in range(1, 6))
+    return [n for n in names if isinstance(n, str) and n]
+
+
+def practice_sessions(season, gp, sessions, cache_dir=CACHE_DIR) -> tuple[str, ...]:
+    """The practice sessions to read for (season, gp). A weekend without a Sprint reads
+    `sessions` unchanged, so a conventional weekend comes out as it always did. A sprint
+    weekend has no FP2 or FP3: it reads the FP sessions it has plus the Sprint, in that order
+    (FP1 and "Sprint" since 2023). A weekend the cached schedule does not name keeps `sessions`."""
+    names = weekend_sessions(season, gp, cache_dir)
+    if names is None or SPRINT not in names:
+        return tuple(sessions)
+    return tuple(fp for name, fp in FP_SESSIONS.items() if name in names) + (SPRINT,)
+
+
 def _practice(season, gp, long_run=None):
-    """FP1-FP3 long-run laps, for the pre_race and to_snapshot fit windows."""
-    return practice_frame({kind: load_session(season, gp, kind).laps for kind in PRACTICE_SESSIONS},
-                          long_run=long_run)
+    """Long-run laps of the weekend's practice sessions, for the pre_race and to_snapshot fit
+    windows: FP1-FP3 (PRACTICE_SESSIONS), or on a sprint weekend FP1 and the Sprint
+    (practice_sessions)."""
+    sessions = practice_sessions(season, gp, PRACTICE_SESSIONS)
+    return practice_frame({kind: load_session(season, gp, kind).laps for kind in sessions}, long_run=long_run)
+
+
+PACE_SESSIONS_HELP = (f"comma-separated session ids; default {','.join(pace.PRACTICE_SESSIONS)}, "
+                      "or FP1,Sprint on a sprint weekend (practice_sessions)")
+
+
+def _pace_sessions(args):
+    """--pace-sessions as a list; when not given, the weekend's pace sessions:
+    pace.PRACTICE_SESSIONS, or FP1 and the Sprint on a sprint weekend."""
+    if args.pace_sessions:
+        return args.pace_sessions.split(",")
+    return list(practice_sessions(args.season, args.gp, pace.PRACTICE_SESSIONS))
 
 
 def midrace_main(argv):
@@ -435,7 +485,7 @@ def traffic_main(argv):
     ap = argparse.ArgumentParser(prog="calibrate traffic", description="ghost-car traffic, off against on")
     _race_args(ap)
     ap.add_argument("--pace", choices=pace.PACE_KINDS, default="practice", help="pace term in the engine, both arms")
-    ap.add_argument("--pace-sessions", default=",".join(pace.PRACTICE_SESSIONS))
+    ap.add_argument("--pace-sessions", help=PACE_SESSIONS_HELP)
     args = ap.parse_args(argv)
 
     session, frame, cfg, race = _race_setup(args)
@@ -446,7 +496,7 @@ def traffic_main(argv):
     results = session_results(session)
     pace_series = None
     if args.pace != "none":
-        practice, notes = pace.load_practice(args.season, args.gp, args.pace_sessions.split(","), cfg.long_run)
+        practice, notes = pace.load_practice(args.season, args.gp, _pace_sessions(args), cfg.long_run)
         for note in notes:
             print("practice:", note)
         paces, _ = pace.offsets(Simulator(frame, off_cfg), frame, race, practice)
@@ -504,8 +554,8 @@ def main(argv=None):
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the pairs and positions csvs go")
     ap.add_argument("--pace", choices=pace.PACE_KINDS, default="none", help="pace term in the position check")
     ap.add_argument("--pace-table", action="store_true", help="the position gate under every pace term")
-    ap.add_argument("--pace-sessions", default=",".join(pace.PRACTICE_SESSIONS),
-                    help="practice sessions for the practice and team pace terms")
+    ap.add_argument("--pace-sessions", help="practice sessions for the practice and team pace terms: "
+                    + PACE_SESSIONS_HELP)
     args = ap.parse_args(argv)
 
     session = load_session(args.season, args.gp)
@@ -542,7 +592,7 @@ def main(argv=None):
     results = session_results(session)
     paces, practice_table = {"none": None}, None
     if args.pace != "none" or args.pace_table:
-        practice, notes = pace.load_practice(args.season, args.gp, args.pace_sessions.split(","), cfg.long_run)
+        practice, notes = pace.load_practice(args.season, args.gp, _pace_sessions(args), cfg.long_run)
         paces, practice_table = pace.offsets(sim, frame, race, practice)
         for note in notes + (practice_table.attrs["notes"] if practice_table is not None else []):
             print("practice:", note)
