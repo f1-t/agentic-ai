@@ -216,6 +216,20 @@ Scenario sets under the split:
   (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
   it until the final run. d4's Monaco scenarios may coincide with d3's, since both sample 25
   per race at seed 0; the final run will state whether they do.
+- **dev6** (`data/scenarios/dev6.json`, 150 scenarios, digest `8823b7b73c87`) is a
+  **development set on calibration races, not a held-out result**: 25 scenarios each of the six
+  non-sprint calibration races 2021_04_spain, 2023_07_spain, 2023_01_bahrain,
+  2019_10_united_kingdom, 2022_02_saudi_arabia and 2024_07_emilia_romagna, seed 0,
+  `--development` (`scenarios --races <the six> --version dev6 --max-per-race 25 --seed 0
+  --development`). The simulator was calibrated on these races, so its numbers say how the agent
+  and the baselines behave where the model fits best; they are not a report-set estimate. Its 25
+  2021 Spain scenarios are pilot1's and its 25 2023 Spain scenarios are d2's (same ids and the
+  same snapshots, item for item). References: `data/references/dev6/4ecc62a30937.parquet`
+  (sim_code_version `1dcf46ad75aa`, seed 0, 50 samples, two stops, default world). Known issue:
+  in 2022 Saudi Arabia the belief models SOFT (from the practice prior) but the world, fitted on
+  the race laps, models only HARD and MEDIUM, so a decision whose belief continuation uses SOFT
+  is scored invalid with "Unknown compound 'SOFT'" (20 of the agent's 21 invalid rows on pass 1,
+  and 5 greedy_crossover rows).
 
 ### Sprint weekends
 
@@ -481,6 +495,8 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | d2, baselines | `reports/eval/d2_baselines_r8.csv` | `d2.csv` baseline rows (Milestone 2, before R8) |
 | d2, live agent | `d2.csv` agent rows (Milestone 2, before R8; the cited ones) | `d2_fix*.csv` is a follow-up rerun after #59, not a replacement (below) |
 | d3 | none: d3 is rebuilt and scored at the final evaluation | `d3_baselines.csv` (before R8; its reference is the expected stale one) |
+| dev6, baselines (development, calibration races) | `reports/eval/dev6_baselines.csv` (R8 rank 1, margin 3, limit-aware baselines) | |
+| dev6, live agent pass 1 (development, calibration races) | `reports/eval/dev6_agent_pass1.csv`, trajectories in `reports/eval/trajectories/dev6_pass1/`; `dev6_pass1_combined.csv` (agent + baseline rows, the input to `dev6_pass1_compare_regret_s_*` with driver clusters and `dev6_pass1_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_pass1_compare_per_race_regret_s_paired.csv`; figure table `dev6_pass1_chart.csv` | |
 
 Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
 under R8.
@@ -725,6 +741,15 @@ with up to 2 grace turns that offer only `submit_recommendation`. The rows carry
 as the `_fix` ones: the new agent rows plus the Milestone 2 baseline rows, whose reference
 columns match row for row. They are the input to `*_fix2_compare_regret_s_*`. The Milestone 2
 files stay the cited ones.
+
+**dev6, agent pass 1.** `reports/eval/dev6_agent_pass1.csv` is one pass of the agent over the 150
+dev6 scenarios with the same settings (qwen3-30b-a3b on Voyager, default temperature, seed 0,
+`n_samples` 50, `max_stops` 2, main's world defaults: R8 at rank 1 and margin 3, driver effects
+off), run as one sequential job (`score --scenarios data/scenarios/dev6.json --policies agent
+--seed 0 --require-reference`) at commit 3223131, 94 minutes wall time, with no other agent
+run at the same time. `score` logs trajectories under the set version; they were moved to
+`trajectories/dev6_pass1/`. dev6 is a development set on calibration races, not a held-out
+result.
 
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
