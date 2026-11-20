@@ -621,6 +621,17 @@ outside the 24-call evidence budget. The `*_fix.csv` files hold only the agent r
 reference columns match row for row) and are the input to `*_fix_compare_regret_s_*`. The
 Milestone 2 files above stay the cited ones; the reruns are a follow-up measurement.
 
+**Reruns after the turn-limit grace (#72).** `reports/eval/pilot1_fix2*.csv`,
+`reports/eval/d2_fix2*.csv` and `reports/eval/trajectories/{pilot1_fix2,d2_fix2}/` repeat the
+pilot1 and d2 runs once with the same settings. The two sets ran one after the other, so the
+latency figures are not affected by contention. Since #72 the agent loop prints a turn-status
+line, refuses an evidence call identical to one already run, and follows the 10 evidence turns
+with up to 2 grace turns that offer only `submit_recommendation`. The rows carry
+`submitted_in_grace` and `evidence_calls`. The `*_fix2_combined.csv` files are built the same way
+as the `_fix` ones: the new agent rows plus the Milestone 2 baseline rows, whose reference
+columns match row for row. They are the input to `*_fix2_compare_regret_s_*`. The Milestone 2
+files stay the cited ones.
+
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
 the run was produced at), or run one fresh episode with `--live`, which writes `case_b/live_<time>.*`.
