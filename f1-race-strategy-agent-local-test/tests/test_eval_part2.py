@@ -305,10 +305,10 @@ def test_run_agent_takes_a_contract_snapshot_and_reports_usage():
                           stats=stats)
     assert rec["decision"] == "STAY_OUT" and len(traj) == 2
     assert traj[0]["output"]["lap"] == 10 and traj[0]["output"]["min_stint_laps"] == 8
-    assert stats == {"steps": 2, "evidence_calls": 1, "input_tokens": 200, "output_tokens": 40}
+    assert stats == {"steps": 2, "evidence_calls": 1, "repeat_calls": 0, "input_tokens": 200, "output_tokens": 40}
     stats = {}
     run_agent(mid_race(), backend=Scripted(submit(), usage=None), verbose=False, stats=stats)
-    assert stats == {"steps": 1, "evidence_calls": 0, "input_tokens": None, "output_tokens": None}
+    assert stats == {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
 
 
 def test_agent_policy_rows_are_decisions_with_trajectories(tmp_path):
@@ -351,9 +351,10 @@ def test_agent_rows_say_whether_the_submission_came_in_the_grace(tmp_path):
             "not_agent": lambda sc, belief, m: Decision(None)}
     rows = {r["policy"]: r for r in score_scenario(sc, world, pols)}
     assert rows["late"]["status"] == "ok" and rows["late"]["submitted_in_grace"] is True
-    assert (rows["late"]["tool_calls"], rows["late"]["evidence_calls"]) == (2, 1)
+    assert (rows["late"]["tool_calls"], rows["late"]["evidence_calls"], rows["late"]["repeat_calls"]) == (2, 1, 0)
     assert rows["on_time"]["status"] == "ok" and rows["on_time"]["submitted_in_grace"] is False
     assert rows["not_agent"]["submitted_in_grace"] is None and rows["not_agent"]["evidence_calls"] is None
+    assert rows["not_agent"]["repeat_calls"] is None
     log = tmp_path / "g" / "syn_X_10.jsonl"
     assert [json.loads(x)["phase"] for x in log.read_text().splitlines()] == ["evidence", "grace"]
 
@@ -361,11 +362,12 @@ def test_agent_rows_say_whether_the_submission_came_in_the_grace(tmp_path):
 def test_the_summary_means_evidence_calls_apart_from_tool_calls():
     rows = pd.DataFrame([
         {"race_id": "r", "policy": "agent", "status": "ok", "regret_s": 0.0, "stop_agree": True,
-         "tool_calls": 5, "evidence_calls": 1},
-        {"race_id": "r", "policy": "agent", "status": "invalid", "tool_calls": 9, "evidence_calls": 3},
+         "tool_calls": 5, "evidence_calls": 1, "repeat_calls": 2},
+        {"race_id": "r", "policy": "agent", "status": "invalid", "tool_calls": 9, "evidence_calls": 3,
+         "repeat_calls": 0},
     ])
     overall = summarize(rows).query("race_id == 'ALL'").iloc[0]
-    assert (overall.mean_tool_calls, overall.mean_evidence_calls) == (7.0, 2.0)
+    assert (overall.mean_tool_calls, overall.mean_evidence_calls, overall.mean_repeat_calls) == (7.0, 2.0, 1.0)
 
 
 def test_grade_decision_reports_validity_and_regret():

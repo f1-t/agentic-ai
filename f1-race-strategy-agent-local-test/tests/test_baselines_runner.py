@@ -82,13 +82,13 @@ def test_run_pipeline_agent_row_carries_submitted_in_grace(monkeypatch):
     trajectory = [{"tool": "get_race_snapshot", "phase": "evidence"},
                   {"tool": "submit_recommendation", "phase": "grace", "output": {"accepted": True}}]
     def fake_run_agent(*args, stats, **kwargs):
-        stats.update(evidence_calls=1)
+        stats.update(evidence_calls=1, repeat_calls=2)
         return rec, trajectory
     monkeypatch.setattr(runner, "run_agent", fake_run_agent)
     res = run_pipeline(race_id="2021_04_spain", driver="HAM", lap=27, verbose=False, max_stops=2, seed=0)
     rows = {r["policy"]: r for r in res["results"]}
     assert rows["agent"]["submitted_in_grace"] is True and rows["agent"]["tool_calls"] == 2
-    assert rows["agent"]["evidence_calls"] == 1
+    assert (rows["agent"]["evidence_calls"], rows["agent"]["repeat_calls"]) == (1, 2)
     assert rows["fixed_one_stop"]["submitted_in_grace"] is None and rows["fixed_one_stop"]["evidence_calls"] is None
 
 
