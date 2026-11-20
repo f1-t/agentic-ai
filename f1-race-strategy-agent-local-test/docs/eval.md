@@ -359,20 +359,23 @@ keep their old stamps (stamp-only drift, reports/calibration/README.md).
 gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
-Committed (SPEC 0023, the R8 stint limit at rank 1, sim_code_version `983fd6f4f2bf`, local
-profile: seed 0, 50 samples, two stops, default world): `data/references/v1/441a798fbebb.parquet`,
-`data/references/d2/182013ff1f42.parquet` and `data/references/pilot1/a4241208bfb7.parquet`.
-They were rebuilt from scratch after main was merged in (#61) and are byte-identical. v1
-re-scored on them (baselines with the limit-aware wrapper, and the recorded run):
+Committed (SPEC 0023, the R8 stint limit at rank 1, local profile: seed 0, 50 samples, two
+stops, default world), at sim_code_version `1dcf46ad75aa`: `data/references/v1/820f58b3bce2.parquet`,
+`data/references/d2/763a6d2cfb45.parquet` and `data/references/pilot1/c87fdfd26007.parquet`.
+
+**Rebuilt at the current simulator.** The first R8 references (`441a798fbebb`, `182013ff1f42`,
+`a4241208bfb7`, at sim_code_version `983fd6f4f2bf`, built after main was merged in for #61)
+went stale when #69 (the `_ParameterDraws._plan` fix in degradation.py), #60 and the driver
+effects code (off by default) moved the physics version. They were rebuilt once with the
+sidecars' inputs and the stale files removed. The new parquet files are byte-identical to the
+ones they replace (every scenario's plan, per-draw times and near-tie columns), so under the
+default world none of those changes moves a v1, pilot1 or d2 reference, and the `*_r8` result
+files below, scored on the old keys, hold for the new ones. `reference --check` now lists only
+d3, the expected exception.
+
+v1 scored on these references (baselines with the limit-aware wrapper, and the recorded run):
 `reports/eval/v1_baselines_r8.csv`; pilot1 and d2 baselines: `pilot1_baselines_r8.csv` and
 `d2_baselines_r8.csv` ("Result files" below).
-
-**Stale until the next rebuild (expected).** Merging main with #69 (the `_ParameterDraws._plan`
-fix in degradation.py) and #60 moved the physics version to `24af1cd92d22`, so `reference
---check` lists these three references as stale. That is expected: one rebuild of v1, pilot1
-and d2 is planned after more PRs land, and the `*_r8` result files were scored on the
-references above at `983fd6f4f2bf` and were not rerun. Until then `score --require-reference`
-on v1, pilot1 or d2 fails with a missing reference rather than scoring on stale ones.
 
 The record below is of the reference before R8.
 
