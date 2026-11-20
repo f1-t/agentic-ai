@@ -518,13 +518,15 @@ def _grid_laps(frame, ks, horizons=TAU_HORIZONS, min_laps_frac=0.9):
     return [k for k in ks if ((laps - k >= horizons[0]) & (laps - k <= horizons[1])).any()]
 
 
-def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=None) -> dict[str, pd.DataFrame]:
+def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=None,
+                stop_check=True) -> dict[str, pd.DataFrame]:
     """The held-out race `data` under `arm`: G rows (calibrators.loro on the profile's windows,
     intervals at the profile's n_samples), factor errors, and stop-gain rows per window
     against the arm's own full-window fit. A tau-grid arm runs to_snapshot only, one replay
     per row, on the laps whose horizons reach TAU_HORIZONS (its stop-gain rows on every
     profile lap: a fit per k, no sampling). `loader` and
-    `pool` give the training races of a learned calibrator."""
+    `pool` give the training races of a learned calibrator. `stop_check` False leaves out the
+    lap-0 reference_stops (run's stop_check, a pipeline-test option)."""
     base, _, tau = parse_arm(arm)
     grid = tau is not None
     unit = data.race_id
@@ -558,16 +560,17 @@ def fold_tables(data: jobs.RaceData, arm: str, profile, loader=load_race, pool=N
         tables["fits"] = res.fits
     # the stop-count check: a committed arm's world at lap 0 (a derived arm changes to_snapshot only,
     # a learned arm its calibrator only)
-    tables["reference_stops"] = (reference_stops(data, cfg, profile.sim.max_stops)
-                                 if base not in COVERAGE_ONLY and base not in LEARNED_ARMS and arm == base
-                                 else pd.DataFrame(columns=REFERENCE_STOP_COLUMNS))
+    if stop_check:
+        tables["reference_stops"] = (reference_stops(data, cfg, profile.sim.max_stops)
+                                     if base not in COVERAGE_ONLY and base not in LEARNED_ARMS and arm == base
+                                     else pd.DataFrame(columns=REFERENCE_STOP_COLUMNS))
     return tables
 
 
 FOLD_ERROR_COLUMNS = ["race_id", "arm", "error"]
 
 
-def fold_job(unit: str, arm: str, profile, loader=load_race, pool=None) -> pd.DataFrame:
+def fold_job(unit: str, arm: str, profile, loader=load_race, pool=None, stop_check=True) -> pd.DataFrame:
     """jobs h_fold --arm: the packed fold_tables, stamped with the arm and its config hash.
 
     A fold the arm cannot replay (calibration's "replay plan rejected": the arm's world does not
@@ -577,7 +580,7 @@ def fold_job(unit: str, arm: str, profile, loader=load_race, pool=None) -> pd.Da
     data = loader(unit, profile)
     cfg = arm_config(arm, data.config)
     try:
-        tables = fold_tables(data, arm, profile, loader, pool)
+        tables = fold_tables(data, arm, profile, loader, pool, stop_check=stop_check)
     except ValueError as exc:
         if "replay plan rejected" not in str(exc):
             raise
@@ -611,8 +614,10 @@ def _run_items(items, n_jobs: int):
     return [(item_label(i), st) for i, (_, st) in zip(items, done)]
 
 
-def _fold_items(arms, races, profile, out):
-    return [("h_fold", r, profile, str(out), _args(races, arm=a, profile=profile.name)) for a in arms for r in races]
+def _fold_items(arms, races, profile, out, stop_check=True):
+    extra = {} if stop_check else {"stop_check": False}   # the default leaves the task arguments as they were
+    return [("h_fold", r, profile, str(out), _args(races, arm=a, profile=profile.name, **extra))
+            for a in arms for r in races]
 
 
 def guard_committed(out, races):
@@ -677,7 +682,7 @@ def eligibility_records(races, profile, log=print) -> list[dict]:
 
 def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid=True, n_jobs=None,
         log=print, elig=None, runner=None, learned=(), eval_set=EVAL_SET, allow_held_out=False,
-        held_out_skipped=()) -> dict:
+        held_out_skipped=(), arms=None, stop_check=True) -> dict:
     """A, B and the three C stages over `races` (canonical ids or aliases; synthetic ids
     allowed outside CROSS_DIR, guard_committed). Writes eligibility.json and run.json under
     `out`; returns the run record.
@@ -689,6 +694,14 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     `learned`: LEARNED_ARMS to run beside the committed arms (SPEC 0024), each fold trained on
     the eligible races outside it; the record's "arms" lists them. They are reported, never
     chosen, so the belief choice, the prior-sd fix and the tau grid do not depend on them.
+
+    `arms` and `stop_check` are for pipeline tests, which need a few arms and not the lap-0
+    stop-count check; the defaults (every committed arm, the check on) are the real run.
+    `arms`: the committed arms to run, in ARMS order (default all); the selection needs the
+    baseline and the bound arm (BOUND_ARM), and a learned arm's table needs none too.
+    `stop_check` False: no lap-0 reference_stops in any fold (a note in the record says so),
+    in-process only (a scheduler runner does not carry it), and a rerun into the same `out`
+    reuses those folds as they are.
 
     `elig`: eligibility_records of `races` already computed (real_run), else computed here.
     `runner(items, phase)` runs one phase's units (phase races, arms, s2 or tau_grid) and
@@ -703,7 +716,15 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
     unknown = [a for a in learned if a not in LEARNED_ARMS]
     if unknown:
         raise KeyError(f"unknown learned arm(s) {unknown}; learned arms: {list(LEARNED_ARMS)}")
-    arms = [*ARMS, *dict.fromkeys(learned)]
+    committed = list(ARMS) if arms is None else [a for a in ARMS if a in arms]
+    if arms is not None:
+        bad = [a for a in arms if a not in ARMS]
+        need = [a for a in (BASELINE, BOUND_ARM, *(["none"] if learned else [])) if a not in committed]
+        if bad or need:
+            raise KeyError(f"arms: unknown {bad}, missing {need}; committed arms: {list(ARMS)}")
+    if not stop_check and runner is not None:
+        raise ValueError("stop_check=False runs in-process only: a runner does not carry it")
+    arms = [*committed, *dict.fromkeys(learned)]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     n_jobs = profile.parallel.n_jobs if n_jobs is None else n_jobs
@@ -727,26 +748,28 @@ def run(races, profile, out=CROSS_DIR, tau_multipliers=TAU_MULTIPLIERS, tau_grid
 
     pending = step([("cross_race", r, profile, str(out), _args(eligible, profile=profile.name)) for r in eligible],
                    "races")
-    pending += step(_fold_items(arms, eligible, profile, out), "arms")
+    pending += step(_fold_items(arms, eligible, profile, out, stop_check), "arms")
     if pending:
         return halt("races and arms", pending)
-    sel = selection_tables(out, eligible, profile)
+    sel = selection_tables(out, eligible, profile, arms=committed)
     chosen = sel["chosen"].get(BELIEF_WINDOW, BASELINE)
     record = {"races": races, "eligible": eligible, "arms": arms, "profile": profile.name,
               "profile_hash": profile.hash, "sim_code_version": calibration.SIM_CODE_VERSION,
               "belief_bound": sel["bound"], "belief_choice": chosen, "s2_arm": None, "grid_arm": None, "grid": [],
               "notes": [], "held_out": held_out}
+    if not stop_check:
+        record["notes"].append("stop_check off: no lap-0 reference_stops (pipeline test)")
     if _holds_prior(chosen):
         record["notes"].append(f"{chosen} holds the prior: no shrinkage fit, so no prior-sd fix and no tau grid")
     else:
         record["s2_arm"] = f"{chosen}__{S2}"
-        if pending := step(_fold_items([record["s2_arm"]], eligible, profile, out), "s2"):
+        if pending := step(_fold_items([record["s2_arm"]], eligible, profile, out, stop_check), "s2"):
             return halt("s2", pending)
         s2 = s2_table(out, eligible, profile, chosen)
         grid_on = record["s2_arm"] if bool(s2["passes"].iloc[0]) else chosen
         if tau_grid:
             record["grid_arm"], record["grid"] = grid_on, tau_combos(grid_on, tau_multipliers)
-            if pending := step(_fold_items(record["grid"], eligible, profile, out), "tau_grid"):
+            if pending := step(_fold_items(record["grid"], eligible, profile, out, stop_check), "tau_grid"):
                 return halt("tau_grid", pending)
     for unit, st in status:
         log(f"  {unit}: {st}")
@@ -1572,6 +1595,10 @@ def main(argv=None):
     r.add_argument("--synthetic", type=int, default=0, help="add this many synthetic races (pipeline test)")
     r.add_argument("--learned", nargs="+", default=[], choices=list(LEARNED_ARMS),
                    help="learned calibrator arms to run beside the committed arms (reported, never chosen)")
+    r.add_argument("--arms", nargs="+", choices=list(ARMS),
+                   help="committed arms to run (default all; pipeline tests): baseline and wear_nonneg at least")
+    r.add_argument("--no-stop-check", action="store_true",
+                   help="leave out the lap-0 reference_stops (pipeline tests; in-process only)")
     r.add_argument("--tau-multipliers", nargs="+", type=float, default=list(TAU_MULTIPLIERS))
     r.add_argument("--no-tau-grid", action="store_true")
     r.add_argument("--n-jobs", type=int, help="default: the profile's parallel.n_jobs")
@@ -1602,7 +1629,8 @@ def main(argv=None):
             warnings.simplefilter("ignore", UserWarning)
             run(races, load_profile(args.profile), args.out, tuple(args.tau_multipliers), not args.no_tau_grid,
                 args.n_jobs, learned=tuple(args.learned), eval_set=args.eval_set,
-                allow_held_out=args.allow_held_out, held_out_skipped=skipped)
+                allow_held_out=args.allow_held_out, held_out_skipped=skipped, arms=args.arms,
+                stop_check=not args.no_stop_check)
     path = report(args.out, load_profile(args.profile) if args.profile else None, args.race_features)
     print(f"written to {path}")
     return 0

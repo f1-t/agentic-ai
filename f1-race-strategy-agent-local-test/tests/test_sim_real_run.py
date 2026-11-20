@@ -45,6 +45,12 @@ def make_run(tmp, profile, races, log, **kw):
     return RealRun(races, profile, tmp / "out", **kw)
 
 
+# The smoke run checks the stages and the manifest, not the arms: the arms the selection needs and
+# no lap-0 stop-count check. Every committed arm and the check run end to end on Spain in
+# test_sim_cross_race; the Sol test below emits every arm.
+SMOKE_RUN = {"arms": ["baseline", "none", "wear_nonneg"], "stop_check": False}
+
+
 @pytest.fixture(scope="module")
 def smoke(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("real_run")
@@ -54,7 +60,7 @@ def smoke(tmp_path_factory):
     _, notes = real_run.cached_races()
     log = []
     manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log, race_notes=notes,
-                                         race_source="auto: every cached race"))
+                                         race_source="auto: every cached race", **SMOKE_RUN))
     return tmp, manifest, log, before
 
 
@@ -98,6 +104,10 @@ def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smo
     out = tmp / "out"
     assert json.loads((out / "real_run" / "eligibility.json").read_text())[0]["eligible"]
     assert (out / "cross_race" / "run.json").is_file() and (out / "cross_race" / "summary.md").is_file()
+    # the restricted arms reach the cross-race pass and its resume fingerprint
+    assert json.loads((out / "cross_race" / "run.json").read_text())["arms"] == SMOKE_RUN["arms"]
+    assert by["cross_race"]["inputs"]["arms"]["value"] == SMOKE_RUN["arms"]
+    assert by["cross_race"]["inputs"]["stop_check"]["value"] is False
     assert any(line.startswith("Decision for to_snapshot") for line in by["report"]["detail"]["decisions"])
     assert snapshot() == before   # nothing under reports/calibration or data/references changed
 
@@ -105,7 +115,7 @@ def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smo
 def test_a_rerun_resumes_every_stage_that_ran(smoke):
     tmp, first, _, _ = smoke
     log = []
-    manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log))
+    manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log, **SMOKE_RUN))
     status = {e["stage"]: e["status"] for e in manifest["stages"]}
     assert status == {s: CURRENT if e["status"] == RAN else SKIPPED
                       for s, e in ((e["stage"], e) for e in first["stages"])}
