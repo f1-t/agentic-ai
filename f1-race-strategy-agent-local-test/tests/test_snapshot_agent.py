@@ -4,11 +4,25 @@ import os
 import tempfile
 from types import SimpleNamespace
 
+import pytest
+
 from src import agent
 from src.agent import run_agent
 from src.llm.base import ModelBackend, ModelTurn, ToolCall
 from src.snapshot import RaceSnapshot
 from src import tools
+
+
+@pytest.fixture(autouse=True)
+def default_loop_options(monkeypatch):
+    # the loop options take their defaults unless a test sets them, whatever a local .env says
+    monkeypatch.delenv("AGENT_TURN_STATUS", raising=False)
+    monkeypatch.delenv("AGENT_REPEAT_MODE", raising=False)
+
+
+@pytest.fixture
+def cache_mode(monkeypatch):
+    monkeypatch.setenv("AGENT_REPEAT_MODE", "cache")
 
 
 def snap():
@@ -178,7 +192,7 @@ def test_a_turn_that_spends_the_budget_keeps_its_results_anthropic():
     assert "MUST call submit_recommendation" in content[2]["text"]
 
 
-# --- the turn budget: a status line, a submission grace, a repeat guard -------------------------
+# --- the turn budget: a submission grace, an optional status line, repeat handling --------------
 ALL_TOOLS = [t["name"] for t in tools.TOOL_SPECS] + ["submit_recommendation"]
 SPENT = "evidence turns are spent"
 
@@ -257,7 +271,7 @@ def test_the_grace_length_comes_from_the_environment(monkeypatch):
     assert rec is None and len(backend.seen) == 2
 
 
-def test_an_identical_evidence_call_gets_the_cached_result_without_using_budget(monkeypatch):
+def test_an_identical_evidence_call_gets_the_cached_result_without_using_budget(monkeypatch, cache_mode):
     ran = stub_dispatch(monkeypatch)
     stats = {}
     first = {"ages": {"MEDIUM": 30, "SOFT": 10}}
@@ -266,7 +280,7 @@ def test_an_identical_evidence_call_gets_the_cached_result_without_using_budget(
         ModelTurn(tool_calls=[tc("get_model_report", first)]),
         ModelTurn(tool_calls=[tc("get_model_report", same), tc("get_model_report", {"ages": {"MEDIUM": 31}})]),
         submit_turn()])
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_tool_calls=2, stats=stats)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_tool_calls=2, stats=stats, turn_status=True)
     assert rec is not None
     assert ran == [("get_model_report", first), ("get_model_report", {"ages": {"MEDIUM": 31}})]
     assert traj[1]["output"] == {"ran": 1, "repeat_of": 1} and traj[1]["error"] is None
@@ -277,7 +291,7 @@ def test_an_identical_evidence_call_gets_the_cached_result_without_using_budget(
     assert "Evidence calls used 2 of 2." in backend.seen[-1][-1]["content"]
 
 
-def test_a_repeat_runs_the_tool_once_and_is_served_after_the_budget(monkeypatch, tmp_path):
+def test_a_repeat_runs_the_tool_once_and_is_served_after_the_budget(monkeypatch, tmp_path, cache_mode):
     runs = []
     spec = next(s for s in tools.TOOL_SPECS if s["name"] == "estimate_pit_loss")
 
@@ -301,7 +315,7 @@ def test_a_repeat_runs_the_tool_once_and_is_served_after_the_budget(monkeypatch,
     assert results[0] == {"tool": "estimate_pit_loss", "result": {"pit_loss_s": 21.5, "repeat_of": 1}}
 
 
-def test_a_repeat_of_a_call_that_errored_gets_the_same_error(monkeypatch):
+def test_a_repeat_of_a_call_that_errored_gets_the_same_error(monkeypatch, cache_mode):
     dispatched = counting_dispatch(monkeypatch)
     stats = {}
     bad = {"action": {"action": "pit", "compound": "WET"}}
@@ -314,7 +328,7 @@ def test_a_repeat_of_a_call_that_errored_gets_the_same_error(monkeypatch):
     assert (stats["evidence_calls"], stats["repeat_calls"]) == (1, 1)
 
 
-def test_a_repeat_of_a_non_dict_result_is_wrapped(monkeypatch):
+def test_a_repeat_of_a_non_dict_result_is_wrapped(monkeypatch, cache_mode):
     monkeypatch.setattr(agent, "_dispatch", lambda name, args: ["SOFT", "MEDIUM"])
     backend = RecordingBackend([ModelTurn(tool_calls=[tc("get_race_snapshot")] * 2), submit_turn()])
     rec, traj = run_agent(snap(), backend=backend, verbose=False)
@@ -323,7 +337,9 @@ def test_a_repeat_of_a_non_dict_result_is_wrapped(monkeypatch):
     assert traj[1]["output"] == {"result": ["SOFT", "MEDIUM"], "repeat_of": 1} and traj[1]["error"] is None
 
 
-def test_a_repeat_in_the_grace_is_still_refused(monkeypatch):
+@pytest.mark.parametrize("mode", ["run", "cache"])
+def test_a_repeat_in_the_grace_is_still_refused(monkeypatch, mode):
+    monkeypatch.setenv("AGENT_REPEAT_MODE", mode)
     ran = stub_dispatch(monkeypatch)
     stats = {}
     backend = RecordingBackend([ModelTurn(tool_calls=[tc("estimate_pit_loss")]),
@@ -334,7 +350,7 @@ def test_a_repeat_in_the_grace_is_still_refused(monkeypatch):
     assert "repeat_of" not in traj[1] and stats["repeat_calls"] == 0
 
 
-def test_a_repeat_on_the_anthropic_path(monkeypatch):
+def test_a_repeat_on_the_anthropic_path(monkeypatch, cache_mode):
     stub_dispatch(monkeypatch)
 
     def turn(calls):
@@ -349,7 +365,7 @@ def test_a_repeat_on_the_anthropic_path(monkeypatch):
     assert json.loads(content[0]["content"]) == {"ran": 1, "repeat_of": 1}
 
 
-def test_evidence_calls_count_only_the_calls_that_ran(monkeypatch):
+def test_evidence_calls_count_only_the_calls_that_ran(monkeypatch, cache_mode):
     ran = stub_dispatch(monkeypatch)
     stats = {}
     backend = RecordingBackend([
@@ -366,7 +382,7 @@ def test_evidence_calls_count_only_the_calls_that_ran(monkeypatch):
 def test_the_status_line_counts_turns_and_calls(monkeypatch):
     stub_dispatch(monkeypatch)
     backend = RecordingBackend([evidence_turn(2), evidence_turn(1), evidence_turn(1), submit_turn()])
-    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3, max_tool_calls=24)
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3, max_tool_calls=24, turn_status=True)
     assert rec is not None
     after = [seen[-1]["content"] for seen in backend.seen[1:]]   # the message closing turns 1, 2, 3
     assert after[0].endswith("\n\nTurn 1 of 3. Evidence calls used 2 of 24.")
@@ -384,7 +400,7 @@ def test_the_status_line_and_the_grace_on_the_anthropic_path(monkeypatch):
                                 turn([ToolCall("g1", "estimate_pit_loss", {}),
                                       ToolCall("g2", "submit_recommendation", {**SUBMIT, "decision": "MAYBE"})]),
                                 turn([ToolCall("g3", "submit_recommendation", SUBMIT)])], name="anthropic")
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=1)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=1, turn_status=True)
     assert rec is not None and [t["phase"] for t in traj] == ["evidence", "grace", "grace", "grace"]
     assert backend.offered == [ALL_TOOLS, ["submit_recommendation"], ["submit_recommendation"]]
     first = backend.seen[1][-1]["content"]
@@ -394,3 +410,118 @@ def test_the_status_line_and_the_grace_on_the_anthropic_path(monkeypatch):
     assert [b.get("tool_use_id") for b in grace] == ["g1", "g2", None]   # every tool_use is answered
     assert "Evidence turns are spent" in json.loads(grace[0]["content"])["error"]
     assert "1 submission turn left" in grace[2]["text"]
+
+
+# --- the defaults: no status line, a repeat runs again (AGENT_TURN_STATUS, AGENT_REPEAT_MODE) -----
+def test_by_default_the_tool_results_carry_no_status_line(monkeypatch):
+    stub_dispatch(monkeypatch)
+    backend = RecordingBackend([evidence_turn(2), evidence_turn(1), evidence_turn(1), submit_turn()])
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3, max_tool_calls=24)
+    assert rec is not None
+    after = [seen[-1]["content"] for seen in backend.seen[1:]]   # the message closing turns 1, 2, 3
+    for content, n in zip(after[:2], (2, 1)):                     # only the results, as before #72
+        assert content.startswith("Tool results:\n") and "\n\n" not in content
+        assert len(json.loads(content[len("Tool results:\n"):])) == n
+    body, note = after[2].split("\n\n")                          # the grace message stays
+    assert note.startswith("The evidence turns are spent") and "Turn " not in note
+
+
+def test_by_default_the_anthropic_tool_results_carry_no_status_line(monkeypatch):
+    stub_dispatch(monkeypatch)
+
+    def turn(calls):
+        return ModelTurn(tool_calls=calls, raw=SimpleNamespace(content=[{"type": "tool_use", "id": c.id} for c in calls]))
+    backend = RecordingBackend([turn([ToolCall("a1", "get_race_snapshot", {}), ToolCall("a2", "estimate_pit_loss", {})]),
+                                turn([ToolCall("a3", "get_model_report", {})]),
+                                turn([ToolCall("s1", "submit_recommendation", SUBMIT)])], name="anthropic")
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3)
+    assert rec is not None
+    first, second = backend.seen[1][-1]["content"], backend.seen[2][-1]["content"]
+    assert [(b["type"], b["tool_use_id"]) for b in first] == [("tool_result", "a1"), ("tool_result", "a2")]
+    assert [(b["type"], b["tool_use_id"]) for b in second] == [("tool_result", "a3")]
+
+
+@pytest.mark.parametrize("value", ["1", "true", "on", "ON"])
+def test_the_status_line_comes_from_the_environment(monkeypatch, value):
+    stub_dispatch(monkeypatch)
+    monkeypatch.setenv("AGENT_TURN_STATUS", value)
+    backend = RecordingBackend([evidence_turn(1), evidence_turn(1), submit_turn()])
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3, max_tool_calls=24)
+    assert rec is not None
+    assert backend.seen[1][-1]["content"].endswith("\n\nTurn 1 of 3. Evidence calls used 1 of 24.")
+    assert backend.seen[2][-1]["content"].endswith(
+        "\n\nTurn 2 of 3. Evidence calls used 2 of 24. One evidence turn is left after this one.")
+
+
+def test_the_status_line_argument_overrides_the_environment(monkeypatch):
+    stub_dispatch(monkeypatch)
+    monkeypatch.setenv("AGENT_TURN_STATUS", "1")
+    backend = RecordingBackend([evidence_turn(1), submit_turn()])
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, max_steps=3, turn_status=False)
+    assert rec is not None and "Turn " not in backend.seen[1][-1]["content"]
+
+
+def test_by_default_a_repeat_runs_again_and_uses_budget(monkeypatch, tmp_path):
+    runs = []
+    spec = next(s for s in tools.TOOL_SPECS if s["name"] == "estimate_pit_loss")
+
+    def counted(**kwargs):
+        runs.append(kwargs)
+        return {"pit_loss_s": 21.5}
+    monkeypatch.setitem(spec, "fn", counted)
+    path = tmp_path / "trajectory.jsonl"
+    stats = {}
+    backend = RecordingBackend([ModelTurn(tool_calls=[tc("estimate_pit_loss")]),
+                                ModelTurn(tool_calls=[tc("estimate_pit_loss"), tc("estimate_pit_loss")]),
+                                submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_tool_calls=2, log_path=path, stats=stats)
+    assert rec is not None and len(runs) == 2              # the tool function ran twice
+    assert traj[1]["output"] == {"pit_loss_s": 21.5}       # the plain result, no repeat_of in it
+    assert traj[1]["repeat_of"] == 1 and "repeat_of" not in traj[0]
+    assert "budget exhausted" in traj[2]["error"]          # the next repeat found the budget spent
+    assert "repeat_of" not in traj[2]
+    assert (stats["evidence_calls"], stats["repeat_calls"]) == (2, 1)
+    rows = [json.loads(x) for x in path.read_text().splitlines()]
+    assert [r.get("repeat_of") for r in rows] == [None, 1, None, None]
+    results = json.loads(backend.seen[-1][-1]["content"][len("Tool results:\n"):].split("\n\n")[0])
+    assert results[0] == {"tool": "estimate_pit_loss", "result": {"pit_loss_s": 21.5}}
+
+
+def test_by_default_a_repeat_on_the_anthropic_path_runs_again(monkeypatch):
+    ran = stub_dispatch(monkeypatch)
+
+    def turn(calls):
+        return ModelTurn(tool_calls=calls, raw=SimpleNamespace(content=[{"type": "tool_use", "id": c.id} for c in calls]))
+    backend = RecordingBackend([turn([ToolCall("a1", "estimate_pit_loss", {})]),
+                                turn([ToolCall("a2", "estimate_pit_loss", {})]),
+                                turn([ToolCall("s1", "submit_recommendation", SUBMIT)])], name="anthropic")
+    rec, _ = run_agent(snap(), backend=backend, verbose=False)
+    assert rec is not None and len(ran) == 2
+    content = backend.seen[-1][-1]["content"]
+    assert [(b["type"], b["tool_use_id"]) for b in content] == [("tool_result", "a2")]
+    assert json.loads(content[0]["content"]) == {"ran": 2}
+
+
+@pytest.mark.parametrize("env, arg, runs", [("cache", "run", 2), ("run", "cache", 1), (None, "cache", 1)])
+def test_the_repeat_mode_argument_overrides_the_environment(monkeypatch, env, arg, runs):
+    ran = stub_dispatch(monkeypatch)
+    if env:
+        monkeypatch.setenv("AGENT_REPEAT_MODE", env)
+    backend = RecordingBackend([ModelTurn(tool_calls=[tc("estimate_pit_loss")] * 2), submit_turn()])
+    stats = {}
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, stats=stats, repeat_mode=arg)
+    assert rec is not None and len(ran) == runs
+    assert (stats["evidence_calls"], stats["repeat_calls"]) == (runs, 1)
+
+
+class NoTurns(ModelBackend):
+    name = "test"
+    def run_turn(self, **kwargs): raise AssertionError("an invalid repeat mode must fail before any turn")
+
+
+@pytest.mark.parametrize("env, arg", [(None, "skip"), ("refuse", None), ("CACHE", None)])
+def test_an_invalid_repeat_mode_raises(monkeypatch, env, arg):
+    if env:
+        monkeypatch.setenv("AGENT_REPEAT_MODE", env)
+    with pytest.raises(ValueError, match="run, cache"):
+        run_agent(snap(), backend=NoTurns(), verbose=False, repeat_mode=arg)

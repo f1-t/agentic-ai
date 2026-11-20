@@ -73,6 +73,20 @@ turns it into the plan the world scores:
 A submission that cannot become a legal plan (no compound, a compound the belief does not
 model, n below 1, no legal continuation) is an invalid row.
 
+## The belief_optimizer policy
+
+`--policies baselines belief_optimizer agent` adds a baseline with no model call: at each
+snapshot it takes the plan `optimizer_bridge.optimize_batch` picks on the belief simulator (the
+one the agent's tools use, fitted on practice plus race laps up to the snapshot), with no
+decision imposed, and the world scores that plan like any other. It answers what the language
+model adds over running the optimizer on what it can see. It is planned by
+`eval.decisions.belief_optimum`, with the same belief fit, seed (seed + `BELIEF_SEED_OFFSET`),
+samples and future-stop limit as the agent continuation in `to_plan`. It follows every rule
+(R1-R8); a plan the world rejects is an `invalid` row with the reason. Rows carry the usual
+plan, stops, first pit, regret and R8 stamps; the agent-only columns (`decision`, `p_pit`,
+tool calls, tokens) are blank. It is not in the `baselines` group, so default commands and
+existing result files are unchanged; select it by name.
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
@@ -294,16 +308,33 @@ any scenario of any race (the lap-0 same-race guard is gone):
 - the submission is scored as a decision (above); `tool_calls` is the trajectory length
   (every attempted call: refused ones, repeats and submission attempts included),
   `evidence_calls` the evidence calls that actually ran (no submissions, no calls refused
-  for the budget or in a grace turn, no repeats), `repeat_calls` the evidence calls
-  identical to an earlier one (same tool and arguments), which get the earlier call's
-  cached result with `repeat_of` (its `call_index`, also on the trajectory event) and use
-  no budget, also once the budget is spent (a grace turn still refuses them),
-  `input_tokens` and `output_tokens` the backend's reported usage (blank when it reports
-  none); a backend exception is an `error` row, not a crash;
+  for the budget or in a grace turn, no repeats served from the cache; a repeat that was
+  run again counts, since it ran), `repeat_calls` the evidence calls identical to an
+  earlier one in the episode (same tool and arguments), whether run again or served from
+  the cache, so looping stays measurable in either repeat mode (a repeat refused for the
+  budget or in a grace turn is not counted), `input_tokens` and `output_tokens` the
+  backend's reported usage (blank when it reports none); a backend exception is an `error`
+  row, not a crash;
+- `AGENT_REPEAT_MODE` (also `run_agent(repeat_mode=...)`) says what a repeat gets: `run`
+  (the default) runs it again and counts it against the evidence budget, as before #72;
+  `cache` gives it the earlier call's cached result with `repeat_of` added and uses no
+  budget, also once the budget is spent (a grace turn still refuses it). Any other value
+  is an error. In both modes the trajectory event carries `repeat_of` (the earlier
+  call's `call_index`); in `run` mode the model's tool result does not;
+- `AGENT_TURN_STATUS` (`1`, `true` or `on`; also `run_agent(turn_status=...)`) ends each
+  evidence turn's tool-results message with "Turn s of N. Evidence calls used u of B."
+  and, on turn N-1, "One evidence turn is left after this one." It is off by default:
+  the tool-results messages are then what they were before #72;
 - each trajectory event has a `phase`: `evidence` for the `max_steps` turns, `grace` for
   the up to `AGENT_SUBMIT_GRACE_STEPS` (default 2) turns that follow when no submission was
   accepted, which offer only `submit_recommendation`; `submitted_in_grace` marks a
-  submission made there.
+  submission made there. The grace turns are on whatever the two options above say.
+
+Why those defaults: in live runs on the same 50 scenarios, unprompted submissions went 43
+with neither the status line nor repeat handling, 31 with the status line and refused
+repeats, and 27 with the status line and cached repeats, while input
+tokens per episode went 53k, 63k, 85k. The decisions barely changed. The grace turns are
+what guarantee a submission.
 
 `src.grade.grade_decision(snapshot, submission)` grades one submission the same way (valid,
 regret against the optimizer from that snapshot) for `tests/test_case.py`, which reports
@@ -481,8 +512,8 @@ policy's plan is scored by the world under the same draws (docs/rules.md R6).
 | `stop_agreement` | share of scored plans with the optimizer's number of future stops |
 | `first_pit_error` | \|first pit lap - optimizer's first pit lap\|; 0 when neither stops, blank when only one does |
 | `latency_s`, `tool_calls`, `input_tokens`, `output_tokens` | per decision, when the policy reports them. `tool_calls` counts every call the agent attempted, refused calls, repeats and submission attempts included |
-| `evidence_calls` | agent rows: the evidence calls that ran (no submissions, no refused calls, no repeats); summary `mean_evidence_calls` beside `mean_tool_calls` |
-| `repeat_calls` | agent rows: the evidence calls identical to an earlier one, answered with its cached result and no budget (blank for other policies and for rows from before this column); summary `mean_repeat_calls` |
+| `evidence_calls` | agent rows: the evidence calls that ran (no submissions, no refused calls, no repeats served from the cache; a repeat run again counts); summary `mean_evidence_calls` beside `mean_tool_calls` |
+| `repeat_calls` | agent rows: the evidence calls identical to an earlier one in the episode, run again (`AGENT_REPEAT_MODE=run`, the default) or answered with its cached result and no budget (`cache`); blank for other policies and for rows from before this column; summary `mean_repeat_calls` |
 | `pit_now_opt` | the world optimizer's first stop is at the end of this lap (`opt_first_pit_lap == laps_completed + 1`) |
 | `submitted_in_grace` | agent rows: the submission came in a grace turn, after the evidence turns ran out (blank for other policies) |
 | `decision`, `p_pit` | agent rows only: PIT or STAY_OUT, and the stated probability that pitting now is right (`confidence` for PIT, `1 - confidence` for STAY_OUT) |
@@ -960,7 +991,10 @@ pilot1 and d2 runs once with the same settings. The two sets ran one after the o
 latency figures are not affected by contention. Since #72 the agent loop prints a turn-status
 line, refuses an evidence call identical to one already run, and follows the 10 evidence turns
 with up to 2 grace turns that offer only `submit_recommendation`. The rows carry
-`submitted_in_grace` and `evidence_calls`. The `*_fix2_combined.csv` files are built the same way
+`submitted_in_grace` and `evidence_calls`. Loop settings of these runs: status line on,
+repeats refused (a mode that no longer exists; their `evidence_calls` excludes the refused
+repeats and they have no `repeat_calls`), grace on. The current defaults (status line off,
+repeats run again) are the loop of the `*_fix` runs plus the grace. The `*_fix2_combined.csv` files are built the same way
 as the `_fix` ones: the new agent rows plus the Milestone 2 baseline rows, whose reference
 columns match row for row. They are the input to `*_fix2_compare_regret_s_*`. The Milestone 2
 files stay the cited ones.
@@ -972,7 +1006,9 @@ off), run as one sequential job (`score --scenarios data/scenarios/dev6.json --p
 --seed 0 --require-reference`) at commit 3223131, 94 minutes wall time, with no other agent
 run at the same time. `score` logs trajectories under the set version; they were moved to
 `trajectories/dev6_pass1/`. dev6 is a development set on calibration races, not a held-out
-result.
+result. Loop settings of this pass: status line on, repeats served from the cache (today
+`AGENT_TURN_STATUS=1 AGENT_REPEAT_MODE=cache`), grace on; its `repeat_calls` are cached
+repeats, which its `evidence_calls` exclude.
 
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit

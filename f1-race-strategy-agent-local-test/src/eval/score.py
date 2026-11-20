@@ -214,6 +214,12 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
             except decisions.InvalidDecision as exc:
                 rows.append({**row, "status": "invalid", "reason": str(exc)})
                 continue
+        if plan is None and decision.belief_optimum:
+            try:
+                plan = decisions.belief_optimum(snap, belief, max_stops, seed=seed, n_samples=n)
+            except decisions.InvalidDecision as exc:
+                rows.append({**row, "status": "invalid", "reason": str(exc)})
+                continue
         if plan is None:
             rows.append({**row, "status": "invalid", "reason": "no plan submitted"})
             continue
