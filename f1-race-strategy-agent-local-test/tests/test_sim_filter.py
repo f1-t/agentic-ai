@@ -279,6 +279,26 @@ def test_a_lap_faster_than_the_model_is_never_cut(practice):
     assert not fitted.loc[fitted["pace_resid_s"] > 2.5, "clean"].any()
 
 
+def test_practice_frame_keeps_dry_race_compounds_and_warns_once(caplog):
+    """Pirelli test tyres and wet tyres are dropped before the long-run test (SPEC 0023 C):
+    the frame is the one built without those laps, and one warning per call gives the counts."""
+    fp1 = practice_laps([("SOFT", 10), ("MEDIUM", 10), ("SOFT", 10)])
+    fp1.loc[fp1["Stint"] == 3, "Compound"] = "TEST_UNKNOWN"
+    fp3 = practice_laps([("SOFT", 10), ("MEDIUM", 10)], seed=1)
+    fp3.loc[(fp3["Stint"] == 2) & (fp3["Driver"] == "A"), "Compound"] = "INTERMEDIATE"
+    caplog.set_level("WARNING", logger="src.sim.data")
+    f = practice_frame({"FP1": fp1, "FP3": fp3})
+    assert set(f["compound"]) == {"SOFT", "MEDIUM"}
+    assert not f["compound"].isin(["TEST_UNKNOWN", "INTERMEDIATE"]).any()
+    records = [r for r in caplog.records if r.name == "src.sim.data"]
+    assert len(records) == 1
+    assert records[0].getMessage() == ("practice_frame: dropped 84 laps not on a dry race compound "
+                                       "(INTERMEDIATE: 12, TEST_UNKNOWN: 72)")
+    dry = {"FP1": fp1[fp1["Compound"] != "TEST_UNKNOWN"], "FP3": fp3[fp3["Compound"] != "INTERMEDIATE"]}
+    pd.testing.assert_frame_equal(f, practice_frame(dry))
+    assert len([r for r in caplog.records if r.name == "src.sim.data"]) == 1   # the dry call is silent
+
+
 def test_practice_frame_cuts_slow_laps_with_the_race_filter():
     laps = practice_laps([("SOFT", 10), ("SOFT", 10), ("MEDIUM", 10)], bumps={("B", 5): 3.0})
     f = practice_frame({"FP2": laps})

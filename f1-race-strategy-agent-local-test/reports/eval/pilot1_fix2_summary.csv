@@ -1,0 +1,3 @@
+race_id,policy,scenarios,scored,unavailable,errors,invalid_rate,mean_regret_s,median_regret_s,p90_regret_s,max_regret_s,mean_regret_pct,stop_agreement,share_within_mc,mean_first_pit_error,mean_latency_s,mean_tool_calls,mean_evidence_calls,mean_input_tokens,mean_output_tokens,brier,pit_now_agreement
+2021_04_spain,agent,25,25,0,0,0.0,7.994091498844609,3.2138666651972017,23.417955561346755,24.729317527692274,0.19592615832795676,0.96,0.2,9.708333333333334,15.848501797679345,16.56,9.4,49197.92,806.56,0.167632,0.8
+ALL,agent,25,25,0,0,0.0,7.994091498844609,3.2138666651972017,23.417955561346755,24.729317527692274,0.19592615832795676,0.96,0.2,9.708333333333334,15.848501797679345,16.56,9.4,49197.92,806.56,0.167632,0.8

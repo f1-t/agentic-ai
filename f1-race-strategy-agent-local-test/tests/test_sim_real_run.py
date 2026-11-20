@@ -13,13 +13,14 @@ import pandas as pd
 import pytest
 import yaml
 
-from src.sim import calibrate, event_rates, fuel_prior, jobs, real_run
+from src.sim import calibrate, cross_race, event_rates, fuel_prior, jobs, real_run
 from src.sim.compute import load_profile
 from src.sim.real_run import CURRENT, PENDING, RAN, SKIPPED, STAGES, RealRun
 
 ROOT = real_run.ROOT
 ENTRY_KEYS = {"stage", "status", "reason", "inputs", "outputs", "code_version", "wall_time_s", "fingerprint"}
 COMMITTED = (real_run.REPORTS_DIR, ROOT / "data" / "references")
+N_ARMS = len(cross_race.ARMS)   # one h_fold task per committed arm on a one-race run
 
 
 def small_profile(name="local", scheduler="local"):
@@ -44,6 +45,12 @@ def make_run(tmp, profile, races, log, **kw):
     return RealRun(races, profile, tmp / "out", **kw)
 
 
+# The smoke run checks the stages and the manifest, not the arms: the arms the selection needs and
+# no lap-0 stop-count check. Every committed arm and the check run end to end on Spain in
+# test_sim_cross_race; the Sol test below emits every arm.
+SMOKE_RUN = {"arms": ["baseline", "none", "wear_nonneg"], "stop_check": False}
+
+
 @pytest.fixture(scope="module")
 def smoke(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("real_run")
@@ -53,7 +60,7 @@ def smoke(tmp_path_factory):
     _, notes = real_run.cached_races()
     log = []
     manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log, race_notes=notes,
-                                         race_source="auto: every cached race"))
+                                         race_source="auto: every cached race", **SMOKE_RUN))
     return tmp, manifest, log, before
 
 
@@ -94,6 +101,10 @@ def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smo
     out = tmp / "out"
     assert json.loads((out / "real_run" / "eligibility.json").read_text())[0]["eligible"]
     assert (out / "cross_race" / "run.json").is_file() and (out / "cross_race" / "summary.md").is_file()
+    # the restricted arms reach the cross-race pass and its resume fingerprint
+    assert json.loads((out / "cross_race" / "run.json").read_text())["arms"] == SMOKE_RUN["arms"]
+    assert by["cross_race"]["inputs"]["arms"]["value"] == SMOKE_RUN["arms"]
+    assert by["cross_race"]["inputs"]["stop_check"]["value"] is False
     assert any(line.startswith("Decision for to_snapshot") for line in by["report"]["detail"]["decisions"])
     assert snapshot() == before   # nothing under reports/calibration or data/references changed
 
@@ -101,7 +112,7 @@ def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smo
 def test_a_rerun_resumes_every_stage_that_ran(smoke):
     tmp, first, _, _ = smoke
     log = []
-    manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log))
+    manifest = real_run.execute(make_run(tmp, small_profile(), ["2021_04_spain"], log, **SMOKE_RUN))
     status = {e["stage"]: e["status"] for e in manifest["stages"]}
     assert status == {s: CURRENT if e["status"] == RAN else SKIPPED
                       for s, e in ((e["stage"], e) for e in first["stages"])}
@@ -247,14 +258,14 @@ def test_sol_emits_the_arrays_from_the_templates_and_submits_nothing(tmp_path, m
     manifest = real_run.execute(run)
     by = {e["stage"]: e for e in manifest["stages"]}
     assert manifest["complete"] and manifest["mode"].startswith("slurm")
-    assert by["cross_race"]["status"] == PENDING and by["cross_race"]["detail"]["pending"] == 12
+    assert by["cross_race"]["status"] == PENDING and by["cross_race"]["detail"]["pending"] == 1 + N_ARMS
     assert by["report"]["status"] == SKIPPED and "pending" in by["report"]["reason"]
     assert not (tmp_path / "out" / "cross_race" / "run.json").exists()
     assert not list((tmp_path / "out" / "cross_race").rglob("*.parquet"))   # nothing ran here
     slurm = tmp_path / "out" / "real_run" / "slurm"
     commands = by["cross_race"]["detail"]["sbatch"]
     assert commands == [f"sbatch --array=0-0%50 {slurm / 'cross_race.sbatch'}",
-                        f"sbatch --array=0-10%50 {slurm / 'h_fold_arms.sbatch'}"]
+                        f"sbatch --array=0-{N_ARMS - 1}%50 {slurm / 'h_fold_arms.sbatch'}"]
     assert all(any(c in line for line in log) for c in commands)
     for name, template in (("cross_race", "g_race.sbatch"), ("h_fold_arms", "h_fold.sbatch")):
         text = (slurm / f"{name}.sbatch").read_text()
@@ -262,7 +273,7 @@ def test_sol_emits_the_arrays_from_the_templates_and_submits_nothing(tmp_path, m
                   if ln.startswith("#SBATCH") and "--job-name" not in ln]
         assert all(ln in text.splitlines() for ln in header) and "source \"${SIM_VENV" in text
         assert f"OUT={tmp_path / 'out' / 'cross_race'}" in text and "--profile " + str(path) in text
-    assert len((slurm / "h_fold_arms_tasks.txt").read_text().splitlines()) == 11
+    assert len((slurm / "h_fold_arms_tasks.txt").read_text().splitlines()) == N_ARMS
 
     # one task of each array, as Slurm would run it, lands where the next real-run looks
     for name in ("cross_race", "h_fold_arms"):
@@ -272,9 +283,9 @@ def test_sol_emits_the_arrays_from_the_templates_and_submits_nothing(tmp_path, m
     again = real_run.execute(make_run(tmp_path, load_profile(str(path)), ["2021_04_spain"], [],
                                       profile_ref=str(path)))
     cross = {e["stage"]: e for e in again["stages"]}["cross_race"]
-    assert cross["status"] == PENDING and cross["detail"]["pending"] == 10
-    assert cross["detail"]["sbatch"] == [f"sbatch --array=0-9%50 {slurm / 'h_fold_arms.sbatch'}"]
-    assert len((slurm / "h_fold_arms_tasks.txt").read_text().splitlines()) == 10
+    assert cross["status"] == PENDING and cross["detail"]["pending"] == N_ARMS - 1
+    assert cross["detail"]["sbatch"] == [f"sbatch --array=0-{N_ARMS - 2}%50 {slurm / 'h_fold_arms.sbatch'}"]
+    assert len((slurm / "h_fold_arms_tasks.txt").read_text().splitlines()) == N_ARMS - 1
 
 
 def test_a_long_phase_is_split_into_arrays_with_an_offset(tmp_path):

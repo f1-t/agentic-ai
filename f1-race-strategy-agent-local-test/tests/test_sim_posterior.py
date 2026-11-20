@@ -194,7 +194,9 @@ def test_large_wear_sd_widens_the_gap_and_pulls_p_beats_toward_half():
     snap = Snapshot.at_start(RACE, "X", "SOFT")
     out = {}
     for name, deg in (("none", {"name": "linear_fuel"}), ("posterior", POST)):
-        c = Simulator(f, SimConfig(degradation=deg)).compare(snap, [ONE, TWO], n_samples=400)
+        # R8 off: a frame cut at lap 12 runs no tyre past age 12 (docs/rules.md R8)
+        c = Simulator(f, SimConfig(degradation=deg, stint_limit_margin_laps=None)).compare(snap, [ONE, TWO],
+                                                                                            n_samples=400)
         out[name] = (c.gap_std_s[0][1], c.p_beats[0][1])
     (std0, p0), (std1, p1) = out["none"], out["posterior"]
     assert std0 == 0.0 and p0 in (0.0, 1.0)

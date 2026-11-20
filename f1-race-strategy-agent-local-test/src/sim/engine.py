@@ -15,7 +15,7 @@ from .config import SimConfig, class_names, compound_class
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
 from .hazard import HAZARD
-from .rules import RuleContext, apply_inventory, check
+from .rules import RuleContext, apply_inventory, check, stint_limits
 from .track import TRACK
 from .traffic import TRAFFIC
 
@@ -186,6 +186,8 @@ class Simulator:
                  race_features: dict | None = None, calibrator=None):
         self.config = config or SimConfig()
         self.laps, self.practice, self.pace = laps, practice, pace
+        # R8, from the full race frame; shared by fitted_for copies
+        self.stint_limits = stint_limits(laps, self.config.stint_limit_rank)
         self.weather, self.race_features = weather, race_features
         spec = self.config.calibrator
         self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
@@ -360,7 +362,7 @@ class Simulator:
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
         fit = self.fitted_for(snapshot)
-        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config))
+        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config, self.stint_limits))
 
     # --- public API ----------------------------------------------------------
     def model_report(self, snapshot: Snapshot, ages=None,

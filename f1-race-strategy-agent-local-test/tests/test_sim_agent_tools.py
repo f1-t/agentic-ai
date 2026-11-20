@@ -271,6 +271,13 @@ def test_evaluate_action_errors_and_edges(syn):
         StintRecord(compound="SOFT", laps=K, start_lap=1)]})
     flag = agent_tools.evaluate_action(later, {"action": "stay_out", "laps": 99}, sim=sim, profile=PROFILE)
     assert flag["plan"] == [["MEDIUM", snap.remaining_laps]] and "error" not in flag
+    # R8: AAA..CCC ran SOFT to age 25, so the SOFT set (20 laps old) may end at age 28; a stay
+    # of 10 laps cannot, and the error says by how much (a rule error the agent can correct)
+    assert sim.stint_limits["SOFT"] == 25.0
+    long = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 10}, sim=sim, profile=PROFILE)
+    assert long["valid"] is False and "past the stint limit of 28" in long["error"]
+    ok = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 5}, sim=sim, profile=PROFILE)
+    assert "error" not in ok
 
 
 def test_recommendation_fields_give_p_pit(syn):
@@ -325,7 +332,11 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
     """At HAM lap 20 the sampling spread alone would claim certainty (|gap| > 2 sd); the
     calibration error says the gap is inside the model's error."""
     snap = calibration.snapshot_at(spain.frame, spain.race, "HAM", 20)
-    out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1})
+    # without the R8 stint limit: it bounds the continuations of both actions (SOFT to age 35),
+    # which spreads the gap (sd 6.4 s against |gap| 2.2 s) past the claim this test is about
+    sim = agent_tools.belief_simulator(
+        snap, config=agent_tools.belief_config().model_copy(update={"stint_limit_margin_laps": None}))
+    out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1}, sim=sim)
     assert abs(out["gap_mean_s"]) > 2 * out["gap_std_s"]
     assert out["within_sim_error"] is True and out["confidence_basis"] == "model error"
     assert out["calibration_error_s"] > 2 * out["gap_std_s"]

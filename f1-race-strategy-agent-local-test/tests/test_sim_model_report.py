@@ -32,7 +32,7 @@ def first_stint_race(drivers=("A", "B", "C"), pit=20, total=50):
 
 # --- fit_report sd -------------------------------------------------------------
 def test_sd_is_the_ols_standard_error_on_an_unpenalised_fit():
-    frame = noisy(synthetic_frame())
+    frame = noisy(synthetic_frame()[lambda d: d["clean"]])   # the fitted rows (synthetic_frame adds unclean R8 rows)
     rep = Simulator(frame, SimConfig(degradation={"name": "linear"})).degradation.fit_report
     design, rss = {}, 0.0
     for comp in TRUE:
