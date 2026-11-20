@@ -3,7 +3,8 @@
     python -m src.sim.calibrate real-run --profile {local,sol} [--races auto|<ids>] [--out DIR]
 
 Stages, in order, over the races (auto, the default: every race in the FastF1 cache,
-cached_races):
+cached_races, less the races data/eval_set.json holds out, each left out with a note; a
+held-out race given by id is refused unless --allow-held-out, cross_race.guard_held_out):
   eligibility  calibration.eligibility per race (cross_race.eligibility_records), printed
                as a table and written to real_run/eligibility.json.
   cross_race   the cross-race pass and leave-one-race-out per arm (SPEC 0016, cross_race.run)
@@ -147,9 +148,14 @@ class RealRun:
     def __init__(self, races, profile, out=REPORTS_DIR, *, profile_ref=None, race_source="given", race_notes=(),
                  periods=event_rates.NEUTRALISED_PERIODS, race_features=cross_race.RACE_FEATURES,
                  reference_dir=None, tau_multipliers=cross_race.TAU_MULTIPLIERS, tau_grid=True, n_boot=None,
-                 slurm_dir=SLURM_DIR, log=print):
+                 slurm_dir=SLURM_DIR, log=print, eval_set=cross_race.EVAL_SET, allow_held_out=False,
+                 held_out_skipped=()):
         from ..eval.reference import REFERENCE_DIR
         self.races = [canonical_race_id(r) for r in races]
+        # a held-out race (data/eval_set.json) is refused here, before its eligibility loads it
+        cross_race.guard_held_out(self.races, eval_set, allow_held_out)
+        self.eval_set, self.allow_held_out = eval_set, allow_held_out
+        self.held_out_skipped = [canonical_race_id(r) for r in held_out_skipped]
         self.profile, self.out, self.log = profile, Path(out), log
         self.profile_ref = profile_ref or profile.name
         self.race_source, self.race_notes = race_source, list(race_notes)
@@ -275,7 +281,8 @@ def stage_cross_race(run: RealRun):
     t0 = time.perf_counter()
     emitter = SlurmEmitter(run.run_dir / "slurm", run.profile_ref, run.slurm_dir) if run.slurm else None
     record = cross_race.run(run.races, run.profile, out, run.tau_multipliers, run.tau_grid, log=run.log,
-                            elig=run.elig, runner=emitter)
+                            elig=run.elig, runner=emitter, eval_set=run.eval_set,
+                            allow_held_out=run.allow_held_out, held_out_skipped=run.held_out_skipped)
     if record.get("pending"):
         run.log("\nSubmit these from f1-race-strategy-agent-local-test/ (nothing has been submitted), then rerun "
                 "this command once they finish:\n\n" + "\n".join(f"  {c}" for c in emitter.commands) + "\n")
@@ -559,6 +566,8 @@ def main(argv=None):
     ap.add_argument("--reference-dir", default=str(REFERENCE_DIR))
     ap.add_argument("--tau-multipliers", nargs="+", type=float, default=list(cross_race.TAU_MULTIPLIERS))
     ap.add_argument("--no-tau-grid", action="store_true")
+    ap.add_argument("--allow-held-out", action="store_true",
+                    help="run races data/eval_set.json holds out (refused without it; auto skips them)")
     args = ap.parse_args(argv)
     if "auto" in args.races and len(args.races) > 1:
         ap.error("--races takes auto or race ids, not both")
@@ -566,9 +575,14 @@ def main(argv=None):
     ref = str(Path(args.profile).resolve()) if args.profile and args.profile.endswith((".yaml", ".yml")) else None
     races, notes, source = (*cached_races(), "auto: every cached race") if args.races == ["auto"] else \
         (args.races, [], "given")
+    skipped = []
+    if args.races == ["auto"] and not args.allow_held_out:
+        races, skipped = cross_race.split_held_out(races)
+        notes = notes + [f"{r}: held out in data/eval_set.json, left out" for r in skipped]
     run = RealRun(races, profile, args.out, profile_ref=ref, race_source=source, race_notes=notes,
                   periods=args.periods, race_features=args.race_features, reference_dir=args.reference_dir,
-                  tau_multipliers=args.tau_multipliers, tau_grid=not args.no_tau_grid)
+                  tau_multipliers=args.tau_multipliers, tau_grid=not args.no_tau_grid,
+                  allow_held_out=args.allow_held_out, held_out_skipped=skipped)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         execute(run)

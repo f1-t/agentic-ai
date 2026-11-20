@@ -1,0 +1,7 @@
+# Wear identification arm "driver_effects_nonneg": driver_effects with the wear bound at 0 in
+# every fit, the bound configs/sim/belief.yaml carries (wear_nonneg).
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+    wear_lower_bound: 0.0
