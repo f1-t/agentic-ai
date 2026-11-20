@@ -41,8 +41,9 @@ class Decision:
     `submitted_in_grace` is True when an agent's submission came in a grace turn after its
     evidence turns ran out (src/agent.py), False for any other agent run, None otherwise.
     `tool_calls` counts every attempted call; `evidence_calls` only the evidence calls that
-    ran (no submissions, no refused calls, no repeats); `repeat_calls` the repeated evidence
-    calls served from the cache."""
+    ran (no submissions, no refused calls, no cached repeats; a re-run repeat counts);
+    `repeat_calls` the evidence calls identical to an earlier one, re-run or served from the
+    cache (AGENT_REPEAT_MODE)."""
 
     plan: object
     tool_calls: int | None = None
@@ -174,8 +175,8 @@ class AgentPolicy:
     in the id written "_" (a rerun replaces the file). The submission goes back as Decision.submission, which the scorer expands on
     the belief (eval.decisions.to_plan). tool_calls is the trajectory's length: every
     attempted call, refused ones (budget, grace), repeats and submission attempts included;
-    evidence_calls counts only the evidence calls that ran, repeat_calls the repeats served
-    from the cache. submitted_in_grace says the submission came in a grace turn. Tokens are the backend's
+    evidence_calls counts only the evidence calls that ran, repeat_calls the repeats re-run
+    or served from the cache. submitted_in_grace says the submission came in a grace turn. Tokens are the backend's
     reported usage (None when it reports none), and a backend exception is a status "error"
     row, not a crash. `backend` is for tests; None takes LLM_BACKEND."""
 

@@ -17,6 +17,8 @@ load_dotenv()
 DEFAULT_MAX_STEPS = 10
 DEFAULT_MAX_TOOL_CALLS = 24
 DEFAULT_SUBMIT_GRACE_STEPS = 2
+DEFAULT_REPEAT_MODE = "run"
+REPEAT_MODES = ("run", "cache")
 
 SYSTEM_PROMPT = """You are a Formula 1 race strategist making a MID-RACE decision from a snapshot in time.
 
@@ -117,25 +119,37 @@ def _usage(raw):
 
 
 def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=None,
-              max_tool_calls=None, log_path=None, stats=None, submit_grace_steps=None):
+              max_tool_calls=None, log_path=None, stats=None, submit_grace_steps=None,
+              turn_status=None, repeat_mode=None):
     """Run one decision episode. Returns ``(recommendation, trajectory)``.
 
     ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot.
     tools.set_snapshot keeps a contract for the tools and shows the model its
     RaceSnapshot.from_contract view. Every attempted tool call, including
     invalid calls, refused calls and submission attempts, is logged with its ``phase``.
-    Each tool-results message ends with the turn and evidence-call counts. When the
-    ``max_steps`` evidence turns end without an accepted submission, up to
-    ``submit_grace_steps`` (AGENT_SUBMIT_GRACE_STEPS, default 2) grace turns follow that
-    offer only submit_recommendation; evidence calls in them are refused. An evidence call
-    identical to one already run this episode (same tool and arguments) gets the cached
-    result of that call, error included, with ``repeat_of`` (its call_index) added, also once
-    the budget is spent; it uses no budget: the tools are deterministic for a snapshot. When
-    ``stats`` is a dict it receives ``steps`` (grace turns included), ``evidence_calls`` (the
-    evidence calls that ran: no submissions, no refused calls, no repeats), ``repeat_calls``
-    (the repeats served from the cache) and, if the backend reports usage, the summed
-    ``input_tokens`` and ``output_tokens`` (None when it does not).
+    With ``turn_status`` (AGENT_TURN_STATUS=1/true/on, default off) each evidence turn's
+    tool-results message ends with the turn and evidence-call counts, and the second-to-last
+    turn says one evidence turn is left. When the ``max_steps`` evidence turns end without an
+    accepted submission, up to ``submit_grace_steps`` (AGENT_SUBMIT_GRACE_STEPS, default 2)
+    grace turns follow that offer only submit_recommendation; evidence calls in them are
+    refused. An evidence call identical to an earlier one this episode (same tool and
+    arguments) is a repeat. ``repeat_mode`` (AGENT_REPEAT_MODE) says what it gets: "run"
+    (default) runs it again against the budget, like any other call; "cache" gives it the
+    cached result of the first call, error included, with ``repeat_of`` (that call_index)
+    added, also once the budget is spent, and uses no budget: the tools are deterministic for
+    a snapshot. Either way the trajectory event carries ``repeat_of``. When ``stats`` is a
+    dict it receives ``steps`` (grace turns included), ``evidence_calls`` (the evidence calls
+    that ran: no submissions, no refused calls, no cached repeats; a re-run repeat counts),
+    ``repeat_calls`` (the repeats that were re-run or served from the cache) and, if the
+    backend reports usage, the summed ``input_tokens`` and ``output_tokens`` (None when it
+    does not).
     """
+    if turn_status is None:
+        turn_status = os.environ.get("AGENT_TURN_STATUS", "").strip().lower() in {"1", "true", "on"}
+    repeat_mode = repeat_mode or os.environ.get("AGENT_REPEAT_MODE") or DEFAULT_REPEAT_MODE
+    if repeat_mode not in REPEAT_MODES:
+        raise ValueError(f"AGENT_REPEAT_MODE / repeat_mode must be one of {', '.join(REPEAT_MODES)}; "
+                         f"got {repeat_mode!r}")
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
     stats.update(steps=0, evidence_calls=0, repeat_calls=0, input_tokens=None, output_tokens=None)
@@ -194,8 +208,9 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             rec = repeat_of = None
             # A submission is always processed and never counts against the evidence budget;
             # the budget guard applies to evidence tools only. A grace turn runs no evidence. An
-            # evidence call identical to one already run gets that call's cached result, with
-            # repeat_of, without using budget, even once the budget is spent.
+            # evidence call identical to one already run is run again against the budget
+            # (repeat_mode "run"), or gets that call's cached result, with repeat_of, without
+            # using budget, even once the budget is spent (repeat_mode "cache").
             key = (call.name, json.dumps(args, sort_keys=True, default=str))
             if call.name == "submit_recommendation":
                 rec, error = _normalise_submission(args)
@@ -203,7 +218,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             elif phase == "grace":
                 out = {"error": "Evidence turns are spent; call not run. Submit your recommendation now with "
                                 "submit_recommendation.", "recoverable": True}
-            elif key in run_calls:
+            elif key in run_calls and repeat_mode == "cache":
                 repeat_of, cached = run_calls[key]
                 stats["repeat_calls"] += 1
                 # a copy, so the cached output (and the first call's event) stays as it was
@@ -212,10 +227,13 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                 out = {"error": "Tool-call budget exhausted; call not run. Submit your best recommendation now.",
                        "recoverable": True}
             else:
+                if key in run_calls:   # repeat_mode "run": the repeat runs again; only the event notes it
+                    repeat_of = run_calls[key][0]
+                    stats["repeat_calls"] += 1
                 tool_calls_used += 1
                 stats["evidence_calls"] = tool_calls_used
                 out = _dispatch(call.name, args)
-                run_calls[key] = (len(trajectory) + 1, out)
+                run_calls.setdefault(key, (len(trajectory) + 1, out))
 
             event = {"episode_id": episode_id, "step": step, "phase": phase, "call_index": len(trajectory) + 1,
                      "tool": call.name, "input": args, "output": out,
@@ -240,9 +258,10 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
         must_submit = "Evidence budget is exhausted. You MUST call submit_recommendation now; do not call any other tool."
         notes = []
         if phase == "evidence":
-            notes.append(f"Turn {step} of {max_steps}. Evidence calls used {tool_calls_used} of {max_tool_calls}.")
-            if step == max_steps - 1:
-                notes.append("One evidence turn is left after this one.")
+            if turn_status:
+                notes.append(f"Turn {step} of {max_steps}. Evidence calls used {tool_calls_used} of {max_tool_calls}.")
+                if step == max_steps - 1:
+                    notes.append("One evidence turn is left after this one.")
             if tool_calls_used >= max_tool_calls:
                 notes.append(must_submit)
         if (spent := grace_note(step)):
