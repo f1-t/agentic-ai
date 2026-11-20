@@ -76,6 +76,27 @@ def test_cached_races_are_the_committed_spain_cache():
     ], [])
 
 
+def test_races_auto_on_the_cached_races_leaves_the_four_held_out_races_out(tmp_path, monkeypatch):
+    """The 14 cached races less the four data/eval_set.json holds out (two of them, 2024 and
+    2025 Austria, are sprint weekends now listed): ten races for both commands. Nothing runs
+    and no race loads: the runners are stubbed and the loaders raise."""
+    def no_load(*a, **k):
+        raise AssertionError("a race was loaded")
+    for mod, name in ((cross_race, "load_race"), (cross_race, "eligibility_records"), (jobs, "load_race")):
+        monkeypatch.setattr(mod, name, no_load)
+    seen, ran = {}, {}
+    monkeypatch.setattr(cross_race, "run", lambda races, *a, **kw: seen.update(races=races, **kw))
+    monkeypatch.setattr(cross_race, "report", lambda *a, **kw: tmp_path / "summary.md")
+    monkeypatch.setattr(real_run, "execute", lambda run: ran.setdefault("run", run))
+    kept = ["2019_10_united_kingdom", "2021_04_spain", "2022_02_saudi_arabia", "2023_01_bahrain", "2023_07_spain",
+            "2024_07_emilia_romagna", "2024_08_monaco", "2024_12_united_kingdom", "2024_21_brazil", "2025_23_qatar"]
+    held = ["2019_06_monaco", "2020_16_sakhir", "2024_11_austria", "2025_11_austria"]
+    cross_race.main(["run", "--races", "auto", "--out", str(tmp_path / "cross")])
+    assert seen["races"] == kept and seen["held_out_skipped"] == held and not seen["allow_held_out"]
+    real_run.main(["--races", "auto", "--out", str(tmp_path / "rr")])
+    assert ran["run"].races == kept and ran["run"].held_out_skipped == held
+
+
 def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smoke):
     tmp, manifest, log, before = smoke
     assert manifest["complete"] and [e["stage"] for e in manifest["stages"]] == list(STAGES)
