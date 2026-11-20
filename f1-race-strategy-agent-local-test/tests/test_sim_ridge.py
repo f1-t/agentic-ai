@@ -336,6 +336,18 @@ def test_ridge_arms_are_frozen_and_learned():
     assert t.loc["ridge", "role"] == cross_race.LEARNED_ROLE and t.loc["ridge", "file"] == "configs/sim/arms/ridge.yaml"
     with pytest.raises(KeyError, match="unknown learned arm"):
         cross_race.run(["2099_01_synthetic"], load_profile("local"), "unused", learned=("gbm",))
+    # a restricted run (pipeline tests) keeps the arms the selection and the learned table read
+    with pytest.raises(KeyError, match=r"missing \['none'\]"):
+        cross_race.run(["2099_01_synthetic"], load_profile("local"), "unused", learned=("ridge",),
+                       arms=["baseline", "wear_nonneg"])
+    with pytest.raises(KeyError, match=r"unknown \['bogus'\], missing \['wear_nonneg'\]"):
+        cross_race.run(["2099_01_synthetic"], load_profile("local"), "unused", arms=["baseline", "bogus"])
+
+
+# The arms the ridge assertions read: the baseline (shrinkage), none, and the bound arm the belief
+# selection starts from. The other committed arms and the lap-0 stop-count check are covered by
+# test_sim_cross_race's end-to-end run; here they would only add minutes.
+RIDGE_RUN_ARMS = ["baseline", "none", "wear_nonneg"]
 
 
 def cross_run(tmp_path_factory, n):
@@ -347,6 +359,7 @@ def cross_run(tmp_path_factory, n):
     prof = out / "small.yaml"
     prof.write_text(yaml.safe_dump(small.model_dump(mode="json")))
     assert cross_race.main(["run", "--races", "--synthetic", str(n), "--learned", "ridge", "--tau-multipliers", "1",
+                            "--arms", *RIDGE_RUN_ARMS, "--no-stop-check",
                             "--profile", str(prof), "--out", str(out)]) == 0
     return out
 
@@ -367,7 +380,13 @@ def test_cross_run_with_6_synthetic_races_and_a_ridge_arm_completes(ridge_run):
     record = json.loads((out / "run.json").read_text())
     races = [f"2099_{i:02d}_synthetic" for i in range(1, 7)]
     assert record["races"] == races and record["eligible"] == races
-    assert record["arms"] == [*cross_race.ARMS, "ridge"] and record["belief_choice"] in cross_race.ARMS
+    assert record["arms"] == [*RIDGE_RUN_ARMS, "ridge"] and record["belief_choice"] in RIDGE_RUN_ARMS
+    # only the arms asked for, plus the prior-sd fix and the tau grid on the choice; no lap-0 references
+    ran = {p.name for p in (out / "h" / "arms").iterdir() if p.is_dir()}
+    assert ran == {*RIDGE_RUN_ARMS, "ridge", *([record["s2_arm"]] if record["s2_arm"] else []), *record["grid"]}
+    assert "stop_check off: no lap-0 reference_stops (pipeline test)" in record["notes"]
+    fold = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / "baseline" / f"{races[0]}.parquet"))
+    assert "reference_stops" not in fold and len(fold["g"])
     for r in races:
         assert (out / "h" / "arms" / "ridge" / f"{r}.parquet").is_file()
     assert not (cross_race.CROSS_DIR / "h" / "arms" / "ridge").exists()

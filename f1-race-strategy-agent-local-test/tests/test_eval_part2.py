@@ -247,6 +247,16 @@ def test_default_eval_set_path_and_v1_is_a_development_set():
     assert ScenarioSet.load(ROOT / "data" / "scenarios" / "v1.json").development
 
 
+def test_the_registered_split_holds_out_four_races_and_d2_d3_still_load():
+    # docs/eval.md "The registered split". Reads the split file and the committed set files
+    # only: no held-out race is loaded.
+    races, digest = scen_mod.load_eval_set()
+    assert races == ["2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria"]
+    for name in ("d2", "d3"):   # records of the earlier splits: they load and keep their own digest
+        s = ScenarioSet.load(ROOT / "data" / "scenarios" / f"{name}.json")
+        assert not s.development and s.sampling["eval_set_digest"] != digest
+
+
 # --- G: run-all with the eval runner ------------------------------------------------------------
 def _stub_installer(tag):
     jobs.set_eval_runner(lambda chunk, prof: pd.DataFrame({"chunk": [chunk], "tag": [tag]}),
