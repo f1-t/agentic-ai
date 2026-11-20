@@ -54,6 +54,7 @@ class Decision:
     submitted_in_grace: bool | None = None
     evidence_calls: int | None = None
     repeat_calls: int | None = None
+    belief_optimum: bool = False   # no plan given: the scorer plans the belief optimum (eval.decisions.belief_optimum)
 
 
 def submitted_in_grace(rec, trajectory) -> bool:
@@ -144,6 +145,14 @@ BASELINE_POLICIES = {
 }
 
 
+def belief_optimizer(scenario, belief, max_stops):
+    """The optimizer on what the agent can see, with no model call: the scorer plans the belief's
+    optimal full plan from the snapshot (eval.decisions.belief_optimum, the agent
+    continuation's belief, seed and rules, nothing imposed) and the world scores it. Not in
+    "baselines"; select it by name."""
+    return Decision(None, belief_optimum=True)
+
+
 def recorded_policy(path):
     """(name, policy) replaying a json file of saved decisions:
 
@@ -214,7 +223,8 @@ agent_policy = AgentPolicy()
 
 
 def resolve(names, recorded=(), *, set_name: str | None = None, profile=None) -> dict:
-    """Policies by name. "baselines" expands to the four reference policies, "agent" is the
+    """Policies by name. "baselines" expands to the four reference policies, "belief_optimizer" is the optimizer on
+    the belief (apart from the group), "agent" is the
     live agent (an AgentPolicy logging under `set_name`, with `profile`'s agent budget),
     and each recorded file adds the policy it names."""
     out = {}
@@ -223,10 +233,13 @@ def resolve(names, recorded=(), *, set_name: str | None = None, profile=None) ->
             out.update(BASELINE_POLICIES)
         elif name == "agent":
             out["agent"] = AgentPolicy(set_name=set_name or "adhoc", profile=profile)
+        elif name == "belief_optimizer":
+            out[name] = belief_optimizer
         elif name in BASELINE_POLICIES:
             out[name] = BASELINE_POLICIES[name]
         else:
-            raise KeyError(f"unknown policy {name!r}; choose from baselines, agent, {', '.join(BASELINES)}")
+            raise KeyError(f"unknown policy {name!r}; choose from baselines, agent, belief_optimizer, "
+                           f"{', '.join(BASELINES)}")
     for path in recorded:
         name, policy = recorded_policy(path)
         out[name] = policy
