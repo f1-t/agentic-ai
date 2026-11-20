@@ -119,9 +119,9 @@ def test_traffic_is_part_of_the_config_hash():
     # 0778d5ef02f6 (eeea1e3), as any new config field does; SimConfig.lap_noise (SPEC 0017)
     # moved it again off eccb59070c14, and the R8 stint limit (SPEC 0023: the stint_limit rule and
     # SimConfig.stint_limit_margin_laps and stint_limit_rank) off 07dc9587709d, and the compound
-    # proxy (SimConfig.compound_proxy, with the tier-5 table in it) off 09c60db53ac9
+    # proxy (SimConfig.compound_proxy, with the step table, weights and sd floor in it) off 09c60db53ac9
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "99672c62e2d9" and ghost_on == "64e1210f6b57"
+    assert default == "ccb08edf391b" and ghost_on == "7f07c32a4cd8"
     assert default not in ("0778d5ef02f6", "eccb59070c14", "07dc9587709d", "09c60db53ac9")
 
 

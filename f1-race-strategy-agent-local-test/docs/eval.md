@@ -90,204 +90,203 @@ existing result files are unchanged; select it by name.
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
-only when it has `min_samples` (5) clean race laps (`degradation._fuel_fit` keeps
-`_usable` compounds; the rest go to `fit_report["unmodelled"]` with the lap count), and it
-never reads practice: the practice prior enters only the belief's `to_snapshot` and
-`pre_race` fits (the shrinkage prior of `_shrunk`, whose compounds are the prior's plus the
-raced ones). So at 2022 Saudi Arabia, where SOFT was run in practice but never raced, the
-belief priced SOFT and the world did not: every plan with a later SOFT stint was "Unknown
-compound 'SOFT'" (20 of the 21 invalid agent rows of dev6 pass 1). With
-`SimConfig.compound_proxy.enabled` (the default; `false` restores the simulator as it was,
-bit for bit) every fit prices HARD, MEDIUM and SOFT, each parameter from the best tier that
-has data (`src/sim/proxy.py`):
+only when it has `min_samples` (5) clean race laps (`degradation._fuel_fit` keeps `_usable`
+compounds; the rest go to `fit_report["unmodelled"]` with the lap count), and it never reads
+practice: the practice prior enters only the belief's `to_snapshot` and `pre_race` fits (the
+shrinkage prior of `_shrunk`, whose compounds are the prior's plus the raced ones). So at
+2022 Saudi Arabia, where SOFT was run in practice but never raced, the belief priced SOFT and
+the world did not: every plan with a later SOFT stint was "Unknown compound 'SOFT'" (20 of the
+21 invalid agent rows of dev6 pass 1). With `SimConfig.compound_proxy.enabled` (the default;
+`false` restores the simulator as it was, bit for bit) every fit prices HARD, MEDIUM and SOFT
+(`src/sim/proxy.py`).
 
-| tier | source | pace (fresh base) | wear | prior sd floor (pace, wear) |
-| --- | --- | --- | --- | --- |
-| 1 | race laps, `min_samples` clean rows (belief: up to its calibration point) | the fit, unchanged | the fit | the fit's own |
-| 2 | practice long runs this weekend (FP sessions, plus the Sprint on a sprint weekend) | anchor + (practice base_c - practice base_anchor) | anchor + (practice wear_c - practice wear_anchor) | 0.5 s, 0.03 s/lap |
-| 3 | qualifying this weekend | anchor + the qualifying gap (below) | none | 0.75 s |
-| 4 | same circuit, other seasons | not built (`proxy._tier4_pace`, `_tier4_wear` are the extension point) | | |
-| 5 | cross-race neighbour step (`configs/sim/compound_steps.json`) | anchor x (1 + pace_frac) per step | anchor x wear_ratio per step | 1.0 s and at least the step's spread, 0.045 s/lap and at least the spread |
+**The rule.** A compound with `min_samples` clean race rows in that simulator keeps its fit
+(the belief: rows up to its calibration point). For any other, pace (the fresh base) and wear
+are each a precision-weighted blend, from the nearest raced compound (the anchor), of every
+source that exists for it:
 
-**Anchoring.** Every borrowed number is a step from an anchor compound with tier-1 data in
-that simulator (the nearest in SOFT < MEDIUM < HARD; ties to the one with more race rows),
-so the race sets the level. Tier 2 also needs the anchor in the practice fit, tier 3 in
-qualifying; otherwise the next tier is tried. A fit with no tier-1 compound (the belief
-before its first race laps, `pre_race`) keeps its practice compounds and anchors the missing
-ones on them. The belief's tier 1 uses only the laps up to its calibration point, and
-tiers 2, 3 and 5 are known before the race, so the belief gains no hindsight; a belief
-compound with fewer than 5 race rows by then is re-priced from practice relative to a raced
-one (before, it stayed at practice plus the config base delta, whatever the race said).
-Tier-2 wear is a difference, not a ratio: an error in the fixed practice fuel prior biases
-every compound's practice wear by the same amount, which the difference cancels, and a
-practice wear can be negative.
-
-**The qualifying correction (tier 3).** A qualifying lap is a low-fuel push lap on an evolving
-track, so it is never compared with a race lap directly. Each driver's best timed lap per
-(segment Q1/Q2/Q3, compound) (`data.qualifying_frame`: a lap time, no pit in or out, a dry
-compound, track status green) is one row of a least-squares fit lap = driver + segment +
-compound, slow rows trimmed against the fit as `data.robust_filter` trims practice (2.5
-robust sd, two passes; fast rows never cut). Only the compound term is used, as the gap
-q_c - q_anchor added to the anchor's race base. In that gap fuel cancels (every qualifying
-lap carries a few laps of fuel, so the race fit's fuel slope is not needed: the race base the
-gap is added to already carries the race's fuel level); car and driver pace cancel (the
-driver term); track evolution and engine modes between segments cancel (the segment term,
-which takes the pre-2020 Q3 modes too); evolution within a segment does not, nor does push
-against managed driving: in the race nobody drives a qualifying lap, so a qualifying gap is a
-push-lap gap. A compound enters only with at least 2 drivers who also set a row on another
-compound. When the anchor (the raced compound) has no qualifying laps there is nothing in
-qualifying to tie it to, and tier 3 is not used: pace falls to tier 5. In practice HARD is
-never run in qualifying, so tier 3 can price only SOFT against MEDIUM or MEDIUM against
-SOFT, and at 2022 Saudi Arabia (2 drivers on MEDIUM, one of them trimmed) it prices nothing.
-
-**The tier-5 table** (`python -m src.sim.compound_steps estimate`; calibration races only,
-the four held-out races never loaded; the per-race values and the command are in the file).
-Per race, the full-window world fit with the proxy off; a pair counts when both compounds
-are tier 1; the value is the median over races, sd the sample sd across them:
-
-| pair | pace_frac (softer / harder base - 1) | wear_ratio (softer / harder) | life_ratio (R8 limits) |
+| source | pace | wear | exists when |
 | --- | --- | --- | --- |
-| MEDIUM-HARD | -0.0035, sd 0.0038, n 6 (about -0.33 s on a 95 s lap) | 1.53, sd 0.85, n 6 | 0.64, sd 0.26, n 5 |
-| SOFT-MEDIUM | +0.0019, sd 0.0061, n 6 (SOFT about 0.17 s slower) | 0.60, sd 0.88, n 6 | 0.76, sd 0.88, n 5 |
+| practice long runs this weekend (FP sessions, plus the Sprint on a sprint weekend) | anchor + (practice base_c - practice base_anchor) | anchor + (practice wear_c - practice wear_anchor) | the compound and the anchor have practice long runs |
+| qualifying this weekend | anchor + the qualifying gap (below) | none | the compound and the anchor have qualifying laps |
+| the cross-race neighbour step (`configs/sim/compound_steps.json`) | anchor x (1 + pace_frac) per step | anchor x wear_ratio per step | always |
 
-Races: 2019 United Kingdom, 2022 Saudi Arabia (MEDIUM-HARD only), 2023 Bahrain, 2023 Spain,
-2024 Emilia Romagna and 2025 Qatar, and 2021 Spain (SOFT-MEDIUM only); 2025 Qatar is left
-out of the life ratio (a mandated 25-lap maximum stint). Compound names are relative to each
-race's allocation, and the race fits do not show the textbook order between SOFT and MEDIUM:
-in five of six races the fitted SOFT is no faster fresh than MEDIUM (by at most 1.1 s), and
-in four of six it wears less. So a tier-5 SOFT is, after the ordering constraint, a copy of its MEDIUM anchor.
-That is what the race data say, not a tuning choice.
+value = sum_i w_i v_i / sum_i w_i, with fixed weights, one set for all races, w = 1 / that
+source's mean squared error alone in the hidden-compound validation below (all calibration
+races). Pace and wear have separate weights: qualifying informs pace only, and a stint error
+mixes the two. The pace weights use each source's fresh-pace error, the wear weights its wear
+error:
 
-**Ordering.** A softer compound is never slower fresh and never wears less than a harder one.
-The constraint moves proxied values only, never a tier-1 one; where the tier-1 values are
-themselves out of order the proxied value is put between them ("conflict"). A proxied wear is
-also floored at 0 (and at the belief's wear bound): a tyre does not get faster with age. This
-floor is the one constraint not in the original design; without it, tier 2 gave HARD a wear
-of -0.15 s/lap at 2019 United Kingdom and 2022 Saudi Arabia (practice HARD long runs that
-got faster).
+| | practice | qualifying | cross-race step |
+| --- | --- | --- | --- |
+| pace: fresh-pace MSE, s^2 (n) | 2.671 (16) | 1.091 (6) | 0.247 (19) |
+| pace weight (share when all three exist) | 0.374 (7%) | 0.917 (17%) | 4.055 (76%) |
+| wear: wear MSE, (s/lap per lap)^2 (n) | 0.0139 (16) | | 0.0058 (19) |
+| wear weight (share) | 71.8 (29%) | | 172.7 (71%) |
+| for comparison, 15-lap stint MSE, s^2 (n) | 322.4 (16) | | 31.8 (19) |
 
-**Uncertainty.** A proxied parameter is g x anchor + a step, so `fit_report["cov"]` carries it
-as T cov T' + its tier's tau^2: posterior draws move it with its anchor plus its own spread,
-and its shrinkage weight is 0 (model report source "prior"). tau is the tier's floor above,
-or the tier's own estimate when larger (the practice fit's sd of the difference, the
-qualifying fit's sd of the gap, a tier-5 step's spread across races times the anchor).
+(Weights from the 15-lap stint error would give practice 9% against the step's 91%; they
+cannot weigh qualifying, which has no wear.) The blended value's prior sd is the larger of the
+blend's own leave-one-race-out error (0.585 s pace, 0.079 s/lap per lap wear,
+`compound_proxy.sd_floor`) and the cross-race step's spread times the anchor value. Tier 4
+(the same circuit in other seasons) is not built: `proxy._tier4_pace` and `_tier4_wear` are
+the extension point. A belief compound with fewer than 5 race rows by its calibration point is
+re-priced the same way, relative to a raced compound: **this changes what the agent sees on
+any race where a compound has under 5 race rows at the snapshot** (before, it stayed at
+practice plus the config base delta). A fit with no raced compound yet (the belief before its
+first race laps, `pre_race`) keeps its practice compounds and anchors the missing ones on them.
+Weights, steps and sd floor are read through the config, so `config_hash` covers them.
 
-**Reporting.** `fit_report["proxy"]` holds, per compound, `pace_tier`, `pace_source`,
-`pace_anchor`, `wear_tier`, `wear_source`, `wear_anchor`, `ordering` and the step. The model
-report flags `pace_from_<source>:<compound>` and `wear_from_<source>:<compound>`, and the
-agent's model report and `estimate_tyre_degradation` carry `pace_source`, `wear_source` and
-`price_basis` ("SOFT: pace from practice long runs (anchor MEDIUM), wear from practice long
-runs (anchor MEDIUM)"). Score rows carry `proxied_compounds` (the plan's compounds the world
-prices by proxy, ";"-joined, empty for none) and `opt_proxied_compounds` (the reference's),
-only when the world's proxy is on. `calibrators.hindsight_targets` leaves a proxied compound
-out: it has no race laps to be a target.
+**The qualifying correction.** A qualifying lap is a low-fuel push lap on an evolving track, so
+it is never compared with a race lap directly. Each driver's best timed lap per (segment
+Q1/Q2/Q3, compound) (`data.qualifying_frame`: a lap time, no pit in or out, a dry compound,
+track status green) is one row of a least-squares fit lap = driver + segment + compound, slow
+rows trimmed against the fit as `data.robust_filter` trims practice (2.5 robust sd, two
+passes; fast rows never cut). Only the compound gap q_c - q_anchor is used, added to the
+anchor's race base. Fuel cancels in it (every qualifying lap carries little fuel, and the race
+base the gap is added to carries the race's fuel level, so the race fit's fuel slope is not
+needed); car and driver pace cancel (the driver term); evolution and engine modes between
+segments cancel (the segment term, which takes the pre-2020 Q3 modes too). Not corrected:
+evolution within a segment, and push against managed driving. A compound needs 2 drivers who
+also set a row on another compound. Without qualifying laps on the anchor, qualifying does not
+enter. HARD is never run in qualifying, so it only ever informs SOFT against MEDIUM, and at
+2022 Saudi Arabia it informs nothing (2 drivers on MEDIUM, one trimmed). The measured gap is
+shown to the agent for every compound that has one (`qualifying_gap_s` in the model report,
+e.g. 2021 Spain "SOFT: ...; qualifying gap to MEDIUM -0.94 s on fresh tyres (3 drivers)"), raced
+or not, since fresh-tyre pace is the datapoint the race fit cannot give.
 
-**R8.** A compound no car raced gets a stint limit: its oldest practice tyre age, else the
-nearest raced compound's limit times the life ratio, plus the margin (docs/rules.md R8). On
-the calibration races: 2021 Spain HARD, 18 laps (FP1, LEC; longest practice run 13 laps),
-cap 21; 2022 Saudi Arabia SOFT, 18 laps (FP1, GAS; longest run 12 laps), cap 21.
+**The step table** (`python -m src.sim.compound_steps estimate`; calibration races only, the
+four held-out races never loaded). Per race, the full-window world fit with the proxy off; a
+pair counts when both compounds have at least 50 clean race rows (`MIN_PAIR_ROWS`); the
+value is the median over races, sd the sample sd across them. Before and after that filter:
+
+| pair | key | all raced pairs (before) | at least 50 rows (shipped) |
+| --- | --- | --- | --- |
+| MEDIUM-HARD | pace_frac | -0.0035, sd 0.0038, n 6 | -0.0027, sd 0.0033, n 5 |
+| MEDIUM-HARD | wear_ratio | 1.53, sd 0.85, n 6 | 1.40, sd 0.65, n 5 |
+| MEDIUM-HARD | life_ratio | 0.64, sd 0.26, n 5 | 0.67, sd 0.24, n 4 |
+| SOFT-MEDIUM | pace_frac | +0.0019, sd 0.0061, n 6 | +0.0001, sd 0.0026, n 3 |
+| SOFT-MEDIUM | wear_ratio | 0.60, sd 0.88, n 6 | 0.72, sd 0.33, n 3 |
+| SOFT-MEDIUM | life_ratio | 0.76, sd 0.88, n 5 | 0.76, sd 0.14, n 3 |
+
+The filter drops 2023 Bahrain (MEDIUM, 8 rows) from both pairs and 2024 Emilia Romagna (SOFT,
+11 rows) and 2025 Qatar (SOFT, 34 rows) from SOFT-MEDIUM, which rests on 2019 United Kingdom,
+2021 Spain and 2023 Spain only. **Its pace step is +0.0001, zero to within 0.01 s on a 90 s
+lap: on these race fits a fresh SOFT is no faster than a fresh MEDIUM, and its wear ratio
+(0.72) says SOFT wears less.** After the ordering constraint a step-priced SOFT is a copy of
+MEDIUM. The yardstick matters here: the step reflects the simulator's own race fits, which
+under-separate SOFT from MEDIUM (the pooled fit confounds compound with when and by whom it was
+run). A proxied compound has to sit where the world's own fits would put it, or the search
+exploits the difference; the table is re-estimated when driver effects are adopted.
+
+**Ordering, R8, uncertainty, reporting.** A softer compound is never slower fresh and never
+wears less than a harder one: the constraint moves proxied values only, never a raced one
+(where raced values are out of order the proxied one is put between them, "conflict"); a
+proxied wear is also floored at 0 and at the belief's wear bound. A compound no car raced gets
+an R8 limit: its oldest practice tyre age, else the nearest raced compound's limit times the
+life ratio, plus the margin (docs/rules.md R8; 2021 Spain HARD: 18 in FP1, longest practice run
+13 laps, cap 21; 2022 Saudi Arabia SOFT: 18 in FP1, longest run 12 laps, cap 21). A blended
+parameter is linear in its anchors, so `fit_report["cov"]` carries it as T cov T' + tau^2 and
+posterior draws move it with them. `fit_report["proxy"]` holds, per compound, `pace_sources` and
+`wear_sources` ([{source, weight, anchor, value, step}]), `pace_source` / `wear_source` (the
+sources joined by "+", or "race"), the steps, the sds, the ordering notes and
+`qualifying_gap_s`. The model report flags `pace_from_<sources>:<compound>`; the agent's model
+report and `estimate_tyre_degradation` carry the sources, their weights, the qualifying gap and
+`price_basis` ("SOFT: pace from practice long runs 8%, the cross-race step 92% (anchor MEDIUM);
+wear from practice long runs 29%, the cross-race step 71% (anchor MEDIUM)" at Saudi). Score rows
+carry `proxied_compounds` and `opt_proxied_compounds` (the plan's and the reference's compounds
+the world prices by proxy, ";"-joined, empty for none) when the world's proxy is on. **Results
+can be read with and without the rows where either is non-empty.**
+`calibrators.hindsight_targets` and `cross_race.wear_check` leave proxied compounds out.
 
 ### Validation
 
 `python -m src.sim.compound_steps validate` (calibration races only; outputs under
-`reports/calibration/compound_proxy/`). For each calibration race and each compound that was
-raced, its race laps are hidden (its rows dropped from the race frame), the world refitted,
-and the compound priced again through one tier at a time (tier 5 leave-one-race-out: the
-table without that race), then compared with the real tier-1 fit: the fresh pace at
-mid-race, the wear, and the time of a 15- and a 25-lap stint on a new set centred on
-mid-race. Errors are proxy minus truth (negative: the proxy is faster):
+`reports/calibration/compound_proxy/`; it writes the weights and the sd floor into the table).
+For each calibration race and each compound that was raced, its race laps are hidden (its rows
+dropped from the race frame), the world refitted, and the compound priced again, then compared
+with the real race fit: the fresh pace at mid-race, the wear, and the time of a 15- and a
+25-lap stint on a new set centred on mid-race. Each source alone uses the step table without
+that race; **the blend is leave-one-race-out throughout: for each race its weights come from the
+other races' source errors and its step table from the other races** (the shipped constants
+use every race). Proxy minus truth, mean signed / mean absolute error:
 
-| tier | n | fresh pace, s: mean / MAE | wear, s/lap per lap: mean / MAE | 15-lap stint, s: mean / MAE | 25-lap stint, s: mean / MAE |
+| priced by | n | fresh pace, s | wear, s/lap per lap | 15-lap stint, s | 25-lap stint, s |
 | --- | --- | --- | --- | --- | --- |
-| 2 practice | 16 | +0.18 / 1.06 | +0.020 / 0.067 | +5.1 / 10.0 | +10.9 / 17.7 |
-| 3 qualifying (pace only) | 6 | -0.15 / 0.85 | | | |
-| 5 cross-race step, leave-one-race-out | 19 | +0.03 / 0.38 | +0.004 / 0.043 | +0.9 / 4.4 | +2.0 / 10.8 |
-| pace from 3, wear from 5 | 6 | -0.15 / 0.85 | +0.018 / 0.032 | -0.1 / 9.0 | +2.0 / 11.1 |
-| the chain as built (best tier available) | 19 | +0.06 / 0.99 | +0.019 / 0.064 | +3.3 / 9.6 | +7.8 / 16.4 |
+| practice alone | 16 | +0.18 / 1.06 | +0.020 / 0.067 | +5.1 / 10.0 | +10.9 / 17.7 |
+| qualifying alone (pace) | 6 | -0.15 / 0.85 | | | |
+| cross-race step alone | 19 | +0.01 / 0.38 | +0.004 / 0.043 | +0.6 / 4.4 | +1.6 / 10.4 |
+| **blend (leave-one-race-out)** | 19 | +0.02 / 0.47 | +0.007 / 0.048 | +1.1 / 4.9 | +2.6 / 10.6 |
+| (the old best-single-tier chain, old step table) | 19 | +0.06 / 0.99 | +0.019 / 0.064 | +3.3 / 9.6 | +7.8 / 16.4 |
 
-n counts the raced compounds a tier could price (19 in all: tier 2 needs a practice long run
-on the compound and its anchor, tier 3 qualifying laps on both, which only SOFT and MEDIUM
-ever have). On the same compounds, tier 5 is better than tier 2 (16 compounds: fresh-pace MAE
-0.36 against 1.06 s, wear 0.043 against 0.067, 25-lap stint 11.3 against 17.7 s) and better
-than tier 3 (6 compounds: 0.38 against 0.85 s), and tier 3 is better than tier 2 on pace. So
-**the tier order of the design (practice before qualifying before the cross-race step) is the
-reverse of the order of accuracy here**, and the chain inherits tier 2's errors. Part of tier
-5's edge is the ordering constraint: its steps are small, so after clipping a tier-5 compound
-is often its anchor's copy, and the race fits put neighbouring compounds close together.
-Tier 2's large errors come from practice long runs that are not race-like: HARD at 2019
-United Kingdom and 2022 Saudi Arabia got faster in practice (wear floored at 0, pace off by
-+3.6 and +3.1 s), SOFT at 2023 Bahrain was 2.9 s too fast fresh and wore 0.32 s/lap per lap
-too much. Tier 3 has a consistent sign: qualifying makes SOFT about 1 s faster than MEDIUM
-(SOFT hidden: -1.0 s on average; MEDIUM hidden: +0.7 s), where the race fits put them within
-0.3 s: the push-lap gap is wider than the race gap. These numbers were computed once with the
-design as specified; the tiers were not tuned to them, and the order has not been changed
-(it would be a choice made on the validation set itself).
+The blend's root mean squared errors (0.585 s, 0.079 s/lap per lap) are the sd floor. The
+step alone is slightly better than the blend on every column: practice and qualifying, even
+at 7% and 17% of the pace weight, add more error than they remove on these races (practice
+long runs that are not race-like: HARD got faster in practice at 2019 United Kingdom and 2022
+Saudi Arabia; qualifying makes SOFT about 1 s faster than MEDIUM where the race fits put them
+within 0.3 s). Both are far better than the chain, which put practice first.
 
-Decision level: for each race, each raced compound hidden in turn and one lap-0 snapshot
+**Decision level**: for each race, each raced compound hidden in turn and one lap-0 snapshot
 per starting compound (a finisher's), the reference (`optimize_batch`, seed 0, 50 samples,
-two stops) on the world with that compound hidden and proxied by the chain, against the
-reference on the true world (`validation_decisions.csv`). Cost is the true world's time of
-the proxied world's plan less the true optimum:
+two stops) on the world with that compound hidden and proxied, against the reference on the
+true world (`validation_decisions.csv`, `validation_decisions_summary.csv`). Cost is the true
+world's time of the proxied world's plan less the true optimum (valid rows):
 
-| hidden compound priced by | rows | plan changed | invalid in the true world | cost, s (valid rows): mean / median / max | laps on it: more / fewer / same |
+| priced by | rows | plan changed | invalid in the true world | cost, s: mean / median / max | laps on the hidden compound: more / fewer / same |
 | --- | --- | --- | --- | --- | --- |
-| tier 2 (practice) | 38 | 34 | 1 | 2.57 / 0.69 / 23.56 | 7 / 21 / 10 |
-| tier 3 pace + tier 5 wear | 3 | 3 | 3 | | 3 / 0 / 0 |
-| tier 5 | 6 | 5 | 0 | 4.02 / 3.56 / 9.36 | 2 / 2 / 2 |
-| all | 47 | 42 | 4 | 2.77 / 0.69 / 23.56 | 12 / 23 / 12 |
+| (i) the chain as built (old step table) | 47 | 42 | 4 | 2.77 / 0.69 / 23.56 | 12 / 23 / 12 |
+| (ii) cross-race step alone | 47 | 40 | 3 | 3.45 / 2.01 / 13.52 | 12 / 24 / 11 |
+| (iii) the blend, leave-one-race-out (shipped) | 47 | 41 | 3 | 3.57 / 2.01 / 13.52 | 11 / 26 / 10 |
 
-Most plans move (often by a lap or two: the other compounds' fits move too once a compound's
-laps are gone). The proxied plan uses the hidden compound more than the true plan in 12 of
-47 and less in 23: on these races the search does not systematically pick the proxied
-compound for being priced too kindly. The 4 invalid rows put the hidden compound past its
-true race limit (2023 Bahrain MEDIUM, raced to 10 laps; 2024 Emilia Romagna SOFT, raced to 8),
-because its proxied limit is its practice age. The worst cost (23.6 s, 2022 Saudi Arabia,
-HARD hidden) is tier 2 again: practice HARD got faster with age.
+**The step alone beats the blend at decision level too, by 0.12 s mean cost (within 0.3 s),
+and the chain as built had the lowest mean (2.77 s) and median (0.69 s) cost but the worst
+tail (23.6 s, practice HARD at Saudi) and one more invalid row.** The three are within about
+1 s of each other on 47 cases; the parameter errors above separate them more clearly. In all
+three the search uses the hidden compound less than the truth more often than more, so it does
+not systematically exploit a proxied compound. The invalid rows run the hidden compound past
+its true race limit, because its proxied limit is its practice age (2023 Bahrain MEDIUM,
+raced to 10 laps; 2024 Emilia Romagna SOFT, raced to 8; for the step alone also 2022 Saudi
+Arabia MEDIUM, raced to 16).
 
 ### What changed in the references
 
-References rebuilt at seed 0, 50 samples, two stops (`python -m src.eval reference`), against
-main's. With the proxy off every record of every set is identical to main's (v1, pilot1, d2,
-dev6); with it on, the sets move only where a compound is proxied (2021 Spain: HARD, tier 5
-for pace and wear, R8 cap 21; 2022 Saudi Arabia: SOFT, tier 2, R8 cap 21):
+References rebuilt with the blend at seed 0, 50 samples, two stops (`python -m src.eval
+reference`), against main's. With the proxy off every record of every set is identical to
+main's (rebuilt in a scratch directory and compared column by column); with it on, only races
+with a proxied compound move:
 
-| set | references | plan changed | plan on a proxied compound | stops 0 / 1 / 2, main | stops 0 / 1 / 2, proxy on |
+| set | references | plan changed | plan on a proxied compound | stops 0 / 1 / 2, main | stops 0 / 1 / 2, blend |
 | --- | --- | --- | --- | --- | --- |
-| v1 (2021 Spain) | 264 | 50 | 50 | 40 / 216 / 8 | 40 / 174 / 50 |
+| v1 (2021 Spain) | 264 | 66 | 66 (HARD) | 40 / 216 / 8 | 40 / 174 / 50 |
 | pilot1 (2021 Spain) | 25 | 7 | 7 | 3 / 22 / 0 | 3 / 15 / 7 |
 | d2 (2023 Spain) | 25 | 0 | 0 | 8 / 17 / 0 | 8 / 17 / 0 |
-| dev6 (six races) | 150 | 32 | 32 (Spain 7 of 25, Saudi 25 of 25) | 56 / 85 / 9 | 44 / 69 / 37 |
+| dev6 (six races) | 150 | 7 | 7 (Spain 7 of 25, Saudi 0 of 25) | 56 / 85 / 9 | 56 / 78 / 16 |
 
-**2022 Saudi Arabia: the proxy is probably too kind there.** Tier 2 prices SOFT 2.57 s faster
-fresh than MEDIUM (practice step) with 0.32 s/lap per lap of wear, and every one of the 25
-dev6 references now ends on SOFT (one or two stints of 7 to 16 laps), 2 to 15 s faster than
-main's plan.
-Re-scored in a scratch directory, actual_strategy's mean regret at Saudi moves from 0.72 to
-7.71 s (median 0.17 to 6.60 s); nobody raced SOFT there, and the validation above puts tier
-2's SOFT about 0.9 s too fast fresh on average. **2021 Spain: HARD wins through the ordering
-constraint.** The race fit has SOFT wearing less than MEDIUM (0.033 against 0.068 s/lap per
-lap), so a HARD that may not wear more than either softer compound gets SOFT's 0.033 with a
-base 0.3 s above MEDIUM's, and references switch a MEDIUM stint for a 21-lap HARD one (gain
-about 0.3 s). actual_strategy's mean regret at Spain moves from 8.91 to 9.00 s. Elsewhere the
-world prices nothing new and the references are unchanged, but the belief does price more:
-before its first race laps it now also models a compound with no practice long run (tier 5),
-so baseline plans move at lap 0. At 2023 Spain two actual_strategy rows that were unavailable
-are scored and fixed_one_stop and fixed_two_stop take HARD in two scenarios; at 2023 Bahrain
-greedy_crossover has 4 unavailable rows turned invalid and 4 plans with MEDIUM for SOFT; at
-2024 Emilia Romagna greedy_crossover changes 3 plans, one ok row turning invalid. At 2021
-Spain fixed_one_stop takes the proxied HARD and is invalid on 14 rows past its practice cap
-(27 invalid fixed_one_stop rows in dev6, from 14). Over dev6 the mean regret moves from 6.97
-to 8.32 s (actual_strategy), 8.21 to 10.20 (fixed_one_stop), 24.38 to 25.46 (fixed_two_stop)
-and 22.01 to 20.90 s (greedy_crossover). Regret is at least 0 on every scored baseline row. Replaying the dev6 pass-1 agent submissions (their
-recorded `submit_recommendation`, no agent run) on the new simulators: Saudi Arabia goes from
-21 invalid rows (20 "Unknown compound 'SOFT'") to 1 (a PIT the minimum-stint rule refuses),
-and no row anywhere is invalid for an unknown compound.
+The two real cases, on main, with the chain as built (#81's first version) and with the blend
+(dev6 baselines re-scored in a scratch directory; regret is at least 0 on every scored row):
 
-**Limitation.** A proxied compound's price has no race laps behind it. Its pace and wear are
-the anchor's plus a step measured somewhere else (practice, qualifying, other races), with
-the errors above; its stint limit is a practice age, not a race one. The optimizer will use a
-proxied compound wherever that price says so, and the validation shows it can be wrong in
-either direction. Read `proxied_compounds` beside any result on a race with a proxied compound.
+| | unraced compound | blended fresh-pace step from the anchor | blended wear | dev6 references using it | actual_strategy mean regret, s: main / chain / blend |
+| --- | --- | --- | --- | --- | --- |
+| 2022 Saudi Arabia | SOFT | -0.21 s from MEDIUM (practice 8%, step 92%) | 0.127 s/lap per lap (MEDIUM 0.064; practice 29%, step 71%) | 0 of 25 (chain: 25 of 25) | 0.72 / 7.71 / 0.72 |
+| 2021 Spain | HARD | +0.28 s from MEDIUM (step only; raised to SOFT's base) | 0.033 (lowered to SOFT's) | 7 of 25 | 8.91 / 9.00 / 9.08 |
+
+At Saudi the blend leaves the references where main had them: SOFT, 0.2 s faster than MEDIUM
+fresh but wearing twice as much, is not worth a stop. At 2021 Spain HARD is priced by the step
+alone (no HARD long run, no HARD in qualifying), and the ordering constraint makes it a copy of
+SOFT: the race fit has SOFT both slower than MEDIUM fresh and wearing less, so HARD may be
+neither faster than SOFT nor wear more than it. The references then use HARD as a second
+SOFT-like compound (SOFT-HARD-SOFT two-stops, capped at 21 laps by R8), which a SOFT-SOFT-SOFT
+plan could not do under R3: 66 of v1's 264 references and 7 of dev6's 25 Spain ones. Over dev6
+the mean regret moves from 6.97 to 7.15 s (actual_strategy), 8.21 to 9.00 (fixed_one_stop, which
+takes the proxied HARD at Spain and is invalid on 13 more rows past its practice cap),
+24.38 to 24.44 (fixed_two_stop) and 22.01 to 20.86 s (greedy_crossover). Replaying the dev6
+pass-1 agent submissions (no agent run) on the blend: no row is invalid for an unknown compound;
+Saudi Arabia goes from 21 invalid rows to 1 (a PIT the minimum-stint rule refuses).
+
+**Limitation.** A proxied compound's price has no race laps behind it: its pace and wear are
+the anchor's plus a step measured elsewhere (practice, qualifying, other races), with the
+errors above, and its stint limit is a practice age. Read `proxied_compounds` and
+`opt_proxied_compounds` beside any result on a race with a proxied compound.
 
 ## The agent policy
 
@@ -457,9 +456,9 @@ Scenario sets under the split:
   --development`). The simulator was calibrated on these races, so its numbers say how the agent
   and the baselines behave where the model fits best; they are not a report-set estimate. Its 25
   2021 Spain scenarios are pilot1's and its 25 2023 Spain scenarios are d2's (same ids and the
-  same snapshots, item for item). References: `data/references/dev6/72bebbb40278.parquet`
-  (sim_code_version `fc338d72f763`, seed 0, 50 samples, two stops, default world with the
-  compound proxy). Pass 1 and `dev6_baselines.csv` were scored on the earlier
+  same snapshots, item for item). References: `data/references/dev6/fbb33ef732dd.parquet`
+  (sim_code_version `58b50a00e0e3`, seed 0, 50 samples, two stops, default world with the
+  compound proxy's blend). Pass 1 and `dev6_baselines.csv` were scored on the earlier
   `4ecc62a30937` (sim_code_version `1dcf46ad75aa`), before the compound proxy, where 2022 Saudi
   Arabia had a known issue: the belief modelled SOFT (from the practice prior) but the world,
   fitted on the race laps, modelled only HARD and MEDIUM, so a decision whose belief
@@ -610,9 +609,9 @@ gets the per-draw times: `diagnostics["times"]`, `diagnostics["runner_up"]` and
 `diagnostics["searched"]` (every legal plan in tie-break order with its mean and times).
 
 Committed (SPEC 0023, the R8 stint limit at rank 1, local profile: seed 0, 50 samples, two
-stops, default world with the compound proxy), at sim_code_version `fc338d72f763`:
-`data/references/v1/78bd08512180.parquet`, `data/references/d2/9ebe6bc5491f.parquet`,
-`data/references/pilot1/3a4a0322b1a0.parquet` and `data/references/dev6/72bebbb40278.parquet`.
+stops, default world with the compound proxy's blend), at sim_code_version `58b50a00e0e3`:
+`data/references/v1/c0c7247b95b7.parquet`, `data/references/d2/dbc5b90ac885.parquet`,
+`data/references/pilot1/fda18509e2f7.parquet` and `data/references/dev6/fbb33ef732dd.parquet`.
 They replace `820f58b3bce2`, `763a6d2cfb45`, `c87fdfd26007` and `4ecc62a30937` (sim_code_version
 `1dcf46ad75aa`), on which the committed `*_r8` and dev6 result files were scored; what the
 proxy changed in them is in "Proxied compounds". With the proxy off, every record of the four
@@ -892,10 +891,10 @@ SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
   seasons, Pirelli guidance) can replace it later (docs/rules.md R8).
 - **A proxied compound's price has no race laps behind it** ("Proxied compounds"): its pace
   and wear are a step from a raced compound measured in practice, qualifying or other races,
-  with the validation errors listed there, and its R8 limit is a practice age. At 2022 Saudi
-  Arabia (SOFT, from practice) it makes every dev6 reference end on SOFT and is probably too
-  kind; rows carry `proxied_compounds` and `opt_proxied_compounds` so results resting on one
-  can be counted and set apart.
+  with the validation errors listed there, and its R8 limit is a practice age. At 2021 Spain
+  the ordering constraint makes the proxied HARD a copy of SOFT, which 66 of v1's references
+  use as a second SOFT-like compound; rows carry `proxied_compounds` and
+  `opt_proxied_compounds` so results can be read with and without the rows that rest on one.
 - **The R8 rank moves the results.** At rank 3 instead of 1, 9 of d2's 13 references at laps
   0 to 20 are two-stops instead of 0. Rows and summaries carry `stint_limit_rank` and
   `stint_limit_margin_laps` so both can be shown; the committed tables are rank 1.
@@ -953,10 +952,12 @@ events, the d3 exception), `regret_se_s` on a world with known per-draw differen
 `within_mc` at N = 1 against the tie rule, and the R8 stamps on rows and summaries.
 `tests/test_optimizer_bridge.py` covers the limit-aware baselines (fixed_one_stop's moved
 stop, greedy_crossover's forced stop, a plan still past the limit scored invalid, and every
-baseline unchanged with R8 off). `tests/test_sim_proxy.py` covers the compound proxy (tier
-selection and mixing, anchoring, the qualifying gap, the ordering constraint and the wear
-floor, the proxied covariance and draws, the belief's information boundary, R8 for an
-unraced compound, the off switch, the committed step table) on synthetic weekends, and on
+baseline unchanged with R8 off). `tests/test_sim_proxy.py` covers the compound proxy (which
+sources enter the blend and with what weight, the weighted mean, anchoring, the qualifying gap
+and its place in the model report, the ordering constraint and the wear floor, the proxied
+covariance and draws, the belief's information boundary, R8 for an unraced compound, the off
+switch, the committed table and weights, the leave-one-race-out weight helper) on synthetic
+weekends, and on
 2022 Saudi Arabia that the world prices SOFT and accepts the belief's continuations. Modules
 that test other mechanics on synthetic two-compound races carry `pytest.mark.compound_proxy_off`
 (tests/conftest.py): their configs default to the proxy off, so they pin those mechanics as

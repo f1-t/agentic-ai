@@ -373,6 +373,9 @@ def _deterministic_world_rows(scenario_set, sims, pols, n_samples):
 
 
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
+# without the compound proxy: at 2021 Spain the proxied HARD is SOFT's copy (the ordering
+# constraint on the race fit), so plans swapping the two tie exactly in this deterministic world
+@pytest.mark.compound_proxy_off
 def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
     """The deterministic default world on a slice of v1: every optimal set is the reference
     alone, every pit-now call is decisive, the set-based agreement is the plain one, and the

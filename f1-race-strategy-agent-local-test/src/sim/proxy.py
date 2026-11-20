@@ -5,57 +5,67 @@ laps, and the to_snapshot fit (the belief) only the practice prior's compounds p
 min_samples clean race laps up to the snapshot. A compound nobody raced is then "Unknown" to
 the world, so every plan using it is rejected. With SimConfig.compound_proxy.enabled (the
 default) Simulator._fit runs `apply` on every fitted degradation model, so HARD, MEDIUM and
-SOFT are all priced, each parameter from the best tier that has data:
+SOFT are all priced. A compound with race laps keeps its fit (tier 1); for the others each
+parameter is a precision-weighted blend of every source below that has an estimate:
 
   tier 1  race laps: the fit itself, unchanged, for a compound with min_samples clean race
           rows in the fit (the belief: rows up to its calibration point).
-  tier 2  practice long runs this weekend (FP sessions plus the Sprint, calibrate.practice_sessions):
+  practice (tier 2)  practice long runs this weekend (FP sessions plus the Sprint, calibrate.practice_sessions):
           the practice fit's step from the anchor, base_c = base_a + (p_c - p_a) and
           wear_c = wear_a + (pw_c - pw_a). Additive in wear as well: an error in the fixed
           practice fuel prior biases every compound's practice wear by the same amount, which
           the difference cancels (a ratio would not, and a practice wear can be negative).
-  tier 3  qualifying this weekend, pace only (qualifying_gaps): the compound gap in a
+  qualifying (tier 3)  qualifying this weekend, pace only (qualifying_gaps): the compound gap in a
           fixed-effects fit of each driver's best timed lap per (segment, compound),
           lap = driver + segment + compound, slow laps trimmed as data.robust_filter trims
           them. base_c = base_a + (q_c - q_a). Fuel (every qualifying lap is on low fuel),
           the driver and car, track evolution and engine modes between segments (the segment
           term, which also takes the pre-2020 Q3 modes) cancel in the gap; what does not cancel
           is push against managed driving, which the validation measures as a bias.
-  tier 4  the same circuit in other seasons: not built. `_tier4_pace` and `_tier4_wear` are the
+  same_circuit (tier 4)  the same circuit in other seasons: not built. `_tier4_pace` and `_tier4_wear` are the
           extension point and return None.
-  tier 5  the cross-race neighbour step (SimConfig.compound_proxy.steps, from
+  cross_race_step (tier 5)  the cross-race neighbour step (SimConfig.compound_proxy.steps, from
           configs/sim/compound_steps.json, built by compound_steps.py on calibration races
           only): base_c = base_a * (1 + pace_frac) per neighbour step, wear_c = wear_a *
           wear_ratio per step (inverted when pricing a harder compound from a softer one).
+          Always present.
+
+The blend (_blend): value = sum_i w_i v_i / sum_i w_i, each source's v_i from its own nearest
+anchor, with fixed weights, one set for all races (SimConfig.compound_proxy.weights, from
+configs/sim/compound_steps.json): w = 1 / the source's mean squared error in the
+hidden-compound validation, fresh-pace error for the pace weights, wear error for the wear
+weights (qualifying informs pace only). compound_steps.py computes them and validates the
+blend leave-one-race-out (weights and step table from the other races).
 
 Anchoring: every borrowed quantity is a step from an anchor compound a with tier-1 data in
 this fit (the nearest one in SOFT < MEDIUM < HARD, ties to the one with more race rows), so
 the race sets the level. A fit with no tier-1 compound at all (the belief before its first
 race laps, the pre_race window, the practice fit) keeps its own compounds as they are (their
-tier is 2, practice) and anchors the missing ones on them. Tier 2 needs the anchor in the
-practice fit too, tier 3 in qualifying; otherwise the next tier is tried with the next anchor.
-Pace and wear may come from different tiers.
+tier is 2, practice) and anchors the missing ones on them. A practice estimate needs the anchor
+in the practice fit too, a qualifying one in qualifying; each source takes the nearest anchor
+it can use.
 
 Ordering: a softer compound is never slower fresh and never wears less than a harder one.
 The constraint moves proxied values only, never a tier-1 one: a proxied base is clipped into
 [max base of the softer compounds, min base of the harder ones] and a proxied wear into
 [max wear of the harder ones, min wear of the softer ones], against the compounds priced so
-far (tier 1 first, then the proxied compounds by pace tier, softest first). When tier-1 values
+far (tier 1 first, then the proxied compounds by their best source's tier, softest first). When tier-1 values
 are themselves out of order the interval is empty and the value is clipped between them
 ("conflict"). A proxied wear is then floored at compound_proxy.min_wear_s_per_lap (0: a tyre
 does not get faster with age) and at the fit's wear_lower_bound when it has one.
 
-Uncertainty: a proxied parameter is p = g * anchor + const, so fit_report["cov"] gains its row
-as T cov T' + diag(tau^2), T the map from the fit's parameters: it moves with its anchor in a
-posterior draw, plus its own tau. tau is the tier's floor (compound_proxy *_sd_floor, wider
-for each tier down) or the tier's own estimate when larger: the practice fit's sd of the
-difference, the qualifying fit's sd of the gap, and for tier 5 the step's spread across races
-times the anchor value (so the tier-5 sd is at least that spread). The shrinkage weight of a
-proxied parameter is 0 (model_report source "prior").
+Uncertainty: a blended parameter is p = sum_a g_a * anchor_a + const, so fit_report["cov"]
+gains its row as T cov T' + diag(tau^2), T the map from the fit's parameters: it moves with
+its anchors in a posterior draw, plus its own tau. tau is the larger of compound_proxy.sd_floor
+(the blend's leave-one-race-out error) and the cross-race step's spread across races times
+the anchor value. The shrinkage weight of a proxied parameter is 0 (model_report source
+"prior").
 
-fit_report gains "proxy": {compound: {pace_tier, pace_source, pace_anchor, wear_tier,
-wear_source, wear_anchor, ordering, detail}} for every one of HARD, MEDIUM and SOFT the model
-prices (tier 1 included, source "race"), and the proxied compounds get the per compound
+fit_report gains "proxy": {compound: {pace_tier (the best source's), pace_source (the sources
+joined by "+"), pace_anchor, pace_sources ([{source, weight, anchor, value, step}]), the same
+for wear, ordering, the steps and sds, qualifying_gap_s ({anchor, gap_s, sd_s, drivers}: the
+measured qualifying gap to the nearest other raced compound, None without one)}} for every
+one of HARD, MEDIUM and SOFT the model prices (raced ones included, source "race"), and the proxied compounds get the per compound
 entries every model has (n_rows: practice rows behind it; n_race_rows_per_compound: the race
 rows of the fit, 0 for a compound the fit left out; max_tyre_age: the practice fit's support,
 NaN without one; shrinkage_weight 0; sd from the new cov; hinge dropped) and leave
@@ -237,44 +247,108 @@ def _diff_sd(model, c, a, param):
     return float(np.sqrt(var)) if np.isfinite(var) and var >= 0 else float("nan")
 
 
-def _tau(estimate, floor):
-    return float(floor) if not np.isfinite(estimate) else max(float(estimate), float(floor))
+SOURCE_TIER = {"practice": 2, "qualifying": 3, "same_circuit": 4, "cross_race_step": 5}
+SOURCES_ALL = ("practice", "qualifying", "cross_race_step")
+SOURCE_WORDS = {"race": "race laps", "practice": "practice long runs", "qualifying": "qualifying",
+                "same_circuit": "the same circuit in other seasons", "cross_race_step": "the cross-race step"}
 
 
-PACE_TIERS = (2, 3, 4, 5)
-WEAR_TIERS = (2, 4, 5)
-
-
-def _price(kind, c, anchors, coefs, practice, quali, steps, floors, race_rows, tiers):
-    """(tier, anchor, g, value, tau, detail) for c's base (`kind` "pace") or wear ("wear"), from
-    the first of `tiers` that can price it (each tier trying the anchors nearest first); None
-    when none can. The value is g * anchor's value + a step."""
+def _part(kind, source, c, a, coefs, practice, quali, steps):
+    """One source's estimate of c's base (`kind` "pace") or wear ("wear") from anchor a, as
+    {source, anchor, g, value, sd, step} with value = g * anchor's value + a step; None when the
+    source has nothing for (c, a)."""
     j = 0 if kind == "pace" else 1
-    param = "base_s" if kind == "pace" else "wear_s_per_lap"
-    order = _anchors_by_distance(c, anchors, race_rows)
     pc = practice.coefs if practice is not None else {}
-    for tier in tiers:
-        for a in order:
-            if tier == 2 and c in pc and a in pc:
-                d = pc[c][j] - pc[a][j]
-                sd = _diff_sd(practice, c, a, param)
-                return 2, a, 1.0, coefs[a][j] + d, _tau(sd, floors[2]), {"practice_step": d, "practice_sd": sd}
-            if tier == 3 and kind == "pace":
-                step = quali_step(quali, c, a)
-                if step is not None:
-                    d, sd, n = step
-                    return 3, a, 1.0, coefs[a][j] + d, _tau(sd, floors[3]), {"qualifying_step": d,
-                                                                             "qualifying_sd": sd,
-                                                                             "qualifying_drivers": n}
-            if tier == 4 and (_tier4_pace if kind == "pace" else _tier4_wear)(c, a) is not None:  # pragma: no cover
-                raise NotImplementedError("tier 4 (same circuit, other seasons) is not built")
-            if tier == 5:
-                f = neighbour_factor(steps, a, c, "pace_frac" if kind == "pace" else "wear_ratio")
-                if f is not None:
-                    g, rel = f
-                    value = coefs[a][j] * g
-                    return 5, a, g, value, _tau(abs(value) * rel, floors[5]), {"factor": g, "factor_rel_sd": rel}
+    if source == "practice" and c in pc and a in pc:
+        d = pc[c][j] - pc[a][j]
+        sd = _diff_sd(practice, c, a, "base_s" if kind == "pace" else "wear_s_per_lap")
+        return {"source": source, "anchor": a, "g": 1.0, "value": coefs[a][j] + d, "sd": sd, "step": d}
+    if source == "qualifying" and kind == "pace":
+        step = quali_step(quali, c, a)
+        if step is not None:
+            d, sd, n = step
+            return {"source": source, "anchor": a, "g": 1.0, "value": coefs[a][j] + d, "sd": sd, "step": d,
+                    "drivers": n}
+    if source == "same_circuit" and (_tier4_pace if kind == "pace" else _tier4_wear)(c, a) is not None:  # pragma: no cover
+        raise NotImplementedError("tier 4 (same circuit, other seasons) is not built")
+    if source == "cross_race_step":
+        f = neighbour_factor(steps, a, c, "pace_frac" if kind == "pace" else "wear_ratio")
+        if f is not None:
+            g, rel = f
+            value = coefs[a][j] * g
+            return {"source": source, "anchor": a, "g": g, "value": value, "sd": abs(value) * rel,
+                    "step": value - coefs[a][j]}
     return None
+
+
+def _blend(kind, c, anchors, coefs, practice, quali, cfg, race_rows, sources):
+    """The precision-weighted blend of every source in `sources` with an estimate of c's base
+    (`kind` "pace") or wear ("wear"), each from its nearest anchor; None when none has one.
+    Returns {value, coef: {anchor: g_eff}, tau, tier, source, parts}: value = sum_i w_i v_i /
+    sum_i w_i with the fixed weights cfg.weights[kind][source] (1 / the source's mean squared
+    error in the hidden-compound validation; 1.0 for a source without a weight), linear in the
+    anchors with g_eff = sum_i (w_i / W) g_i. tau, the blend's prior sd, is the larger of
+    cfg.sd_floor[kind] (the blend's leave-one-race-out error) and the cross-race step's spread."""
+    order = _anchors_by_distance(c, anchors, race_rows)
+    parts = []
+    for source in sources:
+        for a in order:
+            part = _part(kind, source, c, a, coefs, practice, quali, cfg.steps)
+            if part is not None:
+                part["weight"] = float(((cfg.weights or {}).get(kind) or {}).get(source, 1.0))
+                parts.append(part)
+                break
+    if not parts:
+        return None
+    total = sum(p["weight"] for p in parts)
+    if total <= 0:
+        for p in parts:
+            p["weight"] = 1.0
+        total = float(len(parts))
+    coef = {}
+    for p in parts:
+        p["weight"] = p["weight"] / total
+        coef[p["anchor"]] = coef.get(p["anchor"], 0.0) + p["weight"] * p["g"]
+    value = sum(p["weight"] * p["value"] for p in parts)
+    spread = max([p["sd"] for p in parts if p["source"] == "cross_race_step" and np.isfinite(p["sd"])],
+                 default=0.0)
+    tau = max(float((cfg.sd_floor or {}).get(kind, 0.0)), spread)
+    if tau <= 0:   # no floor and no step: the sources' own sd
+        tau = max([p["sd"] for p in parts if np.isfinite(p["sd"])], default=0.0)
+    return {"value": float(value), "coef": coef, "tau": float(tau),
+            "tier": min(SOURCE_TIER[p["source"]] for p in parts),
+            "source": "+".join(p["source"] for p in parts), "parts": parts}
+
+
+def _main_anchor(blend):
+    """The anchor carrying the most weight in a blend."""
+    return max(blend["coef"], key=lambda a: (blend["coef"][a], -_idx(a)))
+
+
+def _parts_report(blend):
+    out = []
+    for p in blend["parts"]:
+        e = {"source": p["source"], "weight": float(p["weight"]), "anchor": p["anchor"], "value": float(p["value"]),
+             "step": float(p["step"])}
+        if "drivers" in p:
+            e["drivers"] = int(p["drivers"])
+        out.append(e)
+    return out
+
+
+def _qualifying_gaps(info, anchors, quali, race_rows):
+    """For every compound in `info`, its measured qualifying gap to the nearest other anchor
+    (quali_step), the fresh-tyre datapoint the agent's model report shows: {anchor, gap_s, sd_s,
+    drivers}, None when qualifying has nothing for it."""
+    for c in info:
+        gap = None
+        for a in _anchors_by_distance(c, [x for x in anchors if x != c], race_rows):
+            step = quali_step(quali, c, a)
+            if step is not None:
+                d, sd, n = step
+                gap = {"anchor": a, "gap_s": float(d), "sd_s": float(sd), "drivers": int(n)}
+                break
+        info[c]["qualifying_gap_s"] = gap
 
 
 def _clip(value, lo, hi):
@@ -306,15 +380,17 @@ def _transform(M, T):
 
 
 def apply(model, cfg, *, min_samples, practice=None, quali=None, knot=None, wear_lower_bound=None,
-          tiers=None):
-    """`model` with HARD, MEDIUM and SOFT priced by the tier chain (module docstring), a copy;
+          sources=None):
+    """`model` with HARD, MEDIUM and SOFT priced by the blend (module docstring), a copy;
     `model` itself when it prices none of them or has no fit_report. `cfg` is
     SimConfig.compound_proxy, `practice` the practice fit the tier-2 steps come from (the belief's
     prior, else Simulator.physics_prior), `quali` qualifying_gaps' result, `knot(c)` the hinge knot
     of a new compound on a hinge model, `wear_lower_bound` the fit's wear bound (None: none).
-    `tiers` ({"pace": (...), "wear": (...)}, default PACE_TIERS and WEAR_TIERS) restricts the
-    chain; the validation (compound_steps.py) prices through one tier at a time with it."""
-    tiers = {"pace": PACE_TIERS, "wear": WEAR_TIERS, **(tiers or {})}
+    `sources` (default cfg.sources; a list, or {"pace": [...], "wear": [...]}) are the sources
+    the blend may use; the validation (compound_steps.py) prices through one source at a time."""
+    sources = cfg.sources if sources is None else sources
+    sources = ({"pace": list(sources["pace"]), "wear": list(sources["wear"])} if isinstance(sources, dict)
+               else {"pace": list(sources), "wear": list(sources)})
     rep0 = getattr(model, "fit_report", None)
     if rep0 is None or "cov" not in rep0:
         return model
@@ -327,28 +403,27 @@ def apply(model, cfg, *, min_samples, practice=None, quali=None, knot=None, wear
     anchors = tier1 or present
     targets = [c for c in SOFTNESS if c not in anchors]
     pcoefs = practice.coefs if practice is not None else {}
-    floors_p = {int(k): float(v) for k, v in cfg.pace_sd_floor_s.items()}
-    floors_w = {int(k): float(v) for k, v in cfg.wear_sd_floor_s_per_lap.items()}
     info = {}
 
     def as_fitted(c):
         """The label of a compound the fit prices itself: race laps, or practice (the prior)
         for one with fewer than min_samples race rows."""
         tier, src = (1, SOURCES[1]) if c in tier1 or c not in pcoefs else (2, SOURCES[2])
-        return {"pace_tier": tier, "pace_source": src, "pace_anchor": None, "wear_tier": tier, "wear_source": src,
-                "wear_anchor": None, "ordering": [], "detail": {}}
+        return {"pace_tier": tier, "pace_source": src, "pace_anchor": None, "pace_sources": [],
+                "wear_tier": tier, "wear_source": src, "wear_anchor": None, "wear_sources": [], "ordering": []}
     for c in anchors:
         info[c] = as_fitted(c)
     priced = {}
     for c in targets:
-        pace = _price("pace", c, anchors, coefs, practice, quali, cfg.steps, floors_p, race_rows, tiers["pace"])
-        wear = _price("wear", c, anchors, coefs, practice, quali, cfg.steps, floors_w, race_rows, tiers["wear"])
+        pace = _blend("pace", c, anchors, coefs, practice, quali, cfg, race_rows, sources["pace"])
+        wear = _blend("wear", c, anchors, coefs, practice, quali, cfg, race_rows, sources["wear"])
         if pace is None or wear is None:
-            if c in coefs:   # a compound of the fit no tier can re-price: kept as the fit has it
+            if c in coefs:   # a compound of the fit no source can re-price: kept as the fit has it
                 info[c] = as_fitted(c)
             continue
         priced[c] = (pace, wear)
     if not priced:
+        _qualifying_gaps(info, anchors, quali, race_rows)
         out = copy.copy(model)
         out.fit_report = {**rep0, "proxy": {c: info[c] for c in SOFTNESS if c in info}}
         return out
@@ -356,8 +431,8 @@ def apply(model, cfg, *, min_samples, practice=None, quali=None, knot=None, wear
     # pace tier, softest first
     values = {c: list(coefs[c]) for c in coefs if c in SOFTNESS and c not in priced}
     notes = {}
-    for c in sorted(priced, key=lambda c: (priced[c][0][0], _idx(c))):
-        (_, _, _, base, _, _), (_, _, _, wear, _, _) = priced[c]
+    for c in sorted(priced, key=lambda c: (priced[c][0]["tier"], _idx(c))):
+        base, wear = priced[c][0]["value"], priced[c][1]["value"]
         softer = [values[s] for s in values if _idx(s) < _idx(c)]
         harder = [values[h] for h in values if _idx(h) > _idx(c)]
         note = []
@@ -386,10 +461,10 @@ def apply(model, cfg, *, min_samples, practice=None, quali=None, knot=None, wear
     for i, n in enumerate(new_names):
         p, _, c = n[:-1].partition("[") if n.endswith("]") else (n, None, None)
         if c in priced:
-            k = 0 if p == "base_s" else 1
-            tier, a, g, _, tau, _ = priced[c][k]
-            T[i, at[f"{p}[{a}]"]] = g
-            tau2[i] = tau ** 2
+            blend = priced[c][0 if p == "base_s" else 1]
+            for a, g in blend["coef"].items():
+                T[i, at[f"{p}[{a}]"]] += g
+            tau2[i] = blend["tau"] ** 2
         else:
             T[i, at[n]] = 1.0
     M_new = _transform(M, T) + np.diag(tau2)
@@ -412,13 +487,14 @@ def apply(model, cfg, *, min_samples, practice=None, quali=None, knot=None, wear
         rep["sd"]["wear_s_per_lap"][c] = float(np.sqrt(max(M_new[new_at[f"wear_s_per_lap[{c}]"]]
                                                            [new_at[f"wear_s_per_lap[{c}]"]], 0.0)))
         rep["unmodelled"].pop(c, None)
-        (pt, pa, _, _, _, pdet), (wt, wa, _, _, _, wdet) = priced[c]
-        info[c] = {"pace_tier": pt, "pace_source": SOURCES[pt], "pace_anchor": pa,
-                   "wear_tier": wt, "wear_source": SOURCES[wt], "wear_anchor": wa, "ordering": notes[c],
-                   "detail": {"pace": {k: float(v) for k, v in pdet.items()},
-                              "wear": {k: float(v) for k, v in wdet.items()},
-                              "pace_step_s": float(values[c][0] - coefs[pa][0]),
-                              "wear_step_s_per_lap": float(values[c][1] - coefs[wa][1])}}
+        pb, wb = priced[c]
+        pa, wa = _main_anchor(pb), _main_anchor(wb)
+        info[c] = {"pace_tier": pb["tier"], "pace_source": pb["source"], "pace_anchor": pa,
+                   "pace_sources": _parts_report(pb), "wear_tier": wb["tier"], "wear_source": wb["source"],
+                   "wear_anchor": wa, "wear_sources": _parts_report(wb), "ordering": notes[c],
+                   "pace_step_s": float(values[c][0] - coefs[pa][0]),
+                   "wear_step_s_per_lap": float(values[c][1] - coefs[wa][1]),
+                   "pace_sd_s": float(pb["tau"]), "wear_sd_s_per_lap": float(wb["tau"])}
     if "bounded" in rep:
         rep["bounded"] = dict(rep0["bounded"])
         for c in priced:
@@ -445,6 +521,7 @@ def apply(model, cfg, *, min_samples, practice=None, quali=None, knot=None, wear
         out.knots = {**model.knots, **{c: int(knot(c)) for c in priced if c not in model.knots}}
         rep["hinge"] = {**rep0.get("hinge", {}), **{c: _dropped(out.knots[c], 0) for c in priced
                                                     if c not in (rep0.get("hinge") or {})}}
+    _qualifying_gaps(info, anchors, quali, race_rows)
     rep["proxy"] = {c: info[c] for c in SOFTNESS if c in info}
     out.fit_report = rep
     return out
@@ -477,14 +554,23 @@ def proxied(fit_report) -> dict:
 
 
 def describe(compound, entry) -> str:
-    """'SOFT: pace from qualifying (anchor MEDIUM), wear from the cross-race step (anchor MEDIUM)'."""
-    words = {"race": "race laps", "practice": "practice long runs", "qualifying": "qualifying",
-             "same_circuit": "the same circuit in other seasons", "cross_race_step": "the cross-race step"}
-
+    """'SOFT: pace from practice long runs 40%, qualifying 35%, the cross-race step 25% (anchor
+    MEDIUM); wear from practice long runs 30%, the cross-race step 70% (anchor MEDIUM)', or
+    'MEDIUM: pace from race laps; wear from race laps'; a measured qualifying gap is appended."""
     def part(kind):
-        a = entry.get(f"{kind}_anchor")
-        return f"{kind} from {words[entry[f'{kind}_source']]}" + (f" (anchor {a})" if a else "")
-    return f"{compound}: {part('pace')}, {part('wear')}"
+        parts = entry.get(f"{kind}_sources") or []
+        if not parts:
+            src = entry[f"{kind}_source"]
+            return f"{kind} from {SOURCE_WORDS.get(src, src)}"
+        what = ", ".join(f"{SOURCE_WORDS[p['source']]} {100 * p['weight']:.0f}%" for p in parts)
+        anchors = sorted({p["anchor"] for p in parts}, key=_idx)
+        return f"{kind} from {what} (anchor {'/'.join(anchors)})"
+    text = f"{compound}: {part('pace')}; {part('wear')}"
+    gap = entry.get("qualifying_gap_s")
+    if gap:
+        text += (f"; qualifying gap to {gap['anchor']} {gap['gap_s']:+.2f} s on fresh tyres "
+                 f"({gap['drivers']} drivers)")
+    return text
 
 
 # --- R8 for an unraced compound --------------------------------------------------------------

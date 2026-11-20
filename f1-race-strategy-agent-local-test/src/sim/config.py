@@ -125,23 +125,39 @@ def load_compound_steps(path=COMPOUND_STEPS_FILE) -> dict:
             for pair, entry in table.get("steps", {}).items()}
 
 
+def _blend_section(key, path=COMPOUND_STEPS_FILE) -> dict:
+    """{"pace": {...}, "wear": {...}} section `key` of the committed table ("weights": per
+    source 1 / its validation mean squared error; "sd_floor": the blend's leave-one-race-out
+    error), {} when absent."""
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        table = json.load(f)
+    sec = table.get(key) or {}
+    if key == "weights":
+        return {k: {s: float(w) for s, w in v.items()} for k, v in sec.items()}
+    return {k: float(v) for k, v in sec.items()}
+
+
 class CompoundProxy(_Cfg):
     """Pricing of dry compounds the race laps do not model (proxy.py, docs/eval.md "Proxied
     compounds"). With `enabled` False the simulator is exactly what it was before proxying.
 
-    Per compound (HARD, MEDIUM, SOFT) pace and wear come from the best tier available: 1 race
-    laps, 2 practice long runs, 3 qualifying (pace only), 5 the cross-race neighbour step
-    (`steps`, read from configs/sim/compound_steps.json so that config_hash covers the table).
-    Tier 4 (the same circuit in other seasons) is not built. The *_sd_floor values are each
-    tier's smallest prior sd, wider for each tier down; a tier's own estimate replaces the floor
-    when it is larger, and a tier-5 sd is at least the spread of its step across races.
-    `min_wear_s_per_lap` floors a proxied wear (a tyre does not get faster with age)."""
+    A compound with race laps (tier 1) keeps its fit. For the others pace and wear are each a
+    precision-weighted blend, from the nearest raced compound, of every source in `sources` that
+    has an estimate: practice long runs, qualifying (pace only) and the cross-race neighbour
+    step (`steps`). `weights` ({"pace"|"wear": {source: 1 / mean squared error}}) are fixed, one
+    set for all races; `sd_floor` ({"pace"|"wear": the blend's leave-one-race-out error}) is the
+    smallest prior sd of a blended value (the cross-race spread raises it). All three are read
+    from configs/sim/compound_steps.json, so config_hash covers them. `min_wear_s_per_lap`
+    floors a proxied wear (a tyre does not get faster with age)."""
 
     enabled: bool = True
-    pace_sd_floor_s: dict[int, float] = Field(default_factory=lambda: {2: 0.5, 3: 0.75, 5: 1.0})
-    wear_sd_floor_s_per_lap: dict[int, float] = Field(default_factory=lambda: {2: 0.03, 5: 0.045})
+    sources: list[str] = Field(default_factory=lambda: ["practice", "qualifying", "cross_race_step"])
     min_wear_s_per_lap: float = 0.0
     steps: dict = Field(default_factory=load_compound_steps)
+    weights: dict = Field(default_factory=lambda: _blend_section("weights"))
+    sd_floor: dict = Field(default_factory=lambda: _blend_section("sd_floor"))
 
 
 class SimConfig(_Cfg):

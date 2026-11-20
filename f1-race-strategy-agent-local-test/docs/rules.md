@@ -79,7 +79,7 @@ docs/eval.md "Proxied compounds"), each of HARD, MEDIUM and SOFT that no car ran
 so the optimizer cannot plan an absurdly long stint on a compound priced by a straight line
 it has no race laps for: the oldest tyre age run on it in practice this weekend (every
 practice lap, the Sprint included on a sprint weekend), plus the margin; if it was never
-run in practice, the limit of the nearest raced compound times the tier-5 tyre-life ratio
+run in practice, the limit of the nearest raced compound times the cross-race tyre-life ratio
 (`configs/sim/compound_steps.json`, rounded down), plus the margin. `proxy.unraced_limits`
 computes them once, beside `rules.stint_limits`, and `Simulator.stint_limit_sources` says
 where each came from; the error message names it ("no SOFT raced: the oldest SOFT tyre run

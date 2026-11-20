@@ -1,6 +1,7 @@
-"""The compound proxy (src/sim/proxy.py): tier selection, anchoring, the ordering constraint,
-uncertainty, R8 for an unraced compound and the off switch, on synthetic weekends; then the
-2022 Saudi Arabia case (SOFT run in practice, never raced) on the calibration race."""
+"""The compound proxy (src/sim/proxy.py): the source blend and its weights, anchoring, the
+ordering constraint, uncertainty, R8 for an unraced compound and the off switch, on synthetic
+weekends; the validation's leave-one-race-out weights; then the 2022 Saudi Arabia case (SOFT run
+in practice, never raced) on the calibration race."""
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,10 +20,17 @@ STEPS = {"SOFT-MEDIUM": {"pace_frac": {"value": -0.02, "sd": 0.004, "n": 4},
          "MEDIUM-HARD": {"pace_frac": {"value": -0.01, "sd": 0.003, "n": 4},
                          "wear_ratio": {"value": 1.5, "sd": 0.6, "n": 4},
                          "life_ratio": {"value": 0.8, "sd": 0.2, "n": 4}}}
+# 1 / mse: practice weighs 1, qualifying 2, the step 1 for pace; practice 1, the step 3 for wear
+WEIGHTS = {"pace": {"practice": 1.0, "qualifying": 2.0, "cross_race_step": 1.0},
+           "wear": {"practice": 1.0, "cross_race_step": 3.0}}
+SD_FLOOR = {"pace": 0.6, "wear": 0.04}
 
 
-def config(enabled=True, steps=STEPS, **kw):
-    return SimConfig(compound_proxy=CompoundProxy(enabled=enabled, steps=steps), pre_race_base_delta_s=0.0, **kw)
+def config(enabled=True, steps=STEPS, sources=None, weights=WEIGHTS, **kw):
+    px = dict(enabled=enabled, steps=steps, weights=weights, sd_floor=SD_FLOOR)
+    if sources is not None:
+        px["sources"] = sources
+    return SimConfig(compound_proxy=CompoundProxy(**px), pre_race_base_delta_s=0.0, **kw)
 
 
 def practice(hard=True):
@@ -48,9 +56,9 @@ def quali(gap_hard_medium=None, gap_soft_medium=-0.8):
     return pd.DataFrame(rows)
 
 
-def world(enabled=True, steps=STEPS, prac=None, q=None, frame=None, **kw):
-    return Simulator(synthetic_frame(fuel=FUEL) if frame is None else frame, config(enabled, steps, **kw), prac,
-                     qualifying=q)
+def world(enabled=True, steps=STEPS, prac=None, q=None, frame=None, sources=None, weights=WEIGHTS, **kw):
+    return Simulator(synthetic_frame(fuel=FUEL) if frame is None else frame,
+                     config(enabled, steps, sources, weights, **kw), prac, qualifying=q)
 
 
 def tiers(sim, c):
@@ -58,7 +66,11 @@ def tiers(sim, c):
     return e["pace_tier"], e["wear_tier"]
 
 
-# --- tier selection ------------------------------------------------------------------------------
+def used(sim, c, kind="pace"):
+    return {p["source"]: p["weight"] for p in sim.degradation.fit_report["proxy"][c][f"{kind}_sources"]}
+
+
+# --- source selection and the blend ---------------------------------------------------------------
 def test_raced_compounds_are_tier_one_and_unchanged():
     on, off = world(prac=practice()), world(enabled=False, prac=practice())
     for c in ("SOFT", "MEDIUM"):
@@ -68,28 +80,45 @@ def test_raced_compounds_are_tier_one_and_unchanged():
     assert "HARD" not in off.modelled and "HARD" in on.modelled
 
 
-def test_tier_selection_practice_then_qualifying_then_step():
-    assert tiers(world(prac=practice()), "HARD") == (2, 2)
-    # no HARD long run, HARD in qualifying: pace from qualifying, wear from the step
-    assert tiers(world(prac=practice(hard=False), q=quali(gap_hard_medium=0.9)), "HARD") == (3, 5)
-    # neither: the step for both
-    assert tiers(world(prac=practice(hard=False), q=quali()), "HARD") == (5, 5)
-    assert tiers(world(), "HARD") == (5, 5)
-    # nothing to price it with: HARD stays unknown
+def test_every_source_that_exists_enters_the_blend():
+    full = world(prac=practice(), q=quali(gap_hard_medium=0.9))
+    assert used(full, "HARD") == pytest.approx({"practice": 0.25, "qualifying": 0.5, "cross_race_step": 0.25})
+    assert used(full, "HARD", "wear") == pytest.approx({"practice": 0.25, "cross_race_step": 0.75})
+    # no HARD long run: qualifying and the step for pace, the step alone for wear
+    nq = world(prac=practice(hard=False), q=quali(gap_hard_medium=0.9))
+    assert used(nq, "HARD") == pytest.approx({"qualifying": 2 / 3, "cross_race_step": 1 / 3})
+    assert used(nq, "HARD", "wear") == {"cross_race_step": 1.0}
+    # neither: the step, always there
+    assert used(world(), "HARD") == {"cross_race_step": 1.0}
     assert "HARD" not in world(steps={}).modelled
+    assert full.degradation.fit_report["proxy"]["HARD"]["pace_source"] == "practice+qualifying+cross_race_step"
 
 
-def test_tiers_can_mix_and_be_restricted():
-    sim = world(prac=practice(hard=False), q=quali(gap_hard_medium=0.9))
-    e = sim.degradation.fit_report["proxy"]["HARD"]
-    assert (e["pace_source"], e["wear_source"]) == ("qualifying", "cross_race_step")
-    assert proxy.describe("HARD", e) == ("HARD: pace from qualifying (anchor MEDIUM), "
-                                         "wear from the cross-race step (anchor MEDIUM)")
+def test_the_blend_is_the_weighted_mean_of_the_sources():
+    full = world(prac=practice(), q=quali(gap_hard_medium=0.9)).degradation
+    base_m, wear_m = full.coefs["MEDIUM"]
+    e = full.fit_report["proxy"]["HARD"]
+    parts = {p["source"]: p["value"] for p in e["pace_sources"]}
+    assert parts["qualifying"] == pytest.approx(base_m + 0.9)
+    assert parts["cross_race_step"] == pytest.approx(base_m / 0.99)
+    assert full.coefs["HARD"][0] == pytest.approx(0.25 * parts["practice"] + 0.5 * parts["qualifying"]
+                                                  + 0.25 * parts["cross_race_step"])
+    w = {p["source"]: p["value"] for p in e["wear_sources"]}
+    assert full.coefs["HARD"][1] == pytest.approx(max(0.25 * w["practice"] + 0.75 * w["cross_race_step"], 0.0))
+    assert proxy.describe("HARD", e).startswith(
+        "HARD: pace from practice long runs 25%, qualifying 50%, the cross-race step 25% (anchor MEDIUM)")
+
+
+def test_sources_can_be_restricted():
+    one = world(prac=practice(), q=quali(gap_hard_medium=0.9), sources=["cross_race_step"])
+    assert used(one, "HARD") == {"cross_race_step": 1.0}
+    nopq = world(prac=practice(), q=quali(gap_hard_medium=0.9), sources=["practice", "cross_race_step"])
+    assert set(used(nopq, "HARD")) == {"practice", "cross_race_step"}
 
 
 # --- anchoring -----------------------------------------------------------------------------------
-def test_tier_two_is_the_practice_step_from_the_raced_anchor():
-    sim = world(prac=practice())
+def test_practice_is_the_practice_step_from_the_raced_anchor():
+    sim = world(prac=practice(), sources=["practice"])
     base_m, wear_m = sim.degradation.coefs["MEDIUM"]
     pp = sim.physics_prior().coefs
     base_h, wear_h = sim.degradation.coefs["HARD"]
@@ -100,16 +129,16 @@ def test_tier_two_is_the_practice_step_from_the_raced_anchor():
 def test_the_race_sets_the_level_of_a_borrowed_compound():
     frame = synthetic_frame(fuel=FUEL)
     slow = frame.assign(lap_time_s=frame["lap_time_s"] + 2.0)
-    for kw in ({"prac": practice()}, {"q": quali(gap_hard_medium=0.9)}, {}):
-        a = world(frame=frame, **kw).degradation.coefs["HARD"][0]
-        b = world(frame=slow, **kw).degradation.coefs["HARD"][0]
-        # tier 5 scales with the anchor (a share of the lap); 2 and 3 add a step in seconds
-        expect = 2.0 * (1 / 0.99) if not kw else 2.0
-        assert b - a == pytest.approx(expect, abs=1e-6)
+    kw = {"prac": practice(), "q": quali(gap_hard_medium=0.9)}
+    a = world(frame=frame, **kw).degradation.coefs["HARD"][0]
+    b = world(frame=slow, **kw).degradation.coefs["HARD"][0]
+    # practice and qualifying add a step in seconds; the step scales with the anchor (a share of the lap)
+    assert b - a == pytest.approx(2.0 * (0.25 + 0.5 + 0.25 / 0.99), abs=1e-6)
 
 
-def test_tier_three_is_the_qualifying_gap_from_the_anchor():
-    sim = world(prac=practice(hard=False), q=quali(gap_hard_medium=0.9))
+def test_qualifying_alone_is_the_qualifying_gap_from_the_anchor():
+    sim = world(prac=practice(hard=False), q=quali(gap_hard_medium=0.9),
+                weights={"pace": {"qualifying": 1.0, "cross_race_step": 0.0}, "wear": {}})
     base_m = sim.degradation.coefs["MEDIUM"][0]
     assert sim.degradation.coefs["HARD"][0] == pytest.approx(base_m + 0.9, abs=1e-9)
 
@@ -156,18 +185,24 @@ def test_a_proxied_wear_is_floored_at_zero():
 
 
 # --- uncertainty ---------------------------------------------------------------------------------
-def test_proxied_sd_is_wider_down_the_tiers_and_moves_with_the_anchor():
-    t2, t5 = world(prac=practice()), world()
-    sd2 = t2.degradation.fit_report["sd"]["base_s"]["HARD"]
-    sd5 = t5.degradation.fit_report["sd"]["base_s"]["HARD"]
-    assert sd2 >= 0.5 and sd5 >= 1.0 and sd5 > sd2
-    assert t5.degradation.fit_report["shrinkage_weight"]["base_s"]["HARD"] == 0.0
-    cov = t2.degradation.fit_report["cov"]
+def test_proxied_sd_is_at_least_the_blend_error_and_the_step_spread_and_moves_with_the_anchor():
+    sim = world(prac=practice(), q=quali(gap_hard_medium=0.9))
+    e = sim.degradation.fit_report["proxy"]["HARD"]
+    base_m = sim.degradation.coefs["MEDIUM"][0]
+    spread = base_m / 0.99 * 0.003 / 0.99    # the step's spread times its value
+    assert e["pace_sd_s"] == pytest.approx(max(SD_FLOOR["pace"], spread))
+    assert sim.degradation.fit_report["sd"]["base_s"]["HARD"] >= SD_FLOOR["pace"]
+    wide = world(steps={**STEPS, "MEDIUM-HARD": {**STEPS["MEDIUM-HARD"],
+                                                 "pace_frac": {"value": -0.01, "sd": 0.05, "n": 4}}})
+    assert wide.degradation.fit_report["proxy"]["HARD"]["pace_sd_s"] > 3.0   # the spread rules
+    assert sim.degradation.fit_report["shrinkage_weight"]["base_s"]["HARD"] == 0.0
+    cov = sim.degradation.fit_report["cov"]
     at = {n: i for i, n in enumerate(cov["names"])}
     m = np.array(cov["matrix"])
     assert np.all(np.linalg.eigvalsh(m) > -1e-12)
-    # base[HARD] = base[MEDIUM] + a step: their covariance is MEDIUM's variance
-    assert m[at["base_s[HARD]"], at["base_s[MEDIUM]"]] == pytest.approx(m[at["base_s[MEDIUM]"], at["base_s[MEDIUM]"]])
+    # base[HARD] = g_eff * base[MEDIUM] + a step: their covariance is g_eff times MEDIUM's variance
+    g = 0.25 + 0.5 + 0.25 / 0.99
+    assert m[at["base_s[HARD]"], at["base_s[MEDIUM]"]] == pytest.approx(g * m[at["base_s[MEDIUM]"], at["base_s[MEDIUM]"]])
 
 
 def test_posterior_draws_cover_the_proxied_compound():
@@ -176,21 +211,28 @@ def test_posterior_draws_cover_the_proxied_compound():
     plan = [["SOFT", 37], ["HARD", 13]]   # R8: HARD's practice age 10 + 3
     b = sim.simulate_batch(Snapshot.at_start(RACE, "X", "SOFT"), [plan], seed=0, n_samples=200)
     assert b.valid[0], b.errors[0]
-    # the HARD stint's spread: 13 laps of a base with sd >= 0.5 s
-    assert b.stint_seconds[0][1].std() > 13 * 0.4
+    # the HARD stint's spread: 13 laps of a base with sd >= 0.6 s
+    assert b.stint_seconds[0][1].std() > 13 * 0.45
 
 
-def test_model_report_and_agent_view_name_the_tiers():
+def test_model_report_and_agent_view_name_the_sources_and_the_qualifying_gap():
     sim = world(prac=practice(hard=False), q=quali(gap_hard_medium=0.9))
     rep = sim.model_report(Snapshot.at_start(RACE, "X", "SOFT"), calibration_summary=None)
-    assert "pace_from_qualifying:HARD" in rep.flags and "wear_from_cross_race_step:HARD" in rep.flags
+    assert "pace_from_qualifying+cross_race_step:HARD" in rep.flags and "wear_from_cross_race_step:HARD" in rep.flags
     assert rep.compounds["HARD"].modelled and rep.compounds["HARD"].n_race_rows == 0
     from src.sim import agent_tools
     out = agent_tools.model_report(Snapshot.at_start(RACE, "X", "SOFT"), sim=sim, n_samples=5)
     entry = out["compounds"]["HARD"]
-    assert (entry["pace_source"], entry["wear_source"]) == ("qualifying", "cross_race_step")
-    assert entry["price_basis"].startswith("HARD: pace from qualifying")
-    assert out["compounds"]["SOFT"]["pace_source"] == "race"
+    assert (entry["pace_source"], entry["wear_source"]) == ("qualifying+cross_race_step", "cross_race_step")
+    assert [p["source"] for p in entry["pace_sources"]] == ["qualifying", "cross_race_step"]
+    assert entry["pace_sources"][0]["weight"] == pytest.approx(2 / 3)
+    assert entry["price_basis"].startswith("HARD: pace from qualifying 67%, the cross-race step 33% (anchor MEDIUM)")
+    # the measured qualifying gap on fresh tyres, for a proxied and for a raced compound
+    assert entry["qualifying_gap_s"]["anchor"] == "MEDIUM"
+    assert entry["qualifying_gap_s"]["gap_s"] == pytest.approx(0.9, abs=1e-9)
+    assert "qualifying gap to MEDIUM +0.90 s" in entry["price_basis"]
+    soft = out["compounds"]["SOFT"]
+    assert soft["pace_source"] == "race" and soft["qualifying_gap_s"]["gap_s"] == pytest.approx(-0.8, abs=1e-9)
 
 
 # --- belief: no hindsight ------------------------------------------------------------------------
@@ -257,7 +299,12 @@ def test_the_committed_step_table_loads_with_both_pairs():
     for pair in steps.values():
         assert {"pace_frac", "wear_ratio", "life_ratio"} <= set(pair)
         assert all(e["n"] >= 2 for e in pair.values())
-    assert SimConfig().compound_proxy.steps == steps
+    px = SimConfig().compound_proxy
+    assert px.steps == steps
+    assert set(px.weights["pace"]) == {"practice", "qualifying", "cross_race_step"}
+    assert set(px.weights["wear"]) == {"practice", "cross_race_step"}
+    assert all(w > 0 for k in px.weights.values() for w in k.values())
+    assert px.sd_floor["pace"] > 0 and px.sd_floor["wear"] > 0
 
 
 def test_hindsight_targets_leave_a_proxied_compound_out():
@@ -316,3 +363,19 @@ def test_saudi_belief_continuation_is_accepted_by_the_world(saudi):
                 b = world_on.simulate_batch(snap, [plan], seed=0, n_samples=5)
                 assert b.valid[0], b.errors[0]
                 assert not any("Unknown compound" in e for e in b.errors[0])
+
+
+def test_weights_are_one_over_the_mse_and_leave_a_race_out():
+    from src.sim.compound_steps import weights_from
+    rows = pd.DataFrame([
+        {"race_id": "r1", "case": "practice", "available": True, "pace_err_s": 1.0, "wear_err_s_per_lap": 0.1},
+        {"race_id": "r2", "case": "practice", "available": True, "pace_err_s": 3.0, "wear_err_s_per_lap": 0.1},
+        {"race_id": "r1", "case": "qualifying", "available": True, "pace_err_s": 0.5, "wear_err_s_per_lap": np.nan},
+        {"race_id": "r1", "case": "cross_race_step", "available": True, "pace_err_s": 2.0, "wear_err_s_per_lap": 0.2},
+        {"race_id": "r2", "case": "cross_race_step", "available": False, "pace_err_s": 9.0, "wear_err_s_per_lap": 9.0}])
+    w, mse = weights_from(rows)
+    assert w["pace"] == pytest.approx({"practice": 1 / 5.0, "qualifying": 1 / 0.25, "cross_race_step": 1 / 4.0})
+    assert w["wear"] == pytest.approx({"practice": 1 / 0.01, "cross_race_step": 1 / 0.04})
+    assert mse["pace"]["practice"]["n"] == 2
+    w1, _ = weights_from(rows, exclude=["r2"])
+    assert w1["pace"]["practice"] == pytest.approx(1.0)

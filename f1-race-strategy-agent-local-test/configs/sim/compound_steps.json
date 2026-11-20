@@ -18,39 +18,36 @@
  "steps": {
   "MEDIUM-HARD": {
    "pace_frac": {
-    "value": -0.0034667151639933835,
-    "sd": 0.0037708194560158313,
-    "n": 6,
+    "value": -0.0027204509078597727,
+    "sd": 0.003255466155654935,
+    "n": 5,
     "races": [
      "2019_10_united_kingdom",
      "2022_02_saudi_arabia",
-     "2023_01_bahrain",
      "2023_07_spain",
      "2024_07_emilia_romagna",
      "2025_23_qatar"
     ]
    },
    "wear_ratio": {
-    "value": 1.526845889230334,
-    "sd": 0.854047043590834,
-    "n": 6,
+    "value": 1.4014129060602705,
+    "sd": 0.6486790984275315,
+    "n": 5,
     "races": [
      "2019_10_united_kingdom",
      "2022_02_saudi_arabia",
-     "2023_01_bahrain",
      "2023_07_spain",
      "2024_07_emilia_romagna",
      "2025_23_qatar"
     ]
    },
    "life_ratio": {
-    "value": 0.64,
-    "sd": 0.255691066095604,
-    "n": 5,
+    "value": 0.6718518518518519,
+    "sd": 0.24021859683112554,
+    "n": 4,
     "races": [
      "2019_10_united_kingdom",
      "2022_02_saudi_arabia",
-     "2023_01_bahrain",
      "2023_07_spain",
      "2024_07_emilia_romagna"
     ]
@@ -58,45 +55,38 @@
   },
   "SOFT-MEDIUM": {
    "pace_frac": {
-    "value": 0.0018918674992824958,
-    "sd": 0.006099558868660246,
-    "n": 6,
+    "value": 8.592299677578907e-05,
+    "sd": 0.002579915488869788,
+    "n": 3,
     "races": [
      "2019_10_united_kingdom",
      "2021_04_spain",
-     "2023_01_bahrain",
-     "2023_07_spain",
-     "2024_07_emilia_romagna",
-     "2025_23_qatar"
+     "2023_07_spain"
     ]
    },
    "wear_ratio": {
-    "value": 0.603029239332175,
-    "sd": 0.8758936673746521,
-    "n": 6,
+    "value": 0.7224364783274126,
+    "sd": 0.32705419763892124,
+    "n": 3,
     "races": [
      "2019_10_united_kingdom",
      "2021_04_spain",
-     "2023_01_bahrain",
-     "2023_07_spain",
-     "2024_07_emilia_romagna",
-     "2025_23_qatar"
+     "2023_07_spain"
     ]
    },
    "life_ratio": {
     "value": 0.7619047619047619,
-    "sd": 0.8821995179859735,
-    "n": 5,
+    "sd": 0.1436437849172394,
+    "n": 3,
     "races": [
      "2019_10_united_kingdom",
      "2021_04_spain",
-     "2023_01_bahrain",
-     "2023_07_spain",
-     "2024_07_emilia_romagna"
+     "2023_07_spain"
     ]
    }
   }
  },
+ "min_pair_race_rows": 50,
  "per_race": [
   {
    "race_id": "2021_04_spain",
@@ -112,7 +102,8 @@
    "limit_soft": 32.0,
    "limit_hard": 42.0,
    "race_rows_soft": 442,
-   "race_rows_hard": 534
+   "race_rows_hard": 534,
+   "thin": false
   },
   {
    "race_id": "2023_07_spain",
@@ -128,7 +119,8 @@
    "limit_soft": 28.0,
    "limit_hard": 32.0,
    "race_rows_soft": 301,
-   "race_rows_hard": 353
+   "race_rows_hard": 353,
+   "thin": false
   },
   {
    "race_id": "2023_07_spain",
@@ -144,7 +136,8 @@
    "limit_soft": 32.0,
    "limit_hard": 50.0,
    "race_rows_soft": 353,
-   "race_rows_hard": 473
+   "race_rows_hard": 473,
+   "thin": false
   },
   {
    "race_id": "2023_01_bahrain",
@@ -160,7 +153,8 @@
    "limit_soft": 25.0,
    "limit_hard": 10.0,
    "race_rows_soft": 351,
-   "race_rows_hard": 8
+   "race_rows_hard": 8,
+   "thin": true
   },
   {
    "race_id": "2023_01_bahrain",
@@ -176,7 +170,8 @@
    "limit_soft": 10.0,
    "limit_hard": 29.0,
    "race_rows_soft": 8,
-   "race_rows_hard": 488
+   "race_rows_hard": 488,
+   "thin": true
   },
   {
    "race_id": "2019_10_united_kingdom",
@@ -192,7 +187,8 @@
    "limit_soft": 23.0,
    "limit_hard": 39.0,
    "race_rows_soft": 111,
-   "race_rows_hard": 239
+   "race_rows_hard": 239,
+   "thin": false
   },
   {
    "race_id": "2019_10_united_kingdom",
@@ -208,7 +204,8 @@
    "limit_soft": 39.0,
    "limit_hard": 40.0,
    "race_rows_soft": 239,
-   "race_rows_hard": 311
+   "race_rows_hard": 311,
+   "thin": false
   },
   {
    "race_id": "2022_02_saudi_arabia",
@@ -224,7 +221,8 @@
    "limit_soft": 16.0,
    "limit_hard": 41.0,
    "race_rows_soft": 199,
-   "race_rows_hard": 356
+   "race_rows_hard": 356,
+   "thin": false
   },
   {
    "race_id": "2024_07_emilia_romagna",
@@ -240,7 +238,8 @@
    "limit_soft": 8.0,
    "limit_hard": 38.0,
    "race_rows_soft": 11,
-   "race_rows_hard": 418
+   "race_rows_hard": 418,
+   "thin": true
   },
   {
    "race_id": "2024_07_emilia_romagna",
@@ -256,7 +255,8 @@
    "limit_soft": 38.0,
    "limit_hard": 54.0,
    "race_rows_soft": 418,
-   "race_rows_hard": 610
+   "race_rows_hard": 610,
+   "thin": false
   },
   {
    "race_id": "2025_23_qatar",
@@ -272,7 +272,8 @@
    "limit_soft": 25.0,
    "limit_hard": 25.0,
    "race_rows_soft": 34,
-   "race_rows_hard": 561
+   "race_rows_hard": 561,
+   "thin": true
   },
   {
    "race_id": "2025_23_qatar",
@@ -288,7 +289,54 @@
    "limit_soft": 25.0,
    "limit_hard": 25.0,
    "race_rows_soft": 561,
-   "race_rows_hard": 264
+   "race_rows_hard": 264,
+   "thin": false
   }
- ]
+ ],
+ "weights": {
+  "pace": {
+   "practice": 0.3744074786197437,
+   "qualifying": 0.9167660992376583,
+   "cross_race_step": 4.055168973801994
+  },
+  "wear": {
+   "practice": 71.83517208338597,
+   "cross_race_step": 172.73998375680864
+  }
+ },
+ "sd_floor": {
+  "pace": 0.5851499400251827,
+  "wear": 0.0789226819688241
+ },
+ "blend_provenance": {
+  "weights": "1 / mean squared error of each source alone in the hidden-compound validation over every calibration race (fresh-pace error at mid-race for pace, wear error for wear; qualifying informs pace only)",
+  "mse": {
+   "pace": {
+    "practice": {
+     "mse": 2.670886820120443,
+     "n": 16
+    },
+    "qualifying": {
+     "mse": 1.0907907707664533,
+     "n": 6
+    },
+    "cross_race_step": {
+     "mse": 0.24659884864487722,
+     "n": 19
+    }
+   },
+   "wear": {
+    "practice": {
+     "mse": 0.013920757353225299,
+     "n": 16
+    },
+    "cross_race_step": {
+     "mse": 0.005789047667202785,
+     "n": 19
+    }
+   }
+  },
+  "sd_floor": "root mean squared error of the blend in the same validation, leave-one-race-out (the weights and the step table from the other races)",
+  "command": "python -m src.sim.compound_steps validate"
+ }
 }
