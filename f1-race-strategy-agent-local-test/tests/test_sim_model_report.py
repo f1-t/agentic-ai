@@ -10,6 +10,10 @@ from src.sim import SimConfig, Simulator
 
 from test_sim import FUEL, RACE, TRUE, at_lap, hand_time, start, synthetic_frame, synthetic_practice, window
 
+# synthetic two-compound races (SOFT, MEDIUM): the mechanics here are pinned without the
+# compound proxy, which would also price HARD by the cross-race step (tests/conftest.py)
+pytestmark = pytest.mark.compound_proxy_off
+
 TAU = SimConfig().shrinkage
 
 

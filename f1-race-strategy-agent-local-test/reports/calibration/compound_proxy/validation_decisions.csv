@@ -1,0 +1,48 @@
+race_id,compound,start_compound,driver,pace_tier,wear_tier,true_plan,proxied_plan,plan_changed,stops_true,stops_proxied,cost_s,invalid_in_true_world,true_world_errors,laps_on_x_true,laps_on_x_proxied,laps_on_x_diff
+2021_04_spain,SOFT,MEDIUM,RAI,2,2,"[[""MEDIUM"", 30], [""SOFT"", 35]]","[[""MEDIUM"", 21], [""SOFT"", 22], [""SOFT"", 22]]",True,1,2,6.298185205685513,False,,35,44,9
+2021_04_spain,SOFT,SOFT,ALO,2,2,"[[""SOFT"", 32], [""MEDIUM"", 33]]","[[""SOFT"", 20], [""HARD"", 21], [""SOFT"", 24]]",True,1,2,0.9528162165461254,False,,32,44,12
+2021_04_spain,MEDIUM,MEDIUM,RAI,2,2,"[[""MEDIUM"", 30], [""SOFT"", 35]]","[[""MEDIUM"", 21], [""SOFT"", 22], [""SOFT"", 22]]",True,1,2,6.298185205685513,False,,30,21,-9
+2021_04_spain,MEDIUM,SOFT,ALO,2,2,"[[""SOFT"", 32], [""MEDIUM"", 33]]","[[""SOFT"", 20], [""MEDIUM"", 22], [""SOFT"", 23]]",True,1,2,3.324965592690205,False,,33,22,-11
+2023_07_spain,SOFT,HARD,LEC,2,2,"[[""HARD"", 35], [""SOFT"", 31]]","[[""HARD"", 37], [""MEDIUM"", 29]]",True,1,1,7.4493977159636415,False,,31,0,-31
+2023_07_spain,SOFT,MEDIUM,PER,2,2,"[[""MEDIUM"", 35], [""SOFT"", 31]]","[[""MEDIUM"", 29], [""HARD"", 37]]",True,1,1,5.092358712027817,False,,31,0,-31
+2023_07_spain,SOFT,SOFT,ALB,2,2,"[[""SOFT"", 31], [""HARD"", 34]]","[[""SOFT"", 26], [""HARD"", 39]]",True,1,1,2.6031291910530854,False,,31,26,-5
+2023_07_spain,MEDIUM,HARD,LEC,2,2,"[[""HARD"", 35], [""SOFT"", 31]]","[[""HARD"", 35], [""SOFT"", 31]]",False,1,1,0.0,False,,0,0,0
+2023_07_spain,MEDIUM,MEDIUM,PER,2,2,"[[""MEDIUM"", 35], [""SOFT"", 31]]","[[""MEDIUM"", 21], [""SOFT"", 22], [""SOFT"", 23]]",True,1,2,3.994912844587816,False,,35,21,-14
+2023_07_spain,MEDIUM,SOFT,ALB,2,2,"[[""SOFT"", 31], [""HARD"", 34]]","[[""SOFT"", 31], [""HARD"", 34]]",False,1,1,0.0,False,,0,0,0
+2023_07_spain,HARD,HARD,LEC,5,5,"[[""HARD"", 35], [""SOFT"", 31]]","[[""HARD"", 10], [""SOFT"", 28], [""SOFT"", 28]]",True,1,2,9.359412337447793,False,,35,10,-25
+2023_07_spain,HARD,MEDIUM,PER,5,5,"[[""MEDIUM"", 35], [""SOFT"", 31]]","[[""MEDIUM"", 35], [""SOFT"", 31]]",False,1,1,0.0,False,,0,0,0
+2023_07_spain,HARD,SOFT,ALB,5,5,"[[""SOFT"", 31], [""HARD"", 34]]","[[""SOFT"", 31], [""MEDIUM"", 34]]",True,1,1,2.0165684188550586,False,,34,0,-34
+2023_01_bahrain,SOFT,HARD,MAG,2,2,"[[""HARD"", 19], [""SOFT"", 18], [""HARD"", 19]]","[[""HARD"", 22], [""SOFT"", 12], [""HARD"", 22]]",True,2,2,2.438007928668412,False,,18,12,-6
+2023_01_bahrain,SOFT,SOFT,ALB,2,2,"[[""SOFT"", 18], [""HARD"", 20], [""HARD"", 19]]","[[""SOFT"", 12], [""HARD"", 22], [""HARD"", 23]]",True,2,2,2.7323032911899645,False,,18,12,-6
+2023_01_bahrain,MEDIUM,HARD,MAG,2,2,"[[""HARD"", 19], [""SOFT"", 18], [""HARD"", 19]]","[[""HARD"", 19], [""MEDIUM"", 18], [""HARD"", 19]]",True,2,2,18.48939374082056,True,"Stint 2 (MEDIUM) ends at tyre age 18, past the stint limit of 13 (the oldest MEDIUM tyre run in this race, 10, + 3).",0,18,18
+2023_01_bahrain,MEDIUM,SOFT,ALB,2,2,"[[""SOFT"", 18], [""HARD"", 20], [""HARD"", 19]]","[[""SOFT"", 18], [""HARD"", 19], [""HARD"", 20]]",True,2,2,9.094947017729282e-13,False,,0,0,0
+2023_01_bahrain,HARD,HARD,MAG,2,2,"[[""HARD"", 19], [""SOFT"", 18], [""HARD"", 19]]","[[""HARD"", 18], [""HARD"", 19], [""SOFT"", 19]]",True,2,2,0.1485469566005122,False,,38,37,-1
+2023_01_bahrain,HARD,SOFT,ALB,2,2,"[[""SOFT"", 18], [""HARD"", 20], [""HARD"", 19]]","[[""SOFT"", 19], [""HARD"", 19], [""HARD"", 19]]",True,2,2,0.050448502426661435,False,,39,38,-1
+2019_10_united_kingdom,SOFT,MEDIUM,BOT,2,2,"[[""MEDIUM"", 26], [""SOFT"", 26]]","[[""MEDIUM"", 29], [""SOFT"", 23]]",True,1,1,0.6870867707657453,False,,26,23,-3
+2019_10_united_kingdom,SOFT,SOFT,ALB,2,2,"[[""SOFT"", 21], [""MEDIUM"", 31]]","[[""SOFT"", 18], [""MEDIUM"", 34]]",True,1,1,0.6870867707666548,False,,21,18,-3
+2019_10_united_kingdom,MEDIUM,MEDIUM,BOT,2,2,"[[""MEDIUM"", 26], [""SOFT"", 26]]","[[""MEDIUM"", 23], [""HARD"", 29]]",True,1,1,8.469882247727583,False,,26,23,-3
+2019_10_united_kingdom,MEDIUM,SOFT,ALB,2,2,"[[""SOFT"", 21], [""MEDIUM"", 31]]","[[""SOFT"", 21], [""HARD"", 31]]",True,1,1,5.093193700644406,False,,31,0,-31
+2019_10_united_kingdom,HARD,MEDIUM,BOT,2,2,"[[""MEDIUM"", 26], [""SOFT"", 26]]","[[""MEDIUM"", 26], [""SOFT"", 26]]",False,1,1,9.094947017729282e-13,False,,0,0,0
+2019_10_united_kingdom,HARD,SOFT,ALB,2,2,"[[""SOFT"", 21], [""MEDIUM"", 31]]","[[""SOFT"", 21], [""MEDIUM"", 31]]",False,1,1,0.0,False,,0,0,0
+2022_02_saudi_arabia,MEDIUM,HARD,HAM,2,2,"[[""HARD"", 28], [""SOFT"", 11], [""SOFT"", 11]]","[[""HARD"", 26], [""SOFT"", 12], [""SOFT"", 12]]",True,2,2,0.43592396166513936,False,,0,0,0
+2022_02_saudi_arabia,MEDIUM,MEDIUM,ALB,2,2,"[[""MEDIUM"", 19], [""SOFT"", 15], [""SOFT"", 14]]","[[""MEDIUM"", 19], [""SOFT"", 14], [""SOFT"", 15]]",True,2,2,1.8189894035458565e-12,False,,19,19,0
+2022_02_saudi_arabia,HARD,HARD,HAM,2,2,"[[""HARD"", 28], [""SOFT"", 11], [""SOFT"", 11]]","[[""HARD"", 12], [""MEDIUM"", 19], [""MEDIUM"", 19]]",True,2,2,23.560807412770373,False,,28,12,-16
+2022_02_saudi_arabia,HARD,MEDIUM,ALB,2,2,"[[""MEDIUM"", 19], [""SOFT"", 15], [""SOFT"", 14]]","[[""MEDIUM"", 19], [""SOFT"", 14], [""SOFT"", 15]]",True,2,2,1.8189894035458565e-12,False,,0,0,0
+2024_07_emilia_romagna,SOFT,HARD,PER,3,5,"[[""HARD"", 35], [""MEDIUM"", 28]]","[[""HARD"", 23], [""SOFT"", 20], [""SOFT"", 20]]",True,1,2,11.177834620455542,True,"Stint 2 (SOFT) ends at tyre age 20, past the stint limit of 11 (the oldest SOFT tyre run in this race, 8, + 3).; Stint 3 (SOFT) ends at tyre age 20, past the stint limit of 11 (the oldest SOFT tyre run in this race, 8, + 3).",0,40,40
+2024_07_emilia_romagna,SOFT,MEDIUM,BOT,3,5,"[[""MEDIUM"", 28], [""HARD"", 34]]","[[""MEDIUM"", 22], [""SOFT"", 20], [""SOFT"", 20]]",True,1,2,6.7353048196873715,True,"Stint 2 (SOFT) ends at tyre age 20, past the stint limit of 11 (the oldest SOFT tyre run in this race, 8, + 3).; Stint 3 (SOFT) ends at tyre age 20, past the stint limit of 11 (the oldest SOFT tyre run in this race, 8, + 3).",0,40,40
+2024_07_emilia_romagna,SOFT,SOFT,ALO,3,5,"[[""SOFT"", 11], [""MEDIUM"", 25], [""MEDIUM"", 26]]","[[""SOFT"", 20], [""SOFT"", 20], [""MEDIUM"", 22]]",True,2,2,-6.366678555690669,True,"Stint 1 (SOFT) ends at tyre age 20, past the stint limit of 11 (the oldest SOFT tyre run in this race, 8, + 3).; Stint 2 (SOFT) ends at tyre age 20, past the stint limit of 11 (the oldest SOFT tyre run in this race, 8, + 3).",11,40,29
+2024_07_emilia_romagna,MEDIUM,HARD,PER,2,2,"[[""HARD"", 35], [""MEDIUM"", 28]]","[[""HARD"", 34], [""MEDIUM"", 29]]",True,1,1,0.0246968074261531,False,,28,29,1
+2024_07_emilia_romagna,MEDIUM,MEDIUM,BOT,2,2,"[[""MEDIUM"", 28], [""HARD"", 34]]","[[""MEDIUM"", 29], [""HARD"", 33]]",True,1,1,0.07123822589073825,False,,28,29,1
+2024_07_emilia_romagna,MEDIUM,SOFT,ALO,2,2,"[[""SOFT"", 11], [""MEDIUM"", 25], [""MEDIUM"", 26]]","[[""SOFT"", 11], [""HARD"", 25], [""HARD"", 26]]",True,2,2,8.876249887751328,False,,51,0,-51
+2024_07_emilia_romagna,HARD,HARD,PER,2,2,"[[""HARD"", 35], [""MEDIUM"", 28]]","[[""HARD"", 29], [""MEDIUM"", 34]]",True,1,1,1.9997931578254793,False,,35,29,-6
+2024_07_emilia_romagna,HARD,MEDIUM,BOT,2,2,"[[""MEDIUM"", 28], [""HARD"", 34]]","[[""MEDIUM"", 33], [""HARD"", 29]]",True,1,1,1.5905993382966699,False,,34,29,-5
+2024_07_emilia_romagna,HARD,SOFT,ALO,2,2,"[[""SOFT"", 11], [""MEDIUM"", 25], [""MEDIUM"", 26]]","[[""SOFT"", 11], [""MEDIUM"", 26], [""MEDIUM"", 25]]",True,2,2,0.0,False,,0,0,0
+2025_23_qatar,SOFT,HARD,ALB,5,5,"[[""HARD"", 21], [""HARD"", 22], [""MEDIUM"", 14]]","[[""HARD"", 20], [""SOFT"", 17], [""HARD"", 20]]",True,2,2,7.672853369534096,False,,0,17,17
+2025_23_qatar,SOFT,MEDIUM,ALO,5,5,"[[""MEDIUM"", 14], [""HARD"", 21], [""HARD"", 22]]","[[""MEDIUM"", 13], [""HARD"", 22], [""HARD"", 22]]",True,2,2,0.0018800823672791012,False,,0,0,0
+2025_23_qatar,SOFT,SOFT,HAM,5,5,"[[""SOFT"", 6], [""HARD"", 26], [""HARD"", 25]]","[[""SOFT"", 17], [""HARD"", 20], [""HARD"", 20]]",True,2,2,5.09780711728763,False,,6,17,11
+2025_23_qatar,MEDIUM,HARD,ALB,2,2,"[[""HARD"", 21], [""HARD"", 22], [""MEDIUM"", 14]]","[[""HARD"", 19], [""MEDIUM"", 18], [""HARD"", 20]]",True,2,2,0.43855805316070473,False,,14,18,4
+2025_23_qatar,MEDIUM,MEDIUM,ALO,2,2,"[[""MEDIUM"", 14], [""HARD"", 21], [""HARD"", 22]]","[[""MEDIUM"", 18], [""HARD"", 19], [""HARD"", 20]]",True,2,2,0.43855805316070473,False,,14,18,4
+2025_23_qatar,MEDIUM,SOFT,HAM,2,2,"[[""SOFT"", 6], [""HARD"", 26], [""HARD"", 25]]","[[""SOFT"", 11], [""HARD"", 23], [""HARD"", 23]]",True,2,2,0.9432594374975452,False,,0,0,0
+2025_23_qatar,HARD,HARD,ALB,2,2,"[[""HARD"", 21], [""HARD"", 22], [""MEDIUM"", 14]]","[[""HARD"", 21], [""MEDIUM"", 16], [""HARD"", 20]]",True,2,2,0.12430370085712639,False,,43,41,-2
+2025_23_qatar,HARD,MEDIUM,ALO,2,2,"[[""MEDIUM"", 14], [""HARD"", 21], [""HARD"", 22]]","[[""MEDIUM"", 16], [""HARD"", 20], [""HARD"", 21]]",True,2,2,0.12430370085894538,False,,43,41,-2
+2025_23_qatar,HARD,SOFT,HAM,2,2,"[[""SOFT"", 6], [""HARD"", 26], [""HARD"", 25]]","[[""SOFT"", 7], [""HARD"", 25], [""HARD"", 25]]",True,2,2,0.00022576066658075433,False,,51,50,-1

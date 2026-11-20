@@ -15,6 +15,8 @@ class RuleContext:
     modelled: set
     config: object = None   # SimConfig when available
     stint_limits: dict | None = None   # R8: compound -> oldest tyre age run in this race (stint_limits)
+    # R8 for a compound no car raced (proxy.unraced_limits): compound -> where its limit came from
+    stint_limit_sources: dict | None = None
 
 
 @RULES.register("first_stint_matches")
@@ -135,14 +137,27 @@ def current_set_past_limit(snapshot, limits, margin) -> bool:
     return snapshot.tyre_age + soonest > limit or (no_stop and snapshot.tyre_age + snapshot.remaining_laps > limit)
 
 
-def stint_limit_violations(snapshot, plan, limits, margin) -> list[str]:
+def _limit_origin(compound, seen, sources) -> str:
+    """Where a limit came from, for the error message: this race, or for an unraced compound
+    (proxy.unraced_limits) practice or the cross-race life ratio of a raced compound."""
+    src = (sources or {}).get(compound)
+    if src is None:
+        return f"the oldest {compound} tyre run in this race, {seen:g}"
+    if src == "practice":
+        return f"no {compound} raced: the oldest {compound} tyre run in practice, {seen:g}"
+    anchor = src.partition(":")[2]
+    return f"no {compound} raced or run in practice: {anchor}'s limit times the cross-race tyre-life ratio, {seen:g}"
+
+
+def stint_limit_violations(snapshot, plan, limits, margin, sources=None) -> list[str]:
     """R8 stint limit (docs/rules.md): every stint ends at most at the oldest tyre age run on
     its compound in this race (`limits`, stint_limits) plus `margin` laps. A compound no car
-    ran in the race has no limit. Fallback: when the current set is already past its limit at
-    the snapshot (current_set_past_limit), the first stint may run to the soonest legal stop,
-    or to the flag when no legal stop fits in the laps left. None `margin` turns R8 off.
-    `plan` is a contracts.Plan or anything whose stints have compound and laps (start_age 0
-    when absent, a new set)."""
+    ran in the race has no limit, unless `limits` carries one from proxy.unraced_limits
+    (`sources` says where it came from, for the message). Fallback: when the current set is
+    already past its limit at the snapshot (current_set_past_limit), the first stint may run
+    to the soonest legal stop, or to the flag when no legal stop fits in the laps left. None
+    `margin` turns R8 off. `plan` is a contracts.Plan or anything whose stints have compound
+    and laps (start_age 0 when absent, a new set)."""
     if margin is None or not limits:
         return []
     out = []
@@ -160,14 +175,14 @@ def stint_limit_violations(snapshot, plan, limits, margin) -> list[str]:
             continue
         hint = f"; this set is already past it, so pit after {soonest} lap(s)" if j == 0 and past else ""
         out.append(f"Stint {j + 1} ({s.compound}) ends at tyre age {end:g}, past the stint limit of "
-                   f"{seen + margin:g} (the oldest {s.compound} tyre run in this race, {seen:g}, + {margin}){hint}.")
+                   f"{seen + margin:g} ({_limit_origin(s.compound, seen, sources)}, + {margin}){hint}.")
     return out
 
 
 @RULES.register("stint_limit")
 def stint_limit(ctx):
     return stint_limit_violations(ctx.snapshot, ctx.plan, ctx.stint_limits,
-                                  getattr(ctx.config, "stint_limit_margin_laps", None))
+                                  getattr(ctx.config, "stint_limit_margin_laps", None), ctx.stint_limit_sources)
 
 
 def assign_sets(snapshot, plan, sources=None):

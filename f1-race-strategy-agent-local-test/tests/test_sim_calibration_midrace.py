@@ -241,6 +241,7 @@ def test_drivers_without_a_lap_k_row_are_skipped(frame):
     assert sorted(zip(rows["k"], rows["driver"])) == [(20, "AAA"), (20, "BBB"), (25, "AAA")]
 
 
+@pytest.mark.compound_proxy_off   # with the proxy on, the step from SOFT prices MEDIUM
 def test_unmodellable_plan_is_nan_and_counted(frame):
     """A window that knows only SOFT cannot replay a MEDIUM stint."""
     soft_only = synthetic_practice(coefs={"SOFT": (80.0, 0.10)})

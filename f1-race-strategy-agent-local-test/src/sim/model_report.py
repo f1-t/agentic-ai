@@ -77,7 +77,10 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     """The ModelReport of `model` (a fitted degradation model) for this snapshot.
 
     `hazard` is the fitted hazard model, when the simulator has one; modelled compounds
-    outside its support are flagged no_hazard_support:<compound>.
+    outside its support are flagged no_hazard_support:<compound>. A compound priced by proxy
+    (fit_report["proxy"], proxy.py) is flagged pace_from_<source>:<compound> and
+    wear_from_<source>:<compound> for each parameter not from race laps, source practice,
+    qualifying or cross_race_step.
     """
     rep = getattr(model, "fit_report", None)
     if rep is None:
@@ -119,6 +122,11 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
               if b and c in compounds and compounds[c].modelled]
     if "n_pack_rows" in rep:   # SimConfig.fit_free_air_only: clean rows the fit left out
         flags.append(f"free_air_filter:{rep['n_pack_rows']}")
+    # SimConfig.compound_proxy (proxy.py): a compound whose pace or wear is not from race laps,
+    # e.g. pace_from_qualifying:SOFT and wear_from_cross_race_step:SOFT
+    for c, e in sorted((rep.get("proxy") or {}).items()):
+        if c in compounds and compounds[c].modelled:
+            flags += [f"{kind}_from_{e[f'{kind}_source']}:{c}" for kind in ("pace", "wear") if e[f"{kind}_tier"] != 1]
     return ModelReport(
         fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel,
         hinge=None if hinge is None else {c: dict(e) for c, e in hinge.items()},

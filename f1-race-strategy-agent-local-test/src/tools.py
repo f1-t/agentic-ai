@@ -136,7 +136,7 @@ TOOL_SPECS = [
     },
     {
         "name": "estimate_tyre_degradation",
-        "description": "Return the simulator's low/median/high degradation per lap for a compound, fitted only on laps up to now, with its flags. It is evidence, not truth.",
+        "description": "Return the simulator's low/median/high degradation per lap for a compound, fitted only on what is known up to now, with its flags. A compound nobody has raced is priced by proxy: pace_source and wear_source say whether a number comes from race laps, practice long runs, qualifying or the typical step from a neighbouring compound, and a proxied number has no race laps behind it. It is evidence, not truth.",
         "input_schema": {"type": "object", "properties": {"compound": {"type": "string"}}, "required": ["compound"], "additionalProperties": False},
         "fn": estimate_tyre_degradation,
     },
@@ -148,7 +148,7 @@ TOOL_SPECS = [
     },
     {
         "name": "get_model_report",
-        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, flags such as extrapolation or wear_at_bound, and the model's calibration error.",
+        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the cross-race step for a compound nobody raced), flags such as extrapolation or wear_at_bound, and the model's calibration error.",
         "input_schema": {
             "type": "object",
             "properties": {"ages": {"type": "object", "description": "Optional {compound: tyre age} to check for extrapolation.",

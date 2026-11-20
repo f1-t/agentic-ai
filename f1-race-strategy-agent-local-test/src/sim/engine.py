@@ -11,6 +11,7 @@ from ..contracts import (Compound, CompareResult, ModelReport, Plan, PlanStint, 
                          StintRecord, TimeSummary)
 from . import calibrators as _cal
 from . import model_report as _report
+from . import proxy as _proxy
 from .config import SimConfig, class_names, compound_class
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
@@ -179,15 +180,25 @@ class Simulator:
     adds the snapshot driver's offset to every green lap, lap 1 included, never to an SC or
     VSC lap (the field's lap, or a delta every car drives to). Drivers it does not list,
     and None, get 0. `with_pace` gives a copy with another pace.
+
+    `qualifying` (data.qualifying_frame of this weekend's qualifying) feeds the tier-3 pace of
+    an unraced compound (proxy.py); with config.compound_proxy.enabled every fit then prices
+    HARD, MEDIUM and SOFT, and R8 gains a limit for a compound no car raced
+    (stint_limit_sources says where each such limit came from).
     """
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
                  practice: pd.DataFrame | None = None, pace=None, *, weather: pd.DataFrame | None = None,
-                 race_features: dict | None = None, calibrator=None):
+                 race_features: dict | None = None, calibrator=None, qualifying: pd.DataFrame | None = None):
         self.config = config or SimConfig()
         self.laps, self.practice, self.pace = laps, practice, pace
+        self.qualifying, self._quali_gaps = qualifying, None
         # R8, from the full race frame; shared by fitted_for copies
         self.stint_limits = stint_limits(laps, self.config.stint_limit_rank)
+        self.stint_limit_sources = {}
+        if self.config.compound_proxy.enabled:
+            self.stint_limits, self.stint_limit_sources = _proxy.unraced_limits(
+                self.stint_limits, practice, self.config.compound_proxy.steps)
         self.weather, self.race_features = weather, race_features
         spec = self.config.calibrator
         self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
@@ -259,9 +270,28 @@ class Simulator:
         if self.config.fit_free_air_only and getattr(self.degradation, "fit_report", None) is not None:
             self.degradation = copy.copy(self.degradation)   # `model` may be a shared prior
             self.degradation.fit_report = {**self.degradation.fit_report, "n_pack_rows": n_pack}
+        if self.config.compound_proxy.enabled:
+            self.degradation = self._proxied(self.degradation, extra.get("prior"))
         hz = self.config.hazard
         self.hazard = HAZARD.get(hz.name).fit(ref, min_samples=self.config.min_samples, **hz.params)
         self.ref_lap_s = float(ref.loc[ref["clean"].astype(bool), "lap_time_s"].median())
+
+    def quali_gaps(self):
+        """proxy.qualifying_gaps of `qualifying`, computed once; None without qualifying."""
+        if self._quali_gaps is None and self.qualifying is not None:
+            self._quali_gaps = _proxy.qualifying_gaps(self.qualifying) or {}
+        return self._quali_gaps or None
+
+    def _proxied(self, model, prior=None):
+        """proxy.apply on a fitted model: the tier-2 steps from `prior` (the to_snapshot fit's
+        prior) when given, else from the practice fit (physics_prior, the snapshot driver left
+        out under exclude_snapshot_driver)."""
+        cfg = self.config
+        if prior is None and self._has_practice:
+            prior = self.physics_prior(self.window[2] if self.window is not None else None)
+        return _proxy.apply(model, cfg.compound_proxy, min_samples=cfg.min_samples, practice=prior,
+                            quali=self.quali_gaps(), knot=lambda c: cfg.hinge_knots.get(c, cfg.hinge_knot_default),
+                            wear_lower_bound=cfg.degradation.params.get("wear_lower_bound"))
 
     def fitted_for(self, snapshot: Snapshot) -> "Simulator":
         """The instance fitted on this snapshot's fit window. Built once per key, then cached.
@@ -362,7 +392,8 @@ class Simulator:
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
         fit = self.fitted_for(snapshot)
-        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config, self.stint_limits))
+        return check(names, RuleContext(snapshot, plan, fit.modelled, self.config, self.stint_limits,
+                                        self.stint_limit_sources))
 
     # --- public API ----------------------------------------------------------
     def model_report(self, snapshot: Snapshot, ages=None,

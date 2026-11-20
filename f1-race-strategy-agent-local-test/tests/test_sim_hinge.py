@@ -15,6 +15,10 @@ from src.sim.optimizer_bridge import optimize_batch
 
 from test_sim import at_lap, start, window
 
+# synthetic two-compound races (SOFT, MEDIUM): the mechanics here are pinned without the
+# compound proxy, which would also price HARD by the cross-race step (tests/conftest.py)
+pytestmark = pytest.mark.compound_proxy_off
+
 KNOT, HINGE, FUEL = 25, 0.15, -0.04
 TRUE = {"SOFT": (80.0, 0.03), "MEDIUM": (80.4, 0.03)}
 HINGED = {"degradation": {"name": "linear_fuel_hinge"}}

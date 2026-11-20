@@ -213,7 +213,7 @@ def test_to_plan_stay_to_the_flag_and_invalid_submissions(world):
     for bad, match in [({"decision": "BOX"}, "PIT or STAY_OUT"), ({"decision": "PIT"}, "compound"),
                        ({"decision": "STAY_OUT", "reassess_after_laps": 0}, "at least 1"),
                        ({"decision": "STAY_OUT"}, "at least 1"),
-                       ({"decision": "PIT", "compound": "HARD"}, "does not model")]:
+                       ({"decision": "PIT", "compound": "SUPERSOFT"}, "does not model")]:   # the proxy prices only H/M/S
         with pytest.raises(decisions.InvalidDecision, match=match):
             decisions.to_plan(mid_race(), bad, world, 2)
 

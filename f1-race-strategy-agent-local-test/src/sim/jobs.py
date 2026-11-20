@@ -66,6 +66,7 @@ class RaceData:
     practice: pd.DataFrame | None
     results: pd.DataFrame
     config: SimConfig = field(default_factory=SimConfig)
+    qualifying: pd.DataFrame | None = None   # data.qualifying_frame, the proxy's tier 3
 
 
 def split_race_id(race_id: str) -> tuple[int, int | str]:
@@ -85,7 +86,8 @@ def race_min_stint(profile: ComputeProfile) -> int:
 
 
 def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
-    """Frame, race constants (observed pit loss, as `calibrate midrace` does), practice and results.
+    """Frame, race constants (observed pit loss, as `calibrate midrace` does), practice, results
+    and qualifying (None when not cached).
 
     `race_id` is canonical or an alias; the session is looked up by season and round."""
     race_id = canonical_race_id(race_id)
@@ -96,7 +98,7 @@ def load_race(race_id: str, profile: ComputeProfile) -> RaceData:
     pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
     race = race.model_copy(update={"pit_loss_s": pit_loss, "race_id": race_id})
     return RaceData(race_id, frame, race, calibrate._practice(season, rnd, cfg.long_run),
-                    session_results(session), cfg)
+                    session_results(session), cfg, calibrate._qualifying(season, rnd))
 
 
 def race_loader(args=None) -> Callable:
@@ -173,7 +175,8 @@ def g_rows(data: RaceData, cfg: SimConfig, profile: ComputeProfile, windows=None
     laps_k = laps_k_for(data.frame, data.race.total_laps, profile) if laps_k is None else laps_k
 
     def factory(window):
-        return Simulator(data.frame, cfg.model_copy(update={"fit_window": window}), data.practice)
+        return Simulator(data.frame, cfg.model_copy(update={"fit_window": window}), data.practice,
+                         qualifying=getattr(data, "qualifying", None))
 
     rows = calibration.midrace(factory, data.frame, data.race, laps_k=laps_k,
                                windows=windows or profile.g.windows, results=data.results,

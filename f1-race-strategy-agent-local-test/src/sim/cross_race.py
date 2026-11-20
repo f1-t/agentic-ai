@@ -84,7 +84,7 @@ import numpy as np
 import pandas as pd
 
 from ..contracts import RaceParams
-from . import calibrate, calibration, calibrators, jobs, pace
+from . import calibrate, calibration, calibrators, jobs, pace, proxy
 from .compute import load_profile
 from .config import EventModel, SimConfig
 from .engine import Simulator
@@ -451,13 +451,15 @@ WEAR_CHECK_MIN_LAPS = 8   # stints with at least this many clean laps enter the 
 
 
 def wear_check(frame, model, min_laps=WEAR_CHECK_MIN_LAPS) -> pd.DataFrame:
-    """SPEC 0023 A diagnostic, one row per compound the model fits: its fitted wear (the pooled
+    """SPEC 0023 A diagnostic, one row per compound the model fits on race laps (a compound priced
+    by the compound proxy, sim/proxy.py, is left out): its fitted wear (the pooled
     fit) against the median within-stint wear. Within-stint: per (driver, stint) with at least
     `min_laps` clean laps (green, no in or out lap), the least-squares slope of lap time on tyre
     age, less the model's fuel slope (within a stint age and lap number move together, so the
     raw slope is wear plus fuel). A gap between the two columns shows wear the pooled fit
     under- or over-identifies."""
     fuel = float(getattr(model, "fuel_slope", 0.0) or 0.0)
+    borrowed = proxy.proxied(getattr(model, "fit_report", None))   # no race laps to check against
     clean = frame[frame["clean"].astype(bool)]
     slopes = {}
     for (_, _), s in clean.groupby(["driver", "stint"]):
@@ -468,7 +470,7 @@ def wear_check(frame, model, min_laps=WEAR_CHECK_MIN_LAPS) -> pd.DataFrame:
     rows = [{"compound": c, "fitted_wear_s_per_lap": float(wear),
              "within_stint_wear_s_per_lap": float(np.median(slopes[c])) if c in slopes else np.nan,
              "n_stints": len(slopes.get(c, [])), "fuel_s_per_lap": fuel}
-            for c, (_, wear) in sorted(model.coefs.items())]
+            for c, (_, wear) in sorted(model.coefs.items()) if c not in borrowed]
     return pd.DataFrame(rows, columns=["compound", "fitted_wear_s_per_lap", "within_stint_wear_s_per_lap",
                                        "n_stints", "fuel_s_per_lap"])
 

@@ -73,7 +73,18 @@ its smallest per-car maximum; a rank above 1 needs the frame's driver column. Th
 for a later one. The limits are computed once per race from the full race lap frame
 (`rules.stint_limits`, `Simulator.stint_limits`, every lap counted, clean or not), which the
 belief and the world simulators are both built on, so both apply the same limits whatever
-their fit window. A compound no car ran in the race has no limit. There is no exemption for
+their fit window. A compound no car ran in the race has no limit when the compound proxy is
+off (`SimConfig.compound_proxy.enabled: false`). With it on (the default; `src/sim/proxy.py`,
+docs/eval.md "Proxied compounds"), each of HARD, MEDIUM and SOFT that no car ran gets one,
+so the optimizer cannot plan an absurdly long stint on a compound priced by a straight line
+it has no race laps for: the oldest tyre age run on it in practice this weekend (every
+practice lap, the Sprint included on a sprint weekend), plus the margin; if it was never
+run in practice, the limit of the nearest raced compound times the tier-5 tyre-life ratio
+(`configs/sim/compound_steps.json`, rounded down), plus the margin. `proxy.unraced_limits`
+computes them once, beside `rules.stint_limits`, and `Simulator.stint_limit_sources` says
+where each came from; the error message names it ("no SOFT raced: the oldest SOFT tyre run
+in practice, 18, + 3"). On the calibration races this applies to 2021 Spain HARD (18 in FP1,
+cap 21) and 2022 Saudi Arabia SOFT (18 in FP1, cap 21). There is no exemption for
 a degradation model with a hinge: past the last observed age a hinge is still a straight
 line. If the current set cannot keep inside its limit (it cannot reach its soonest legal
 stop, R1 and R2, inside the limit, or no legal stop fits in the laps left and the flag is

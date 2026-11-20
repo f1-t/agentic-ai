@@ -14,6 +14,10 @@ from src.sim.data import GAP_COLUMNS, gap_columns, lap_frame, practice_frame
 from test_sim import FUEL, RACE, TRUE, at_lap, synthetic_frame, synthetic_practice, window
 from test_sim_filter import practice_laps
 
+# synthetic two-compound races (SOFT, MEDIUM): the mechanics here are pinned without the
+# compound proxy, which would also price HARD by the cross-race step (tests/conftest.py)
+pytestmark = pytest.mark.compound_proxy_off
+
 PACK_SLOW_S = 0.5
 
 

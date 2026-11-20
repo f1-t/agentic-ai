@@ -16,6 +16,10 @@ from src.sim.race_ids import canonical_race_id, make_race_id, parse_race_id, rac
 from test_sim import FUEL, RACE, TRUE, synthetic_frame, synthetic_practice
 from test_sim_position import race_frame
 
+# synthetic two-compound races (SOFT, MEDIUM): the mechanics here are pinned without the
+# compound proxy, which would also price HARD by the cross-race step (tests/conftest.py)
+pytestmark = pytest.mark.compound_proxy_off
+
 OFF = {"SOFT": (79.0, 0.06), "MEDIUM": (81.5, 0.05)}   # practice that disagrees with the race
 A_PLAN = [("SOFT", 20), ("MEDIUM", 30)]
 B_PLAN = [("SOFT", 10), ("MEDIUM", 25), ("SOFT", 15)]

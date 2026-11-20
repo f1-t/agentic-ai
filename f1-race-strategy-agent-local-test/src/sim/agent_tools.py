@@ -44,6 +44,7 @@ import numpy as np
 from ..contracts import Plan, Snapshot
 from . import calibrators, jobs
 from . import model_report as _report
+from . import proxy as _proxy
 from .compute import load_profile
 from .config import SimConfig
 from .engine import DEGRADATION_RETRY_STREAM, DEGRADATION_STREAM, Simulator, batch_normals
@@ -96,7 +97,7 @@ def belief_simulator(snapshot: Snapshot, profile=None, config: SimConfig | None 
     key = (race_id, profile.hash, config.model_dump_json())
     if key not in _SIMS:
         data = _race_data(race_id, profile)
-        _SIMS[key] = Simulator(data.frame, config, data.practice)
+        _SIMS[key] = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
     return _SIMS[key]
 
 
@@ -311,6 +312,13 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
       wear_at_bound             the fit put the wear on its lower bound
       fuel_wear_corr            corr(fuel slope, wear slope), None without a fuel term
       flags                     the report's flags for this compound, plus no_sd:<name>
+      pace_source, wear_source  with the compound proxy on (proxy.py): where the base and the
+                                wear come from: race (laps), practice (long runs this weekend),
+                                qualifying (pace only) or cross_race_step (the typical step
+                                from a neighbouring compound); price_basis says it in words, e.g.
+                                "SOFT: pace from qualifying (anchor MEDIUM), wear from the
+                                cross-race step (anchor MEDIUM)". A proxied compound's price
+                                has no race laps behind it and wider intervals.
 
     and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis and
     fuel_point_estimate) for models with a
@@ -343,6 +351,10 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
                      interval_basis={name: basis for name, (_, basis) in pairs.items()},
                      wear_at_bound=bool(bounded.get(c, False)),
                      fuel_wear_corr=(rep.fuel_wear_corr or {}).get(c), flags=flags)
+        tiers = (fit_report.get("proxy") or {}).get(c)
+        if tiers is not None:   # SimConfig.compound_proxy: where this compound's pace and wear come from
+            entry.update(pace_source=tiers["pace_source"], wear_source=tiers["wear_source"],
+                         price_basis=_proxy.describe(c, tiers))
     if rep.fuel_s_per_lap is not None:
         iv, basis = _interval(rep.fuel_s_per_lap.value, rep.fuel_s_per_lap.sd)
         out["fuel_s_per_lap_interval"], out["fuel_interval_basis"] = iv, basis

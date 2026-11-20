@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from src.baselines.__main__ import main as baselines_main
 from src.baselines.runner import format_table, load_snapshot, run_pipeline
 from src.baselines.runner import main as runner_main
@@ -28,6 +30,9 @@ def test_load_snapshot_midrace():
     assert view.lap == 27
 
 
+# the R8 wrapper's moves on 2021 Spain, pinned without the compound proxy: with it on, fixed_one_stop
+# takes the proxied HARD, whose practice cap (18 + 3) no one-stop from these snapshots fits
+@pytest.mark.compound_proxy_off
 def test_run_pipeline_offline_lap0():
     res = run_pipeline(
         race_id="2021_04_spain",
@@ -54,6 +59,7 @@ def test_run_pipeline_offline_lap0():
     assert rows["actual_strategy"]["regret_s"] >= 0.0
 
 
+@pytest.mark.compound_proxy_off
 def test_run_pipeline_offline_midrace():
     res = run_pipeline(
         race_id="2021_04_spain",

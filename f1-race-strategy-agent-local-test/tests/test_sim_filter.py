@@ -255,6 +255,7 @@ def test_practice_in_stint_fuel_is_taken_at_the_prior():
     assert net.coefs["SOFT"][1] == pytest.approx(0.1 + prior, abs=0.01)  # no fuel term: wear net of fuel
 
 
+@pytest.mark.compound_proxy_off   # with the proxy on, the cross-race step prices HARD
 def test_practice_compound_without_a_long_run_is_unmodelled():
     laps = practice_laps([("SOFT", 10), ("MEDIUM", 10)])
     laps.loc[(laps["Compound"] == "MEDIUM") & (laps["Driver"] == "A"), "Compound"] = "HARD"

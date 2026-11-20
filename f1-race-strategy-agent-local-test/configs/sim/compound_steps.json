@@ -1,0 +1,294 @@
+{
+ "description": "Tier-5 neighbour steps of the compound proxy (src/sim/proxy.py): per pair of neighbouring compounds, the median over calibration races of pace_frac (base_softer / base_harder - 1), wear_ratio (wear_softer / wear_harder, races with wear_harder > 0) and life_ratio (R8 limit_softer / limit_harder); sd is the sample sd across the races.",
+ "fit": "full-window world fit per race, the race's default SimConfig with compound_proxy off; a compound counts when it has min_samples clean race rows",
+ "command": "python -m src.sim.compound_steps estimate",
+ "races": [
+  "2021_04_spain",
+  "2023_07_spain",
+  "2023_01_bahrain",
+  "2019_10_united_kingdom",
+  "2022_02_saudi_arabia",
+  "2024_07_emilia_romagna",
+  "2025_23_qatar"
+ ],
+ "life_ratio_excluded": {
+  "2025_23_qatar": "mandated 25-lap maximum stint, so its tyre ages say nothing about tyre life"
+ },
+ "held_out_never_loaded": "data/eval_set.json",
+ "steps": {
+  "MEDIUM-HARD": {
+   "pace_frac": {
+    "value": -0.0034667151639933835,
+    "sd": 0.0037708194560158313,
+    "n": 6,
+    "races": [
+     "2019_10_united_kingdom",
+     "2022_02_saudi_arabia",
+     "2023_01_bahrain",
+     "2023_07_spain",
+     "2024_07_emilia_romagna",
+     "2025_23_qatar"
+    ]
+   },
+   "wear_ratio": {
+    "value": 1.526845889230334,
+    "sd": 0.854047043590834,
+    "n": 6,
+    "races": [
+     "2019_10_united_kingdom",
+     "2022_02_saudi_arabia",
+     "2023_01_bahrain",
+     "2023_07_spain",
+     "2024_07_emilia_romagna",
+     "2025_23_qatar"
+    ]
+   },
+   "life_ratio": {
+    "value": 0.64,
+    "sd": 0.255691066095604,
+    "n": 5,
+    "races": [
+     "2019_10_united_kingdom",
+     "2022_02_saudi_arabia",
+     "2023_01_bahrain",
+     "2023_07_spain",
+     "2024_07_emilia_romagna"
+    ]
+   }
+  },
+  "SOFT-MEDIUM": {
+   "pace_frac": {
+    "value": 0.0018918674992824958,
+    "sd": 0.006099558868660246,
+    "n": 6,
+    "races": [
+     "2019_10_united_kingdom",
+     "2021_04_spain",
+     "2023_01_bahrain",
+     "2023_07_spain",
+     "2024_07_emilia_romagna",
+     "2025_23_qatar"
+    ]
+   },
+   "wear_ratio": {
+    "value": 0.603029239332175,
+    "sd": 0.8758936673746521,
+    "n": 6,
+    "races": [
+     "2019_10_united_kingdom",
+     "2021_04_spain",
+     "2023_01_bahrain",
+     "2023_07_spain",
+     "2024_07_emilia_romagna",
+     "2025_23_qatar"
+    ]
+   },
+   "life_ratio": {
+    "value": 0.7619047619047619,
+    "sd": 0.8821995179859735,
+    "n": 5,
+    "races": [
+     "2019_10_united_kingdom",
+     "2021_04_spain",
+     "2023_01_bahrain",
+     "2023_07_spain",
+     "2024_07_emilia_romagna"
+    ]
+   }
+  }
+ },
+ "per_race": [
+  {
+   "race_id": "2021_04_spain",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.0033087653796655125,
+   "pace_step_s": 0.2810390644574312,
+   "wear_ratio": 0.4836220003369375,
+   "life_ratio": 0.7619047619047619,
+   "base_soft": 85.2187823643008,
+   "base_hard": 84.93774329984336,
+   "wear_soft": 0.033036441329039,
+   "wear_hard": 0.0683104600411533,
+   "limit_soft": 32.0,
+   "limit_hard": 42.0,
+   "race_rows_soft": 442,
+   "race_rows_hard": 534
+  },
+  {
+   "race_id": "2023_07_spain",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 8.592299677578907e-05,
+   "pace_step_s": 0.006987836607308395,
+   "wear_ratio": 0.7224364783274126,
+   "life_ratio": 0.875,
+   "base_soft": 81.33372071979015,
+   "base_hard": 81.32673288318284,
+   "wear_soft": 0.040521876313870504,
+   "wear_hard": 0.05609057339918229,
+   "limit_soft": 28.0,
+   "limit_hard": 32.0,
+   "race_rows_soft": 301,
+   "race_rows_hard": 353
+  },
+  {
+   "race_id": "2023_07_spain",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.0027204509078597727,
+   "pace_step_s": -0.22184891338314117,
+   "wear_ratio": 1.4014129060602705,
+   "life_ratio": 0.64,
+   "base_soft": 81.32673288318284,
+   "base_hard": 81.54858179656598,
+   "wear_soft": 0.05609057339918229,
+   "wear_hard": 0.040024302014505644,
+   "limit_soft": 32.0,
+   "limit_hard": 50.0,
+   "race_rows_soft": 353,
+   "race_rows_hard": 473
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.009417115564168688,
+   "pace_step_s": 0.9292625377007084,
+   "wear_ratio": 0.33227469028500695,
+   "life_ratio": 2.5,
+   "base_soft": 99.60730586940619,
+   "base_hard": 98.67804333170548,
+   "wear_soft": 0.10248134372290094,
+   "wear_hard": 0.3084235625500037,
+   "limit_soft": 25.0,
+   "limit_hard": 10.0,
+   "race_rows_soft": 351,
+   "race_rows_hard": 8
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.008679654708980133,
+   "pace_step_s": -0.8639904825372469,
+   "wear_ratio": 3.1440206183483497,
+   "life_ratio": 0.3448275862068966,
+   "base_soft": 98.67804333170548,
+   "base_hard": 99.54203381424273,
+   "wear_soft": 0.3084235625500037,
+   "wear_hard": 0.09809845417363326,
+   "limit_soft": 10.0,
+   "limit_hard": 29.0,
+   "race_rows_soft": 8,
+   "race_rows_hard": 488
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": -0.0017923344532043695,
+   "pace_step_s": -0.16687037883899336,
+   "wear_ratio": 1.1303992028362775,
+   "life_ratio": 0.5897435897435898,
+   "base_soft": 92.93538435975671,
+   "base_hard": 93.1022547385957,
+   "wear_soft": 0.014823559918660597,
+   "wear_hard": 0.01311356190049223,
+   "limit_soft": 23.0,
+   "limit_hard": 39.0,
+   "race_rows_soft": 111,
+   "race_rows_hard": 239
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.002030443437793461,
+   "pace_step_s": -0.18942347583121943,
+   "wear_ratio": 1.136049018363766,
+   "life_ratio": 0.975,
+   "base_soft": 93.1022547385957,
+   "base_hard": 93.29167821442692,
+   "wear_soft": 0.01311356190049223,
+   "wear_hard": 0.011543130347825566,
+   "limit_soft": 39.0,
+   "limit_hard": 40.0,
+   "race_rows_soft": 239,
+   "race_rows_hard": 311
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.004212979420126994,
+   "pace_step_s": -0.40966800893843924,
+   "wear_ratio": 2.705754145044991,
+   "life_ratio": 0.3902439024390244,
+   "base_soft": 96.8298311875928,
+   "base_hard": 97.23949919653124,
+   "wear_soft": 0.06371553905837089,
+   "wear_hard": 0.023548162783027515,
+   "limit_soft": 16.0,
+   "limit_hard": 41.0,
+   "race_rows_soft": 199,
+   "race_rows_hard": 356
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.013755174259160174,
+   "pace_step_s": 1.1250231174291656,
+   "wear_ratio": -0.23744800158263413,
+   "life_ratio": 0.21052631578947367,
+   "base_soft": 82.91410817245608,
+   "base_hard": 81.78908505502692,
+   "wear_soft": -0.018259609427590605,
+   "wear_hard": 0.07689940242026459,
+   "limit_soft": 8.0,
+   "limit_hard": 38.0,
+   "race_rows_soft": 11,
+   "race_rows_hard": 418
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.006998513548015395,
+   "pace_step_s": -0.5764362165081849,
+   "wear_ratio": 1.6522788724003974,
+   "life_ratio": 0.7037037037037037,
+   "base_soft": 81.78908505502692,
+   "base_hard": 82.3655212715351,
+   "wear_soft": 0.07689940242026459,
+   "wear_hard": 0.046541418464394385,
+   "limit_soft": 38.0,
+   "limit_hard": 54.0,
+   "race_rows_soft": 418,
+   "race_rows_hard": 610
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.000474969618899479,
+   "pace_step_s": 0.04199957435609747,
+   "wear_ratio": 2.325098542602615,
+   "life_ratio": null,
+   "base_soft": 88.46781184716191,
+   "base_hard": 88.42581227280581,
+   "wear_soft": 0.07693411582552147,
+   "wear_hard": 0.03308853986868218,
+   "limit_soft": 25.0,
+   "limit_hard": 25.0,
+   "race_rows_soft": 34,
+   "race_rows_hard": 561
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.0019085292274854115,
+   "pace_step_s": 0.16844177114343495,
+   "wear_ratio": 1.148977610853006,
+   "life_ratio": null,
+   "base_soft": 88.42581227280581,
+   "base_hard": 88.25737050166238,
+   "wear_soft": 0.03308853986868218,
+   "wear_hard": 0.028798245985069373,
+   "limit_soft": 25.0,
+   "limit_hard": 25.0,
+   "race_rows_soft": 561,
+   "race_rows_hard": 264
+  }
+ ]
+}

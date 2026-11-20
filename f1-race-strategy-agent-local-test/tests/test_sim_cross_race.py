@@ -164,6 +164,7 @@ def held_and_released(seed=1):
     return pd.concat([soft[soft["compound"] == "SOFT"], pd.DataFrame(rows)], ignore_index=True)
 
 
+@pytest.mark.compound_proxy_off   # a synthetic two-compound race: no proxied HARD in the report
 def test_collinear_hold_with_the_bound_holds_while_collinear_and_bounds_once_released():
     f = held_and_released()
     held = fitted({"collinear_hold": 0.5}, k=45, frame=f)

@@ -258,12 +258,12 @@ def test_eval_jobs_runner_reads_the_cache_and_carries_require_reference(tmp_path
     build_references(small, race_simulators(profile), n_samples=profile.sim.n_samples,
                      max_stops=profile.sim.max_stops, root=refs)
     try:
-        install_job_runner(path, ["fixed_one_stop"], reference_dir=refs, require_reference=True)
+        install_job_runner(path, ["fixed_two_stop"], reference_dir=refs, require_reference=True)
         spec = jobs._EVAL_SPEC[0]
         assert spec["require_reference"] is True and spec["reference_dir"] == str(refs.resolve())
         assert jobs.run_task(jobs.JOBS["eval_chunk"], "chunk_0000", profile, tmp_path / "a") == jobs.DONE
         got = pd.read_parquet(tmp_path / "a" / "eval" / "chunk_0000.parquet")
-        want = score_set(small, race_simulators(profile), resolve(["fixed_one_stop"]),
+        want = score_set(small, race_simulators(profile), resolve(["fixed_two_stop"]),
                          n_samples=profile.sim.n_samples, max_stops=profile.sim.max_stops, warn=False)
         assert len(got) == 3 and "regret_se_s" in got
         pd.testing.assert_frame_equal(_drop_latency(got), _drop_latency(want), check_dtype=False)
