@@ -73,6 +73,20 @@ turns it into the plan the world scores:
 A submission that cannot become a legal plan (no compound, a compound the belief does not
 model, n below 1, no legal continuation) is an invalid row.
 
+## The belief_optimizer policy
+
+`--policies baselines belief_optimizer agent` adds a baseline with no model call: at each
+snapshot it takes the plan `optimizer_bridge.optimize_batch` picks on the belief simulator (the
+one the agent's tools use, fitted on practice plus race laps up to the snapshot), with no
+decision imposed, and the world scores that plan like any other. It answers what the language
+model adds over running the optimizer on what it can see. It is planned by
+`eval.decisions.belief_optimum`, with the same belief fit, seed (seed + `BELIEF_SEED_OFFSET`),
+samples and future-stop limit as the agent continuation in `to_plan`. It follows every rule
+(R1-R8); a plan the world rejects is an `invalid` row with the reason. Rows carry the usual
+plan, stops, first pit, regret and R8 stamps; the agent-only columns (`decision`, `p_pit`,
+tool calls, tokens) are blank. It is not in the `baselines` group, so default commands and
+existing result files are unchanged; select it by name.
+
 ## The agent policy
 
 `--policies agent` is `eval.policies.AgentPolicy`, the snapshot loop of `src/agent.py`, on

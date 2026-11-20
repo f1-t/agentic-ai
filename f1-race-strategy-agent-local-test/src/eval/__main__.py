@@ -79,7 +79,7 @@ def main(argv=None):
     p = sub.add_parser("score", help="score policies against the optimizer on a scenario set")
     p.add_argument("--scenarios", required=True)
     p.add_argument("--policies", nargs="*", default=["baselines"],
-                   help="baselines, agent, or single baseline names")
+                   help="baselines, belief_optimizer, agent, or single baseline names")
     p.add_argument("--recorded", nargs="*", default=[], help="json files of saved decisions")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--n-samples", type=int, help="default: the profile's sim.n_samples")

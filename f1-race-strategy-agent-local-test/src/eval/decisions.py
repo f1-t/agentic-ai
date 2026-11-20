@@ -31,7 +31,7 @@ from __future__ import annotations
 from ..baselines.domain import NoFeasiblePlan
 from ..contracts import Plan, Snapshot
 from ..sim import agent_tools
-from ..sim.optimizer_bridge import as_continuation
+from ..sim.optimizer_bridge import as_continuation, optimize_batch
 
 DECISIONS = ("PIT", "STAY_OUT")
 
@@ -103,3 +103,17 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     if errors:
         raise InvalidDecision("; ".join(errors))
     return plan
+
+
+def belief_optimum(snapshot: Snapshot, belief_sim, max_stops: int, *, seed: int = 0,
+                   n_samples: int | None = None) -> Plan:
+    """The belief-optimal full plan from the snapshot with no decision imposed (the
+    belief_optimizer policy): optimize_batch on the belief's fit at the snapshot, with the same
+    belief seed (seed + BELIEF_SEED_OFFSET), samples and future-stop limit as to_plan's
+    continuation. Raises InvalidDecision when the belief finds no legal plan."""
+    fit = belief_sim.fitted_for(snapshot)
+    try:
+        return optimize_batch(snapshot, fit, seed=seed + agent_tools.BELIEF_SEED_OFFSET, n_samples=n_samples,
+                              max_stops=max_stops).plan
+    except NoFeasiblePlan as exc:
+        raise InvalidDecision(f"the belief finds no legal plan: {exc}") from exc
