@@ -1,0 +1,9668 @@
+{
+ "schema_version": 1,
+ "version": "d4",
+ "builder": "src.sim.calibration.snapshot_at",
+ "sampling": {
+  "races": [
+   "2019_06_monaco",
+   "2020_16_sakhir",
+   "2025_11_austria",
+   "2024_11_austria"
+  ],
+  "drivers": null,
+  "max_laps_down": 2,
+  "max_per_race": 25,
+  "seed": 0,
+  "eval_set_digest": "98edff4380e1d25a62a264acabc7d8f3287d5deebd6fbb4286dbaf0e5f677b29"
+ },
+ "sim_code_version": "58b50a00e0e3",
+ "digest": "ae878eb91c280156356d40cff78a5d0609b2adfd850f4810c4f268c3fa482c30",
+ "development": false,
+ "items": [
+  {
+   "scenario_id": "2019_06_monaco:BOT:25",
+   "race_id": "2019_06_monaco",
+   "driver": "BOT",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BOT",
+    "laps_completed": 25,
+    "compound": "HARD",
+    "tyre_age": 13,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 5
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 12,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2102.374,
+    "position": 4,
+    "gap_ahead_s": 0.9510000000000218,
+    "gap_behind_s": 2.22400000000016,
+    "car_ahead": "VET",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VET",
+       "position": 3,
+       "gap_s": -0.9510000000000218
+      },
+      {
+       "driver": "GAS",
+       "position": 5,
+       "gap_s": 2.22400000000016
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     78.99,
+     78.855,
+     78.372,
+     78.186,
+     78.407
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "HARD",
+     66
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:BOT:60",
+   "race_id": "2019_06_monaco",
+   "driver": "BOT",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BOT",
+    "laps_completed": 60,
+    "compound": "HARD",
+    "tyre_age": 48,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 5
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 12,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4817.103,
+    "position": 4,
+    "gap_ahead_s": 1.2709999999997308,
+    "gap_behind_s": 13.0,
+    "car_ahead": "VET",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VET",
+       "position": 3,
+       "gap_s": -1.2709999999997308
+      },
+      {
+       "driver": "GAS",
+       "position": 5,
+       "gap_s": 13.0
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     77.95,
+     78.207,
+     77.17,
+     77.362,
+     77.179
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "HARD",
+     66
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:GAS:05",
+   "race_id": "2019_06_monaco",
+   "driver": "GAS",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GAS",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 9,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 407.4689999999998,
+    "position": 7,
+    "gap_ahead_s": 1.4719999999997526,
+    "gap_behind_s": 1.1690000000003238,
+    "car_ahead": "MAG",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MAG",
+       "position": 6,
+       "gap_s": -1.4719999999997526
+      },
+      {
+       "driver": "SAI",
+       "position": 8,
+       "gap_s": 1.1690000000003238
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     88.83,
+     79.955,
+     79.309,
+     79.557,
+     79.648
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     27
+    ],
+    [
+     "MEDIUM",
+     35
+    ],
+    [
+     "SOFT",
+     16
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:GAS:09",
+   "race_id": "2019_06_monaco",
+   "driver": "GAS",
+   "lap": 9,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GAS",
+    "laps_completed": 9,
+    "compound": "SOFT",
+    "tyre_age": 13,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 727.1450000000002,
+    "position": 7,
+    "gap_ahead_s": 1.6849999999999454,
+    "gap_behind_s": 1.20699999999988,
+    "car_ahead": "MAG",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MAG",
+       "position": 6,
+       "gap_s": -1.6849999999999454
+      },
+      {
+       "driver": "SAI",
+       "position": 8,
+       "gap_s": 1.20699999999988
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     79.648,
+     79.66,
+     79.626,
+     79.851,
+     80.539
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     27
+    ],
+    [
+     "MEDIUM",
+     35
+    ],
+    [
+     "SOFT",
+     16
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:GIO:65",
+   "race_id": "2019_06_monaco",
+   "driver": "GIO",
+   "lap": 65,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 76,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GIO",
+    "laps_completed": 65,
+    "compound": "MEDIUM",
+    "tyre_age": 21,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 44,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 5336.72,
+    "position": 19,
+    "gap_ahead_s": 1.8479999999999563,
+    "gap_behind_s": null,
+    "car_ahead": "KUB",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "KUB",
+       "position": 18,
+       "gap_s": -1.8479999999999563
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     78.638,
+     78.514,
+     78.475,
+     78.609,
+     78.876
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     44
+    ],
+    [
+     "MEDIUM",
+     32
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:GRO:30",
+   "race_id": "2019_06_monaco",
+   "driver": "GRO",
+   "lap": 30,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GRO",
+    "laps_completed": 30,
+    "compound": "SOFT",
+    "tyre_age": 30,
+    "stints": [],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2502.915,
+    "position": 7,
+    "gap_ahead_s": 2.3059999999995853,
+    "gap_behind_s": 9.691000000000713,
+    "car_ahead": "ALB",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "ALB",
+       "position": 6,
+       "gap_s": -2.3059999999995853
+      },
+      {
+       "driver": "SAI",
+       "position": 8,
+       "gap_s": 9.691000000000713
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     78.32,
+     79.58,
+     78.483,
+     77.961,
+     78.034
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     50
+    ],
+    [
+     "MEDIUM",
+     28
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:HAM:05",
+   "race_id": "2019_06_monaco",
+   "driver": "HAM",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 10,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 389.03800000000024,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 1.3019999999996799,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOT",
+       "position": 2,
+       "gap_s": 1.3019999999996799
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     81.953,
+     77.129,
+     76.72,
+     76.355,
+     76.711
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:HAM:35",
+   "race_id": "2019_06_monaco",
+   "driver": "HAM",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 35,
+    "compound": "MEDIUM",
+    "tyre_age": 24,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 5
+     }
+    ],
+    "sc_laps": [
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2874.1800000000003,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 0.6260000000002037,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VER",
+       "position": 2,
+       "gap_s": 0.6260000000002037
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     77.441,
+     77.399,
+     77.502,
+     77.221,
+     77.675
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:HUL:20",
+   "race_id": "2019_06_monaco",
+   "driver": "HUL",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HUL",
+    "laps_completed": 20,
+    "compound": "HARD",
+    "tyre_age": 11,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 9,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1727.001,
+    "position": 16,
+    "gap_ahead_s": 0.7779999999997926,
+    "gap_behind_s": 5.150000000000091,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 15,
+       "gap_s": -0.7779999999997926
+      },
+      {
+       "driver": "RUS",
+       "position": 17,
+       "gap_s": 5.150000000000091
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     78.067,
+     76.843,
+     76.745,
+     78.748,
+     79.219
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     9
+    ],
+    [
+     "HARD",
+     68
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:KUB:50",
+   "race_id": "2019_06_monaco",
+   "driver": "KUB",
+   "lap": 50,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "KUB",
+    "laps_completed": 50,
+    "compound": "HARD",
+    "tyre_age": 29,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 21,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4149.289000000001,
+    "position": 18,
+    "gap_ahead_s": 11.483000000000175,
+    "gap_behind_s": 0.3539999999993597,
+    "car_ahead": "RAI",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RAI",
+       "position": 17,
+       "gap_s": -11.483000000000175
+      },
+      {
+       "driver": "GIO",
+       "position": 19,
+       "gap_s": 0.3539999999993597
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     78.883,
+     79.691,
+     79.986,
+     79.272,
+     83.72
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     21
+    ],
+    [
+     "HARD",
+     56
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:KVY:25",
+   "race_id": "2019_06_monaco",
+   "driver": "KVY",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "KVY",
+    "laps_completed": 25,
+    "compound": "SOFT",
+    "tyre_age": 30,
+    "stints": [],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2107.4210000000003,
+    "position": 7,
+    "gap_ahead_s": 0.987999999999829,
+    "gap_behind_s": 1.8400000000001455,
+    "car_ahead": "SAI",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "SAI",
+       "position": 6,
+       "gap_s": -0.987999999999829
+      },
+      {
+       "driver": "ALB",
+       "position": 8,
+       "gap_s": 1.8400000000001455
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     79.179,
+     79.028,
+     78.762,
+     78.865,
+     78.301
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     32
+    ],
+    [
+     "MEDIUM",
+     46
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:MAG:35",
+   "race_id": "2019_06_monaco",
+   "driver": "MAG",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAG",
+    "laps_completed": 35,
+    "compound": "MEDIUM",
+    "tyre_age": 24,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 5
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2922.892,
+    "position": 14,
+    "gap_ahead_s": 1.5479999999997744,
+    "gap_behind_s": 0.43800000000010186,
+    "car_ahead": "RIC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RIC",
+       "position": 13,
+       "gap_s": -1.5479999999997744
+      },
+      {
+       "driver": "PER",
+       "position": 15,
+       "gap_s": 0.43800000000010186
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     79.085,
+     79.322,
+     79.497,
+     79.311,
+     79.0
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     66
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:MAG:55",
+   "race_id": "2019_06_monaco",
+   "driver": "MAG",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAG",
+    "laps_completed": 55,
+    "compound": "MEDIUM",
+    "tyre_age": 44,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 5
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4501.209,
+    "position": 12,
+    "gap_ahead_s": 1.5799999999999272,
+    "gap_behind_s": 1.4390000000003056,
+    "car_ahead": "NOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "NOR",
+       "position": 11,
+       "gap_s": -1.5799999999999272
+      },
+      {
+       "driver": "PER",
+       "position": 13,
+       "gap_s": 1.4390000000003056
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     77.443,
+     77.207,
+     77.744,
+     78.188,
+     78.322
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     66
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:PER:09",
+   "race_id": "2019_06_monaco",
+   "driver": "PER",
+   "lap": 9,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PER",
+    "laps_completed": 9,
+    "compound": "MEDIUM",
+    "tyre_age": 9,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 741.019,
+    "position": 14,
+    "gap_ahead_s": 0.73700000000008,
+    "gap_behind_s": 0.54300000000012,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 13,
+       "gap_s": -0.73700000000008
+      },
+      {
+       "driver": "RAI",
+       "position": 15,
+       "gap_s": 0.54300000000012
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     79.238,
+     79.962,
+     79.698,
+     79.828,
+     86.055
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     11
+    ],
+    [
+     "HARD",
+     66
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:PER:20",
+   "race_id": "2019_06_monaco",
+   "driver": "PER",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PER",
+    "laps_completed": 20,
+    "compound": "HARD",
+    "tyre_age": 9,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1726.2230000000002,
+    "position": 15,
+    "gap_ahead_s": 0.7570000000000618,
+    "gap_behind_s": 0.7779999999997926,
+    "car_ahead": "MAG",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MAG",
+       "position": 14,
+       "gap_s": -0.7570000000000618
+      },
+      {
+       "driver": "HUL",
+       "position": 16,
+       "gap_s": 0.7779999999997926
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     77.818,
+     77.225,
+     78.163,
+     80.087,
+     81.067
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     11
+    ],
+    [
+     "HARD",
+     66
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:RAI:15",
+   "race_id": "2019_06_monaco",
+   "driver": "RAI",
+   "lap": 15,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RAI",
+    "laps_completed": 15,
+    "compound": "SOFT",
+    "tyre_age": 15,
+    "stints": [],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1320.921,
+    "position": 12,
+    "gap_ahead_s": 0.8980000000001382,
+    "gap_behind_s": 1.1359999999999673,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 11,
+       "gap_s": -0.8980000000001382
+      },
+      {
+       "driver": "RIC",
+       "position": 13,
+       "gap_s": 1.1359999999999673
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     104.42,
+     98.452,
+     95.634,
+     110.501,
+     81.634
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     46
+    ],
+    [
+     "MEDIUM",
+     31
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:RAI:20",
+   "race_id": "2019_06_monaco",
+   "driver": "RAI",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RAI",
+    "laps_completed": 20,
+    "compound": "SOFT",
+    "tyre_age": 20,
+    "stints": [],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1724.1540000000002,
+    "position": 12,
+    "gap_ahead_s": 0.6110000000003311,
+    "gap_behind_s": 0.8829999999998108,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 11,
+       "gap_s": -0.6110000000003311
+      },
+      {
+       "driver": "RIC",
+       "position": 13,
+       "gap_s": 0.8829999999998108
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     80.597,
+     80.333,
+     80.448,
+     80.945,
+     80.91
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     46
+    ],
+    [
+     "MEDIUM",
+     31
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:RIC:25",
+   "race_id": "2019_06_monaco",
+   "driver": "RIC",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RIC",
+    "laps_completed": 25,
+    "compound": "MEDIUM",
+    "tyre_age": 14,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 5
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2127.7659999999996,
+    "position": 13,
+    "gap_ahead_s": 2.2789999999999964,
+    "gap_behind_s": 1.374000000000251,
+    "car_ahead": "RAI",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RAI",
+       "position": 12,
+       "gap_s": -2.2789999999999964
+      },
+      {
+       "driver": "MAG",
+       "position": 14,
+       "gap_s": 1.374000000000251
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     80.183,
+     81.089,
+     81.002,
+     81.067,
+     79.388
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "MEDIUM",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:RUS:50",
+   "race_id": "2019_06_monaco",
+   "driver": "RUS",
+   "lap": 50,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 50,
+    "compound": "HARD",
+    "tyre_age": 40,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 10,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     10,
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4129.015,
+    "position": 15,
+    "gap_ahead_s": 13.925000000000182,
+    "gap_behind_s": 1.7780000000002474,
+    "car_ahead": "HUL",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HUL",
+       "position": 14,
+       "gap_s": -13.925000000000182
+      },
+      {
+       "driver": "STR",
+       "position": 16,
+       "gap_s": 1.7780000000002474
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     81.957,
+     85.35,
+     81.485,
+     79.768,
+     78.53
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     10
+    ],
+    [
+     "HARD",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:SAI:00",
+   "race_id": "2019_06_monaco",
+   "driver": "SAI",
+   "lap": 0,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 0,
+    "compound": "SOFT",
+    "tyre_age": 5,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 0.0,
+    "position": null,
+    "gap_ahead_s": null,
+    "gap_behind_s": null,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": []
+    },
+    "red_flag_laps": [],
+    "standing_start": true,
+    "recent_lap_times_s": [],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     30
+    ],
+    [
+     "MEDIUM",
+     48
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:SAI:05",
+   "race_id": "2019_06_monaco",
+   "driver": "SAI",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 10,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 408.63800000000015,
+    "position": 8,
+    "gap_ahead_s": 1.1690000000003238,
+    "gap_behind_s": 0.7119999999999891,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 7,
+       "gap_s": -1.1690000000003238
+      },
+      {
+       "driver": "KVY",
+       "position": 9,
+       "gap_s": 0.7119999999999891
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     89.873,
+     79.954,
+     79.483,
+     79.613,
+     79.545
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     30
+    ],
+    [
+     "MEDIUM",
+     48
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:STR:00",
+   "race_id": "2019_06_monaco",
+   "driver": "STR",
+   "lap": 0,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 77,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "STR",
+    "laps_completed": 0,
+    "compound": "MEDIUM",
+    "tyre_age": 0,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 0.0,
+    "position": null,
+    "gap_ahead_s": null,
+    "gap_behind_s": null,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": []
+    },
+    "red_flag_laps": [],
+    "standing_start": true,
+    "recent_lap_times_s": [],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     40
+    ],
+    [
+     "HARD",
+     37
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:VET:05",
+   "race_id": "2019_06_monaco",
+   "driver": "VET",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VET",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 8,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 393.7520000000002,
+    "position": 4,
+    "gap_ahead_s": 1.780999999999949,
+    "gap_behind_s": 11.319999999999709,
+    "car_ahead": "VER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VER",
+       "position": 3,
+       "gap_s": -1.780999999999949
+      },
+      {
+       "driver": "RIC",
+       "position": 5,
+       "gap_s": 11.319999999999709
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     85.115,
+     77.831,
+     77.14,
+     76.906,
+     76.59
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "HARD",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:VET:20",
+   "race_id": "2019_06_monaco",
+   "driver": "VET",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VET",
+    "laps_completed": 20,
+    "compound": "HARD",
+    "tyre_age": 9,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1708.82,
+    "position": 3,
+    "gap_ahead_s": 0.7300000000000182,
+    "gap_behind_s": 0.7440000000001419,
+    "car_ahead": "VER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VER",
+       "position": 2,
+       "gap_s": -0.7300000000000182
+      },
+      {
+       "driver": "BOT",
+       "position": 4,
+       "gap_s": 0.7440000000001419
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     79.462,
+     79.075,
+     78.637,
+     78.707,
+     78.388
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "HARD",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2019_06_monaco:VET:60",
+   "race_id": "2019_06_monaco",
+   "driver": "VET",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2019_06_monaco",
+     "total_laps": 78,
+     "pit_loss_s": 21.97,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VET",
+    "laps_completed": 60,
+    "compound": "HARD",
+    "tyre_age": 49,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     11,
+     12,
+     13,
+     14
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4815.832,
+    "position": 3,
+    "gap_ahead_s": 1.207999999999629,
+    "gap_behind_s": 1.2709999999997308,
+    "car_ahead": "VER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "VER",
+       "position": 2,
+       "gap_s": -1.207999999999629
+      },
+      {
+       "driver": "BOT",
+       "position": 4,
+       "gap_s": 1.2709999999997308
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     77.636,
+     77.74,
+     77.405,
+     77.49,
+     77.475
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "HARD",
+     67
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:AIT:55",
+   "race_id": "2020_16_sakhir",
+   "driver": "AIT",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "AIT",
+    "laps_completed": 55,
+    "compound": "MEDIUM",
+    "tyre_age": 1,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 31,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 23,
+      "start_lap": 32,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [
+     54,
+     55
+    ],
+    "track_status": "vsc",
+    "elapsed_s": 3502.7889999999998,
+    "position": 15,
+    "gap_ahead_s": 4.657999999999447,
+    "gap_behind_s": 4.196000000000822,
+    "car_ahead": "MAG",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MAG",
+       "position": 14,
+       "gap_s": -4.657999999999447
+      },
+      {
+       "driver": "RAI",
+       "position": 16,
+       "gap_s": 4.196000000000822
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     58.805,
+     58.649,
+     58.667,
+     71.243,
+     80.818
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     31
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "MEDIUM",
+     5
+    ],
+    [
+     "SOFT",
+     28
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:AIT:69",
+   "race_id": "2020_16_sakhir",
+   "driver": "AIT",
+   "lap": 69,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "AIT",
+    "laps_completed": 69,
+    "compound": "SOFT",
+    "tyre_age": 10,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 31,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 23,
+      "start_lap": 32,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 5,
+      "start_lap": 55,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68
+    ],
+    "vsc_laps": [
+     54,
+     55,
+     60
+    ],
+    "track_status": "green",
+    "elapsed_s": 4459.722,
+    "position": 17,
+    "gap_ahead_s": 1.5399999999999636,
+    "gap_behind_s": null,
+    "car_ahead": "FIT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "FIT",
+       "position": 16,
+       "gap_s": -1.5399999999999636
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     75.734,
+     62.078,
+     58.343,
+     60.362,
+     57.963
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     31
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "MEDIUM",
+     5
+    ],
+    [
+     "SOFT",
+     28
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:ALB:59",
+   "race_id": "2020_16_sakhir",
+   "driver": "ALB",
+   "lap": 59,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "ALB",
+    "laps_completed": 59,
+    "compound": "HARD",
+    "tyre_age": 12,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 47,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [
+     54,
+     55
+    ],
+    "track_status": "green",
+    "elapsed_s": 3677.782,
+    "position": 6,
+    "gap_ahead_s": 8.192000000000007,
+    "gap_behind_s": 5.131000000000313,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 5,
+       "gap_s": -8.192000000000007
+      },
+      {
+       "driver": "SAI",
+       "position": 7,
+       "gap_s": 5.131000000000313
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     68.846,
+     57.606,
+     57.406,
+     57.308,
+     57.475
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     47
+    ],
+    [
+     "HARD",
+     15
+    ],
+    [
+     "SOFT",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:ALB:65",
+   "race_id": "2020_16_sakhir",
+   "driver": "ALB",
+   "lap": 65,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "ALB",
+    "laps_completed": 65,
+    "compound": "SOFT",
+    "tyre_age": 3,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 47,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 15,
+      "start_lap": 48,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     62,
+     63,
+     64,
+     65
+    ],
+    "vsc_laps": [
+     54,
+     55,
+     61,
+     62
+    ],
+    "track_status": "sc",
+    "elapsed_s": 4141.539,
+    "position": 10,
+    "gap_ahead_s": 1.2269999999998618,
+    "gap_behind_s": 1.6760000000003856,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 9,
+       "gap_s": -1.2269999999998618
+      },
+      {
+       "driver": "NOR",
+       "position": 11,
+       "gap_s": 1.6760000000003856
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.765,
+     76.98,
+     91.251,
+     79.559,
+     88.651
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     47
+    ],
+    [
+     "HARD",
+     15
+    ],
+    [
+     "SOFT",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:BOT:75",
+   "race_id": "2020_16_sakhir",
+   "driver": "BOT",
+   "lap": 75,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BOT",
+    "laps_completed": 75,
+    "compound": "HARD",
+    "tyre_age": 26,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 49,
+      "start_lap": 1,
+      "start_age": 4
+     },
+     {
+      "compound": "HARD",
+      "laps": 13,
+      "start_lap": 50,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68
+    ],
+    "vsc_laps": [
+     55,
+     56,
+     61,
+     62
+    ],
+    "track_status": "green",
+    "elapsed_s": 4797.577,
+    "position": 5,
+    "gap_ahead_s": 0.7730000000001382,
+    "gap_behind_s": 0.6639999999997599,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 4,
+       "gap_s": -0.7730000000001382
+      },
+      {
+       "driver": "SAI",
+       "position": 6,
+       "gap_s": 0.6639999999997599
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     57.379,
+     57.458,
+     57.742,
+     57.537,
+     57.611
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     49
+    ],
+    [
+     "HARD",
+     13
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:FIT:07",
+   "race_id": "2020_16_sakhir",
+   "driver": "FIT",
+   "lap": 7,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "FIT",
+    "laps_completed": 7,
+    "compound": "SOFT",
+    "tyre_age": 7,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 596.5840000000001,
+    "position": 17,
+    "gap_ahead_s": 0.47400000000016007,
+    "gap_behind_s": 0.5670000000000073,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 16,
+       "gap_s": -0.47400000000016007
+      },
+      {
+       "driver": "RAI",
+       "position": 18,
+       "gap_s": 0.5670000000000073
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     91.123,
+     91.219,
+     91.944,
+     71.799,
+     60.52
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     31
+    ],
+    [
+     "MEDIUM",
+     22
+    ],
+    [
+     "SOFT",
+     10
+    ],
+    [
+     "SOFT",
+     24
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:MAG:60",
+   "race_id": "2020_16_sakhir",
+   "driver": "MAG",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAG",
+    "laps_completed": 60,
+    "compound": "SOFT",
+    "tyre_age": 9,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 26,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 28,
+      "start_lap": 27,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [
+     54,
+     55,
+     60
+    ],
+    "track_status": "vsc",
+    "elapsed_s": 3796.536,
+    "position": 14,
+    "gap_ahead_s": 16.086999999999534,
+    "gap_behind_s": 11.277000000000044,
+    "car_ahead": "GIO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GIO",
+       "position": 13,
+       "gap_s": -16.086999999999534
+      },
+      {
+       "driver": "RAI",
+       "position": 15,
+       "gap_s": 11.277000000000044
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     58.038,
+     57.516,
+     57.749,
+     57.887,
+     67.215
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     26
+    ],
+    [
+     "MEDIUM",
+     28
+    ],
+    [
+     "SOFT",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:NOR:10",
+   "race_id": "2020_16_sakhir",
+   "driver": "NOR",
+   "lap": 10,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 10,
+    "compound": "SOFT",
+    "tyre_age": 10,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 769.9979999999998,
+    "position": 9,
+    "gap_ahead_s": 0.9169999999999163,
+    "gap_behind_s": 1.3880000000003747,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 8,
+       "gap_s": -0.9169999999999163
+      },
+      {
+       "driver": "VET",
+       "position": 10,
+       "gap_s": 1.3880000000003747
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     75.339,
+     60.39,
+     59.242,
+     58.936,
+     59.055
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     20
+    ],
+    [
+     "MEDIUM",
+     34
+    ],
+    [
+     "MEDIUM",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:NOR:15",
+   "race_id": "2020_16_sakhir",
+   "driver": "NOR",
+   "lap": 15,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 15,
+    "compound": "SOFT",
+    "tyre_age": 15,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1065.7340000000002,
+    "position": 9,
+    "gap_ahead_s": 1.6520000000000437,
+    "gap_behind_s": 1.0049999999996544,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 8,
+       "gap_s": -1.6520000000000437
+      },
+      {
+       "driver": "ALB",
+       "position": 10,
+       "gap_s": 1.0049999999996544
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     59.046,
+     59.342,
+     59.23,
+     59.144,
+     58.974
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     20
+    ],
+    [
+     "MEDIUM",
+     34
+    ],
+    [
+     "MEDIUM",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:NOR:20",
+   "race_id": "2020_16_sakhir",
+   "driver": "NOR",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 20,
+    "compound": "MEDIUM",
+    "tyre_age": 0,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 20,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1365.82,
+    "position": 11,
+    "gap_ahead_s": 3.574000000000069,
+    "gap_behind_s": 1.137000000000171,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 10,
+       "gap_s": -3.574000000000069
+      },
+      {
+       "driver": "VET",
+       "position": 12,
+       "gap_s": 1.137000000000171
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     59.019,
+     58.992,
+     59.291,
+     59.401,
+     63.383
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     20
+    ],
+    [
+     "MEDIUM",
+     34
+    ],
+    [
+     "MEDIUM",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:NOR:35",
+   "race_id": "2020_16_sakhir",
+   "driver": "NOR",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 35,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 20,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2265.0210000000006,
+    "position": 11,
+    "gap_ahead_s": 5.747000000000298,
+    "gap_behind_s": 13.370999999999185,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 10,
+       "gap_s": -5.747000000000298
+      },
+      {
+       "driver": "VET",
+       "position": 12,
+       "gap_s": 13.370999999999185
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     58.105,
+     58.305,
+     58.425,
+     58.684,
+     58.697
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     20
+    ],
+    [
+     "MEDIUM",
+     34
+    ],
+    [
+     "MEDIUM",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:NOR:70",
+   "race_id": "2020_16_sakhir",
+   "driver": "NOR",
+   "lap": 70,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 70,
+    "compound": "MEDIUM",
+    "tyre_age": 16,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 20,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 34,
+      "start_lap": 21,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68
+    ],
+    "vsc_laps": [
+     54,
+     55,
+     60,
+     61
+    ],
+    "track_status": "green",
+    "elapsed_s": 4513.593,
+    "position": 11,
+    "gap_ahead_s": 0.5729999999994106,
+    "gap_behind_s": 0.5799999999999272,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 10,
+       "gap_s": -0.5729999999994106
+      },
+      {
+       "driver": "VET",
+       "position": 12,
+       "gap_s": 0.5799999999999272
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     93.017,
+     86.565,
+     74.3,
+     58.299,
+     58.197
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     20
+    ],
+    [
+     "MEDIUM",
+     34
+    ],
+    [
+     "MEDIUM",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:OCO:70",
+   "race_id": "2020_16_sakhir",
+   "driver": "OCO",
+   "lap": 70,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 70,
+    "compound": "HARD",
+    "tyre_age": 29,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 41,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68
+    ],
+    "vsc_laps": [
+     55,
+     61,
+     62
+    ],
+    "track_status": "green",
+    "elapsed_s": 4507.193,
+    "position": 2,
+    "gap_ahead_s": 2.0159999999996217,
+    "gap_behind_s": 1.0209999999997308,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 1,
+       "gap_s": -2.0159999999996217
+      },
+      {
+       "driver": "STR",
+       "position": 3,
+       "gap_s": 1.0209999999997308
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     94.418,
+     86.591,
+     82.462,
+     57.663,
+     57.431
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     41
+    ],
+    [
+     "HARD",
+     46
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:PER:40",
+   "race_id": "2020_16_sakhir",
+   "driver": "PER",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PER",
+    "laps_completed": 40,
+    "compound": "MEDIUM",
+    "tyre_age": 39,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2536.1540000000005,
+    "position": 5,
+    "gap_ahead_s": 1.542000000000371,
+    "gap_behind_s": 3.1099999999996726,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 4,
+       "gap_s": -1.542000000000371
+      },
+      {
+       "driver": "ALB",
+       "position": 6,
+       "gap_s": 3.1099999999996726
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     58.621,
+     58.796,
+     58.71,
+     58.664,
+     58.6
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     1
+    ],
+    [
+     "MEDIUM",
+     46
+    ],
+    [
+     "HARD",
+     40
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:PER:55",
+   "race_id": "2020_16_sakhir",
+   "driver": "PER",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PER",
+    "laps_completed": 55,
+    "compound": "HARD",
+    "tyre_age": 8,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 3
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 46,
+      "start_lap": 2,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [
+     55
+    ],
+    "track_status": "vsc",
+    "elapsed_s": 3438.532,
+    "position": 7,
+    "gap_ahead_s": 0.43800000000010186,
+    "gap_behind_s": 9.454999999999927,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 6,
+       "gap_s": -0.43800000000010186
+      },
+      {
+       "driver": "ALB",
+       "position": 8,
+       "gap_s": 9.454999999999927
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     57.052,
+     56.925,
+     56.949,
+     57.426,
+     71.049
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     1
+    ],
+    [
+     "MEDIUM",
+     46
+    ],
+    [
+     "HARD",
+     40
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:RAI:40",
+   "race_id": "2020_16_sakhir",
+   "driver": "RAI",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RAI",
+    "laps_completed": 40,
+    "compound": "HARD",
+    "tyre_age": 17,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 23,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2587.7840000000006,
+    "position": 17,
+    "gap_ahead_s": 2.9890000000004875,
+    "gap_behind_s": 16.480999999999767,
+    "car_ahead": "AIT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "AIT",
+       "position": 16,
+       "gap_s": -2.9890000000004875
+      },
+      {
+       "driver": "FIT",
+       "position": 18,
+       "gap_s": 16.480999999999767
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     59.103,
+     58.886,
+     59.027,
+     58.806,
+     58.729
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "HARD",
+     31
+    ],
+    [
+     "MEDIUM",
+     8
+    ],
+    [
+     "SOFT",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:RAI:63",
+   "race_id": "2020_16_sakhir",
+   "driver": "RAI",
+   "lap": 63,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RAI",
+    "laps_completed": 63,
+    "compound": "SOFT",
+    "tyre_age": 1,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 23,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 31,
+      "start_lap": 24,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 8,
+      "start_lap": 55,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     61,
+     62,
+     63
+    ],
+    "vsc_laps": [
+     54,
+     60,
+     61
+    ],
+    "track_status": "sc",
+    "elapsed_s": 4056.1010000000006,
+    "position": 15,
+    "gap_ahead_s": 14.949000000000524,
+    "gap_behind_s": 2.469999999999345,
+    "car_ahead": "MAG",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MAG",
+       "position": 14,
+       "gap_s": -14.949000000000524
+      },
+      {
+       "driver": "FIT",
+       "position": 16,
+       "gap_s": 2.469999999999345
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     57.855,
+     70.404,
+     74.676,
+     78.167,
+     95.445
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "HARD",
+     31
+    ],
+    [
+     "MEDIUM",
+     8
+    ],
+    [
+     "SOFT",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:RAI:69",
+   "race_id": "2020_16_sakhir",
+   "driver": "RAI",
+   "lap": 69,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RAI",
+    "laps_completed": 69,
+    "compound": "SOFT",
+    "tyre_age": 7,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 23,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 31,
+      "start_lap": 24,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 8,
+      "start_lap": 55,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68
+    ],
+    "vsc_laps": [
+     54,
+     60,
+     61
+    ],
+    "track_status": "green",
+    "elapsed_s": 4457.368,
+    "position": 15,
+    "gap_ahead_s": 0.29799999999977445,
+    "gap_behind_s": 0.8139999999993961,
+    "car_ahead": "MAG",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "MAG",
+       "position": 14,
+       "gap_s": -0.29799999999977445
+      },
+      {
+       "driver": "FIT",
+       "position": 16,
+       "gap_s": 0.8139999999993961
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     58.922,
+     59.77,
+     80.11,
+     70.711,
+     58.621
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "HARD",
+     31
+    ],
+    [
+     "MEDIUM",
+     8
+    ],
+    [
+     "SOFT",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:RIC:30",
+   "race_id": "2020_16_sakhir",
+   "driver": "RIC",
+   "lap": 30,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RIC",
+    "laps_completed": 30,
+    "compound": "MEDIUM",
+    "tyre_age": 1,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 29,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1965.2050000000002,
+    "position": 10,
+    "gap_ahead_s": 0.8220000000001164,
+    "gap_behind_s": 3.455999999999676,
+    "car_ahead": "KVY",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "KVY",
+       "position": 9,
+       "gap_s": -0.8220000000001164
+      },
+      {
+       "driver": "GAS",
+       "position": 11,
+       "gap_s": 3.455999999999676
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     58.927,
+     58.765,
+     58.673,
+     61.391,
+     78.489
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     29
+    ],
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     32
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:RUS:59",
+   "race_id": "2020_16_sakhir",
+   "driver": "RUS",
+   "lap": 59,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 59,
+    "compound": "HARD",
+    "tyre_age": 14,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 45,
+      "start_lap": 1,
+      "start_age": 4
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [
+     55,
+     56
+    ],
+    "track_status": "green",
+    "elapsed_s": 3635.71,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 5.261999999999716,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOT",
+       "position": 2,
+       "gap_s": 5.261999999999716
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     65.262,
+     64.719,
+     56.977,
+     56.865,
+     56.975
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     45
+    ],
+    [
+     "HARD",
+     17
+    ],
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "MEDIUM",
+     15
+    ],
+    [
+     "SOFT",
+     9
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:SAI:07",
+   "race_id": "2020_16_sakhir",
+   "driver": "SAI",
+   "lap": 7,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 7,
+    "compound": "SOFT",
+    "tyre_age": 10,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 588.508,
+    "position": 3,
+    "gap_ahead_s": 0.8040000000000873,
+    "gap_behind_s": 0.7539999999999054,
+    "car_ahead": "BOT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOT",
+       "position": 2,
+       "gap_s": -0.8040000000000873
+      },
+      {
+       "driver": "RIC",
+       "position": 4,
+       "gap_s": 0.7539999999999054
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     89.628,
+     92.053,
+     90.161,
+     87.502,
+     59.252
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     28
+    ],
+    [
+     "MEDIUM",
+     27
+    ],
+    [
+     "MEDIUM",
+     32
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:SAI:70",
+   "race_id": "2020_16_sakhir",
+   "driver": "SAI",
+   "lap": 70,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 70,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 28,
+      "start_lap": 1,
+      "start_age": 3
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 27,
+      "start_lap": 29,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68
+    ],
+    "vsc_laps": [
+     55,
+     61,
+     62
+    ],
+    "track_status": "green",
+    "elapsed_s": 4510.387000000001,
+    "position": 6,
+    "gap_ahead_s": 0.5370000000002619,
+    "gap_behind_s": 0.5929999999998472,
+    "car_ahead": "BOT",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOT",
+       "position": 5,
+       "gap_s": -0.5370000000002619
+      },
+      {
+       "driver": "RIC",
+       "position": 7,
+       "gap_s": 0.5929999999998472
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     94.206,
+     87.516,
+     78.787,
+     58.552,
+     57.998
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     28
+    ],
+    [
+     "MEDIUM",
+     27
+    ],
+    [
+     "MEDIUM",
+     32
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:STR:05",
+   "race_id": "2020_16_sakhir",
+   "driver": "STR",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "STR",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 8,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "vsc_laps": [],
+    "track_status": "sc",
+    "elapsed_s": 447.91200000000003,
+    "position": 6,
+    "gap_ahead_s": 1.4270000000001346,
+    "gap_behind_s": 1.8550000000000182,
+    "car_ahead": "KVY",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "KVY",
+       "position": 5,
+       "gap_s": -1.4270000000001346
+      },
+      {
+       "driver": "GAS",
+       "position": 7,
+       "gap_s": 1.8550000000000182
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     80.518,
+     94.619,
+     90.389,
+     90.509,
+     91.719
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     42
+    ],
+    [
+     "MEDIUM",
+     45
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:STR:65",
+   "race_id": "2020_16_sakhir",
+   "driver": "STR",
+   "lap": 65,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "STR",
+    "laps_completed": 65,
+    "compound": "MEDIUM",
+    "tyre_age": 23,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 42,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     62,
+     63,
+     64,
+     65
+    ],
+    "vsc_laps": [
+     55,
+     61,
+     62
+    ],
+    "track_status": "sc",
+    "elapsed_s": 4129.805,
+    "position": 3,
+    "gap_ahead_s": 1.1769999999996799,
+    "gap_behind_s": 1.331000000000131,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 2,
+       "gap_s": -1.1769999999996799
+      },
+      {
+       "driver": "BOT",
+       "position": 4,
+       "gap_s": 1.331000000000131
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     68.378,
+     75.987,
+     77.868,
+     90.862,
+     89.584
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     42
+    ],
+    [
+     "MEDIUM",
+     45
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2020_16_sakhir:VET:25",
+   "race_id": "2020_16_sakhir",
+   "driver": "VET",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2020_16_sakhir",
+     "total_laps": 87,
+     "pit_loss_s": 25.59,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VET",
+    "laps_completed": 25,
+    "compound": "MEDIUM",
+    "tyre_age": 27,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1663.8880000000001,
+    "position": 11,
+    "gap_ahead_s": 6.5210000000001855,
+    "gap_behind_s": 5.433999999999742,
+    "car_ahead": "ALB",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "ALB",
+       "position": 10,
+       "gap_s": -6.5210000000001855
+      },
+      {
+       "driver": "LAT",
+       "position": 12,
+       "gap_s": 5.433999999999742
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     59.857,
+     59.31,
+     59.456,
+     59.118,
+     59.19
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     31
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "SOFT",
+     9
+    ],
+    [
+     "SOFT",
+     24
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:BEA:05",
+   "race_id": "2025_11_austria",
+   "driver": "BEA",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BEA",
+    "laps_completed": 5,
+    "compound": "SOFT",
+    "tyre_age": 5,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 465.0009999999993,
+    "position": 11,
+    "gap_ahead_s": 0.7319999999999709,
+    "gap_behind_s": 0.5010000000002037,
+    "car_ahead": "ALO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "ALO",
+       "position": 10,
+       "gap_s": -0.7319999999999709
+      },
+      {
+       "driver": "COL",
+       "position": 12,
+       "gap_s": 0.5010000000002037
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     109.434,
+     107.141,
+     104.216,
+     72.69,
+     71.256
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "HARD",
+     28
+    ],
+    [
+     "MEDIUM",
+     30
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:BEA:20",
+   "race_id": "2025_11_austria",
+   "driver": "BEA",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BEA",
+    "laps_completed": 20,
+    "compound": "HARD",
+    "tyre_age": 9,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1554.1509999999998,
+    "position": 12,
+    "gap_ahead_s": 1.917000000000371,
+    "gap_behind_s": 0.31999999999970896,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 11,
+       "gap_s": -1.917000000000371
+      },
+      {
+       "driver": "HUL",
+       "position": 13,
+       "gap_s": 0.31999999999970896
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.444,
+     71.49,
+     71.202,
+     71.442,
+     71.184
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     11
+    ],
+    [
+     "HARD",
+     28
+    ],
+    [
+     "MEDIUM",
+     30
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:GAS:15",
+   "race_id": "2025_11_austria",
+   "driver": "GAS",
+   "lap": 15,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GAS",
+    "laps_completed": 15,
+    "compound": "HARD",
+    "tyre_age": 3,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 12,
+      "start_lap": 1,
+      "start_age": 3
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1196.3499999999995,
+    "position": 13,
+    "gap_ahead_s": 10.707999999999629,
+    "gap_behind_s": 1.0390000000006694,
+    "car_ahead": "HAD",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAD",
+       "position": 12,
+       "gap_s": -10.707999999999629
+      },
+      {
+       "driver": "BEA",
+       "position": 14,
+       "gap_s": 1.0390000000006694
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.522,
+     75.976,
+     89.354,
+     70.994,
+     70.3
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     12
+    ],
+    [
+     "HARD",
+     26
+    ],
+    [
+     "MEDIUM",
+     31
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAD:04",
+   "race_id": "2025_11_austria",
+   "driver": "HAD",
+   "lap": 4,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAD",
+    "laps_completed": 4,
+    "compound": "MEDIUM",
+    "tyre_age": 2,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 2,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 395.9429999999993,
+    "position": 17,
+    "gap_ahead_s": 0.4579999999996289,
+    "gap_behind_s": null,
+    "car_ahead": "HUL",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HUL",
+       "position": 16,
+       "gap_s": -0.4579999999996289
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     117.087,
+     102.317,
+     103.989,
+     72.286
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     2
+    ],
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     41
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAD:10",
+   "race_id": "2025_11_austria",
+   "driver": "HAD",
+   "lap": 10,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAD",
+    "laps_completed": 10,
+    "compound": "MEDIUM",
+    "tyre_age": 8,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 2,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 825.1080000000002,
+    "position": 17,
+    "gap_ahead_s": 0.9570000000003347,
+    "gap_behind_s": null,
+    "car_ahead": "HUL",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HUL",
+       "position": 16,
+       "gap_s": -0.9570000000003347
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     72.078,
+     71.578,
+     70.974,
+     71.008,
+     71.516
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     2
+    ],
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     41
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAM:04",
+   "race_id": "2025_11_austria",
+   "driver": "HAM",
+   "lap": 4,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 4,
+    "compound": "MEDIUM",
+    "tyre_age": 4,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 389.4569999999994,
+    "position": 4,
+    "gap_ahead_s": 0.9309999999995853,
+    "gap_behind_s": 0.6520000000000437,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 3,
+       "gap_s": -0.9309999999995853
+      },
+      {
+       "driver": "RUS",
+       "position": 5,
+       "gap_s": 0.6520000000000437
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     96.74,
+     110.441,
+     110.612,
+     71.4
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAM:15",
+   "race_id": "2025_11_austria",
+   "driver": "HAM",
+   "lap": 15,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 15,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1167.2730000000001,
+    "position": 4,
+    "gap_ahead_s": 3.8720000000002983,
+    "gap_behind_s": 5.3159999999998035,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 3,
+       "gap_s": -3.8720000000002983
+      },
+      {
+       "driver": "RUS",
+       "position": 5,
+       "gap_s": 5.3159999999998035
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.169,
+     70.891,
+     70.714,
+     70.701,
+     70.717
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAM:20",
+   "race_id": "2025_11_austria",
+   "driver": "HAM",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 20,
+    "compound": "MEDIUM",
+    "tyre_age": 20,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1522.1509999999998,
+    "position": 4,
+    "gap_ahead_s": 2.8350000000000364,
+    "gap_behind_s": 11.945999999999913,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 3,
+       "gap_s": -2.8350000000000364
+      },
+      {
+       "driver": "BOR",
+       "position": 5,
+       "gap_s": 11.945999999999913
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.009,
+     71.064,
+     71.052,
+     70.811,
+     70.942
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAM:35",
+   "race_id": "2025_11_austria",
+   "driver": "HAM",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 35,
+    "compound": "HARD",
+    "tyre_age": 9,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 26,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2601.151,
+    "position": 4,
+    "gap_ahead_s": 3.5950000000002547,
+    "gap_behind_s": 14.24499999999989,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 3,
+       "gap_s": -3.5950000000002547
+      },
+      {
+       "driver": "RUS",
+       "position": 5,
+       "gap_s": 14.24499999999989
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.979,
+     69.933,
+     69.864,
+     69.769,
+     69.961
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HAM:50",
+   "race_id": "2025_11_austria",
+   "driver": "HAM",
+   "lap": 50,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HAM",
+    "laps_completed": 50,
+    "compound": "MEDIUM",
+    "tyre_age": 0,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 26,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 24,
+      "start_lap": 27,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3656.942,
+    "position": 3,
+    "gap_ahead_s": 26.034999999999854,
+    "gap_behind_s": 7.9669999999996435,
+    "car_ahead": "PIA",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PIA",
+       "position": 2,
+       "gap_s": -26.034999999999854
+      },
+      {
+       "driver": "LEC",
+       "position": 4,
+       "gap_s": 7.9669999999996435
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.346,
+     70.282,
+     71.777,
+     70.432,
+     73.95
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HUL:10",
+   "race_id": "2025_11_austria",
+   "driver": "HUL",
+   "lap": 10,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HUL",
+    "laps_completed": 10,
+    "compound": "SOFT",
+    "tyre_age": 10,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 824.1509999999998,
+    "position": 16,
+    "gap_ahead_s": 0.49099999999998545,
+    "gap_behind_s": 0.9570000000003347,
+    "car_ahead": "TSU",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "TSU",
+       "position": 15,
+       "gap_s": -0.49099999999998545
+      },
+      {
+       "driver": "HAD",
+       "position": 17,
+       "gap_s": 0.9570000000003347
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.857,
+     71.507,
+     70.949,
+     71.201,
+     71.118
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     12
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "MEDIUM",
+     27
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HUL:40",
+   "race_id": "2025_11_austria",
+   "driver": "HUL",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HUL",
+    "laps_completed": 40,
+    "compound": "MEDIUM",
+    "tyre_age": 28,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 12,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2976.108,
+    "position": 7,
+    "gap_ahead_s": 4.229000000000269,
+    "gap_behind_s": 2.243999999999687,
+    "car_ahead": "BOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOR",
+       "position": 6,
+       "gap_s": -4.229000000000269
+      },
+      {
+       "driver": "OCO",
+       "position": 8,
+       "gap_s": 2.243999999999687
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.861,
+     70.802,
+     70.797,
+     70.906,
+     70.708
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     12
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "MEDIUM",
+     27
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:HUL:60",
+   "race_id": "2025_11_austria",
+   "driver": "HUL",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HUL",
+    "laps_completed": 60,
+    "compound": "MEDIUM",
+    "tyre_age": 18,
+    "stints": [
+     {
+      "compound": "SOFT",
+      "laps": 12,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 30,
+      "start_lap": 13,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4402.427,
+    "position": 9,
+    "gap_ahead_s": 2.9470000000001164,
+    "gap_behind_s": 2.5270000000000437,
+    "car_ahead": "BOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOR",
+       "position": 8,
+       "gap_s": -2.9470000000001164
+      },
+      {
+       "driver": "OCO",
+       "position": 10,
+       "gap_s": 2.5270000000000437
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.872,
+     69.459,
+     69.661,
+     69.46,
+     69.792
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "SOFT",
+     12
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "MEDIUM",
+     27
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:LAW:04",
+   "race_id": "2025_11_austria",
+   "driver": "LAW",
+   "lap": 4,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LAW",
+    "laps_completed": 4,
+    "compound": "MEDIUM",
+    "tyre_age": 4,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 392.34699999999975,
+    "position": 9,
+    "gap_ahead_s": 0.6469999999999345,
+    "gap_behind_s": 0.5420000000003711,
+    "car_ahead": "BOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOR",
+       "position": 8,
+       "gap_s": -0.6469999999999345
+      },
+      {
+       "driver": "ALO",
+       "position": 10,
+       "gap_s": 0.5420000000003711
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     104.886,
+     108.551,
+     106.296,
+     72.35
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     32
+    ],
+    [
+     "HARD",
+     38
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:LAW:45",
+   "race_id": "2025_11_austria",
+   "driver": "LAW",
+   "lap": 45,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LAW",
+    "laps_completed": 45,
+    "compound": "HARD",
+    "tyre_age": 13,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 32,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3336.6979999999994,
+    "position": 8,
+    "gap_ahead_s": 4.286999999999352,
+    "gap_behind_s": 0.9149999999999636,
+    "car_ahead": "OCO",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "OCO",
+       "position": 7,
+       "gap_s": -4.286999999999352
+      },
+      {
+       "driver": "ALO",
+       "position": 9,
+       "gap_s": 0.9149999999999636
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.122,
+     69.996,
+     70.163,
+     70.36,
+     70.118
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     32
+    ],
+    [
+     "HARD",
+     38
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:LEC:15",
+   "race_id": "2025_11_austria",
+   "driver": "LEC",
+   "lap": 15,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 15,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1163.4009999999998,
+    "position": 3,
+    "gap_ahead_s": 4.591000000000349,
+    "gap_behind_s": 3.8720000000002983,
+    "car_ahead": "PIA",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PIA",
+       "position": 2,
+       "gap_s": -4.591000000000349
+      },
+      {
+       "driver": "HAM",
+       "position": 4,
+       "gap_s": 3.8720000000002983
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.565,
+     70.623,
+     70.605,
+     71.297,
+     71.051
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     25
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     21
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:LEC:40",
+   "race_id": "2025_11_austria",
+   "driver": "LEC",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 40,
+    "compound": "HARD",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 25,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2945.0509999999995,
+    "position": 3,
+    "gap_ahead_s": 14.061999999999898,
+    "gap_behind_s": 4.204999999999927,
+    "car_ahead": "PIA",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PIA",
+       "position": 2,
+       "gap_s": -14.061999999999898
+      },
+      {
+       "driver": "HAM",
+       "position": 4,
+       "gap_s": 4.204999999999927
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.677,
+     69.339,
+     69.362,
+     69.501,
+     69.616
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     25
+    ],
+    [
+     "HARD",
+     24
+    ],
+    [
+     "MEDIUM",
+     21
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:NOR:35",
+   "race_id": "2025_11_austria",
+   "driver": "NOR",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "NOR",
+    "laps_completed": 35,
+    "compound": "HARD",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 20,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2578.3109999999997,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 5.389000000000124,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PIA",
+       "position": 2,
+       "gap_s": 5.389000000000124
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.546,
+     69.546,
+     69.602,
+     69.561,
+     69.377
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     20
+    ],
+    [
+     "HARD",
+     32
+    ],
+    [
+     "MEDIUM",
+     18
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:OCO:45",
+   "race_id": "2025_11_austria",
+   "driver": "OCO",
+   "lap": 45,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "OCO",
+    "laps_completed": 45,
+    "compound": "HARD",
+    "tyre_age": 26,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 19,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3332.411,
+    "position": 7,
+    "gap_ahead_s": 6.4350000000004,
+    "gap_behind_s": 4.286999999999352,
+    "car_ahead": "BOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "BOR",
+       "position": 6,
+       "gap_s": -6.4350000000004
+      },
+      {
+       "driver": "LAW",
+       "position": 8,
+       "gap_s": 4.286999999999352
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.925,
+     70.829,
+     70.662,
+     70.815,
+     70.828
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     19
+    ],
+    [
+     "HARD",
+     31
+    ],
+    [
+     "HARD",
+     19
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:RUS:00",
+   "race_id": "2025_11_austria",
+   "driver": "RUS",
+   "lap": 0,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 0,
+    "compound": "MEDIUM",
+    "tyre_age": 0,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 0.0,
+    "position": null,
+    "gap_ahead_s": null,
+    "gap_behind_s": null,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": []
+    },
+    "red_flag_laps": [],
+    "standing_start": true,
+    "recent_lap_times_s": [],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     27
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:RUS:04",
+   "race_id": "2025_11_austria",
+   "driver": "RUS",
+   "lap": 4,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 4,
+    "compound": "MEDIUM",
+    "tyre_age": 4,
+    "stints": [],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 390.10899999999947,
+    "position": 5,
+    "gap_ahead_s": 0.6520000000000437,
+    "gap_behind_s": 0.6370000000006257,
+    "car_ahead": "HAM",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAM",
+       "position": 4,
+       "gap_s": -0.6520000000000437
+      },
+      {
+       "driver": "GAS",
+       "position": 6,
+       "gap_s": 0.6370000000006257
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     97.687,
+     111.333,
+     109.154,
+     71.671
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     27
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:RUS:20",
+   "race_id": "2025_11_austria",
+   "driver": "RUS",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 20,
+    "compound": "MEDIUM",
+    "tyre_age": 2,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 18,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1550.205,
+    "position": 10,
+    "gap_ahead_s": 3.568000000000211,
+    "gap_behind_s": 2.0289999999995416,
+    "car_ahead": "HAD",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAD",
+       "position": 9,
+       "gap_s": -3.568000000000211
+      },
+      {
+       "driver": "GAS",
+       "position": 11,
+       "gap_s": 2.0289999999995416
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.907,
+     71.675,
+     75.249,
+     87.877,
+     70.908
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     27
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:STR:40",
+   "race_id": "2025_11_austria",
+   "driver": "STR",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "STR",
+    "laps_completed": 40,
+    "compound": "HARD",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 26,
+      "start_lap": 1,
+      "start_age": 1
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2996.5969999999998,
+    "position": 12,
+    "gap_ahead_s": 6.6030000000000655,
+    "gap_behind_s": 7.979999999999563,
+    "car_ahead": "HAD",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAD",
+       "position": 11,
+       "gap_s": -6.6030000000000655
+      },
+      {
+       "driver": "BEA",
+       "position": 13,
+       "gap_s": 7.979999999999563
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.873,
+     70.773,
+     70.916,
+     70.713,
+     71.073
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     26
+    ],
+    [
+     "HARD",
+     27
+    ],
+    [
+     "SOFT",
+     16
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:TSU:35",
+   "race_id": "2025_11_austria",
+   "driver": "TSU",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 68,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "TSU",
+    "laps_completed": 35,
+    "compound": "MEDIUM",
+    "tyre_age": 5,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 18,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 12,
+      "start_lap": 19,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2659.165,
+    "position": 16,
+    "gap_ahead_s": 16.916000000000167,
+    "gap_behind_s": null,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 15,
+       "gap_s": -16.916000000000167
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     97.508,
+     70.469,
+     70.209,
+     70.028,
+     70.213
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "HARD",
+     12
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "SOFT",
+     8
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2025_11_austria:TSU:45",
+   "race_id": "2025_11_austria",
+   "driver": "TSU",
+   "lap": 45,
+   "snapshot": {
+    "race": {
+     "race_id": "2025_11_austria",
+     "total_laps": 68,
+     "pit_loss_s": 22.55,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "TSU",
+    "laps_completed": 45,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 18,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 12,
+      "start_lap": 19,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [
+     1,
+     2,
+     3
+    ],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3362.5209999999997,
+    "position": 15,
+    "gap_ahead_s": 3.368000000000393,
+    "gap_behind_s": 4.231999999999971,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 14,
+       "gap_s": -3.368000000000393
+      },
+      {
+       "driver": "COL",
+       "position": 16,
+       "gap_s": 4.231999999999971
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.311,
+     70.416,
+     70.548,
+     70.569,
+     70.35
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "HARD",
+     12
+    ],
+    [
+     "MEDIUM",
+     30
+    ],
+    [
+     "SOFT",
+     8
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:ALB:35",
+   "race_id": "2024_11_austria",
+   "driver": "ALB",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "ALB",
+    "laps_completed": 35,
+    "compound": "HARD",
+    "tyre_age": 23,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 12,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2538.4959999999996,
+    "position": 13,
+    "gap_ahead_s": 2.1899999999996,
+    "gap_behind_s": 0.6090000000003783,
+    "car_ahead": "GAS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "GAS",
+       "position": 12,
+       "gap_s": -2.1899999999996
+      },
+      {
+       "driver": "TSU",
+       "position": 14,
+       "gap_s": 0.6090000000003783
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.888,
+     71.931,
+     71.767,
+     72.038,
+     72.367
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     12
+    ],
+    [
+     "HARD",
+     27
+    ],
+    [
+     "HARD",
+     31
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:ALB:55",
+   "race_id": "2024_11_austria",
+   "driver": "ALB",
+   "lap": 55,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "ALB",
+    "laps_completed": 55,
+    "compound": "HARD",
+    "tyre_age": 16,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 12,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 27,
+      "start_lap": 13,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3986.1739999999995,
+    "position": 14,
+    "gap_ahead_s": 0.9849999999996726,
+    "gap_behind_s": 3.5700000000006185,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 13,
+       "gap_s": -0.9849999999996726
+      },
+      {
+       "driver": "TSU",
+       "position": 15,
+       "gap_s": 3.5700000000006185
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.146,
+     70.827,
+     70.812,
+     71.922,
+     72.452
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     12
+    ],
+    [
+     "HARD",
+     27
+    ],
+    [
+     "HARD",
+     31
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:ALO:35",
+   "race_id": "2024_11_austria",
+   "driver": "ALO",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "ALO",
+    "laps_completed": 35,
+    "compound": "HARD",
+    "tyre_age": 1,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 3
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 24,
+      "start_lap": 12,
+      "start_age": 1
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2540.9069999999997,
+    "position": 16,
+    "gap_ahead_s": 0.31599999999980355,
+    "gap_behind_s": 2.58600000000024,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 15,
+       "gap_s": -0.31599999999980355
+      },
+      {
+       "driver": "BOT",
+       "position": 17,
+       "gap_s": 2.58600000000024
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.845,
+     72.0,
+     71.501,
+     72.44,
+     78.118
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     11
+    ],
+    [
+     "MEDIUM",
+     24
+    ],
+    [
+     "HARD",
+     33
+    ],
+    [
+     "SOFT",
+     2
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:BOT:60",
+   "race_id": "2024_11_austria",
+   "driver": "BOT",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "BOT",
+    "laps_completed": 60,
+    "compound": "HARD",
+    "tyre_age": 18,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 19,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 23,
+      "start_lap": 20,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4352.813,
+    "position": 17,
+    "gap_ahead_s": 8.192999999999302,
+    "gap_behind_s": 2.704000000000633,
+    "car_ahead": "TSU",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "TSU",
+       "position": 16,
+       "gap_s": -8.192999999999302
+      },
+      {
+       "driver": "ALO",
+       "position": 18,
+       "gap_s": 2.704000000000633
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.177,
+     71.473,
+     72.808,
+     73.607,
+     70.778
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     19
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "HARD",
+     28
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:GAS:67",
+   "race_id": "2024_11_austria",
+   "driver": "GAS",
+   "lap": 67,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "GAS",
+    "laps_completed": 67,
+    "compound": "MEDIUM",
+    "tyre_age": 25,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 20,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 22,
+      "start_lap": 21,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [
+     65,
+     66
+    ],
+    "track_status": "green",
+    "elapsed_s": 4841.011,
+    "position": 10,
+    "gap_ahead_s": 0.7529999999997017,
+    "gap_behind_s": 5.8659999999999854,
+    "car_ahead": "RIC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RIC",
+       "position": 9,
+       "gap_s": -0.7529999999997017
+      },
+      {
+       "driver": "OCO",
+       "position": 11,
+       "gap_s": 5.8659999999999854
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.493,
+     71.2,
+     86.614,
+     71.797,
+     70.894
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     20
+    ],
+    [
+     "HARD",
+     22
+    ],
+    [
+     "MEDIUM",
+     29
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:HUL:45",
+   "race_id": "2024_11_austria",
+   "driver": "HUL",
+   "lap": 45,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "HUL",
+    "laps_completed": 45,
+    "compound": "HARD",
+    "tyre_age": 6,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 11,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 28,
+      "start_lap": 12,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3260.0499999999997,
+    "position": 8,
+    "gap_ahead_s": 28.759000000000015,
+    "gap_behind_s": 0.9009999999998399,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 7,
+       "gap_s": -28.759000000000015
+      },
+      {
+       "driver": "MAG",
+       "position": 9,
+       "gap_s": 0.9009999999998399
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     72.764,
+     70.745,
+     70.492,
+     70.45,
+     70.264
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     11
+    ],
+    [
+     "HARD",
+     28
+    ],
+    [
+     "HARD",
+     32
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:LEC:40",
+   "race_id": "2024_11_austria",
+   "driver": "LEC",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 40,
+    "compound": "MEDIUM",
+    "tyre_age": 8,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 15,
+      "start_lap": 2,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 17,
+      "start_lap": 17,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2914.663,
+    "position": 16,
+    "gap_ahead_s": 4.935999999999694,
+    "gap_behind_s": 6.596999999999753,
+    "car_ahead": "RIC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RIC",
+       "position": 15,
+       "gap_s": -4.935999999999694
+      },
+      {
+       "driver": "ALB",
+       "position": 17,
+       "gap_s": 6.596999999999753
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.894,
+     70.008,
+     70.477,
+     70.143,
+     70.308
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "HARD",
+     15
+    ],
+    [
+     "MEDIUM",
+     17
+    ],
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:LEC:45",
+   "race_id": "2024_11_austria",
+   "driver": "LEC",
+   "lap": 45,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 45,
+    "compound": "MEDIUM",
+    "tyre_age": 13,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 15,
+      "start_lap": 2,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 17,
+      "start_lap": 17,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3266.8309999999997,
+    "position": 11,
+    "gap_ahead_s": 3.2659999999996217,
+    "gap_behind_s": 1.3780000000006112,
+    "car_ahead": "RIC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RIC",
+       "position": 10,
+       "gap_s": -3.2659999999996217
+      },
+      {
+       "driver": "GAS",
+       "position": 12,
+       "gap_s": 1.3780000000006112
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.368,
+     70.118,
+     70.946,
+     70.543,
+     70.193
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "HARD",
+     15
+    ],
+    [
+     "MEDIUM",
+     17
+    ],
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:LEC:60",
+   "race_id": "2024_11_austria",
+   "driver": "LEC",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "LEC",
+    "laps_completed": 60,
+    "compound": "MEDIUM",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 15,
+      "start_lap": 2,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 17,
+      "start_lap": 17,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 18,
+      "start_lap": 34,
+      "start_age": 1
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4340.825999999999,
+    "position": 14,
+    "gap_ahead_s": 1.6569999999992433,
+    "gap_behind_s": 1.498000000000502,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 13,
+       "gap_s": -1.6569999999992433
+      },
+      {
+       "driver": "ALB",
+       "position": 15,
+       "gap_s": 1.498000000000502
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.801,
+     69.687,
+     69.649,
+     70.285,
+     70.36
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "HARD",
+     15
+    ],
+    [
+     "MEDIUM",
+     17
+    ],
+    [
+     "MEDIUM",
+     18
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:MAG:25",
+   "race_id": "2024_11_austria",
+   "driver": "MAG",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAG",
+    "laps_completed": 25,
+    "compound": "HARD",
+    "tyre_age": 15,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 10,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1813.7270000000003,
+    "position": 9,
+    "gap_ahead_s": 2.111000000000786,
+    "gap_behind_s": 1.6329999999998108,
+    "car_ahead": "PER",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "PER",
+       "position": 8,
+       "gap_s": -2.111000000000786
+      },
+      {
+       "driver": "RIC",
+       "position": 10,
+       "gap_s": 1.6329999999998108
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.473,
+     71.905,
+     71.862,
+     72.381,
+     71.693
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     10
+    ],
+    [
+     "HARD",
+     28
+    ],
+    [
+     "HARD",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:MAG:50",
+   "race_id": "2024_11_austria",
+   "driver": "MAG",
+   "lap": 50,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "MAG",
+    "laps_completed": 50,
+    "compound": "HARD",
+    "tyre_age": 12,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 10,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 28,
+      "start_lap": 11,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3614.231,
+    "position": 9,
+    "gap_ahead_s": 1.2640000000001237,
+    "gap_behind_s": 2.519999999999527,
+    "car_ahead": "HUL",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HUL",
+       "position": 8,
+       "gap_s": -1.2640000000001237
+      },
+      {
+       "driver": "RIC",
+       "position": 10,
+       "gap_s": 2.519999999999527
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.365,
+     70.879,
+     70.707,
+     70.698,
+     70.631
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     10
+    ],
+    [
+     "HARD",
+     28
+    ],
+    [
+     "HARD",
+     33
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:PER:67",
+   "race_id": "2024_11_austria",
+   "driver": "PER",
+   "lap": 67,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PER",
+    "laps_completed": 67,
+    "compound": "MEDIUM",
+    "tyre_age": 21,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 21,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 30,
+      "start_lap": 22,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [
+     65,
+     66
+    ],
+    "track_status": "green",
+    "elapsed_s": 4834.392,
+    "position": 7,
+    "gap_ahead_s": 0.4960000000000946,
+    "gap_behind_s": 4.7150000000001455,
+    "car_ahead": "HUL",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HUL",
+       "position": 6,
+       "gap_s": -0.4960000000000946
+      },
+      {
+       "driver": "MAG",
+       "position": 8,
+       "gap_s": 4.7150000000001455
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.871,
+     71.333,
+     84.696,
+     74.584,
+     71.077
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     21
+    ],
+    [
+     "HARD",
+     30
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:PIA:35",
+   "race_id": "2024_11_austria",
+   "driver": "PIA",
+   "lap": 35,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "PIA",
+    "laps_completed": 35,
+    "compound": "HARD",
+    "tyre_age": 10,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 25,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2508.479,
+    "position": 6,
+    "gap_ahead_s": 2.4880000000002838,
+    "gap_behind_s": 10.680000000000291,
+    "car_ahead": "HAM",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "HAM",
+       "position": 5,
+       "gap_s": -2.4880000000002838
+      },
+      {
+       "driver": "PER",
+       "position": 7,
+       "gap_s": 10.680000000000291
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.994,
+     69.767,
+     69.516,
+     69.779,
+     70.238
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     25
+    ],
+    [
+     "HARD",
+     26
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:RUS:25",
+   "race_id": "2024_11_austria",
+   "driver": "RUS",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 25,
+    "compound": "MEDIUM",
+    "tyre_age": 3,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 22,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1797.3110000000001,
+    "position": 4,
+    "gap_ahead_s": 2.0169999999998254,
+    "gap_behind_s": 3.255000000000109,
+    "car_ahead": "NOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "NOR",
+       "position": 3,
+       "gap_s": -2.0169999999998254
+      },
+      {
+       "driver": "SAI",
+       "position": 5,
+       "gap_s": 3.255000000000109
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.641,
+     75.077,
+     86.769,
+     69.563,
+     69.792
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     22
+    ],
+    [
+     "MEDIUM",
+     24
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:RUS:30",
+   "race_id": "2024_11_austria",
+   "driver": "RUS",
+   "lap": 30,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 30,
+    "compound": "MEDIUM",
+    "tyre_age": 8,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 22,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2147.6339999999996,
+    "position": 3,
+    "gap_ahead_s": 3.7969999999995707,
+    "gap_behind_s": 3.9090000000005602,
+    "car_ahead": "NOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "NOR",
+       "position": 2,
+       "gap_s": -3.7969999999995707
+      },
+      {
+       "driver": "SAI",
+       "position": 4,
+       "gap_s": 3.9090000000005602
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.037,
+     69.864,
+     70.085,
+     70.157,
+     70.18
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     22
+    ],
+    [
+     "MEDIUM",
+     24
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:RUS:60",
+   "race_id": "2024_11_austria",
+   "driver": "RUS",
+   "lap": 60,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "RUS",
+    "laps_completed": 60,
+    "compound": "HARD",
+    "tyre_age": 14,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 22,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 24,
+      "start_lap": 23,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 4276.637000000001,
+    "position": 3,
+    "gap_ahead_s": 15.38000000000011,
+    "gap_behind_s": 2.889999999999418,
+    "car_ahead": "NOR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "NOR",
+       "position": 2,
+       "gap_s": -15.38000000000011
+      },
+      {
+       "driver": "SAI",
+       "position": 4,
+       "gap_s": 2.889999999999418
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     69.711,
+     70.064,
+     70.002,
+     69.961,
+     70.065
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     22
+    ],
+    [
+     "MEDIUM",
+     24
+    ],
+    [
+     "HARD",
+     25
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:SAI:50",
+   "race_id": "2024_11_austria",
+   "driver": "SAI",
+   "lap": 50,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAI",
+    "laps_completed": 50,
+    "compound": "MEDIUM",
+    "tyre_age": 3,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 22,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 25,
+      "start_lap": 23,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3582.1829999999995,
+    "position": 6,
+    "gap_ahead_s": 5.127999999999702,
+    "gap_behind_s": 6.9760000000005675,
+    "car_ahead": "RUS",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RUS",
+       "position": 5,
+       "gap_s": -5.127999999999702
+      },
+      {
+       "driver": "PER",
+       "position": 7,
+       "gap_s": 6.9760000000005675
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.088,
+     74.811,
+     86.343,
+     69.555,
+     69.357
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     22
+    ],
+    [
+     "HARD",
+     25
+    ],
+    [
+     "MEDIUM",
+     24
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:SAR:05",
+   "race_id": "2024_11_austria",
+   "driver": "SAR",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAR",
+    "laps_completed": 5,
+    "compound": "MEDIUM",
+    "tyre_age": 10,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 399.53200000000015,
+    "position": 20,
+    "gap_ahead_s": 6.651000000000295,
+    "gap_behind_s": null,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 19,
+       "gap_s": -6.651000000000295
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     84.605,
+     99.346,
+     71.686,
+     71.76,
+     71.895
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "MEDIUM",
+     19
+    ],
+    [
+     "HARD",
+     29
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:SAR:20",
+   "race_id": "2024_11_austria",
+   "driver": "SAR",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 69,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "SAR",
+    "laps_completed": 20,
+    "compound": "HARD",
+    "tyre_age": 0,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 1,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "MEDIUM",
+      "laps": 19,
+      "start_lap": 2,
+      "start_age": 6
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1493.2689999999998,
+    "position": 20,
+    "gap_ahead_s": 11.021999999999935,
+    "gap_behind_s": null,
+    "car_ahead": "LEC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "LEC",
+       "position": 19,
+       "gap_s": -11.021999999999935
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     72.858,
+     73.584,
+     74.433,
+     72.772,
+     76.433
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     1
+    ],
+    [
+     "MEDIUM",
+     19
+    ],
+    [
+     "HARD",
+     29
+    ],
+    [
+     "MEDIUM",
+     20
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:STR:00",
+   "race_id": "2024_11_austria",
+   "driver": "STR",
+   "lap": 0,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "STR",
+    "laps_completed": 0,
+    "compound": "MEDIUM",
+    "tyre_age": 1,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 0.0,
+    "position": null,
+    "gap_ahead_s": null,
+    "gap_behind_s": null,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": []
+    },
+    "red_flag_laps": [],
+    "standing_start": true,
+    "recent_lap_times_s": [],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     20
+    ],
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "HARD",
+     27
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:STR:40",
+   "race_id": "2024_11_austria",
+   "driver": "STR",
+   "lap": 40,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "STR",
+    "laps_completed": 40,
+    "compound": "MEDIUM",
+    "tyre_age": 20,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 20,
+      "start_lap": 1,
+      "start_age": 1
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 2901.3529999999996,
+    "position": 11,
+    "gap_ahead_s": 3.338999999999942,
+    "gap_behind_s": 2.0070000000005166,
+    "car_ahead": "TSU",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "TSU",
+       "position": 10,
+       "gap_s": -3.338999999999942
+      },
+      {
+       "driver": "BOT",
+       "position": 12,
+       "gap_s": 2.0070000000005166
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     72.029,
+     71.884,
+     72.042,
+     72.507,
+     72.3
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     20
+    ],
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "HARD",
+     27
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:TSU:05",
+   "race_id": "2024_11_austria",
+   "driver": "TSU",
+   "lap": 5,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "TSU",
+    "laps_completed": 5,
+    "compound": "MEDIUM",
+    "tyre_age": 5,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 366.2069999999999,
+    "position": 13,
+    "gap_ahead_s": 1.2269999999998618,
+    "gap_behind_s": 0.7409999999999854,
+    "car_ahead": "RIC",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "RIC",
+       "position": 12,
+       "gap_s": -1.2269999999998618
+      },
+      {
+       "driver": "ALO",
+       "position": 14,
+       "gap_s": 0.7409999999999854
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     80.095,
+     71.613,
+     71.537,
+     71.316,
+     71.406
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     21
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "HARD",
+     26
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:TSU:25",
+   "race_id": "2024_11_austria",
+   "driver": "TSU",
+   "lap": 25,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "TSU",
+    "laps_completed": 25,
+    "compound": "HARD",
+    "tyre_age": 4,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 21,
+      "start_lap": 1,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1825.3870000000002,
+    "position": 15,
+    "gap_ahead_s": 5.390000000000327,
+    "gap_behind_s": 0.7680000000000291,
+    "car_ahead": "ALB",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "ALB",
+       "position": 14,
+       "gap_s": -5.390000000000327
+      },
+      {
+       "driver": "STR",
+       "position": 16,
+       "gap_s": 0.7680000000000291
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     76.247,
+     88.068,
+     71.011,
+     71.463,
+     71.534
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     21
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "HARD",
+     26
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:TSU:45",
+   "race_id": "2024_11_austria",
+   "driver": "TSU",
+   "lap": 45,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 70,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "TSU",
+    "laps_completed": 45,
+    "compound": "HARD",
+    "tyre_age": 1,
+    "stints": [
+     {
+      "compound": "MEDIUM",
+      "laps": 21,
+      "start_lap": 1,
+      "start_age": 0
+     },
+     {
+      "compound": "HARD",
+      "laps": 23,
+      "start_lap": 22,
+      "start_age": 0
+     }
+    ],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 3280.475,
+    "position": 16,
+    "gap_ahead_s": 2.2160000000003492,
+    "gap_behind_s": 0.43800000000010186,
+    "car_ahead": "STR",
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "STR",
+       "position": 15,
+       "gap_s": -2.2160000000003492
+      },
+      {
+       "driver": "ALO",
+       "position": 17,
+       "gap_s": 0.43800000000010186
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     71.872,
+     71.839,
+     71.859,
+     75.062,
+     91.829
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     21
+    ],
+    [
+     "HARD",
+     23
+    ],
+    [
+     "HARD",
+     26
+    ]
+   ]
+  },
+  {
+   "scenario_id": "2024_11_austria:VER:20",
+   "race_id": "2024_11_austria",
+   "driver": "VER",
+   "lap": 20,
+   "snapshot": {
+    "race": {
+     "race_id": "2024_11_austria",
+     "total_laps": 71,
+     "pit_loss_s": 24.07,
+     "min_stint_laps": 3,
+     "compounds": [
+      "HARD",
+      "MEDIUM",
+      "SOFT"
+     ],
+     "sc_rate_per_lap": null,
+     "sc_mean_laps": null,
+     "vsc_rate_per_lap": null,
+     "vsc_mean_laps": null
+    },
+    "driver": "VER",
+    "laps_completed": 20,
+    "compound": "MEDIUM",
+    "tyre_age": 20,
+    "stints": [],
+    "sc_laps": [],
+    "vsc_laps": [],
+    "track_status": "green",
+    "elapsed_s": 1414.1070000000004,
+    "position": 1,
+    "gap_ahead_s": null,
+    "gap_behind_s": 5.820999999999913,
+    "car_ahead": null,
+    "sets_available": null,
+    "weather": {
+     "rainfall_now": false,
+     "track_temp_c": null,
+     "air_temp_c": null,
+     "wind_kph": null,
+     "rain_laps": [],
+     "wetness_estimate": null,
+     "rain_probability": null
+    },
+    "field": {
+     "class_counts": {},
+     "class_pace_s": {},
+     "nearby": [
+      {
+       "driver": "NOR",
+       "position": 2,
+       "gap_s": 5.820999999999913
+      }
+     ]
+    },
+    "red_flag_laps": [],
+    "standing_start": false,
+    "recent_lap_times_s": [
+     70.957,
+     70.981,
+     71.364,
+     71.515,
+     71.548
+    ],
+    "context": {}
+   },
+   "actual_stints": [
+    [
+     "MEDIUM",
+     23
+    ],
+    [
+     "HARD",
+     28
+    ],
+    [
+     "MEDIUM",
+     13
+    ],
+    [
+     "SOFT",
+     7
+    ]
+   ]
+  }
+ ],
+ "skipped": []
+}
