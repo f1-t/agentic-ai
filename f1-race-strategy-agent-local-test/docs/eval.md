@@ -371,7 +371,8 @@ set `development: false`. Without it a set is `development: true`.
 - **v1 is the development set**: sampled before the split, from the race we tuned on.
   Its numbers are for debugging the harness and the baselines, not for the report.
 - **A set sampled from the eval races is the report set**: the numbers the report quotes.
-  Today that is d4, still to be built (see "The registered split" below).
+  Today that is d4, built and scored once at tag `d4-final-eval` (see "The registered split"
+  below and "d4, the held-out result").
 
 `scenarios --development` (`build_set(..., development=True)`) still samples a development
 set once the split exists, a Spain debug set say: no race is refused, the set is marked
@@ -734,7 +735,9 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | pilot1, live agent | `pilot1.csv` agent rows (Milestone 2, before R8; the cited ones) | `pilot1_fix*.csv` is a follow-up rerun after #59, not a replacement (below) |
 | d2, baselines | `reports/eval/d2_baselines_r8.csv` | `d2.csv` baseline rows (Milestone 2, before R8) |
 | d2, live agent | `d2.csv` agent rows (Milestone 2, before R8; the cited ones) | `d2_fix*.csv` is a follow-up rerun after #59, not a replacement (below) |
-| d3 | none: d3 is rebuilt and scored at the final evaluation | `d3_baselines.csv` (before R8; its reference is the expected stale one) |
+| d3 | none: its Monaco rows are superseded by d4 (below); d3 is not rescored | `d3_baselines.csv` (Nov 11, before R8; its reference is the expected stale one) |
+| d4, baselines + belief_optimizer (**report set, the held-out result**) | `reports/eval/d4_baselines.csv` (reference `data/references/d4/39bf1bbb4aa9.parquet`) | supersedes d3's 2019 Monaco baseline rows |
+| d4, live agent, one pass (**report set, the held-out result**) | `reports/eval/d4_agent.csv`, trajectories in `reports/eval/trajectories/d4/`; `d4_combined.csv` (agent + baseline + belief_optimizer rows, the input to `d4_compare_regret_s_*` with driver clusters and `d4_compare_race_regret_s_*` with race clusters); per-race paired table `d4_compare_per_race_regret_s_paired.csv`; figure table `d4_chart.csv` | |
 | dev6, baselines (development, calibration races) | `reports/eval/dev6_baselines.csv` (R8 rank 1, margin 3, limit-aware baselines) | |
 | dev6, live agent pass 1 (development, calibration races) | `reports/eval/dev6_agent_pass1.csv`, trajectories in `reports/eval/trajectories/dev6_pass1/`; `dev6_pass1_combined.csv` (agent + baseline rows, the input to `dev6_pass1_compare_regret_s_*` with driver clusters and `dev6_pass1_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_pass1_compare_per_race_regret_s_paired.csv`; figure table `dev6_pass1_chart.csv` | |
 | dev6, baselines + belief_optimizer, run 2 (development, calibration races) | `reports/eval/dev6_run2_baselines.csv` (compound proxy on, reference `fbb33ef732dd`) | `dev6_baselines.csv` (before the proxy) is the record pass 1 was compared with |
@@ -1035,6 +1038,46 @@ ties of 150). 119 submissions were voluntary and 31 came in a grace turn (pass 1
 at 72k mean input tokens (pass 1: 100k). The PIT / STAY_OUT decision is the same as pass 1's on
 142 of 150 scenarios. No row of any policy is invalid for anything but its own plan's R8 stint
 limit. dev6 is a development set on calibration races, not a held-out result.
+
+### d4, the held-out result
+
+d4 is the report set and this is the held-out result, declared in advance and run once at tag
+`d4-final-eval` (commit cd1b937, main after #82), with no code or config change. Steps, each run
+once: `scenarios --races 2019_06_monaco 2020_16_sakhir 2025_11_austria 2024_11_austria --version
+d4 --max-per-race 25 --seed 0` (report set, `development: false`, 100 scenarios, 25 per race,
+none skipped, digest `ae878eb91c28`, eval_set digest `98edff4380e1`); `reference` (seed 0, 50
+samples, two stops: `data/references/d4/39bf1bbb4aa9.parquet`, sim_code_version
+`58b50a00e0e3`, world config `ccb08edf391b`; `reference --check` clean apart from d3);
+`score --policies baselines belief_optimizer --require-reference` (`d4_baselines.csv`); then,
+after the baseline rows passed the gate (no row invalid for anything but an R8 breach of its own
+plan, none for an unknown compound, no negative regret, all four races loaded and fitted), one
+sequential agent pass (`score --policies agent --seed 0 --n-samples 50 --max-stops 2
+--require-reference`, `d4_agent.csv`): qwen3-30b-a3b on Voyager, default temperature, seed 0,
+main's agent loop (status line off, repeats run again, 2 grace turns, 10 evidence turns, 24-call
+budget; `AGENT_TURN_STATUS`, `AGENT_REPEAT_MODE`, `AGENT_SUBMIT_GRACE_STEPS` and
+`VOYAGER_TEMPERATURE` unset), R8 at rank 1 and margin 3, compound proxy on, 47.2 minutes wall
+time, nothing else calling the model. It is one pass: the model is not deterministic at this
+temperature, and no episode was rerun. d4's 25 Monaco scenario ids are d3's (same seed and per-race
+count), so **d3's 2019 Monaco baseline rows of November 11 (`d3_baselines.csv`, pre-R8 simulator)
+are superseded by d4's**; d3 itself is not rescored. What each race had been exposed to before
+this run is the disclosure under "The registered split"; this run adds nothing to it beyond the
+run itself.
+
+Pooled over the 100 scenarios, the agent scored 100 of 100 (71 voluntary submissions, 29 in a
+grace turn), mean regret 8.93 s (median 6.53), against belief_optimizer 8.95, actual_strategy
+8.87 and fixed_one_stop 12.87. Paired, agent minus belief_optimizer is -0.03 s, 95% interval
+[-0.29, 0.22] with driver clusters (39 ties of 100); agent minus actual_strategy -0.19 [-1.88,
+1.43]; agent minus fixed_one_stop -4.28 [-6.73, -1.90]. Per race the agent's mean regret is 8.58
+(2019 Monaco), 8.41 (2020 Sakhir), 2.55 (2025 Austria) and 16.17 s (2024 Austria). No row of any
+policy is invalid for anything but its own plan's R8 stint limit, and the world prices every
+compound from race laps at all four races (`proxied_compounds` and `opt_proxied_compounds` are
+empty on every row), so the with-and-without-proxy reading is the same table. The belief does
+price compounds without race laps at some snapshots (read from the model reports in the
+trajectories): at 2024 Austria the belief prices SOFT from practice and the cross-race step at
+24 of 25 snapshots (the 25th is lap 0, practice only), up to lap 67, while 23 of the 25 world
+references, fitted on every race lap, use SOFT; every policy's regret there is about 16 s. Against dev6 run 2 (development, calibration races) the regrets roughly double for the agent
+(3.95 to 8.93 s) and belief_optimizer (4.11 to 8.95), and the agent's lead over actual_strategy
+(-3.25 [-5.50, -1.25] on dev6) is not there on d4.
 
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
