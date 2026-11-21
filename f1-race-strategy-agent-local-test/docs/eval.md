@@ -737,6 +737,8 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | d3 | none: d3 is rebuilt and scored at the final evaluation | `d3_baselines.csv` (before R8; its reference is the expected stale one) |
 | dev6, baselines (development, calibration races) | `reports/eval/dev6_baselines.csv` (R8 rank 1, margin 3, limit-aware baselines) | |
 | dev6, live agent pass 1 (development, calibration races) | `reports/eval/dev6_agent_pass1.csv`, trajectories in `reports/eval/trajectories/dev6_pass1/`; `dev6_pass1_combined.csv` (agent + baseline rows, the input to `dev6_pass1_compare_regret_s_*` with driver clusters and `dev6_pass1_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_pass1_compare_per_race_regret_s_paired.csv`; figure table `dev6_pass1_chart.csv` | |
+| dev6, baselines + belief_optimizer, run 2 (development, calibration races) | `reports/eval/dev6_run2_baselines.csv` (compound proxy on, reference `fbb33ef732dd`) | `dev6_baselines.csv` (before the proxy) is the record pass 1 was compared with |
+| dev6, live agent run 2 (development, calibration races) | `reports/eval/dev6_run2_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run2/`; `dev6_run2_combined.csv` (agent + baseline + belief_optimizer rows, the input to `dev6_run2_compare_regret_s_*` with driver clusters and `dev6_run2_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run2_compare_per_race_regret_s_paired.csv`; figure table `dev6_run2_chart.csv` | pass 1 stays as the record of the earlier loop and world |
 
 Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
 under R8.
@@ -1010,6 +1012,29 @@ run at the same time. `score` logs trajectories under the set version; they were
 result. Loop settings of this pass: status line on, repeats served from the cache (today
 `AGENT_TURN_STATUS=1 AGENT_REPEAT_MODE=cache`), grace on; its `repeat_calls` are cached
 repeats, which its `evidence_calls` exclude.
+
+**dev6, run 2.** `reports/eval/dev6_run2_agent.csv` is a second single pass over the same 150
+scenarios with the same model settings (qwen3-30b-a3b on Voyager, default temperature, seed 0,
+`n_samples` 50, `max_stops` 2, R8 at rank 1 and margin 3, driver effects off), one sequential
+job (`score --scenarios data/scenarios/dev6.json --policies agent --seed 0 --n-samples 50
+--max-stops 2 --require-reference`) at commit 55a67ee, 54.6 minutes wall time, with no other
+agent run at the same time; trajectories were moved from `trajectories/dev6/` to
+`trajectories/dev6_run2/`. `dev6_run2_baselines.csv` is `--policies baselines
+belief_optimizer` on the same references. Three things differ from pass 1: (1) the world prices
+unraced compounds by the weighted blend ("Proxied compounds"; reference
+`data/references/dev6/fbb33ef732dd.parquet`, sim_code_version `58b50a00e0e3`, world config
+`ccb08edf391b`), so 2022 Saudi Arabia's SOFT continuations are scored rather than rejected;
+(2) the agent loop runs at main's defaults (status line off, repeats run again and counted
+against the budget, grace on; `AGENT_TURN_STATUS` and `AGENT_REPEAT_MODE` unset), where pass 1
+had the status line on and cached repeats, so run 2's `evidence_calls` include repeats and
+pass 1's do not; (3) the `belief_optimizer` baseline is added. Pooled, the agent scored 150 of
+150 (pass 1: 129, with 21 Saudi rows invalid for the unknown compound), mean regret 3.95 s
+(median 1.68), against belief_optimizer 4.11, actual_strategy 7.15 and fixed_one_stop 9.00;
+agent minus belief_optimizer is -0.16 s, 95% interval [-0.58, 0.20] with driver clusters (88
+ties of 150). 119 submissions were voluntary and 31 came in a grace turn (pass 1: 74 and 76),
+at 72k mean input tokens (pass 1: 100k). The PIT / STAY_OUT decision is the same as pass 1's on
+142 of 150 scenarios. No row of any policy is invalid for anything but its own plan's R8 stint
+limit. dev6 is a development set on calibration races, not a held-out result.
 
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
