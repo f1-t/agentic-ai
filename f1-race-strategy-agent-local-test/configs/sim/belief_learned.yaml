@@ -2,6 +2,8 @@
 # learned calibrator (calibrators.TrainedCalibrator: the leave-one-out model for a calibration
 # race, the all-races model for any other). NOT adopted by the default rule: an option; configs/sim/belief.yaml keeps shrinkage.
 # Do not edit by hand; rerun the command.
+pit_loss:
+  source: asof
 fit_window: to_snapshot
 traffic:
   name: none
