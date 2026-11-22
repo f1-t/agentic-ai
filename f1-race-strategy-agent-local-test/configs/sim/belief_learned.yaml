@@ -1,0 +1,20 @@
+# WRITTEN by `python -m src.sim.learned_calibrator train` (src/sim/learned_calibrator.py): configs/sim/belief.yaml with the trained
+# learned calibrator (calibrators.TrainedCalibrator: the leave-one-out model for a calibration
+# race, the all-races model for any other). NOT adopted by the default rule: an option; configs/sim/belief.yaml keeps shrinkage.
+# Do not edit by hand; rerun the command.
+fit_window: to_snapshot
+traffic:
+  name: none
+events:
+  name: rate
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+    wear_lower_bound: 0.0
+lap_noise: residual
+calibrator:
+  name: trained
+  params:
+    artifacts: models/calibrators/ridge_hybrid
+    sha256: f57c93918dfe

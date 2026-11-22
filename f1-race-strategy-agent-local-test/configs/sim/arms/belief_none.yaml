@@ -1,0 +1,6 @@
+# Learned-calibrator comparison arm "belief_none" (src/sim/learned_calibrator.py): the belief
+# simulator (base_config configs/sim/belief.yaml) with the practice prior held at every k
+# (calibrator none).
+base_config: configs/sim/belief.yaml
+calibrator:
+  name: none
