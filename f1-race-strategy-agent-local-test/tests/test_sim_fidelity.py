@@ -288,3 +288,26 @@ def test_only_runs_the_named_factors():
     assert [s.label for s in fidelity.ablation_specs(_spec(), ab, only=["b", "all_on"])] == ["base", "b", "all_on"]
     with pytest.raises(ValueError, match="unknown"):
         fidelity.ablation_specs(_spec(), ab, only=["c"])
+
+
+def test_noise_floor_levels():
+    """The ceiling hands the replay the real race step by step: level 0 is the headline's error
+    (charged pit loss less the summed residuals), stint pace removes each stint's mean clean
+    residual, the pit level the in/out laps and the charged loss, then SC/VSC laps and lap 1."""
+    kinds = ["lap1", "clean_free", "clean_free", "clean_free", "clean_free", "clean_free", "in_lap",
+             "out_lap", "clean_free", "clean_free", "clean_free", "clean_free", "clean_free", "sc", "slow_green"]
+    stint = [1] * 7 + [2] * 8
+    resid = np.array([1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 2.0, 3.0, -0.2, -0.2, -0.2, -0.2, -0.2, 4.0, 1.5])
+    laps = pd.DataFrame({"driver": "AAA", "lap": np.arange(1, 16), "stint": stint, "kind": kinds,
+                         "clean": [k.startswith("clean") for k in kinds], "resid_s": resid})
+    charged = 20.0
+    drivers = pd.DataFrame({"driver": ["AAA"], "pit_err_s": [-(2.0 + 3.0) + charged]})
+    e = {lvl: float(fidelity.ceiling_errors(laps, drivers, parts)["AAA"]) for lvl, parts in fidelity.CEILING_LEVELS}
+    assert e["0 judge"] == pytest.approx(charged - resid.sum())
+    after_pace = -resid.copy()
+    after_pace[:7] += 0.5
+    after_pace[7:] += -0.2
+    assert e["1 +stint pace"] == pytest.approx(after_pace.sum() + charged)
+    assert e["2 +pit laps"] == pytest.approx(after_pace.sum() - after_pace[6] - after_pace[7])
+    assert e["4 +lap 1"] == pytest.approx(after_pace[14])   # only the slow green lap is left
+    assert e["alone: pit laps"] == pytest.approx(-resid.sum() + 2.0 + 3.0)

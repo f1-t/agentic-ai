@@ -2488,11 +2488,38 @@ Measures (each one line; `pace` and `fit` columns say what every number was fitt
 | B4 | `calibration.midrace` (the G measure) under the belief at the version-3 laps |
 | B5 | `tests/future_blindness.py` run on its synthetic race with this belief, when the branch has it; else "not checked" |
 | D | per component (`fidelity.COMPONENTS`: tyre life (`tyre_history.tyre_life_prior` against the oldest age run, the median stint-end age and `observed_tyre_life`'s edge), wear rate, fresh-tyre gain, compound gap, fuel, pit loss (the prior from earlier races and `pit_loss.estimate` at k against the world's whole-race median, green and SC), lap 1 and warm-up, traffic rejoin, neutralisations (rates), neutralised laps (lap time under SC/VSC)), each predictor from allowed information against the whole-race target: error, bias, coverage where an sd is stated. A branch adds one `register(Component(...))`; code absent on the branch reports "not present" |
+| noise floor | `ceiling.csv`, `ceiling_pooled.csv` and the scorecard's "Noise floor" section (`fidelity.ceiling_table`, `ceiling_bootstrap`; computed from the cached Section A tables, no simulation): the headline replay (version 1, leave-one-driver-out fit, whole-race pace offset) handed the real race step by step, cumulative: (1) each stint's own pace offset (mean clean-lap residual of the stint, five or more clean laps), (2) in- and out-laps as recorded with no charged pit loss (the real stop durations), (3) SC/VSC laps as recorded, (4) lap 1 as recorded; then (2), (3), (4) alone. Close-pair order and relative gap error per level with race-cluster bootstrap intervals. What level 4 leaves is the non-clean green laps (blue flags, incidents, off-track moments) and lap noise: the order no simulator of these inputs can beat |
 | C | the scorecard for the base, each factor overlay alone and `all_on` (configs/sim/fidelity/ablation.yaml); headline changes pooled with a race-cluster bootstrap 95% interval over the races every configuration ran, and the ledger change. A factor whose switch is not on the branch (a module or file it `requires`, or an overlay SimConfig rejects) is skipped with a note |
 
 Before numbers on main (2026-11-22, f7be251: wear cliff, R8 retired, traffic off by default) are in `reports/calibration/fidelity/main/scorecard.md`
 and the ablation in `reports/calibration/fidelity/ablation/ablation.md`, both computed on main f7be251
 over 18 calibration races (2022_11_austria did not load then).
+
+### The noise floor (9c225f5's default judge, 18 calibration races)
+
+The headline replay handed the real race step by step (`ceiling_pooled.csv`; 365 close pairs;
+race-cluster 95% intervals):
+
+| level | close-pair order | rel gap MAE s | Spearman | abs MAE s |
+| --- | --- | --- | --- | --- |
+| 0 judge (the headline) | 0.682 [0.595, 0.744] | 15.5 [10.1, 21.4] | 0.945 | 32.2 |
+| 1 + each stint's own pace | 0.677 [0.581, 0.748] | 15.1 [9.7, 21.1] | 0.946 | 32.5 |
+| 2 + in/out laps as recorded (real stop durations) | 0.693 [0.617, 0.753] | 14.5 [9.0, 20.5] | 0.951 | 28.5 |
+| 3 + SC/VSC laps as recorded | 0.608 [0.557, 0.667] | 5.2 [4.2, 6.3] | 0.943 | 8.9 |
+| 4 + lap 1 as recorded | 0.745 [0.683, 0.804] | 3.2 [2.5, 3.9] | 0.967 | 7.9 |
+| pit laps alone | 0.710 [0.635, 0.762] | 14.9 | 0.951 | 28.3 |
+| SC/VSC laps alone | 0.551 [0.506, 0.607] | 8.2 | 0.882 | 13.8 |
+| lap 1 alone | 0.685 [0.597, 0.749] | 16.0 | 0.946 | 32.6 |
+
+Reading: about 0.75 close-pair order and 3 s relative gap error is the ceiling for a judge that
+knows every stint's pace, every stop, every neutralised lap and the start; what is left sits on
+the non-clean green laps (blue flags, incidents, off-track moments). Most of today's relative gap
+error is the neutralised laps (15.5 to 5.2 s), not tyre or pace physics: per-stint pace known
+moves the headline by -0.005 order and -0.4 s, the real stops by +0.011 to +0.028 order and
+-0.6 to -1.0 s. Recorded SC/VSC laps without the cars' real positions at the restart make the
+order worse (0.55 alone): a recorded SC lap closes the real gap to the car ahead, not the
+simulated one, so the neutralised laps need the queue (whose order the earlier laps decide)
+rather than their lap times.
 
 ### What the ablation says (f7be251, selection rule applied)
 
