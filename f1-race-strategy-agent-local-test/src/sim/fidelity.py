@@ -173,8 +173,10 @@ class Spec:
 
     def world_config(self, data=None) -> SimConfig:
         from ..eval.score import default_world_config
+        from . import config as _config
+        world_default = getattr(_config, "world_default", lambda c: c)   # the eval world's wear fit
         base = self.world if self.world is not None else default_world_config(
-            data.config if data is not None else SimConfig()).model_dump()
+            world_default(data.config if data is not None else SimConfig())).model_dump()
         return SimConfig.model_validate(merge(base, self.world_overlay))
 
     def belief_config(self) -> SimConfig:
@@ -312,6 +314,9 @@ class Options:
     grid_references: bool = True    # A4 also over the judge's reference at every B snapshot
     hindsight_variants: bool = True # A paired: each ledger input replaced by its substitute
     components: bool = True
+    # also run src/sim/field_replay.py's whole-field replay (every car together, traffic between
+    # them) and report its own summary; not cached, so off unless asked (--field-replay)
+    field_replay: bool = False
     seed: int = 0
     max_stops: int = 2
 
@@ -405,6 +410,21 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
     if "stint_limit" in cfg.rules and cfg.stint_limit_margin_laps is not None:
         add("stint_limit", f"R8 stint limit (rank-{cfg.stint_limit_rank} oldest age per compound + "
             f"{cfg.stint_limit_margin_laps})", _W, "Simulator.stint_limits from the full race frame", "r8_off")
+    wc = getattr(cfg, "wear_cliff", None)
+    if wc is not None and wc.enabled:
+        if role == "judge" and cfg.fit_window == "full":
+            edge = wc.world_edge
+            add("cliff_edge", f"wear-cliff support edge (world_edge {edge})",
+                {"history_only": _H, "history": _W, "race": _W}[edge],
+                {"history_only": "the historical tyre-life prior only (races strictly before this one)",
+                 "history": "the historical prior extended by the ages this race has lap data for",
+                 "race": "the oldest age raced in this race"}[edge],
+                None if edge == "history_only" else "cliff_history_only")
+        else:
+            add("cliff_edge", "wear-cliff support edge (as of the snapshot)", _K,
+                "the oldest age seen so far as a lower bound, the historical prior from earlier races above it")
+        add("cliff_prior", f"tyre-life history prior ({wc.prior_source})", _H, "races strictly before this one")
+        add("cliff_shape", f"cliff cost min({wc.kappa} o^2, {wc.cap_s_per_lap}) s/lap past the edge", _P)
     if cfg.compound_proxy.enabled:
         add("proxy_raced", "compound proxy: which compounds count as raced", _W, "decided over the whole race",
             "proxy_off")
@@ -414,8 +434,10 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
     tr = cfg.traffic.name
     if tr != "none":
         src = cfg.traffic.params.get("source", "recorded")
+        own = " at the car's own whole-race pace" if cfg.traffic.params.get("own_pace") and src == "recorded" else ""
         add("traffic", f"traffic ({tr}, source {src})", _W if src == "recorded" else _K,
-            "the recorded field replayed as ghost cars", "traffic_off")
+            ("the recorded field replayed as ghost cars" + own) if src == "recorded" else
+            "the other cars projected forward from the rows visible at the snapshot", "traffic_off" if src == "recorded" else None)
     ev = cfg.events.name
     add("events", f"neutralisations (events {ev})",
         {"none": _P, "fixed": _W, "recorded": _W, "hybrid": _W}.get(ev, _H),
@@ -451,7 +473,7 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
     covered = {"fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
-               "pit_loss", "exclude_snapshot_driver"}
+               "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit"}
     default = SimConfig().model_dump(mode="json")
     mine = cfg.model_dump(mode="json")
     for k in sorted(mine):
@@ -493,6 +515,9 @@ SUBSTITUTES: dict[str, dict] = {
                                "across circuits, else 22 s)"},
     "events_rate": {"world": {"events": {"name": "rate", "params": {}}}, "race": {}, "replaces": "events",
                     "with": "SC/VSC drawn at the rate model's rates (no recorded periods or lap times)"},
+    "cliff_history_only": {"world": {"wear_cliff": {"world_edge": "history_only"}}, "race": {},
+                           "replaces": "cliff_edge",
+                           "with": "the wear-cliff edge from the historical prior only, nothing from this race"},
     "r8_off": {"world": {"stint_limit_margin_laps": None}, "race": {}, "replaces": "stint_limit",
                "with": "no stint limit (A4 only: replays do not apply R8)"},
     "proxy_off": {"world": {"compound_proxy": {"enabled": False}}, "race": {}, "replaces": "proxy_raced",
@@ -1163,9 +1188,18 @@ def _tyre_life_predict(ctx):
                          "sd": float(pr.sd_laps)})
     else:
         rows.append({"key": "*", "source": "history prior (tyre_life_prior)", "pred": np.nan, "not_present": True})
+    s0 = ctx.snap(0)
+    if hasattr(ctx.world, "cliffs_for"):   # the judge's wear-cliff edge (the scorer's, may read this race)
+        rows += [{"key": c, "source": f"judge cliff edge ({ctx.world.config.wear_cliff.world_edge})", "pred": float(cl.age)}
+                 for c, cl in ctx.world.cliffs_for(s0).items()]
     for k in ctx.ks:
         lim = getattr(ctx.belief_at(k), "stint_limits", None) or {}
-        rows += [{"key": c, "source": f"belief support edge @k{k}", "pred": float(v)} for c, v in lim.items()]
+        rows += [{"key": c, "source": f"belief R8 limit @k{k}", "pred": float(v)} for c, v in lim.items()]
+        if hasattr(ctx.belief, "cliffs_for"):   # the belief's as-of edge: max(seen so far, prior)
+            for c, cl in ctx.belief.cliffs_for(ctx.snap(k)).items():
+                point = max(cl.lower, cl.prior) if cl.prior is not None else cl.age
+                rows.append({"key": c, "source": f"belief cliff edge @k{k}", "pred": float(point),
+                             "sd": float(cl.prior_sd) if cl.prior is not None and cl.prior > cl.lower else np.nan})
         f = ctx.data.frame
         seen = f[f["lap"] <= k].groupby("compound")["tyre_age"].max()
         prac = ctx.data.practice.groupby("compound")["tyre_age"].max() if ctx.data.practice is not None else pd.Series(dtype=float)
@@ -1579,7 +1613,7 @@ def race_tables(race_id: str, spec: Spec, opts: Options, cache_dir=None, pool=()
     if len(out.get("o_pred", [])):
         order.append(out["o_pred"])
     out["o_rows"] = pd.concat([o for o in order if len(o)], ignore_index=True)
-    fr = field_replay_summary(data, wcfg) if importlib.util.find_spec("src.sim.field_replay") else None
+    fr = field_replay_summary(data, wcfg) if opts.field_replay and importlib.util.find_spec("src.sim.field_replay") else None
     if fr is not None:
         out["o_field_replay"] = fr
     out["ledger"] = ledger_frame(spec, data)
@@ -2268,7 +2302,7 @@ def _options(args) -> Options:
     return Options(b_drivers=args.drivers, b_every=args.every, samples=0 if args.coverage else args.samples,
                    n_one=args.n_one, n_two=args.n_two, lodo=not args.no_lodo, loso=not args.no_loso,
                    grid_references=not args.no_grid_references, hindsight_variants=not args.no_hindsight_variants,
-                   components=not args.no_components, seed=args.seed)
+                   components=not args.no_components, seed=args.seed, field_replay=args.field_replay)
 
 
 def _common(ap):
@@ -2291,6 +2325,8 @@ def _common(ap):
     ap.add_argument("--no-hindsight-variants", action="store_true")
     ap.add_argument("--no-components", action="store_true")
     ap.add_argument("--no-future-blindness", action="store_true")
+    ap.add_argument("--field-replay", action="store_true",
+                    help="also run src/sim/field_replay.py's whole-field replay and report its summary")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--jobs", type=int, default=DEFAULT_JOBS,
                     help=f"worker processes, one BLAS thread each (default min(6, cpu_count // 2) = {DEFAULT_JOBS})")

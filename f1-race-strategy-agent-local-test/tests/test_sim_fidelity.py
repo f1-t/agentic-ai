@@ -66,7 +66,7 @@ def _by_id(rows):
 
 
 def test_ledger_lists_whole_race_inputs():
-    judge = _by_id(fidelity.ledger(SimConfig(fit_window="full"), "judge"))
+    judge = _by_id(fidelity.ledger(SimConfig(fit_window="full", stint_limit_margin_laps=3), "judge"))
     assert judge["fit_window"]["tag"] == "this race, whole"
     assert judge["fit_window"]["substitute"] == "pre_race_fit"
     assert judge["pit_loss"]["tag"] == "this race, whole"
@@ -95,7 +95,7 @@ def test_ledger_traffic_declared_and_unclassified(tmp_path):
 def test_substitutes_follow_the_ledger():
     spec = fidelity.Spec(label="t", world=SimConfig().model_dump(), belief=SimConfig().model_dump())
     subs = fidelity.substitutes_for(spec)
-    assert {"pre_race_fit", "pit_loss_prior", "r8_off", "proxy_off"} <= set(subs)
+    assert {"pre_race_fit", "pit_loss_prior", "cliff_history_only", "proxy_off"} <= set(subs)
     v = fidelity.substituted(spec, ["pit_loss_prior", "pre_race_fit"])
     assert v.world_race["pit_loss_s"] == "prior"
     assert v.world_config().fit_window == "pre_race"
@@ -268,3 +268,14 @@ def test_workers_run_one_blas_thread():
     assert fidelity.DEFAULT_JOBS <= 6
     with fidelity.ProcessPoolExecutor(1) as ex:   # the pool run_specs uses: spawned, one BLAS thread
         assert list(ex.map(_blas_threads, [0])) == [("1", "1")]
+
+
+def test_ledger_follows_the_wear_cliff_edge():
+    def edge(world_edge):
+        return _by_id(fidelity.ledger(SimConfig(wear_cliff={"world_edge": world_edge}), "judge"))["cliff_edge"]
+    assert edge("history")["tag"] == "this race, whole" and edge("history")["substitute"] == "cliff_history_only"
+    assert edge("race")["tag"] == "this race, whole"
+    assert edge("history_only")["tag"] == "history" and edge("history_only")["substitute"] is None
+    belief = _by_id(fidelity.ledger(SimConfig.from_file(fidelity.BELIEF_FILE), "predictive"))
+    assert belief["cliff_edge"]["tag"] == "this race, to snapshot"
+    assert "stint_limit" not in belief   # R8 retired
