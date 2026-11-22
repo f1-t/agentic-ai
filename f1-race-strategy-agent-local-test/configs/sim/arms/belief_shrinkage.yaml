@@ -1,0 +1,7 @@
+# Learned-calibrator comparison arm "belief_shrinkage" (src/sim/learned_calibrator.py): the
+# belief simulator as configs/sim/belief.yaml stands (base_config: wear bound, posterior draws,
+# residual lap noise, traffic off, rate events; G replays the real SC periods), with its calibrator,
+# shrinkage. The comparator every learned arm is measured against.
+base_config: configs/sim/belief.yaml
+calibrator:
+  name: shrinkage

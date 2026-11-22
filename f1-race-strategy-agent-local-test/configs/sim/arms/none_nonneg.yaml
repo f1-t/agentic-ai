@@ -1,9 +1,0 @@
-# Learned-calibrator comparison arm "none_nonneg" (src/sim/learned_calibrator.py): the practice
-# prior held at every k (calibrator none) under the belief's wear bound, so it compares with
-# wear_nonneg (shrinkage, the belief's calibrator) on the same degradation model.
-degradation:
-  name: linear_fuel
-  params:
-    wear_lower_bound: 0.0
-calibrator:
-  name: none

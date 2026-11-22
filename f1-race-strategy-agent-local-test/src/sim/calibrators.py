@@ -33,7 +33,11 @@ Registry:
   "ridge"      the first learned candidate (SPEC 0024, RidgeCalibrator): per degradation factor
                (targets="all": event factors too) ridge on the dataset features, alpha by inner
                leave-one-race-out, predictive sd floored at shrinkage's tau; shrinkage's output
-               for a factor it cannot fit. Not a default.
+               for a factor it cannot fit. `factors` (a list of factor kinds) fits only those, every
+               other kind shrinkage's: the per-factor hybrid of learned_calibrator.py.
+  "trained"    a ridge committed as trained artifacts (learned_calibrator.py train), loaded by race
+               id: the leave-one-out model for a training race, the all-races model for any other.
+               Never trains at evaluation time.
   "gbm", "mlp" learned candidates, registered stubs until the multi-race dataset exists:
                fit raises NotImplementedError.
   "fuel_config", "fuel_circuit_history", "fuel_circuit_features", "fuel_practice_longrun"

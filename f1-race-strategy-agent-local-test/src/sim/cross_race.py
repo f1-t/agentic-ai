@@ -107,10 +107,11 @@ COVERAGE_ONLY = ("posterior",)
 # arm tables and in learned.csv (calibrators.selection_table), never chosen by the arm selection.
 LEARNED_ARMS = ("ridge", "ridge_all")
 LEARNED_ROLE = "learned (reported, not selected)"
-# the learned calibrator on real races (learned_calibrator.py): none, ridge and ridge_all on the
-# belief's wear bound (wear_nonneg is the shrinkage comparator), and the per-factor hybrid the
-# adoption rule writes. Run only by learned_calibrator.py; never part of a cross run's arms.
-CALIBRATOR_ARMS = ("none_nonneg", "ridge_nonneg", "ridge_all_nonneg", "ridge_hybrid")
+# the learned calibrator on real races (learned_calibrator.py): the belief simulator
+# (base_config configs/sim/belief.yaml) under none, shrinkage, ridge and ridge_all, and the
+# per-factor hybrid the adoption rule writes. Run only by learned_calibrator.py; never part of a
+# cross run's arms.
+CALIBRATOR_ARMS = ("belief_none", "belief_shrinkage", "belief_ridge", "belief_ridge_all", "belief_hybrid")
 CALIBRATOR_ROLE = "calibrator comparison (learned_calibrator.py)"
 # simplest first: the tie-break among arms that pass
 SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air",
@@ -165,6 +166,8 @@ def arm_overlay(name: str) -> dict:
     import yaml
     base, s2, tau = parse_arm(name)
     over = yaml.safe_load((ARMS_DIR / f"{base}.yaml").read_text()) or {}
+    if "base_config" in over:   # an arm on a committed config (belief.yaml), the arm's keys on top
+        over = _merge(yaml.safe_load((ROOT / over.pop("base_config")).read_text()) or {}, over)
     if s2:
         _merge(over, {"degradation": {"params": {"divide_data_by_s2": True}}})
     if tau is not None:

@@ -6,9 +6,10 @@ against shrinkage, adopted per factor, and committed as trained artifacts.
 One command does all of it (docs/eval.md, "The learned calibrator"):
 
   1. Leave-one-race-out folds (cross_race.fold_job, the cross-race runner's own measure) on the
-     calibration races only, for the arms ARMS: none, shrinkage (wear_nonneg, the belief's
-     calibrator), ridge (degradation targets) and ridge_all (event factors too), every one on
-     the belief's wear bound. Each fold trains on the other races only, its inner alpha search
+     calibration races only, for the arms ARMS: none, shrinkage (the belief's calibrator), ridge
+     (degradation targets) and ridge_all (event factors too), every one the belief simulator as
+     configs/sim/belief.yaml stands (arm base_config: wear bound, posterior draws, residual lap
+     noise, traffic off; G replays the race's real SC and VSC periods). Each fold trains on the other races only, its inner alpha search
      included (calibrators.RidgeCalibrator); the windows are the belief's, pre_race and
      to_snapshot. Fold outputs go under --work (gitignored), wiped first unless --resume.
   2. The per-factor table (factor_table): per factor kind (pooled over compounds, as the engine
@@ -19,7 +20,7 @@ One command does all of it (docs/eval.md, "The learned calibrator"):
      worse at both levels (|coverage - nominal| no larger than shrinkage's at 68 and at 90
      percent). Degradation kinds are read from ridge, event kinds from ridge_all (shrinkage has
      no event prior: the config or race registry value at sd 0). Every other kind stays on
-     shrinkage. The result is written to configs/sim/arms/ridge_hybrid.yaml (ridge with
+     shrinkage. The result is written to configs/sim/arms/belief_hybrid.yaml (ridge with
      `factors`, the adopted kinds) and run through the same folds.
   4. The belief measures (belief_table) for none, shrinkage, ridge, ridge_all and the hybrid:
      the replay of the teams' real remaining plans from each calibration point (G: error and
@@ -68,11 +69,11 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 REPORT_DIR = ROOT / "reports" / "calibration" / "learned"
 WORK_DIR = REPORT_DIR / "work"               # fold parquets, gitignored
 ARTIFACTS = "models/calibrators/ridge_hybrid"  # relative to ROOT; TrainedCalibrator's `artifacts`
-HYBRID_ARM = "ridge_hybrid"
+HYBRID_ARM = "belief_hybrid"
 HYBRID_FILE = cross_race.ARMS_DIR / f"{HYBRID_ARM}.yaml"
 COMMAND = "python -m src.sim.learned_calibrator train"
-# calibrator -> cross-race arm; every arm on the belief's wear bound
-ARMS = {"none": "none_nonneg", "shrinkage": "wear_nonneg", "ridge": "ridge_nonneg", "ridge_all": "ridge_all_nonneg"}
+# calibrator -> cross-race arm; every arm is the belief simulator (base_config configs/sim/belief.yaml)
+ARMS = {"none": "belief_none", "shrinkage": "belief_shrinkage", "ridge": "belief_ridge", "ridge_all": "belief_ridge_all"}
 WINDOWS = ("pre_race", "to_snapshot")
 BELIEF_WINDOW = cross_race.BELIEF_WINDOW
 G_HORIZONS = cross_race.G_HORIZONS
@@ -177,16 +178,15 @@ def adopt(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def write_hybrid_arm(adopted: list[str], path=HYBRID_FILE) -> dict:
-    """configs/sim/arms/ridge_hybrid.yaml: ridge (event targets on when an event kind is adopted)
-    fitting the adopted kinds only, every other kind shrinkage's; on the belief's wear bound."""
+    """configs/sim/arms/belief_hybrid.yaml: the belief simulator with ridge (event targets on when
+    an event kind is adopted) fitting the adopted kinds only, every other kind shrinkage's."""
     adopted = sorted(adopted)
     params = {"targets": "all" if any(k in EVENT_KINDS for k in adopted) else "degradation", "factors": adopted}
-    over = {"degradation": {"name": "linear_fuel", "params": {"wear_lower_bound": 0.0}},
-            "calibrator": {"name": "ridge", "params": params}}
-    head = ("# Learned-calibrator arm \"ridge_hybrid\", WRITTEN by `" + COMMAND + "` (src/sim/learned_calibrator.py)\n"
+    over = {"base_config": "configs/sim/belief.yaml", "calibrator": {"name": "ridge", "params": params}}
+    head = ("# Learned-calibrator arm \"belief_hybrid\", WRITTEN by `" + COMMAND + "` (src/sim/learned_calibrator.py)\n"
             "# from the per-factor adoption rule: ridge for the factor kinds in `factors` (lower leave-one-race-out\n"
             "# rmse than shrinkage and coverage no worse, in both belief windows), shrinkage for every other kind.\n"
-            "# On the belief's wear bound. Do not edit by hand; rerun the command.\n")
+            "# The belief simulator otherwise (base_config). Do not edit by hand; rerun the command.\n")
     Path(path).write_text(head + yaml.safe_dump(over, sort_keys=False))
     return params
 
@@ -281,7 +281,10 @@ def decide(belief: pd.DataFrame, candidates=DEFAULT_CANDIDATES) -> dict:
 def _commit() -> dict:
     def git(*a):
         return subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", "src", "configs"))}
+    """The commit the command ran at, and whether src/ or configs/ differed from it (the hybrid arm
+    file, which the command itself writes, aside)."""
+    return {"commit": git("rev-parse", "HEAD"),
+            "dirty": bool(git("status", "--porcelain", "--", "src", "configs", f":!configs/sim/arms/{HYBRID_ARM}.yaml"))}
 
 
 def train_artifacts(races, params: dict, profile, artifacts=ARTIFACTS, arm=HYBRID_ARM, eval_set=cross_race.EVAL_SET,
