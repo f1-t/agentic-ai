@@ -122,11 +122,12 @@ def test_traffic_is_part_of_the_config_hash():
     # proxy (SimConfig.compound_proxy, with the step table, weights and sd floor in it) off 09c60db53ac9,
     # the as-of pit loss (SimConfig.pit_loss, with its prior table) off ccb08edf391b, and the
     # tyre-life change (R8 off by default, SimConfig.wear_cliff, min_race_rows_to_fit) off f4ffd7f05fad, and the
-    # as-of cross-race tables (compound_proxy.as_of, per_race and validation rows, twenty races) off e4eba32e56c6
+    # as-of cross-race tables (compound_proxy.as_of, per_race and validation rows, twenty races) off e4eba32e56c6,
+    # and 2022 Austria added to those rows off bc364c4e7aad
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "bc364c4e7aad" and ghost_on == "e43ff9f7fe9b"
+    assert default == "3b3f68389fd0" and ghost_on == "d7ce6741a51c"
     assert default not in ("0778d5ef02f6", "eccb59070c14", "07dc9587709d", "09c60db53ac9", "ccb08edf391b", "f4ffd7f05fad",
-                           "e4eba32e56c6")
+                           "e4eba32e56c6", "bc364c4e7aad")
 
 
 @pytest.fixture(scope="module")
