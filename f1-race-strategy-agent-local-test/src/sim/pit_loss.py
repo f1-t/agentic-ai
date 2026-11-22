@@ -80,7 +80,7 @@ def stop_table(frame: pd.DataFrame) -> pd.DataFrame:
     in-lap's status: sc, vsc; green when the in- and out-lap are both green; else other),
     known_s (session time the out-lap ended), and the two laps' compound, age, time, status."""
     cols = ["driver", "in_lap", "kind", "known_s", "c_in", "age_in", "t_in", "s_in", "c_out", "age_out",
-            "t_out", "s_out"]
+            "t_out", "s_out", "team", "lane_s"]
     rows = []
     f = frame.sort_values(["driver", "lap"])
     for d, g in f.groupby("driver", sort=True):
@@ -91,9 +91,40 @@ def stop_table(frame: pd.DataFrame) -> pd.DataFrame:
             a, b = g.loc[lap], g.loc[lap + 1]
             k_in, k_out = _status_kind(a["track_status"]), _status_kind(b["track_status"])
             kind = k_in if k_in in KINDS else ("green" if k_in == "green" and k_out == "green" else "other")
+            # pit-lane time, entry to exit (data.lap_frame's pit_in_time_s / pit_out_time_s), NaN without them
+            lane = (float(b["pit_out_time_s"]) - float(a["pit_in_time_s"])
+                    if "pit_in_time_s" in g and pd.notna(a["pit_in_time_s"]) and pd.notna(b["pit_out_time_s"])
+                    else float("nan"))
             rows.append([d, int(lap), kind, float(b["end_s"]), a["compound"], a["tyre_age"], a["lap_time_s"],
-                         k_in, b["compound"], b["tyre_age"], b["lap_time_s"], k_out])
+                         k_in, b["compound"], b["tyre_age"], b["lap_time_s"], k_out,
+                         a["team"] if "team" in g else None, lane])
     return pd.DataFrame(rows, columns=cols)
+
+
+# --- actual stop durations (SimConfig.pit_stops, docs/eval.md "Pit-stop durations") ------------
+def lane_deltas(stops: pd.DataFrame) -> pd.Series:
+    """Per stop (stop_table rows): its pit-lane time less the median lane time of the table's green
+    stops. The pit loss is a whole-race median; a stop's own duration differs from it by its lane
+    time's difference (stationary time, a slow wheel, a double stack): what a replay of the real
+    strategy should charge on top. NaN where the lane time is missing."""
+    if not len(stops) or "lane_s" not in stops:
+        return pd.Series(np.nan, index=stops.index, dtype=float)
+    green = stops.loc[stops["kind"] == "green", "lane_s"].dropna()
+    med = float(green.median()) if len(green) else float(stops["lane_s"].median())
+    return (stops["lane_s"] - med).astype(float)
+
+
+def team_delta(stops: pd.DataFrame, team, prior_stops: float) -> tuple[float, int]:
+    """(delta, n): the team's typical stop against the field's, the median lane-time difference of its
+    green stops in `stops` shrunk toward 0 by n / (n + prior_stops); (0, 0) with none."""
+    if team is None or not len(stops) or "team" not in stops:
+        return 0.0, 0
+    dev = lane_deltas(stops)
+    sel = (stops["team"] == team) & (stops["kind"] == "green") & dev.notna()
+    n = int(sel.sum())
+    if n == 0:
+        return 0.0, 0
+    return float(n / (n + prior_stops) * dev[sel].median()), n
 
 
 def _field_medians(frame: pd.DataFrame, upto_s: float | None = None) -> dict:
