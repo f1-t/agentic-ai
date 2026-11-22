@@ -265,6 +265,7 @@ def read_calls(path):
                     continue
     except OSError as e:
         print(f"warning: cannot read trajectory {path}: {e}", file=sys.stderr)
+    calls = [d for d in calls if "tool" in d]   # "no_tool_call" turn events are not calls
     calls.sort(key=lambda d: d.get("call_index", 0))
     return calls
 

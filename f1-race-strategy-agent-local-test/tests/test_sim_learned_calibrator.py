@@ -80,7 +80,8 @@ def test_the_trained_calibrator_reports_per_factor_sources_in_the_model_report(a
     r = cross_race.synthetic_race(SYN[1])
     cfg = r.config.model_copy(update={"fit_window": "to_snapshot",
                                       "calibrator": ComponentSpec(name="trained", params={"artifacts": str(out),
-                                                                                           "sha256": res["sha256"]})})
+                                                                                           "sha256": res["sha256"],
+                                                                                           "force_not_as_of": True})})
     sim = Simulator(r.frame, cfg, r.practice)
     snap = calibration.snapshot_at(r.frame, r.race, "D00", 15)
     o = sim.fitted_for(snap).calibration.output
@@ -161,9 +162,15 @@ def test_the_learned_belief_on_2021_spain_uses_the_model_fitted_without_it():
     from src.sim import jobs
     data = jobs.load_race("2021_04_spain", load_profile())
     cfg = SimConfig.from_file(lc.BELIEF_LEARNED)
-    sim = Simulator(data.frame, cfg, data.practice)
     driver = data.frame.loc[data.frame["lap"] == 21, "driver"].iloc[0]
     snap = calibration.snapshot_at(data.frame, data.race, driver, 20)
+    # the artifacts were fitted on races after 2021 Spain: refused unless forced (docs/eval.md
+    # "Cross-race tables, as of the race")
+    with pytest.raises(ValueError, match="not as of the race"):
+        Simulator(data.frame, cfg, data.practice).fitted_for(snap)
+    cfg = cfg.model_copy(update={"calibrator": cfg.calibrator.model_copy(
+        update={"params": {**cfg.calibrator.params, "force_not_as_of": True}})})
+    sim = Simulator(data.frame, cfg, data.practice)
     out = sim.fitted_for(snap).calibration.output
     assert out.source == "trained" and out.diagnostics["artifact"] == "loo/2021_04_spain.json"
     manifest = json.loads((lc.ROOT / lc.ARTIFACTS / "manifest.json").read_text())

@@ -282,6 +282,36 @@ that does not set it keeps its hash; the behaviour change under the default show
 snapshots embed the driver's own lap count and the raced compounds. They load and score as
 before; a new set records `"rule": "as_of"` and the builder `snapshot_as_of`.
 
+### Cross-race tables, as of the race
+
+Everything the policy side reads that was estimated from other races records the races it was
+fitted on and, pricing race R, uses only races that started strictly before R
+(`race_ids.as_of`); with no earlier race it falls back to a documented a priori constant with a
+wide sd, never fails and never uses a later race. `src/sim/provenance.py` lists every such
+artifact with its kind and, per race, the races it reads; `tests/future_blindness.py` checks it
+for every real race, 2021 Bahrain, 2019 United Kingdom and a synthetic race dated 1990
+(`test_policy_side_artifacts_fitted_only_on_earlier_races`, `test_race_before_every_table_uses_documented_priors`).
+The tables are built from the calibration races only (`compound_steps.CALIBRATION_RACES`: the six
+development races, 2025 Qatar and fourteen 2021-22 weekends; 2022 Austria is left out because
+`jobs.load_race` cannot build it, laps with no recorded compound); no race of `data/eval_set.json`
+is ever loaded or feeds a table.
+
+| artifact | read as of the race | no earlier race (a priori) | legacy switch |
+| --- | --- | --- | --- |
+| proxy tier 5 (`configs/sim/compound_steps.json`) | `per_race` step rows and the forward-chained `validation_rows` (each race priced with the table of the races before it: `compound_steps validate --as-of`); `proxy.as_of_config` recomputes the steps (median), the blend weights (1 / mse per source, at least 3 rows) and the sd floor (the blend's rmse) | no step, equal weights, `proxy.PRIOR_SD_FLOOR` (pace 1.0 s, wear 0.1 s/lap) | `compound_proxy.as_of: false` |
+| base delta, fuel prior, SC lap factor, lap-1 extra (`configs/sim/race_history.csv`, `python -m src.sim.race_history build`) | the `as_of_history` calibrator (belief.yaml): median of the earlier races, sd their spread floored at `race_history.SD_FLOOR`; the fuel prior is `fuel_prior`'s circuit history (#45) on the earlier races; the sds are the base and fuel taus, the event factors are drawn per sample | `race_history.A_PRIORI`: base delta 0.5 ± 1.0 s, SC lap factor 1.4 ± 0.15, lap-1 extra 8 ± 4 s; the fuel prior is the physics prior (`fuel_practice_longrun`, -0.03 s/kg x 110 kg / laps) | `calibrator: shrinkage` (the Spain-derived config values) |
+| SC/VSC rates (`configs/sim/neutralised_history.csv`) | `events.rate` with `as_of: true`: `event_rates`' global posterior on the earlier dry races (#45's forward-chaining fits) | `race_history.EVENT_PRIOR`: p_sc 1/60 per lap, d_sc 3.5 laps; VSC 0.02, 2 laps | `as_of: false` (EventModel's Spain values) |
+| `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the tools fall back to the sampling spread) | `SimConfig.cross_race_as_of: false` |
+| pit-loss prior, tyre-life history | as-of already (`pit_loss.pit_loss_prior`, `cliff.life_prior` / `tyre_history`) | their constant tiers | their own |
+| shrinkage taus | a priori engineering priors (base 0.5 s, wear 0.03 s/lap, hinge), fitted on no race; under `as_of_history` the base and fuel taus are the as-of sds | | |
+| learned calibrator (`trained`) | not as of the race: fitted on a fixed race set, off by default; refused for a race not after all its training races unless `force_not_as_of` | | |
+
+The world (the judge and the hindsight reference) keeps the whole-set tables: its full window
+prices unraced compounds with the whole-set step table and runs the config's effects and rates.
+The step table, weights and sd floor were re-estimated on the twenty races (the whole-set values
+the world and the legacy switch read; the weights and sd floor in the file are still the earlier
+seven-race validation's).
+
 **Scoring a car that was lapped or later retired.** Every plan covers the scheduled
 distance, the reference's included, and the world scores all of it with its whole-race fit
 (the world has no per-car pace and draws no retirement). Policy and reference then cover the
@@ -607,13 +637,10 @@ against. `actual_strategy` is exempt by definition: it replays what the team did
 **The scorer** (the world simulator and the hindsight reference) may use the whole race. It
 expresses tyre life as lap time (the wear cliff below), never as a rule handed to policies.
 
-Known caveats (the pit loss is as-of since the pit-loss change, above). The other known leaks are
-listed in `tests/future_blindness.py` (KNOWN_LEAKS) and handled by their own changes. The
-cross-race tables in `configs/sim/compound_steps.json` (the proxy's pace and wear steps and
-blend weights) are estimated from all seven calibration races regardless of date, so a race is
-priced partly from later races: for 2019 United Kingdom every row is later, for 2021 Spain all but
-2019 United Kingdom, and so on by date (2025 Qatar is the only calibration race with no later
-race in them). The belief's life ratio (below) is as-of; the proxy's steps are not yet.
+The cross-race tables a policy reads (the proxy's steps, weights and sd floor among them) are
+read as of the race since the cross-race change: "Cross-race tables, as of the race" under the
+first "Information contract" section above. The other known leaks are listed in
+`tests/future_blindness.py` (KNOWN_LEAKS) and handled by their own changes.
 
 ## The wear cliff
 
@@ -1181,7 +1208,18 @@ any scenario of any race (the lap-0 same-race guard is gone):
 - each trajectory event has a `phase`: `evidence` for the `max_steps` turns, `grace` for
   the up to `AGENT_SUBMIT_GRACE_STEPS` (default 2) turns that follow when no submission was
   accepted, which offer only `submit_recommendation`; `submitted_in_grace` marks a
-  submission made there. The grace turns are on whatever the two options above say.
+  submission made there. The grace turns are on whatever the two options above say;
+- a turn whose reply holds no usable tool call is a line in the trajectory file with
+  `event: "no_tool_call"` (step, phase, the reply clipped to 1500 characters, the backend's
+  parse error, finish reason and output tokens), not a trajectory event, so `tool_calls`
+  does not count it. The next message tells the model what was wrong: a reply cut off at
+  the output cap, or the parse error with the text around where it failed (a reply that
+  simply has no call still gets "No tool call was detected..."). The Voyager backend reads
+  a reply whose JSON fails only in its final run of closing brackets as the one run that
+  closes what is open (everything before it well nested and kept as written; never a reply
+  cut off at the cap); the calls from such a reply carry a `parse_repair` note. dev6
+  run 4 is the first pass with this; up to dev6 run 3 and in the held-out d4 pass these
+  turns were not logged, the reminder was the bare one and nothing was repaired.
 
 Why those defaults: in live runs on the same 50 scenarios, unprompted submissions went 43
 with neither the status line nor repeat handling, 31 with the status line and refused
@@ -1796,6 +1834,7 @@ current.
 | dev6, rule baselines (development, calibration races) | `reports/eval/dev6_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, reference `fbb33ef732dd`); `dev6_run2_combined_rules.csv` (run 2's rows plus these) and `dev6_run2_rules_compare_*` ("Rule baselines added after the held-out run") | |
 | dev6, live agent run 2 (development, calibration races) | `reports/eval/dev6_run2_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run2/`; `dev6_run2_combined.csv` (agent + baseline + belief_optimizer rows, the input to `dev6_run2_compare_regret_s_*` with driver clusters and `dev6_run2_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run2_compare_per_race_regret_s_paired.csv`; figure table `dev6_run2_chart.csv` | pass 1 stays as the record of the earlier loop and world |
 | dev6, live agent run 3 (variance repeat of run 2; development, calibration races) | `reports/eval/dev6_run3_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run3/`; `dev6_run3_combined.csv` (run 3's agent rows + run 2's baseline and belief_optimizer rows, the input to `dev6_run3_compare_regret_s_*` with driver clusters and `dev6_run3_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run3_compare_per_race_regret_s_paired.csv`; figure table `dev6_run3_chart.csv` | not a replacement: run 2 stays the cited dev6 result; run 3 only measures run-to-run variation |
+| dev6, live agent run 4 (loop that logs and recovers from turns with no usable tool call; development, calibration races) | `reports/eval/dev6_run4_agent.csv`, trajectories (with `no_tool_call` events and `parse_repair` notes) in `reports/eval/trajectories/dev6_run4/`; `dev6_run4_combined.csv` (run 4's agent rows + every non-agent row of `dev6_run2_combined_rules.csv`, rule baselines included, the input to `dev6_run4_compare_regret_s_*` with driver clusters and `dev6_run4_compare_race_regret_s_*` with race clusters) | a different agent loop from runs 2 and 3 and from the held-out d4 pass, which all ran before the fix |
 
 Rows scored under R8 carry `stint_limit_rank` and `stint_limit_margin_laps`; rows scored after
 the tyre-life change carry a blank `stint_limit_margin_laps` (R8 off).
@@ -2367,6 +2406,62 @@ both passes and changes sign. Per race the movement is concentrated in 2023 Bahr
 STAY_OUT to PIT flips worth +4.4, +15.1 and +21.3 s) made three tool calls in the first turn, no
 logged call in the next nine, and then pitted onto MEDIUM in a grace turn without evaluating a
 plan. Without those four the per-scenario difference is +0.13 s [-0.06, 0.42].
+
+**dev6, run 4 (turns with no usable tool call).** Why run 3's four episodes stalled, found by
+logging every turn with no tool call and rerunning nine dev6 scenarios (the four, and five more
+with 7 or 8 such turns in run 3) three times each with the run 3 loop: all 94 such turns were
+replies that ended normally (finish reason `stop`, at most 571 of the 1024 output tokens) and
+were JSON the parser rejected. 87 had one closing brace too many after `compare_plans`'
+candidates (`"laps": 3}]}}}]}`), 4 one too few, 3 two whole envelopes in one reply; none was
+cut off, empty, prose or fenced. The loop answered each with "No tool call was detected" and
+did not show the model its reply, so it sent the same malformed JSON back: 72 of the 94 came
+directly after another, and 5 of the 27 episodes stalled exactly as in run 3 (grace-turn PIT,
+no plan evaluated). The fix (agent loop and Voyager backend, under "The agent policy" above):
+those turns are logged, the reminder carries the parse error and where it failed, and a reply
+whose only fault is its final run of closing brackets is read as the one run that closes
+what is open (91 of the 94 had that shape; the 3 double envelopes are left to the reminder). The same 27 targeted episodes:
+5 stalls before, 1 with the reminder alone, 0 with the whole fix; turns with no tool call 94,
+50, 3; every decision STAY_OUT, as in run 2. Then one full pass, same command and settings as
+runs 2 and 3, at commit e414a70, 66.5 minutes wall time, nothing else calling the model;
+trajectories moved from `trajectories/dev6/` to `trajectories/dev6_run4/`.
+`dev6_run4_combined.csv` is the new agent rows plus every non-agent row of
+`dev6_run2_combined_rules.csv` (31 reference and stamp columns match row for row, floats to
+1e-9 s: two `opt_time_s` differ by 9e-13).
+
+| | run 2 | run 3 | run 4 |
+| --- | --- | --- | --- |
+| scored / invalid | 150 / 0 | 149 / 1 | 150 / 0 |
+| mean / median / p90 regret s | 3.95 / 1.68 / 11.82 | 4.36 / 2.37 / 13.06 | 4.00 / 1.68 / 11.90 |
+| voluntary / grace submissions | 119 / 31 | 110 / 40 | 121 / 29 |
+| grace submissions with no plan evaluated | 0 | 4 | 0 |
+| turns with no tool call (episodes with any; with 8 or more) | 148 (79; 0) | 222 (93; 6) | 23 (22; 0) |
+| stalled episodes | 0 | 4 | 0 |
+| Brier / pit-now agreement | 0.090 / 0.893 | 0.108 / 0.873 | 0.093 / 0.887 |
+| evidence / repeat / tool calls per episode | 15.16 / 5.85 / 16.67 | 14.33 / 4.76 / 15.73 | 17.70 / 6.93 / 19.59 |
+| latency s / input tokens / output tokens | 21.7 / 72.3k / 951 | 24.1 / 71.0k / 1098 | 26.3 / 84.1k / 966 |
+
+Turns with no tool call are counted the same way for every run (a step with no call event);
+run 4's 23 match its `no_tool_call` events: 13 a bare submission object without the
+`tool_calls` envelope, 5 cut off at the 1024-token cap (many calls in one reply), 5 other
+malformed JSON. 88 turns in 82 episodes were read after a closer repair. Agent minus X,
+paired, 95% interval with (race, driver) clusters (run 3's rule rows paired the same way, not
+committed):
+
+| X | run 2 | run 3 | run 4 |
+| --- | --- | --- | --- |
+| actual_strategy | -3.25 [-5.50, -1.25] | -2.79 [-5.06, -0.68] | -3.20 [-5.47, -1.20] |
+| belief_optimizer | -0.16 [-0.58, 0.20] | +0.24 [-0.21, 0.79] | -0.12 [-0.54, 0.26] |
+| run_to_flag | -0.31 [-2.10, 1.35] | +0.07 [-1.80, 1.81] | -0.27 [-2.05, 1.37] |
+| one_stop_total | -0.24 [-2.24, 1.56] | +0.14 [-1.96, 2.02] | -0.18 [-2.18, 1.59] |
+| fixed_one_stop | -5.28 [-7.25, -3.30] | -5.01 [-7.03, -2.99] | -5.21 [-7.19, -3.24] |
+
+So the stalls are gone and run 4 lands on run 2 (decision the same on 149 of 150 scenarios,
+run 4 minus run 2 regret +0.04 s per scenario, 124 identical); the four run 3 episodes stay out
+again (regret 0.00, 0.60, 0.00 and 5.38 s, against invalid, 4.96, 15.12 and 25.73 in run 3).
+What got worse is cost: with calls that used to be lost now running, an episode makes 2.5 more
+evidence calls and reads 16% more input tokens than in run 2, 4.6 s slower. The held-out d4
+result (tag `d4-final-eval`) was produced by the loop before this fix; rerunning it is the
+owner's decision.
 
 ### d4, the held-out result
 

@@ -125,6 +125,19 @@ def load_compound_steps(path=COMPOUND_STEPS_FILE) -> dict:
             for pair, entry in table.get("steps", {}).items()}
 
 
+def _table_rows(key, path=COMPOUND_STEPS_FILE) -> list:
+    """The rows of list section `key` of the committed table ("per_race": each calibration
+    race's step row; "validation_rows": the forward-chained hidden-compound validation), the
+    numbers proxy.as_of_config recomputes the tier-5 inputs from; [] when absent."""
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        rows = json.load(f).get(key) or []
+    keep = ("race_id", "pair", "thin", *("pace_frac", "wear_ratio", "life_ratio"), "compound", "case", "available",
+            "pace_err_s", "wear_err_s_per_lap")
+    return [{k: r[k] for k in keep if k in r} for r in rows]
+
+
 def _blend_section(key, path=COMPOUND_STEPS_FILE) -> dict:
     """{"pace": {...}, "wear": {...}} section `key` of the committed table ("weights": per
     source 1 / its validation mean squared error; "sd_floor": the blend's leave-one-race-out
@@ -176,6 +189,12 @@ class CompoundProxy(_Cfg):
     steps: dict = Field(default_factory=load_compound_steps)
     weights: dict = Field(default_factory=lambda: _blend_section("weights"))
     sd_floor: dict = Field(default_factory=lambda: _blend_section("sd_floor"))
+    # a windowed fit (a policy's) pricing race R reads steps, weights and sd_floor recomputed from
+    # the races before R in `per_race` and `validation` (proxy.as_of_config); False reads the
+    # whole-set table as before (legacy). The full window (the world) always reads the whole set.
+    as_of: bool = True
+    per_race: list = Field(default_factory=lambda: _table_rows("per_race"))
+    validation: list = Field(default_factory=lambda: _table_rows("validation_rows"))
 
 
 PIT_LOSS_PRIOR_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "sim", "pit_loss_prior.json")
@@ -304,6 +323,10 @@ class SimConfig(_Cfg):
     # what a windowed fit may read of the race frame at the snapshot (PolicyView); left out of
     # config_hash while at its default
     policy_view: PolicyView = Field(default_factory=PolicyView)
+    # a windowed fit reads calibration_error_s (model_report.calibration_error) as of the race:
+    # NaN unless every race of the midrace summary started before it (docs/eval.md "Information
+    # contract"); False reads it whatever the race (legacy). Left out of config_hash at its default.
+    cross_race_as_of: bool = True
     # fit on free-air rows only: every degradation fit (all windows), the hazard fit and
     # ref_lap_s use the clean rows with data.lap_frame's free_air True; practice rows pass
     # (Simulator._fit). ref_lap_s becomes the free-air median, while sc_lap_factor (1.36) was

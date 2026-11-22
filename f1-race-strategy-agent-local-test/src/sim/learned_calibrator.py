@@ -63,7 +63,7 @@ import yaml
 
 from ..contracts import split_factor
 from . import calibration, calibrators, cross_race, jobs
-from .compound_steps import CALIBRATION_RACES
+from .compound_steps import SEVEN_CALIBRATION_RACES as CALIBRATION_RACES
 from .compute import load_profile, training_run
 from .race_ids import canonical_race_id
 

@@ -9,6 +9,8 @@ traffic:
   name: none
 events:
   name: rate
+  params:
+    as_of: true   # the SC/VSC rates as of the race, as belief.yaml (docs/eval.md "Cross-race tables, as of the race")
 degradation:
   name: linear_fuel
   params:

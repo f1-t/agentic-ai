@@ -249,9 +249,13 @@ def test_calibration_error_is_read_from_a_summary_csv(tmp_path):
                          "n": 1, "mae_s": 9.0, "mae_offset_s": [3.5, 4.5, 6.25, 1.0]})
     path = tmp_path / "midrace_summary.csv"
     stub.to_csv(path, index=False)
-    s = Simulator(synthetic_frame(), window("to_snapshot"), synthetic_practice())
+    # the legacy reading (cross_race_as_of off): the summary whatever the race; as of the race a
+    # synthetic race, with no date, gets NaN (docs/eval.md "Cross-race tables, as of the race")
+    s = Simulator(synthetic_frame(), window("to_snapshot", cross_race_as_of=False), synthetic_practice())
+    as_of = Simulator(synthetic_frame(), window("to_snapshot"), synthetic_practice())
     k10 = Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT", tyre_age=10)  # horizon 40
     assert s.model_report(k10, calibration_summary=path).calibration_error_s == 6.25
+    assert math.isnan(as_of.model_report(k10, calibration_summary=path).calibration_error_s)
     k21 = Snapshot(race=RACE, driver="X", laps_completed=21, compound="SOFT", tyre_age=21)  # horizon 29
     assert s.model_report(k21, calibration_summary=str(path)).calibration_error_s == 3.5
     indexed = stub.set_index(["window", "horizon_bucket"])
@@ -266,7 +270,7 @@ def test_default_summary_is_the_committed_midrace_table():
     from src.sim.model_report import CALIBRATION_SUMMARY
     table = pd.read_csv(CALIBRATION_SUMMARY)
     want = float(table[(table["window"] == "to_snapshot") & (table["horizon_bucket"] == 40)]["mae_offset_s"].iloc[0])
-    s = Simulator(synthetic_frame(), window("to_snapshot"), synthetic_practice())
+    s = Simulator(synthetic_frame(), window("to_snapshot", cross_race_as_of=False), synthetic_practice())
     k10 = Snapshot(race=RACE, driver="X", laps_completed=10, compound="SOFT", tyre_age=10)
     assert s.model_report(k10).calibration_error_s == want
 
