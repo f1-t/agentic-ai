@@ -64,21 +64,33 @@ def smoke(tmp_path_factory):
     return tmp, manifest, log, before
 
 
+# The 24 weekends of 2021-22 the more-races cache added (docs/eval.md, "More cached weekends"):
+# nine of circuit history (group A) and fifteen of a seeded pool (group B).
+MORE_RACES_2021_22 = [
+    "2021_01_bahrain", "2021_02_emilia_romagna", "2021_07_france", "2021_09_austrian", "2021_12_belgium",
+    "2021_18_mexico", "2021_20_qatar", "2021_21_saudi_arabia", "2021_22_united_arab_emirates",
+    "2022_01_bahrain", "2022_03_australia", "2022_04_emilia_romagna", "2022_05_miami", "2022_06_spain",
+    "2022_07_monaco", "2022_08_azerbaijan", "2022_09_canada", "2022_11_austria", "2022_12_france",
+    "2022_14_belgium", "2022_17_singapore", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates",
+]
+
+
 def test_cached_races_are_the_committed_spain_cache():
     # Every cached season has its event schedule in the sqlite (dataset 3 added a seeded
-    # 2018-25 sample). Sprint weekends are listed (their practice prior reads FP1 and the
-    # Sprint). Discovery reads directory names and schedules only: no race is loaded.
-    assert real_run.cached_races() == ([
+    # 2018-25 sample, the more-races cache 24 weekends of 2021-22). Sprint weekends are listed
+    # (their practice prior reads FP1 and the Sprint). Discovery reads directory names and
+    # schedules only: no race is loaded.
+    assert real_run.cached_races() == (sorted([
         "2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir", "2021_04_spain",
         "2022_02_saudi_arabia", "2023_01_bahrain", "2023_07_spain", "2024_07_emilia_romagna",
         "2024_08_monaco", "2024_11_austria", "2024_12_united_kingdom", "2024_21_brazil",
-        "2025_11_austria", "2025_23_qatar",
-    ], [])
+        "2025_11_austria", "2025_23_qatar", *MORE_RACES_2021_22,
+    ]), [])
 
 
 def test_races_auto_on_the_cached_races_leaves_the_four_held_out_races_out(tmp_path, monkeypatch):
-    """The 14 cached races less the four data/eval_set.json holds out (two of them, 2024 and
-    2025 Austria, are sprint weekends now listed): ten races for both commands. Nothing runs
+    """The 38 cached races less the four data/eval_set.json holds out (two of them, 2024 and
+    2025 Austria, are sprint weekends now listed): 34 races for both commands. Nothing runs
     and no race loads: the runners are stubbed and the loaders raise."""
     def no_load(*a, **k):
         raise AssertionError("a race was loaded")
@@ -88,8 +100,9 @@ def test_races_auto_on_the_cached_races_leaves_the_four_held_out_races_out(tmp_p
     monkeypatch.setattr(cross_race, "run", lambda races, *a, **kw: seen.update(races=races, **kw))
     monkeypatch.setattr(cross_race, "report", lambda *a, **kw: tmp_path / "summary.md")
     monkeypatch.setattr(real_run, "execute", lambda run: ran.setdefault("run", run))
-    kept = ["2019_10_united_kingdom", "2021_04_spain", "2022_02_saudi_arabia", "2023_01_bahrain", "2023_07_spain",
-            "2024_07_emilia_romagna", "2024_08_monaco", "2024_12_united_kingdom", "2024_21_brazil", "2025_23_qatar"]
+    kept = sorted(["2019_10_united_kingdom", "2021_04_spain", "2022_02_saudi_arabia", "2023_01_bahrain",
+                   "2023_07_spain", "2024_07_emilia_romagna", "2024_08_monaco", "2024_12_united_kingdom",
+                   "2024_21_brazil", "2025_23_qatar", *MORE_RACES_2021_22])
     held = ["2019_06_monaco", "2020_16_sakhir", "2024_11_austria", "2025_11_austria"]
     cross_race.main(["run", "--races", "auto", "--out", str(tmp_path / "cross")])
     assert seen["races"] == kept and seen["held_out_skipped"] == held and not seen["allow_held_out"]

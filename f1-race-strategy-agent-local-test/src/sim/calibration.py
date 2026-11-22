@@ -494,6 +494,11 @@ NON_PHYSICS = (
     # estimates the proxy's tier-5 table into configs/sim/compound_steps.json (read through
     # SimConfig.compound_proxy.steps, so config_hash covers the numbers) and runs its validation
     "compound_steps",
+    # the historical tyre-life prior (tyre_life_prior) and the command that builds its committed
+    # history table; nothing in the simulator calls it yet, so it moves no simulated time. The
+    # change that places the support edge with it must move it to PHYSICS_MODULES (or carry its
+    # numbers into SimConfig), since from then on it moves lap times.
+    "tyre_history",
     # trains and evaluates the learned calibrator into committed artifacts, which the "trained"
     # calibrator (calibrators.py) reads, pinned by its sha256 param, so config_hash covers them
     "learned_calibrator",
