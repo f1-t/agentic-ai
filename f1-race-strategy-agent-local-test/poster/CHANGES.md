@@ -39,3 +39,20 @@ length and others) into the policies. They are discarded, and none of them appea
 - **Layout.**
   - Body text is 22 pt. Nothing outside the references and footer is below 16 pt.
   - The page is fully vector, with fonts embedded, and `check_layout.py` passes.
+
+## Filled with the results (eval-v2-dev2, eval-v2-test)
+
+- **Inputs.** `reports/eval/rerun/dev20` and `test9`, as committed on main. The scorecard is the adopted
+  configuration's (`sc-align-997d69d`), with its own noise floor. The ablation is on the adopted base
+  (`adopt-c67c9a7`).
+- **Lead result.** The poster leads with the pre-registered primary test, the fresh five. Beside it, labelled:
+  the earlier four, all nine, and development.
+- **Verdicts.** Every verdict ("ahead", "level", "behind") is computed from the (race, driver) interval and
+  checked against the pipeline's own verdict.
+- **Cautious readings.** These are computed here:
+  - the Monaco sensitivity for "ahead of the teams";
+  - the fresh-five tail at 20 s;
+  - the shortfall at Australia and Miami 2022;
+  - the development lead split by circuit history.
+
+  The tyre-life explanation is labelled a leading explanation, not an established cause.

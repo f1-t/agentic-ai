@@ -13,7 +13,7 @@ Run from `f1-race-strategy-agent-local-test/` with the project's Python (pandas,
 poppler:
 
 ```bash
-python poster/build_poster.py --dev <dev dir> --test <test dir> --fidelity reports/calibration/fidelity --export
+python poster/build_poster.py --dev reports/eval/rerun/dev20 --test reports/eval/rerun/test9 --fidelity reports/calibration/fidelity --export
 python3 poster/check_layout.py
 ```
 
@@ -44,22 +44,44 @@ It also prints the word count and the words at each type size.
 
 ## What each input directory must contain
 
+The build reads the committed files only. It never runs the `tables` stage or the lint on test9, because both
+load held-out race data.
+
 | input | files read |
 |---|---|
-| `--dev`, `--test` | `provenance.json`, `scenarios.json`, `tables/combined.csv`, `tables/summary.csv`, `tables/chart_regret_s.csv`, `tables/tail.csv`, `tables/paired_agent_minus_x.csv` (with agent rows) or `tables/paired_belief_optimizer_minus_x.csv` (without) |
-| `--test` only (a set with eras) | `tables/tail_by_era.csv`, `tables/paired_agent_minus_x_era_<era>.csv` |
-| `--fidelity` | `main/run.json`, `main/scorecard.md`, `main/ledger.csv`, `ablation/headlines.csv`, `ablation/ablation.csv`; the noise floor from a `ceiling_pooled.csv` anywhere below it, else the table under "The noise floor" in `docs/eval.md` (`--noise-floor FILE` overrides) |
+| `--dev`, `--test` | `provenance.json`, `agent.csv`, `tables/combined.csv`, `tables/reporting_paired.csv`, `tables/reporting_tail.csv`, `tables/agent_latency.csv` |
+| `--test` only | `tables/reporting_paired_by_era.csv`, `tables/summary.csv`, `tables/reporting_header.txt`, `trajectories/*.jsonl` (text, for the tyre-life prior tier) |
+| `--fidelity` | `sc-align-997d69d/main/` (`run.json`, `scorecard.md`, `ledger.csv`, `ceiling_pooled.csv`), the adopted configuration's scorecard; `adopt-c67c9a7/ablation/` (each adopted choice switched back off); `ablation/` (f7be251, the learned calibrator only). `--scorecard`, `--ablation` and `--noise-floor` override them |
 | always | `data/eval_set.json` (race ids only) |
 
-**Cross-checks.** `poster_stats.py` recomputes every number from `combined.csv`, using the same cluster
-bootstrap as `src.eval.compare`. It stops on any disagreement with the pipeline's own tables, the scorecard or
-the ablation.
+Where the numbers come from:
+
+- **Groups.** The held-out groups come from the reporting choices recorded verbatim in `provenance.json`
+  (`configs/eval/reporting.yaml`; its sha256 is verified). They are the fresh five (the primary test), the
+  earlier four and all nine.
+- **Model id.** The model id comes from `agent_run.passes[].env`.
+- **Judge description.** The judge's description, and which factors are on, come from the world and belief
+  `choices` in `provenance.json`.
+
+**Cross-checks.** `poster_stats.py` recomputes every paired difference, (race, driver) and race interval, verdict
+and tail share from `combined.csv`, using the same cluster bootstrap as `src.eval.compare`. It stops on any
+disagreement with:
+
+- `reporting_paired.csv`, `reporting_paired_by_era.csv`, `reporting_tail.csv` and `summary.csv`;
+- the scorecard and its noise floor;
+- the pre-registered fidelity sentence;
+- the ablation.
+
+Some numbers are computed here with no pipeline table to check them against. `numbers.md` says so for each:
+
+- the one-race (Monaco) sensitivity;
+- the fresh races' per-race differences;
+- the development split by circuit history.
 
 **Refusals.** It refuses:
 
-- a development set passed as `--test` (`--fixture` allows one for layout tests only, and stamps the page NOT
-  A RESULT);
-- a `--test` whose races are not those of `data/eval_set.json`;
+- a development set as `--test`;
+- a `--test` that does not cover `data/eval_set.json`;
 - an agent model other than `qwen3-30b-a3b`.
 
 ## Files
