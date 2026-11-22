@@ -1,0 +1,61 @@
+component,status,detail,race_id
+tyre_life,not present,predictor history prior,2021_04_spain
+tyre_life,ok,support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior),2021_04_spain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2021_04_spain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2021_04_spain
+compound_gap,ok,fresh-tyre pace gap between compounds,2021_04_spain
+fuel,ok,fuel/track-evolution slope s per lap,2021_04_spain
+pit_loss,ok,time lost to a stop over the green lap prediction,2021_04_spain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2021_04_spain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2021_04_spain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2021_04_spain
+tyre_life,not present,predictor history prior,2023_07_spain
+tyre_life,ok,support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior),2023_07_spain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2023_07_spain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2023_07_spain
+compound_gap,ok,fresh-tyre pace gap between compounds,2023_07_spain
+fuel,ok,fuel/track-evolution slope s per lap,2023_07_spain
+pit_loss,ok,time lost to a stop over the green lap prediction,2023_07_spain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2023_07_spain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2023_07_spain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2023_07_spain
+tyre_life,not present,predictor history prior,2023_01_bahrain
+tyre_life,ok,support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior),2023_01_bahrain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2023_01_bahrain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2023_01_bahrain
+compound_gap,ok,fresh-tyre pace gap between compounds,2023_01_bahrain
+fuel,ok,fuel/track-evolution slope s per lap,2023_01_bahrain
+pit_loss,ok,time lost to a stop over the green lap prediction,2023_01_bahrain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2023_01_bahrain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2023_01_bahrain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2023_01_bahrain
+tyre_life,not present,predictor history prior,2019_10_united_kingdom
+tyre_life,ok,support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior),2019_10_united_kingdom
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2019_10_united_kingdom
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2019_10_united_kingdom
+compound_gap,ok,fresh-tyre pace gap between compounds,2019_10_united_kingdom
+fuel,ok,fuel/track-evolution slope s per lap,2019_10_united_kingdom
+pit_loss,ok,time lost to a stop over the green lap prediction,2019_10_united_kingdom
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2019_10_united_kingdom
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2019_10_united_kingdom
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2019_10_united_kingdom
+tyre_life,not present,predictor history prior,2022_02_saudi_arabia
+tyre_life,ok,support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior),2022_02_saudi_arabia
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_02_saudi_arabia
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_02_saudi_arabia
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_02_saudi_arabia
+fuel,ok,fuel/track-evolution slope s per lap,2022_02_saudi_arabia
+pit_loss,ok,time lost to a stop over the green lap prediction,2022_02_saudi_arabia
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_02_saudi_arabia
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_02_saudi_arabia
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_02_saudi_arabia
+tyre_life,not present,predictor history prior,2024_07_emilia_romagna
+tyre_life,ok,support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior),2024_07_emilia_romagna
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2024_07_emilia_romagna
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2024_07_emilia_romagna
+compound_gap,ok,fresh-tyre pace gap between compounds,2024_07_emilia_romagna
+fuel,ok,fuel/track-evolution slope s per lap,2024_07_emilia_romagna
+pit_loss,ok,time lost to a stop over the green lap prediction,2024_07_emilia_romagna
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2024_07_emilia_romagna
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2024_07_emilia_romagna
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2024_07_emilia_romagna

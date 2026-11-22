@@ -1,0 +1,31 @@
+# Default factor switches for `python -m src.sim.fidelity ablate` (docs/eval.md "Simulator
+# fidelity"). Each factor is an overlay on the base configuration: `both` goes to the judge (world)
+# and the predictive simulator (belief), `world` / `belief` to one of them, `world_race` overrides
+# RaceParams fields on the judge's snapshots. The factors are the switches that exist on main
+# (2026-11-21); a branch adds its own here. `all_on` is the chosen "everything on" configuration.
+factors:
+  driver_effects:
+    note: one pace offset per driver in every degradation fit (configs/sim/arms/driver_effects.yaml)
+    both: {degradation: {params: {driver_effects: race}}}
+  hinge:
+    note: linear_fuel_hinge, wear steepens past the default knot
+    both: {degradation: {name: linear_fuel_hinge}}
+  driver_effects_hinge:
+    note: both of the above
+    both: {degradation: {name: linear_fuel_hinge, params: {driver_effects: race}}}
+  wear_lower_bound_judge:
+    note: wear bounded below at 0 in the judge too (the belief already has it)
+    world: {degradation: {params: {wear_lower_bound: 0.0}}}
+  no_wear_lower_bound_belief:
+    note: the belief without its wear bound
+    belief: {degradation: {params: {wear_lower_bound: null}}}
+  compound_proxy_off:
+    note: no proxy pricing of unraced compounds, judge and belief
+    both: {compound_proxy: {enabled: false}}
+  stint_limit_off:
+    note: R8 stint limit off, judge and belief
+    both: {stint_limit_margin_laps: null}
+  learned_ridge:
+    note: the belief's calibrator is the learned ridge (SPEC 0024), trained per race on the other races of the run
+    belief: {calibrator: {name: ridge}}
+all_on: [driver_effects_hinge, wear_lower_bound_judge]

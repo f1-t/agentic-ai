@@ -1,0 +1,33 @@
+role,id,input,tag,note,substitute,source
+judge,fit_window,degradation fit rows (fit_window full),"this race, whole",every race lap of every car,pre_race_fit,derived
+judge,clean_flag,lap filter (data.lap_frame clean flag),"this race, whole",one robust pace fit over every lap of the race decides which laps any window may fit on,,derived
+judge,ref_lap_s,SC lap time base ref_lap_s (median clean lap of the fit rows),"this race, whole",,,derived
+judge,pit_loss,pit loss (RaceParams.pit_loss_s),"this race, whole","mean in+out-lap residual over every green stop of the race, against a full-window fit (calibrate._pit_loss)",pit_loss_prior,derived
+judge,race_length,race length (snapshot total_laps = the driver's own completed laps),"this race, whole",,,derived
+judge,compound_list,compound list (RaceParams.compounds: every compound in the race frame),"this race, whole",,,derived
+judge,stint_limit,R8 stint limit (rank-1 oldest age per compound + 3),"this race, whole",Simulator.stint_limits from the full race frame,r8_off,derived
+judge,proxy_raced,compound proxy: which compounds count as raced,"this race, whole",decided over the whole race,proxy_off,derived
+judge,proxy_steps,"compound proxy tier-5 steps, weights, sd floor (configs/sim/compound_steps.json)",history,"built from calibration races, some later than the race scored",,derived
+judge,proxy_weekend,"compound proxy tiers 2-3 (practice long runs, qualifying)",weekend (pre-race),,,derived
+judge,events,neutralisations (events none),a priori,none modelled: every remaining lap is green,,derived
+judge,event_effects,"SC/VSC lap factors, SC pit-loss factor, lap-1 extra, neutralised tyre ageing (EventEffects)",history,"provisional, 2021 Spain",,derived
+judge,practice,practice long runs and qualifying (this weekend),weekend (pre-race),,,derived
+judge,min_stint_two_compounds,"R1-R3: minimum stint, two dry compounds",regulation,,,derived
+predictive,fit_window,degradation fit rows (fit_window to_snapshot),"this race, to snapshot","race laps up to the calibration point (cut by lap number), shrunk toward the practice prior",,derived
+predictive,clean_flag,lap filter (data.lap_frame clean flag),"this race, whole",one robust pace fit over every lap of the race decides which laps any window may fit on,,derived
+predictive,ref_lap_s,SC lap time base ref_lap_s (median clean lap of the fit rows),"this race, to snapshot",,,derived
+predictive,pit_loss,pit loss (RaceParams.pit_loss_s),"this race, whole","mean in+out-lap residual over every green stop of the race, against a full-window fit (calibrate._pit_loss)",pit_loss_prior,derived
+predictive,race_length,race length (snapshot total_laps = the driver's own completed laps),"this race, whole",,,derived
+predictive,compound_list,compound list (RaceParams.compounds: every compound in the race frame),"this race, whole",,,derived
+predictive,stint_limit,R8 stint limit (rank-1 oldest age per compound + 3),"this race, whole",Simulator.stint_limits from the full race frame,r8_off,derived
+predictive,proxy_raced,compound proxy: which compounds count as raced,"this race, whole",decided over the whole race,proxy_off,derived
+predictive,proxy_steps,"compound proxy tier-5 steps, weights, sd floor (configs/sim/compound_steps.json)",history,"built from calibration races, some later than the race scored",,derived
+predictive,proxy_weekend,"compound proxy tiers 2-3 (practice long runs, qualifying)",weekend (pre-race),,,derived
+predictive,events,neutralisations (events rate),history,"EventModel rates (provisional, 2021 Spain) or RaceParams circuit rates",,derived
+predictive,event_effects,"SC/VSC lap factors, SC pit-loss factor, lap-1 extra, neutralised tyre ageing (EventEffects)",history,"provisional, 2021 Spain",,derived
+predictive,practice,practice long runs and qualifying (this weekend),weekend (pre-race),,,derived
+predictive,priors,"pre_race base delta, fuel prior, shrinkage taus",history,Spain-derived constants,,derived
+predictive,calibrator,calibrator shrinkage,a priori,,,derived
+predictive,wear_lower_bound,wear bounded below at 0.0,a priori,,,derived
+predictive,draws,parameter draws (posterior) and lap noise (residual),"this race, to snapshot",the fit's own covariance and residual sd,,derived
+predictive,min_stint_two_compounds,"R1-R3: minimum stint, two dry compounds",regulation,,,derived

@@ -996,6 +996,75 @@ when they match the seed (0) and the profile's `n_samples` and `max_stops`; a re
 
 LLM policies stay on the desktop.
 
+## Simulator fidelity
+
+The framework. There are two simulators. The JUDGE (the `world` above) scores every plan and
+builds the reference: it should be as close as possible to what really happened, while using as
+little hindsight as it can. The PREDICTIVE simulator (the `belief`) is what the agent, its tools
+and the rule baselines plan with at a snapshot: it must use no hindsight, and its goal is to be
+as close as possible to the judge under that restriction. Hindsight facts are measurement
+targets for the model's components, not inputs: each component predicts from allowed
+information and the whole-race fact says how good the prediction was. Every modelling factor
+(wear shape and cliff, driver effects, fuel, warm-up, pit loss, safety cars, traffic,
+calibrators, compound proxies, tyre-life priors) is kept or dropped by what it does to these
+distances, measured by one command that takes any configuration and changes no lap time:
+
+```bash
+python -m src.sim.fidelity run    [--world FILE|default] [--belief FILE] [--world-overlay Y ...] \
+    [--belief-overlay Y ...] [--races ...] [--out reports/calibration/fidelity] [--label main]
+python -m src.sim.fidelity ablate [--spec configs/sim/fidelity/ablation.yaml] [same options]
+python -m src.sim.fidelity report [--out ...] [--label main]
+python -m src.sim.fidelity ledger [--world ...] [--belief ...]
+```
+
+Defaults: the six calibration races, the race's own config as the judge (as `score` uses it),
+`configs/sim/belief.yaml` as the predictive simulator. Options: `--drivers` (B drivers per
+race, 6), `--every` (B snapshot spacing, 5 laps), `--samples` (draws, 20), `--coverage` (100
+draws), `--n-one` / `--n-two` (panel density), `--no-lodo`, `--no-loso`,
+`--no-grid-references`, `--no-hindsight-variants`, `--no-components`, `--no-future-blindness`,
+`--jobs`, `--cache` (default `<out>/.cache`, keyed by race, section, config hash, code version
+and options, so an ablation reuses the base and a belief-only change reuses the judge's
+Section A). A race in `data/eval_set.json` is refused before anything is loaded, with no
+override. The six races run in about 45 s on 6 processes.
+
+Selection rule, stated before any result: finishing ORDER matters more than exact time. Primary
+= close-pair order accuracy of the judge out of sample (`A_close_pair_acc`); then relative gap
+error (`A_rel_gap_mae_s`); then plan-ranking agreement between predictive and judge
+(`B2_rank_rho`, `B2_regret_s`); absolute time is a tie-breaker. A factor that improves order or
+relative gaps while worsening absolute time counts as an improvement.
+
+Measures (each one line; `pace` and `fit` columns say what every number was fitted on):
+
+| measure | definition |
+| --- | --- |
+| close-pair accuracy | pairs of cars on the same lap count whose real finishing gap is under 10 s: share whose simulated order is right |
+| Spearman, mae_pos, within_1 | simulated against real finishing order (laps driven first, then simulated total), rank correlation, mean absolute position error, share within one place |
+| rel_gap_mae_s | per car on the lead lap, time error less the race's mean error, mean absolute value (relative gaps, common offset removed) |
+| abs_mae_s, bias_s | simulated less real total time per car, mean absolute and mean |
+| fit | in-sample (every car's laps), leave-one-driver-out (the judge refitted without the car predicted: `exclude_snapshot_driver`, its pit loss re-estimated from the other cars' green stops), leave-one-stint-out (the stint's rows marked unclean, so no fit uses them; only that stint is reported), as-of (the belief's own fit at k) |
+| pace | insample (the car's whole-race median clean-lap residual: one number, reads its own laps), practice (this weekend's long runs), asof (green laps up to k, practice under five laps), none (the field-mean car) |
+| O version 1 / 2 / 3 | the judge as configured; the judge with each whole-race ledger input replaced by its substitute, singly and all together; the predictive simulator replaying every car's real remaining strategy from k = 0, 10, 20, 30, 40 (real SC/VSC laps ahead, real time to k) |
+| A1 | whole-race replay of every car with at least 90% of the winner's laps: race time error raw and pace-adjusted, per race and pooled |
+| A3 stint | simulated less real time of every real stint, lap 1, in- and out-laps left out |
+| A3 lap residuals | real less predicted lap time, pace removed, on clean laps, by compound and tyre-age bucket; `late_stint_resid_s` over the last 5 laps of each stint |
+| A3 stop gain | predicted less real gain from fresh tyres at real stops (last two clean laps before, first two after) |
+| A3 pit | error on the in- and out-laps including the charged loss, per stop |
+| A3 neutral | error on SC and VSC laps |
+| A4 | the judge's lap-0 reference (optimize_batch) per field car: its stop count against the field's mode and the car's own; the share of reference plans (lap 0 and every B snapshot) with a stint past the oldest age any car ran on that compound (`beyond_raced`), or past it plus the R8 margin |
+| A6 ledger | every input of the judge and the predictive config, tagged this race whole / this race to snapshot / weekend / history / regulation / a priori / unclassified; derived from the config and this branch's code paths, extended or overridden by an `x_ledger:` list in a config file; a non-default config field without a rule shows as unclassified |
+| A paired | per whole-race ledger input with a substitute (`fidelity.SUBSTITUTES`: pre_race fit for the full-window fit, the 22 s prior for the pit loss, R8 off, the proxy off, traffic off), the change in order, gaps, time, stop gain, pit error and A4 against the judge as configured |
+| B panel | per snapshot (every 5 laps, 6 sampled drivers): the real remaining strategy, stay out, one stop at 4 laps on every compound, two stops at 3 first-stop laps on every compound pair |
+| B2 | over the plans legal under both configs' own rules: Spearman of predictive against judge times, the judge time the predictive favourite loses to the judge favourite (regret), agreement on pit-now against stay; `_green` the same with no SC/VSC on either side |
+| B1 | predictive less judge remaining time per panel plan (under R1-R3), by horizon, phase and plan kind; `green` without SC/VSC |
+| B3 | share of plans whose judge time lies in the predictive 68% / 90% interval, the same for gaps to the real plan; per fitted factor (base, wear, fuel) whether the judge's value is within 1 / 1.645 predictive sds |
+| B4 | `calibration.midrace` (the G measure) under the belief at the version-3 laps |
+| B5 | `tests/future_blindness.py` run on its synthetic race with this belief, when the branch has it; else "not checked" |
+| D | per component (`fidelity.COMPONENTS`: tyre life, wear rate, fresh-tyre gain, compound gap, fuel, pit loss, lap 1 and warm-up, traffic rejoin, neutralisations), each predictor from allowed information against the whole-race target: error, bias, coverage where an sd is stated. A branch adds one `register(Component(...))`; code absent on the branch reports "not present" |
+| C | the scorecard for the base, each factor overlay alone and `all_on`; headline changes pooled with a race-cluster bootstrap 95% interval, and the ledger change |
+
+Before numbers on main (2026-11-21) are in `reports/calibration/fidelity/main/scorecard.md`
+and the ablation in `reports/calibration/fidelity/ablation/ablation.md`.
+
 ## Tests
 
 `tests/test_eval.py` runs offline: synthetic races for sampling and scoring, plus the
@@ -1022,7 +1091,12 @@ weekends, and on
 2022 Saudi Arabia that the world prices SOFT and accepts the belief's continuations. Modules
 that test other mechanics on synthetic two-compound races carry `pytest.mark.compound_proxy_off`
 (tests/conftest.py): their configs default to the proxy off, so they pin those mechanics as
-they were. No test calls a model.
+they were. `tests/test_sim_fidelity.py` covers the fidelity scorecard: a judge fitted on a
+synthetic race drawn from its own model replays it exactly (in-sample, leave-one-driver-out and
+leave-one-stint-out), a deliberately wrong belief shows a positive B1 bias and more stops in its
+favourite, the right belief none, the held-out refusal, the ledger and its substitutes, the
+component registry's "not present", the section cache, and (slow) a scorecard on 2021 Spain. No
+test calls a model.
 
 ## Live agent runs for the Milestone 2 report
 

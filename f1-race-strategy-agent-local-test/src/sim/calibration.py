@@ -492,6 +492,9 @@ NON_PHYSICS = (
     # estimates the proxy's tier-5 table into configs/sim/compound_steps.json (read through
     # SimConfig.compound_proxy.steps, so config_hash covers the numbers) and runs its validation
     "compound_steps",
+    # the fidelity scorecard: replays and ranks plans under given configs and reports; it never
+    # changes a lap time
+    "fidelity",
 )
 
 

@@ -1,0 +1,57 @@
+{
+  "label": "main",
+  "races": [
+    "2019_10_united_kingdom",
+    "2021_04_spain",
+    "2022_02_saudi_arabia",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna"
+  ],
+  "code_version": "58b50a00e0e3-2ebb1482c78f",
+  "world": "race default (jobs.load_race)",
+  "world_overlay": {},
+  "belief_overlay": {},
+  "world_race": {},
+  "world_config_hash": "872d3a71bc43",
+  "belief_config_hash": "8f32db455cfb",
+  "options": {
+    "b_drivers": 6,
+    "b_every": 5,
+    "samples": 20,
+    "n_one": 4,
+    "n_two": 3,
+    "lodo": true,
+    "loso": true,
+    "grid_references": true,
+    "hindsight_variants": true,
+    "components": true,
+    "seed": 0,
+    "max_stops": 2
+  },
+  "headline": {
+    "A_close_pair_acc": 0.6442307692307693,
+    "A_spearman": 0.9669173877378211,
+    "A_rel_gap_mae_s": 8.883168251424658,
+    "B2_rank_rho": 0.7482706793250422,
+    "B2_regret_s": 2.0023664454744936,
+    "B2_pit_now_agree": 0.8457142857142858,
+    "P_close_pair_acc": 0.6019230769230769,
+    "P_spearman": 0.8878917569259603,
+    "A_abs_mae_s": 27.055619220017746,
+    "A_abs_bias_s": -16.96654305758584,
+    "A_stop_gain_bias_s": -0.3359138454771676,
+    "B1_mae_s": 95.34956979802057,
+    "B1_bias_s": 95.34076703277537,
+    "B1_green_mae_s": 21.419043662790315,
+    "B2_rank_rho_green": 0.7655650693350864,
+    "B3_cov_90": 0.3017786708342636,
+    "B3_factor_cov_90": 0.5328798185941043,
+    "B4_mae_offset_s": 27.821022999061046
+  },
+  "future_blindness": {
+    "status": "not checked",
+    "detail": "tests/future_blindness.py is not on this branch"
+  },
+  "run_seconds": 40.56216335296631
+}

@@ -1,0 +1,1555 @@
+component,key,source,target_kind,pred,sd,target,err,covered_68,covered_90,race_id
+tyre_life,MEDIUM,belief support edge @k0,oldest age run,42.0,,42.0,0.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k0,median stint-end age,42.0,,27.5,14.5,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k0,oldest age run,32.0,,32.0,0.0,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k0,median stint-end age,32.0,,22.0,10.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",oldest age run,23.0,,42.0,-19.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",median stint-end age,23.0,,27.5,-4.5,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k0, practice)",oldest age run,22.0,,32.0,-10.0,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k0, practice)",median stint-end age,22.0,,22.0,0.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k10,oldest age run,42.0,,42.0,0.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k10,median stint-end age,42.0,,27.5,14.5,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k10,oldest age run,32.0,,32.0,0.0,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k10,median stint-end age,32.0,,22.0,10.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",oldest age run,23.0,,42.0,-19.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",median stint-end age,23.0,,27.5,-4.5,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k10, practice)",oldest age run,22.0,,32.0,-10.0,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k10, practice)",median stint-end age,22.0,,22.0,0.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k20,oldest age run,42.0,,42.0,0.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k20,median stint-end age,42.0,,27.5,14.5,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k20,oldest age run,32.0,,32.0,0.0,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k20,median stint-end age,32.0,,22.0,10.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",oldest age run,23.0,,42.0,-19.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",median stint-end age,23.0,,27.5,-4.5,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k20, practice)",oldest age run,24.0,,32.0,-8.0,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k20, practice)",median stint-end age,24.0,,22.0,2.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k33,oldest age run,42.0,,42.0,0.0,,,2021_04_spain
+tyre_life,MEDIUM,belief support edge @k33,median stint-end age,42.0,,27.5,14.5,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k33,oldest age run,32.0,,32.0,0.0,,,2021_04_spain
+tyre_life,SOFT,belief support edge @k33,median stint-end age,32.0,,22.0,10.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k33, practice)",oldest age run,33.0,,42.0,-9.0,,,2021_04_spain
+tyre_life,MEDIUM,"as-of data (race to k33, practice)",median stint-end age,33.0,,27.5,5.5,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k33, practice)",oldest age run,32.0,,32.0,0.0,,,2021_04_spain
+tyre_life,SOFT,"as-of data (race to k33, practice)",median stint-end age,32.0,,22.0,10.0,,,2021_04_spain
+wear_rate,MEDIUM,belief @k0,within-stint slope less fuel,0.03142973193978014,0.03,0.07198422095217424,-0.040554489012394106,0.0,1.0,2021_04_spain
+wear_rate,SOFT,belief @k0,within-stint slope less fuel,0.0463256849413375,0.03,0.05012294745343512,-0.003797262512097617,1.0,1.0,2021_04_spain
+wear_rate,MEDIUM,belief @k10,within-stint slope less fuel,0.0,0.0848454964087445,0.07198422095217424,-0.07198422095217424,1.0,1.0,2021_04_spain
+wear_rate,SOFT,belief @k10,within-stint slope less fuel,0.0,0.024496883014074437,0.05012294745343512,-0.05012294745343512,0.0,0.0,2021_04_spain
+wear_rate,MEDIUM,belief @k20,within-stint slope less fuel,0.02532124913298044,0.021075442449235034,0.07198422095217424,-0.04666297181919381,0.0,0.0,2021_04_spain
+wear_rate,SOFT,belief @k20,within-stint slope less fuel,0.0,0.01144992211766823,0.05012294745343512,-0.05012294745343512,0.0,0.0,2021_04_spain
+wear_rate,MEDIUM,belief @k33,within-stint slope less fuel,0.07484746310418255,0.009131714779284051,0.07198422095217424,0.0028632421520083107,1.0,1.0,2021_04_spain
+wear_rate,SOFT,belief @k33,within-stint slope less fuel,0.006651767334215676,0.009031068998430305,0.05012294745343512,-0.04347118011921944,0.0,0.0,2021_04_spain
+wear_rate,MEDIUM,judge (full fit),within-stint slope less fuel,0.0683104600411533,,0.07198422095217424,-0.0036737609110209374,,,2021_04_spain
+wear_rate,SOFT,judge (full fit),within-stint slope less fuel,0.033036441329039,,0.05012294745343512,-0.01708650612439612,,,2021_04_spain
+fresh_tyre_gain,ALO:21,belief @k0,real gain at the stop,0.786425634259956,,1.3910000000000053,-0.6045743657400493,,,2021_04_spain
+fresh_tyre_gain,ALO:61,belief @k0,real gain at the stop,1.5054887851644168,,4.252499999999998,-2.747011214835581,,,2021_04_spain
+fresh_tyre_gain,BOT:23,belief @k0,real gain at the stop,0.8790770041426299,,1.7750000000000057,-0.8959229958573758,,,2021_04_spain
+fresh_tyre_gain,BOT:53,belief @k0,real gain at the stop,1.191854308237268,,1.7624999999999886,-0.5706456917627207,,,2021_04_spain
+fresh_tyre_gain,GAS:18,belief @k0,real gain at the stop,0.5084715246119345,,2.2279999999999944,-1.71952847538806,,,2021_04_spain
+fresh_tyre_gain,GAS:47,belief @k0,real gain at the stop,1.2858313630613054,,1.8695000000000022,-0.5836686369386967,,,2021_04_spain
+fresh_tyre_gain,GIO:8,belief @k0,real gain at the stop,-0.03682993750189212,,0.7314999999999827,-0.7683299375018748,,,2021_04_spain
+fresh_tyre_gain,GIO:39,belief @k0,real gain at the stop,1.304002967936185,,3.2590000000000003,-1.9549970320638153,,,2021_04_spain
+fresh_tyre_gain,HAM:28,belief @k0,real gain at the stop,1.1570311137906515,,2.1455000000000126,-0.9884688862093611,,,2021_04_spain
+fresh_tyre_gain,HAM:42,belief @k0,real gain at the stop,0.30571892775913057,,0.9860000000000184,-0.6802810722408879,,,2021_04_spain
+fresh_tyre_gain,LAT:9,belief @k0,real gain at the stop,0.11602952637765895,,-0.0835000000000008,0.19952952637765975,,,2021_04_spain
+fresh_tyre_gain,LAT:27,belief @k0,real gain at the stop,0.6200162471569257,,0.945999999999998,-0.32598375284307224,,,2021_04_spain
+fresh_tyre_gain,LAT:50,belief @k0,real gain at the stop,0.9854164527190505,,1.4365000000000094,-0.4510835472809589,,,2021_04_spain
+fresh_tyre_gain,LEC:28,belief @k0,real gain at the stop,1.1107054288493146,,1.769999999999996,-0.6592945711506815,,,2021_04_spain
+fresh_tyre_gain,LEC:58,belief @k0,real gain at the stop,1.1918543082372963,,1.8900000000000006,-0.6981456917627042,,,2021_04_spain
+fresh_tyre_gain,MAZ:22,belief @k0,real gain at the stop,0.7005593984073926,,2.069999999999993,-1.3694406015926006,,,2021_04_spain
+fresh_tyre_gain,MAZ:42,belief @k0,real gain at the stop,0.6828757110364876,,1.117999999999995,-0.4351242889635074,,,2021_04_spain
+fresh_tyre_gain,MSC:23,belief @k0,real gain at the stop,0.7400999493186191,,1.8484999999999872,-1.108400050681368,,,2021_04_spain
+fresh_tyre_gain,MSC:50,belief @k0,real gain at the stop,0.9028838346149541,,1.7830000000000155,-0.8801161653850613,,,2021_04_spain
+fresh_tyre_gain,NOR:23,belief @k0,real gain at the stop,0.8790770041426299,,0.40099999999999625,0.47807700414263365,,,2021_04_spain
+fresh_tyre_gain,NOR:51,belief @k0,real gain at the stop,1.122209710327624,,1.2800000000000011,-0.15779028967237707,,,2021_04_spain
+fresh_tyre_gain,OCO:23,belief @k0,real gain at the stop,0.8790770041426299,,0.6624999999999943,0.2165770041426356,,,2021_04_spain
+fresh_tyre_gain,PER:27,belief @k0,real gain at the stop,1.0637169014373171,,2.015999999999991,-0.952283098562674,,,2021_04_spain
+fresh_tyre_gain,PER:57,belief @k0,real gain at the stop,1.1769583552357403,,2.3204999999999956,-1.1435416447642552,,,2021_04_spain
+fresh_tyre_gain,RAI:37,belief @k0,real gain at the stop,1.5372692185795245,,2.643500000000003,-1.1062307814204786,,,2021_04_spain
+fresh_tyre_gain,RIC:25,belief @k0,real gain at the stop,0.9717283740253038,,1.3359999999999843,-0.36427162597468055,,,2021_04_spain
+fresh_tyre_gain,RIC:46,belief @k0,real gain at the stop,0.9874049801310463,,0.6260000000000048,0.3614049801310415,,,2021_04_spain
+fresh_tyre_gain,RUS:9,belief @k0,real gain at the stop,0.1024592583174524,,0.003500000000002501,0.0989592583174499,,,2021_04_spain
+fresh_tyre_gain,RUS:28,belief @k0,real gain at the stop,0.6514459790966924,,1.920000000000016,-1.2685540209033235,,,2021_04_spain
+fresh_tyre_gain,SAI:22,belief @k0,real gain at the stop,0.832751319201293,,0.8194999999999908,0.01325131920130218,,,2021_04_spain
+fresh_tyre_gain,SAI:46,belief @k0,real gain at the stop,0.9890428060677152,,1.0699999999999932,-0.08095719393227796,,,2021_04_spain
+fresh_tyre_gain,STR:22,belief @k0,real gain at the stop,0.6937742643772822,,1.01100000000001,-0.3172257356227277,,,2021_04_spain
+fresh_tyre_gain,STR:39,belief @k0,real gain at the stop,0.7696975249599234,,1.0464999999999947,-0.27680247504007127,,,2021_04_spain
+fresh_tyre_gain,VER:24,belief @k0,real gain at the stop,0.925402689083981,,1.8300000000000125,-0.9045973109160315,,,2021_04_spain
+fresh_tyre_gain,VER:60,belief @k0,real gain at the stop,1.5058394866397578,,3.2959999999999923,-1.7901605133602345,,,2021_04_spain
+fresh_tyre_gain,VET:21,belief @k0,real gain at the stop,0.6474485794359452,,2.062000000000012,-1.4145514205640666,,,2021_04_spain
+fresh_tyre_gain,VET:38,belief @k0,real gain at the stop,0.7696975249599234,,1.171999999999997,-0.40230247504007366,,,2021_04_spain
+fresh_tyre_gain,ALO:21,belief @k10,real gain at the stop,0.006682627856122281,,1.3910000000000053,-1.384317372143883,,,2021_04_spain
+fresh_tyre_gain,ALO:61,belief @k10,real gain at the stop,0.4387929138079585,,4.252499999999998,-3.8137070861920392,,,2021_04_spain
+fresh_tyre_gain,BOT:23,belief @k10,real gain at the stop,0.006682627856122281,,1.7750000000000057,-1.7683173721438834,,,2021_04_spain
+fresh_tyre_gain,BOT:53,belief @k10,real gain at the stop,0.4153468326677512,,1.7624999999999886,-1.3471531673322374,,,2021_04_spain
+fresh_tyre_gain,GAS:18,belief @k10,real gain at the stop,0.006682627856136492,,2.2279999999999944,-2.221317372143858,,,2021_04_spain
+fresh_tyre_gain,GAS:47,belief @k10,real gain at the stop,0.36845467038730817,,1.8695000000000022,-1.501045329612694,,,2021_04_spain
+fresh_tyre_gain,GIO:39,belief @k10,real gain at the stop,0.36845467038730817,,3.2590000000000003,-2.890545329612692,,,2021_04_spain
+fresh_tyre_gain,HAM:28,belief @k10,real gain at the stop,0.006682627856122281,,2.1455000000000126,-2.1388173721438903,,,2021_04_spain
+fresh_tyre_gain,HAM:42,belief @k10,real gain at the stop,0.18756864912171523,,0.9860000000000184,-0.7984313508783032,,,2021_04_spain
+fresh_tyre_gain,LAT:27,belief @k10,real gain at the stop,0.18756864912174365,,0.945999999999998,-0.7584313508782543,,,2021_04_spain
+fresh_tyre_gain,LAT:50,belief @k10,real gain at the stop,0.46223899494818,,1.4365000000000094,-0.9742610050518294,,,2021_04_spain
+fresh_tyre_gain,LEC:28,belief @k10,real gain at the stop,0.006682627856122281,,1.769999999999996,-1.7633173721438737,,,2021_04_spain
+fresh_tyre_gain,LEC:58,belief @k10,real gain at the stop,0.4153468326677512,,1.8900000000000006,-1.4746531673322494,,,2021_04_spain
+fresh_tyre_gain,MAZ:22,belief @k10,real gain at the stop,0.03012870899634379,,2.069999999999993,-2.0398712910036494,,,2021_04_spain
+fresh_tyre_gain,MAZ:42,belief @k10,real gain at the stop,0.18756864912171523,,1.117999999999995,-0.9304313508782798,,,2021_04_spain
+fresh_tyre_gain,MSC:23,belief @k10,real gain at the stop,0.006682627856122281,,1.8484999999999872,-1.8418173721438649,,,2021_04_spain
+fresh_tyre_gain,MSC:50,belief @k10,real gain at the stop,0.18756864912172944,,1.7830000000000155,-1.595431350878286,,,2021_04_spain
+fresh_tyre_gain,NOR:23,belief @k10,real gain at the stop,0.006682627856122281,,0.40099999999999625,-0.39431737214387397,,,2021_04_spain
+fresh_tyre_gain,NOR:51,belief @k10,real gain at the stop,0.3919007515275297,,1.2800000000000011,-0.8880992484724715,,,2021_04_spain
+fresh_tyre_gain,OCO:23,belief @k10,real gain at the stop,0.006682627856122281,,0.6624999999999943,-0.655817372143872,,,2021_04_spain
+fresh_tyre_gain,PER:27,belief @k10,real gain at the stop,0.030128708996358,,2.015999999999991,-1.9858712910036331,,,2021_04_spain
+fresh_tyre_gain,PER:57,belief @k10,real gain at the stop,0.4153468326677512,,2.3204999999999956,-1.9051531673322444,,,2021_04_spain
+fresh_tyre_gain,RAI:37,belief @k10,real gain at the stop,0.36845467038730817,,2.643500000000003,-2.275045329612695,,,2021_04_spain
+fresh_tyre_gain,RIC:25,belief @k10,real gain at the stop,0.006682627856122281,,1.3359999999999843,-1.329317372143862,,,2021_04_spain
+fresh_tyre_gain,RIC:46,belief @k10,real gain at the stop,0.3919007515275297,,0.6260000000000048,-0.2340992484724751,,,2021_04_spain
+fresh_tyre_gain,RUS:28,belief @k10,real gain at the stop,0.18756864912171523,,1.920000000000016,-1.7324313508783007,,,2021_04_spain
+fresh_tyre_gain,SAI:22,belief @k10,real gain at the stop,0.006682627856136492,,0.8194999999999908,-0.8128173721438543,,,2021_04_spain
+fresh_tyre_gain,SAI:46,belief @k10,real gain at the stop,0.3919007515275297,,1.0699999999999932,-0.6780992484724635,,,2021_04_spain
+fresh_tyre_gain,STR:22,belief @k10,real gain at the stop,0.006682627856136492,,1.01100000000001,-1.0043173721438734,,,2021_04_spain
+fresh_tyre_gain,STR:39,belief @k10,real gain at the stop,0.36845467038730817,,1.0464999999999947,-0.6780453296126865,,,2021_04_spain
+fresh_tyre_gain,VER:24,belief @k10,real gain at the stop,0.006682627856122281,,1.8300000000000125,-1.8233173721438902,,,2021_04_spain
+fresh_tyre_gain,VER:60,belief @k10,real gain at the stop,0.36845467038730817,,3.2959999999999923,-2.927545329612684,,,2021_04_spain
+fresh_tyre_gain,VET:21,belief @k10,real gain at the stop,0.006682627856122281,,2.062000000000012,-2.0553173721438895,,,2021_04_spain
+fresh_tyre_gain,VET:38,belief @k10,real gain at the stop,0.3684546703873224,,1.171999999999997,-0.8035453296126747,,,2021_04_spain
+fresh_tyre_gain,ALO:21,belief @k20,real gain at the stop,-0.31451407184781033,,1.3910000000000053,-1.7055140718478157,,,2021_04_spain
+fresh_tyre_gain,ALO:61,belief @k20,real gain at the stop,1.5585580097691718,,4.252499999999998,-2.693941990230826,,,2021_04_spain
+fresh_tyre_gain,BOT:23,belief @k20,real gain at the stop,-0.31451407184782454,,1.7750000000000057,-2.0895140718478302,,,2021_04_spain
+fresh_tyre_gain,BOT:53,belief @k20,real gain at the stop,1.2865139280042968,,1.7624999999999886,-0.4759860719956919,,,2021_04_spain
+fresh_tyre_gain,GAS:47,belief @k20,real gain at the stop,1.248850747134071,,1.8695000000000022,-0.6206492528659311,,,2021_04_spain
+fresh_tyre_gain,GIO:39,belief @k20,real gain at the stop,1.3754569927989593,,3.2590000000000003,-1.883543007201041,,,2021_04_spain
+fresh_tyre_gain,HAM:28,belief @k20,real gain at the stop,-0.31451407184783875,,2.1455000000000126,-2.4600140718478514,,,2021_04_spain
+fresh_tyre_gain,HAM:42,belief @k20,real gain at the stop,0.2519377200127906,,0.9860000000000184,-0.7340622799872278,,,2021_04_spain
+fresh_tyre_gain,LAT:27,belief @k20,real gain at the stop,0.5051502113425954,,0.945999999999998,-0.44084978865740254,,,2021_04_spain
+fresh_tyre_gain,LAT:50,belief @k20,real gain at the stop,1.1216071158106615,,1.4365000000000094,-0.3148928841893479,,,2021_04_spain
+fresh_tyre_gain,LEC:28,belief @k20,real gain at the stop,-0.31451407184783875,,1.769999999999996,-2.0845140718478348,,,2021_04_spain
+fresh_tyre_gain,LEC:58,belief @k20,real gain at the stop,1.2865139280042683,,1.8900000000000006,-0.6034860719957322,,,2021_04_spain
+fresh_tyre_gain,MAZ:22,belief @k20,real gain at the stop,-0.3083431059792048,,2.069999999999993,-2.378343105979198,,,2021_04_spain
+fresh_tyre_gain,MAZ:42,belief @k20,real gain at the stop,0.5557927096085535,,1.117999999999995,-0.5622072903914415,,,2021_04_spain
+fresh_tyre_gain,MSC:23,belief @k20,real gain at the stop,-0.31451407184782454,,1.8484999999999872,-2.1630140718478117,,,2021_04_spain
+fresh_tyre_gain,MSC:50,belief @k20,real gain at the stop,0.7330414535394141,,1.7830000000000155,-1.0499585464606014,,,2021_04_spain
+fresh_tyre_gain,NOR:23,belief @k20,real gain at the stop,-0.31451407184782454,,0.40099999999999625,-0.7155140718478208,,,2021_04_spain
+fresh_tyre_gain,NOR:51,belief @k20,real gain at the stop,1.2297004638696762,,1.2800000000000011,-0.050299536130324896,,,2021_04_spain
+fresh_tyre_gain,OCO:23,belief @k20,real gain at the stop,-0.31451407184782454,,0.6624999999999943,-0.9770140718478189,,,2021_04_spain
+fresh_tyre_gain,PER:27,belief @k20,real gain at the stop,-0.2956824814127117,,2.015999999999991,-2.311682481412703,,,2021_04_spain
+fresh_tyre_gain,PER:57,belief @k20,real gain at the stop,1.3118351771372545,,2.3204999999999956,-1.008664822862741,,,2021_04_spain
+fresh_tyre_gain,RAI:37,belief @k20,real gain at the stop,1.4514207401978894,,2.643500000000003,-1.1920792598021137,,,2021_04_spain
+fresh_tyre_gain,RIC:25,belief @k20,real gain at the stop,-0.31451407184783875,,1.3359999999999843,-1.650514071847823,,,2021_04_spain
+fresh_tyre_gain,RIC:46,belief @k20,real gain at the stop,1.065112344505323,,0.6260000000000048,0.4391123445053182,,,2021_04_spain
+fresh_tyre_gain,RUS:28,belief @k20,real gain at the stop,0.5304714604755532,,1.920000000000016,-1.3895285395244628,,,2021_04_spain
+fresh_tyre_gain,SAI:22,belief @k20,real gain at the stop,-0.31451407184782454,,0.8194999999999908,-1.1340140718478153,,,2021_04_spain
+fresh_tyre_gain,SAI:46,belief @k20,real gain at the stop,1.1410760919042673,,1.0699999999999932,0.07107609190427411,,,2021_04_spain
+fresh_tyre_gain,STR:22,belief @k20,real gain at the stop,-0.31451407184782454,,1.01100000000001,-1.3255140718478344,,,2021_04_spain
+fresh_tyre_gain,STR:39,belief @k20,real gain at the stop,0.9449957575383081,,1.0464999999999947,-0.10150424246168654,,,2021_04_spain
+fresh_tyre_gain,VER:24,belief @k20,real gain at the stop,-0.31451407184781033,,1.8300000000000125,-2.144514071847823,,,2021_04_spain
+fresh_tyre_gain,VER:60,belief @k20,real gain at the stop,1.4260994910649174,,3.2959999999999923,-1.8699005089350749,,,2021_04_spain
+fresh_tyre_gain,VET:21,belief @k20,real gain at the stop,-0.31451407184781033,,2.062000000000012,-2.376514071847822,,,2021_04_spain
+fresh_tyre_gain,VET:38,belief @k20,real gain at the stop,0.9449957575382939,,1.171999999999997,-0.22700424246170314,,,2021_04_spain
+fresh_tyre_gain,ALO:61,belief @k33,real gain at the stop,2.6879641357293167,,4.252499999999998,-1.564535864270681,,,2021_04_spain
+fresh_tyre_gain,BOT:53,belief @k33,real gain at the stop,1.9139231937738543,,1.7624999999999886,0.1514231937738657,,,2021_04_spain
+fresh_tyre_gain,GAS:47,belief @k33,real gain at the stop,1.8760941066150991,,1.8695000000000022,0.006594106615096962,,,2021_04_spain
+fresh_tyre_gain,GIO:39,belief @k33,real gain at the stop,2.230376120133357,,3.2590000000000003,-1.0286238798666432,,,2021_04_spain
+fresh_tyre_gain,HAM:42,belief @k33,real gain at the stop,0.530527409062401,,0.9860000000000184,-0.4554725909376174,,,2021_04_spain
+fresh_tyre_gain,LAT:50,belief @k33,real gain at the stop,1.3729278781018337,,1.4365000000000094,-0.06357212189817574,,,2021_04_spain
+fresh_tyre_gain,LEC:58,belief @k33,real gain at the stop,1.9139231937738543,,1.8900000000000006,0.023923193773853768,,,2021_04_spain
+fresh_tyre_gain,MAZ:42,belief @k33,real gain at the stop,1.4286969663126001,,1.117999999999995,0.3106969663126051,,,2021_04_spain
+fresh_tyre_gain,MSC:50,belief @k33,real gain at the stop,1.95262920804187,,1.7830000000000155,0.16962920804185444,,,2021_04_spain
+fresh_tyre_gain,NOR:51,belief @k33,real gain at the stop,1.7727598045368893,,1.2800000000000011,0.49275980453688817,,,2021_04_spain
+fresh_tyre_gain,PER:57,belief @k33,real gain at the stop,1.982118889543841,,2.3204999999999956,-0.3383811104561545,,,2021_04_spain
+fresh_tyre_gain,RAI:37,belief @k33,real gain at the stop,2.4748738114485604,,2.643500000000003,-0.16862618855144262,,,2021_04_spain
+fresh_tyre_gain,RIC:46,belief @k33,real gain at the stop,1.2962289453610367,,0.6260000000000048,0.670228945361032,,,2021_04_spain
+fresh_tyre_gain,SAI:46,belief @k33,real gain at the stop,1.507467800005145,,1.0699999999999932,0.43746780000515173,,,2021_04_spain
+fresh_tyre_gain,STR:39,belief @k33,real gain at the stop,0.9579692473622572,,1.0464999999999947,-0.08853075263773746,,,2021_04_spain
+fresh_tyre_gain,VER:60,belief @k33,real gain at the stop,2.4000263483443973,,3.2959999999999923,-0.895973651655595,,,2021_04_spain
+fresh_tyre_gain,VET:38,belief @k33,real gain at the stop,0.9579692473622572,,1.171999999999997,-0.21403075263773985,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.3424319940691305,,0.24576504574532976,-0.5881970398144603,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k0,qualifying,-0.3424319940691305,,-0.9413573414202272,0.5989253473510967,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-0.18088602126559294,,0.24576504574532976,-0.4266510670109227,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k10,qualifying,-0.18088602126559294,,-0.9413573414202272,0.7604713201546343,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k20,"race (judge full fit, fresh tyre, mid-race)",-0.4271849216292196,,0.24576504574532976,-0.6729499673745494,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k20,qualifying,-0.4271849216292196,,-0.9413573414202272,0.5141724197910076,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k33,"race (judge full fit, fresh tyre, mid-race)",0.32852357129009135,,0.24576504574532976,0.0827585255447616,,,2021_04_spain
+compound_gap,SOFT-MEDIUM,belief @k33,qualifying,0.32852357129009135,,-0.9413573414202272,1.2698809127103186,,,2021_04_spain
+fuel,fuel,prior (config),race (judge full fit),-0.045,,-0.05785336219997917,0.012853362199979172,,,2021_04_spain
+fuel,fuel,belief @k0,race (judge full fit),-0.045,0.008,-0.05785336219997917,0.012853362199979172,0.0,1.0,2021_04_spain
+fuel,fuel,belief @k10,race (judge full fit),-0.04689216228043056,0.008504607215956108,-0.05785336219997917,0.010961199919548609,0.0,1.0,2021_04_spain
+fuel,fuel,belief @k20,race (judge full fit),-0.03766318087021577,0.0063197962183408245,-0.05785336219997917,0.0201901813297634,0.0,0.0,2021_04_spain
+fuel,fuel,belief @k33,race (judge full fit),-0.05778438916141811,0.005746172551020557,-0.05785336219997917,6.897303856106402e-05,1.0,1.0,2021_04_spain
+pit_loss,green,prior (code constant),"whole race, robust (median of green stops)",22.0,,23.58958727028004,-1.5895872702800418,,,2021_04_spain
+pit_loss,green,prior (code constant),"whole race, mean (RaceParams.pit_loss_s)",22.0,,23.85,-1.8500000000000014,,,2021_04_spain
+pit_loss,green,belief charged @k0,"whole race, robust (median of green stops)",23.85,,23.58958727028004,0.26041272971995966,,,2021_04_spain
+pit_loss,green,belief charged @k0,"whole race, mean (RaceParams.pit_loss_s)",23.85,,23.85,0.0,,,2021_04_spain
+pit_loss,sc,belief charged @k0,"whole race, SC stops",11.925,,15.073200000000002,-3.148200000000001,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, robust (median of green stops)",,,23.58958727028004,,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,23.85,,,,2021_04_spain
+pit_loss,green,belief charged @k10,"whole race, robust (median of green stops)",23.85,,23.58958727028004,0.26041272971995966,,,2021_04_spain
+pit_loss,green,belief charged @k10,"whole race, mean (RaceParams.pit_loss_s)",23.85,,23.85,0.0,,,2021_04_spain
+pit_loss,sc,belief charged @k10,"whole race, SC stops",11.925,,15.073200000000002,-3.148200000000001,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k10, n=0)","whole race, robust (median of green stops)",,,23.58958727028004,,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k10, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,23.85,,,,2021_04_spain
+pit_loss,green,belief charged @k20,"whole race, robust (median of green stops)",23.85,,23.58958727028004,0.26041272971995966,,,2021_04_spain
+pit_loss,green,belief charged @k20,"whole race, mean (RaceParams.pit_loss_s)",23.85,,23.85,0.0,,,2021_04_spain
+pit_loss,sc,belief charged @k20,"whole race, SC stops",11.925,,15.073200000000002,-3.148200000000001,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k20, n=1)","whole race, robust (median of green stops)",25.172130982721995,,23.58958727028004,1.5825437124419537,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k20, n=1)","whole race, mean (RaceParams.pit_loss_s)",25.172130982721995,,23.85,1.322130982721994,,,2021_04_spain
+pit_loss,green,belief charged @k33,"whole race, robust (median of green stops)",23.85,,23.58958727028004,0.26041272971995966,,,2021_04_spain
+pit_loss,green,belief charged @k33,"whole race, mean (RaceParams.pit_loss_s)",23.85,,23.85,0.0,,,2021_04_spain
+pit_loss,sc,belief charged @k33,"whole race, SC stops",11.925,,15.073200000000002,-3.148200000000001,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k33, n=17)","whole race, robust (median of green stops)",22.75417226054965,,23.58958727028004,-0.8354150097303901,,,2021_04_spain
+pit_loss,green,"as-of data (green stops to k33, n=17)","whole race, mean (RaceParams.pit_loss_s)",22.75417226054965,,23.85,-1.0958277394503497,,,2021_04_spain
+lap1_and_warmup,lap1_extra,prior (config),observed (median lap-1 residual + prior),9.0,,9.51,-0.5099999999999998,,,2021_04_spain
+lap1_and_warmup,out_lap_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,0.0,,-0.2723835657926159,0.2723835657926159,,,2021_04_spain
+traffic_rejoin,ALO:21,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2021_04_spain
+traffic_rejoin,ALO:61,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,BOT:23,judge rejoin position (horizon 2),real position after the out-lap,6.0,,6.0,0.0,,,2021_04_spain
+traffic_rejoin,BOT:53,judge rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2021_04_spain
+traffic_rejoin,GAS:18,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,GAS:47,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2021_04_spain
+traffic_rejoin,GIO:8,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,GIO:39,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,HAM:28,judge rejoin position (horizon 2),real position after the out-lap,3.0,,2.0,1.0,,,2021_04_spain
+traffic_rejoin,HAM:42,judge rejoin position (horizon 2),real position after the out-lap,3.0,,3.0,0.0,,,2021_04_spain
+traffic_rejoin,LAT:9,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,LAT:27,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,LAT:50,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,LEC:28,judge rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2021_04_spain
+traffic_rejoin,LEC:58,judge rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2021_04_spain
+traffic_rejoin,MAZ:22,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,MAZ:42,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,MSC:23,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,MSC:50,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,NOR:23,judge rejoin position (horizon 2),real position after the out-lap,14.0,,13.0,1.0,,,2021_04_spain
+traffic_rejoin,NOR:51,judge rejoin position (horizon 2),real position after the out-lap,11.0,,11.0,0.0,,,2021_04_spain
+traffic_rejoin,OCO:23,judge rejoin position (horizon 2),real position after the out-lap,12.0,,12.0,0.0,,,2021_04_spain
+traffic_rejoin,PER:27,judge rejoin position (horizon 2),real position after the out-lap,8.0,,7.0,1.0,,,2021_04_spain
+traffic_rejoin,PER:57,judge rejoin position (horizon 2),real position after the out-lap,5.0,,5.0,0.0,,,2021_04_spain
+traffic_rejoin,RAI:37,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,RIC:25,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2021_04_spain
+traffic_rejoin,RIC:46,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2021_04_spain
+traffic_rejoin,RUS:9,judge rejoin position (horizon 2),real position after the out-lap,18.0,,17.0,1.0,,,2021_04_spain
+traffic_rejoin,RUS:28,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2021_04_spain
+traffic_rejoin,SAI:22,judge rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2021_04_spain
+traffic_rejoin,SAI:46,judge rejoin position (horizon 2),real position after the out-lap,9.0,,9.0,0.0,,,2021_04_spain
+traffic_rejoin,STR:22,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2021_04_spain
+traffic_rejoin,STR:39,judge rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2021_04_spain
+traffic_rejoin,VER:24,judge rejoin position (horizon 2),real position after the out-lap,4.0,,3.0,1.0,,,2021_04_spain
+traffic_rejoin,VER:60,judge rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2021_04_spain
+traffic_rejoin,VET:21,judge rejoin position (horizon 2),real position after the out-lap,17.0,,18.0,-1.0,,,2021_04_spain
+traffic_rejoin,VET:38,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2021_04_spain
+traffic_rejoin,ALO:21,belief rejoin position (horizon 2),real position after the out-lap,18.0,,16.0,2.0,,,2021_04_spain
+traffic_rejoin,ALO:61,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,BOT:23,belief rejoin position (horizon 2),real position after the out-lap,6.0,,6.0,0.0,,,2021_04_spain
+traffic_rejoin,BOT:53,belief rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2021_04_spain
+traffic_rejoin,GAS:18,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,GAS:47,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2021_04_spain
+traffic_rejoin,GIO:8,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,GIO:39,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,HAM:28,belief rejoin position (horizon 2),real position after the out-lap,3.0,,2.0,1.0,,,2021_04_spain
+traffic_rejoin,HAM:42,belief rejoin position (horizon 2),real position after the out-lap,3.0,,3.0,0.0,,,2021_04_spain
+traffic_rejoin,LAT:9,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,LAT:27,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,LAT:50,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,LEC:28,belief rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2021_04_spain
+traffic_rejoin,LEC:58,belief rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2021_04_spain
+traffic_rejoin,MAZ:22,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,MAZ:42,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2021_04_spain
+traffic_rejoin,MSC:23,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,MSC:50,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,NOR:23,belief rejoin position (horizon 2),real position after the out-lap,15.0,,13.0,2.0,,,2021_04_spain
+traffic_rejoin,NOR:51,belief rejoin position (horizon 2),real position after the out-lap,12.0,,11.0,1.0,,,2021_04_spain
+traffic_rejoin,OCO:23,belief rejoin position (horizon 2),real position after the out-lap,13.0,,12.0,1.0,,,2021_04_spain
+traffic_rejoin,PER:27,belief rejoin position (horizon 2),real position after the out-lap,9.0,,7.0,2.0,,,2021_04_spain
+traffic_rejoin,PER:57,belief rejoin position (horizon 2),real position after the out-lap,6.0,,5.0,1.0,,,2021_04_spain
+traffic_rejoin,RAI:37,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2021_04_spain
+traffic_rejoin,RIC:25,belief rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2021_04_spain
+traffic_rejoin,RIC:46,belief rejoin position (horizon 2),real position after the out-lap,9.0,,8.0,1.0,,,2021_04_spain
+traffic_rejoin,RUS:9,belief rejoin position (horizon 2),real position after the out-lap,18.0,,17.0,1.0,,,2021_04_spain
+traffic_rejoin,RUS:28,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2021_04_spain
+traffic_rejoin,SAI:22,belief rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2021_04_spain
+traffic_rejoin,SAI:46,belief rejoin position (horizon 2),real position after the out-lap,9.0,,9.0,0.0,,,2021_04_spain
+traffic_rejoin,STR:22,belief rejoin position (horizon 2),real position after the out-lap,17.0,,14.0,3.0,,,2021_04_spain
+traffic_rejoin,STR:39,belief rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2021_04_spain
+traffic_rejoin,VER:24,belief rejoin position (horizon 2),real position after the out-lap,5.0,,3.0,2.0,,,2021_04_spain
+traffic_rejoin,VER:60,belief rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2021_04_spain
+traffic_rejoin,VET:21,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2021_04_spain
+traffic_rejoin,VET:38,belief rejoin position (horizon 2),real position after the out-lap,17.0,,16.0,1.0,,,2021_04_spain
+neutralisations,sc_periods,judge expected (none),occurred,0.0,,1.0,-1.0,,,2021_04_spain
+neutralisations,vsc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2021_04_spain
+neutralisations,sc_laps,judge expected (none),occurred,0.0,,3.0,-3.0,,,2021_04_spain
+neutralisations,vsc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2021_04_spain
+neutralisations,sc_lap_factor,judge config,observed (mean SC lap / ref lap),1.36,,1.361,-0.0009999999999998899,,,2021_04_spain
+neutralisations,vsc_lap_factor,judge config,observed (median VSC lap / green prediction),1.3,,,,,,2021_04_spain
+neutralisations,sc_periods,belief expected (rate),occurred,0.99,,1.0,-0.010000000000000009,,,2021_04_spain
+neutralisations,vsc_periods,belief expected (rate),occurred,1.32,,0.0,1.32,,,2021_04_spain
+neutralisations,sc_laps,belief expected (rate),occurred,2.9699999999999998,,3.0,-0.03000000000000025,,,2021_04_spain
+neutralisations,vsc_laps,belief expected (rate),occurred,2.64,,0.0,2.64,,,2021_04_spain
+neutralisations,sc_lap_factor,belief config,observed (mean SC lap / ref lap),1.36,,1.361,-0.0009999999999998899,,,2021_04_spain
+neutralisations,vsc_lap_factor,belief config,observed (median VSC lap / green prediction),1.3,,,,,,2021_04_spain
+tyre_life,HARD,belief support edge @k0,oldest age run,50.0,,50.0,0.0,,,2023_07_spain
+tyre_life,HARD,belief support edge @k0,median stint-end age,50.0,,25.5,24.5,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k0,oldest age run,32.0,,32.0,0.0,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k0,median stint-end age,32.0,,26.0,6.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k0,oldest age run,28.0,,28.0,0.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k0,median stint-end age,28.0,,17.5,10.5,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k0, practice)",oldest age run,7.0,,50.0,-43.0,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k0, practice)",median stint-end age,7.0,,25.5,-18.5,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",oldest age run,18.0,,32.0,-14.0,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",median stint-end age,18.0,,26.0,-8.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k0, practice)",oldest age run,23.0,,28.0,-5.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k0, practice)",median stint-end age,23.0,,17.5,5.5,,,2023_07_spain
+tyre_life,HARD,belief support edge @k10,oldest age run,50.0,,50.0,0.0,,,2023_07_spain
+tyre_life,HARD,belief support edge @k10,median stint-end age,50.0,,25.5,24.5,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k10,oldest age run,32.0,,32.0,0.0,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k10,median stint-end age,32.0,,26.0,6.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k10,oldest age run,28.0,,28.0,0.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k10,median stint-end age,28.0,,17.5,10.5,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k10, practice)",oldest age run,10.0,,50.0,-40.0,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k10, practice)",median stint-end age,10.0,,25.5,-15.5,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",oldest age run,18.0,,32.0,-14.0,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",median stint-end age,18.0,,26.0,-8.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k10, practice)",oldest age run,23.0,,28.0,-5.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k10, practice)",median stint-end age,23.0,,17.5,5.5,,,2023_07_spain
+tyre_life,HARD,belief support edge @k20,oldest age run,50.0,,50.0,0.0,,,2023_07_spain
+tyre_life,HARD,belief support edge @k20,median stint-end age,50.0,,25.5,24.5,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k20,oldest age run,32.0,,32.0,0.0,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k20,median stint-end age,32.0,,26.0,6.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k20,oldest age run,28.0,,28.0,0.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k20,median stint-end age,28.0,,17.5,10.5,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k20, practice)",oldest age run,19.0,,50.0,-31.0,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k20, practice)",median stint-end age,19.0,,25.5,-6.5,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",oldest age run,20.0,,32.0,-12.0,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",median stint-end age,20.0,,26.0,-6.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k20, practice)",oldest age run,23.0,,28.0,-5.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k20, practice)",median stint-end age,23.0,,17.5,5.5,,,2023_07_spain
+tyre_life,HARD,belief support edge @k33,oldest age run,50.0,,50.0,0.0,,,2023_07_spain
+tyre_life,HARD,belief support edge @k33,median stint-end age,50.0,,25.5,24.5,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k33,oldest age run,32.0,,32.0,0.0,,,2023_07_spain
+tyre_life,MEDIUM,belief support edge @k33,median stint-end age,32.0,,26.0,6.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k33,oldest age run,28.0,,28.0,0.0,,,2023_07_spain
+tyre_life,SOFT,belief support edge @k33,median stint-end age,28.0,,17.5,10.5,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k33, practice)",oldest age run,28.0,,50.0,-22.0,,,2023_07_spain
+tyre_life,HARD,"as-of data (race to k33, practice)",median stint-end age,28.0,,25.5,2.5,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k33, practice)",oldest age run,27.0,,32.0,-5.0,,,2023_07_spain
+tyre_life,MEDIUM,"as-of data (race to k33, practice)",median stint-end age,27.0,,26.0,1.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k33, practice)",oldest age run,27.0,,28.0,-1.0,,,2023_07_spain
+tyre_life,SOFT,"as-of data (race to k33, practice)",median stint-end age,27.0,,17.5,9.5,,,2023_07_spain
+wear_rate,HARD,belief @k0,within-stint slope less fuel,0.07236033110947039,0.08177437233253931,0.07288694176433556,-0.0005266106548651728,1.0,1.0,2023_07_spain
+wear_rate,MEDIUM,belief @k0,within-stint slope less fuel,0.1014067019036063,0.03,0.06761459374008365,0.033792108163522655,0.0,1.0,2023_07_spain
+wear_rate,SOFT,belief @k0,within-stint slope less fuel,0.09803521466065666,0.03,0.06823789361439525,0.029797321046261413,1.0,1.0,2023_07_spain
+wear_rate,HARD,belief @k10,within-stint slope less fuel,0.13054221027645713,0.030595668526114773,0.07288694176433556,0.05765526851212156,0.0,0.0,2023_07_spain
+wear_rate,MEDIUM,belief @k10,within-stint slope less fuel,0.0954255715719404,0.016483934574253862,0.06761459374008365,0.02781097783185675,0.0,0.0,2023_07_spain
+wear_rate,SOFT,belief @k10,within-stint slope less fuel,0.05529731676462898,0.013378329486157725,0.06823789361439525,-0.012940576849766273,1.0,1.0,2023_07_spain
+wear_rate,HARD,belief @k20,within-stint slope less fuel,0.10496910653376239,0.014306529212904328,0.07288694176433556,0.032082164769426824,0.0,0.0,2023_07_spain
+wear_rate,MEDIUM,belief @k20,within-stint slope less fuel,0.06673773616611278,0.010131139851165124,0.06761459374008365,-0.0008768575739708656,1.0,1.0,2023_07_spain
+wear_rate,SOFT,belief @k20,within-stint slope less fuel,0.024658051370677506,0.008092121185859358,0.06823789361439525,-0.04357984224371775,0.0,0.0,2023_07_spain
+wear_rate,HARD,belief @k33,within-stint slope less fuel,0.07778031610119934,0.006330904580083481,0.07288694176433556,0.004893374336863779,1.0,1.0,2023_07_spain
+wear_rate,MEDIUM,belief @k33,within-stint slope less fuel,0.05702267618151288,0.006634161345944319,0.06761459374008365,-0.010591917558570765,0.0,1.0,2023_07_spain
+wear_rate,SOFT,belief @k33,within-stint slope less fuel,0.02846076484401522,0.006584504779532641,0.06823789361439525,-0.03977712877038003,0.0,0.0,2023_07_spain
+wear_rate,HARD,judge (full fit),within-stint slope less fuel,0.040024302014505644,,0.07288694176433556,-0.03286263974982992,,,2023_07_spain
+wear_rate,MEDIUM,judge (full fit),within-stint slope less fuel,0.05609057339918229,,0.06761459374008365,-0.011524020340901359,,,2023_07_spain
+wear_rate,SOFT,judge (full fit),within-stint slope less fuel,0.040521876313870504,,0.06823789361439525,-0.027716017300524746,,,2023_07_spain
+fresh_tyre_gain,ALB:16,belief @k0,real gain at the stop,1.3431589205690244,,1.4894999999999925,-0.14634107943096808,,,2023_07_spain
+fresh_tyre_gain,ALB:37,belief @k0,real gain at the stop,1.5581527838878344,,1.4835000000000065,0.07465278388782792,,,2023_07_spain
+fresh_tyre_gain,ALO:19,belief @k0,real gain at the stop,1.6505282199098303,,0.5054999999999978,1.1450282199098325,,,2023_07_spain
+fresh_tyre_gain,ALO:44,belief @k0,real gain at the stop,2.5195814964968832,,1.6335000000000122,0.8860814964968711,,,2023_07_spain
+fresh_tyre_gain,BOT:5,belief @k0,real gain at the stop,0.2647715593017921,,2.0649999999999977,-1.8002284406982056,,,2023_07_spain
+fresh_tyre_gain,BOT:39,belief @k0,real gain at the stop,2.268728939955679,,1.7654999999999887,0.5032289399556902,,,2023_07_spain
+fresh_tyre_gain,DEV:9,belief @k0,real gain at the stop,0.6038772032837727,,0.8375000000000057,-0.23362279671623298,,,2023_07_spain
+fresh_tyre_gain,DEV:38,belief @k0,real gain at the stop,2.1370354327636107,,1.866500000000002,0.2705354327636087,,,2023_07_spain
+fresh_tyre_gain,GAS:19,belief @k0,real gain at the stop,2.079397363559792,,1.3109999999999928,0.7683973635597994,,,2023_07_spain
+fresh_tyre_gain,GAS:39,belief @k0,real gain at the stop,1.654480075430854,,1.9590000000000032,-0.3045199245691492,,,2023_07_spain
+fresh_tyre_gain,HAM:24,belief @k0,real gain at the stop,2.569573436863095,,1.2665000000000077,1.3030734368630874,,,2023_07_spain
+fresh_tyre_gain,HAM:50,belief @k0,real gain at the stop,1.9820782982293679,,0.4830000000000041,1.4990782982293638,,,2023_07_spain
+fresh_tyre_gain,HUL:8,belief @k0,real gain at the stop,0.8949395729712819,,1.8534999999999968,-0.9585604270287149,,,2023_07_spain
+fresh_tyre_gain,HUL:26,belief @k0,real gain at the stop,1.4516666716236557,,2.266999999999996,-0.8153333283763402,,,2023_07_spain
+fresh_tyre_gain,HUL:43,belief @k0,real gain at the stop,1.2687114594499604,,1.1435000000000173,0.12521145944994316,,,2023_07_spain
+fresh_tyre_gain,LEC:16,belief @k0,real gain at the stop,1.0615876286725268,,0.8919999999999959,0.16958762867253085,,,2023_07_spain
+fresh_tyre_gain,LEC:41,belief @k0,real gain at the stop,0.4164675747781814,,1.8299999999999983,-1.4135324252218169,,,2023_07_spain
+fresh_tyre_gain,MAG:10,belief @k0,real gain at the stop,0.9029747876319192,,1.6680000000000064,-0.7650252123680872,,,2023_07_spain
+fresh_tyre_gain,MAG:24,belief @k0,real gain at the stop,1.0460398640092308,,2.528500000000008,-1.4824601359907774,,,2023_07_spain
+fresh_tyre_gain,MAG:42,belief @k0,real gain at the stop,1.327391625004708,,1.8909999999999911,-0.5636083749952832,,,2023_07_spain
+fresh_tyre_gain,NOR:22,belief @k0,real gain at the stop,1.5581527838878486,,1.6280000000000001,-0.0698472161121515,,,2023_07_spain
+fresh_tyre_gain,NOR:50,belief @k0,real gain at the stop,2.1848917020365946,,1.7964999999999947,0.3883917020365999,,,2023_07_spain
+fresh_tyre_gain,OCO:13,belief @k0,real gain at the stop,1.4646684682655433,,0.8915000000000077,0.5731684682655356,,,2023_07_spain
+fresh_tyre_gain,OCO:35,belief @k0,real gain at the stop,1.8572934792380806,,1.8149999999999977,0.04229347923808291,,,2023_07_spain
+fresh_tyre_gain,PER:27,belief @k0,real gain at the stop,2.350646823201359,,2.4375,-0.08685317679864113,,,2023_07_spain
+fresh_tyre_gain,PER:50,belief @k0,real gain at the stop,1.5681099464388097,,2.3954999999999984,-0.8273900535611887,,,2023_07_spain
+fresh_tyre_gain,PIA:17,belief @k0,real gain at the stop,1.6372645645510033,,1.592000000000013,0.04526456455099037,,,2023_07_spain
+fresh_tyre_gain,PIA:39,belief @k0,real gain at the stop,1.6305131149973136,,1.718999999999994,-0.08848688500268054,,,2023_07_spain
+fresh_tyre_gain,RUS:25,belief @k0,real gain at the stop,2.3735030075417853,,2.350999999999999,0.022503007541786246,,,2023_07_spain
+fresh_tyre_gain,RUS:45,belief @k0,real gain at the stop,1.3736380868077447,,1.2809999999999917,0.09263808680775298,,,2023_07_spain
+fresh_tyre_gain,SAI:15,belief @k0,real gain at the stop,1.687256504917201,,0.8114999999999952,0.8757565049172058,,,2023_07_spain
+fresh_tyre_gain,SAI:41,belief @k0,real gain at the stop,2.2629202868524914,,0.8160000000000025,1.4469202868524889,,,2023_07_spain
+fresh_tyre_gain,SAR:17,belief @k0,real gain at the stop,1.3502599697200424,,2.419000000000011,-1.0687400302799688,,,2023_07_spain
+fresh_tyre_gain,SAR:36,belief @k0,real gain at the stop,1.2380446355325887,,1.6690000000000111,-0.43095536446742244,,,2023_07_spain
+fresh_tyre_gain,STR:14,belief @k0,real gain at the stop,1.1603521466065558,,0.7420000000000044,0.4183521466065514,,,2023_07_spain
+fresh_tyre_gain,STR:34,belief @k0,real gain at the stop,2.029405423193637,,0.8384999999999962,1.190905423193641,,,2023_07_spain
+fresh_tyre_gain,TSU:10,belief @k0,real gain at the stop,0.7549476326050808,,1.3130000000000024,-0.5580523673949216,,,2023_07_spain
+fresh_tyre_gain,TSU:34,belief @k0,real gain at the stop,1.7196700951549815,,1.0634999999999906,0.6561700951549909,,,2023_07_spain
+fresh_tyre_gain,VER:26,belief @k0,real gain at the stop,2.2629202868525056,,1.1759999999999877,1.0869202868525178,,,2023_07_spain
+fresh_tyre_gain,VER:52,belief @k0,real gain at the stop,1.5891205104458948,,1.375,0.21412051044589475,,,2023_07_spain
+fresh_tyre_gain,ZHO:9,belief @k0,real gain at the stop,0.6569124179444401,,1.0349999999999966,-0.3780875820555565,,,2023_07_spain
+fresh_tyre_gain,ZHO:36,belief @k0,real gain at the stop,1.844287615517814,,1.5409999999999968,0.30328761551781724,,,2023_07_spain
+fresh_tyre_gain,ALB:16,belief @k10,real gain at the stop,1.337005172145524,,1.4894999999999925,-0.15249482785446844,,,2023_07_spain
+fresh_tyre_gain,ALB:37,belief @k10,real gain at the stop,2.231082651538628,,1.4835000000000065,0.7475826515386217,,,2023_07_spain
+fresh_tyre_gain,ALO:19,belief @k10,real gain at the stop,1.0142009065426691,,0.5054999999999978,0.5087009065426713,,,2023_07_spain
+fresh_tyre_gain,ALO:44,belief @k10,real gain at the stop,2.0005729733210558,,1.6335000000000122,0.3670729733210436,,,2023_07_spain
+fresh_tyre_gain,BOT:39,belief @k10,real gain at the stop,3.8479366988424886,,1.7654999999999887,2.0824366988425,,,2023_07_spain
+fresh_tyre_gain,DEV:38,belief @k10,real gain at the stop,3.275420333750276,,1.866500000000002,1.4089203337502738,,,2023_07_spain
+fresh_tyre_gain,GAS:19,belief @k10,real gain at the stop,1.495912994498923,,1.3109999999999928,0.18491299449893006,,,2023_07_spain
+fresh_tyre_gain,GAS:39,belief @k10,real gain at the stop,1.8844263784586275,,1.9590000000000032,-0.0745736215413757,,,2023_07_spain
+fresh_tyre_gain,HAM:24,belief @k10,real gain at the stop,1.7723995783220516,,1.2665000000000077,0.5058995783220439,,,2023_07_spain
+fresh_tyre_gain,HAM:50,belief @k10,real gain at the stop,1.8023916416996428,,0.4830000000000041,1.3193916416996387,,,2023_07_spain
+fresh_tyre_gain,HUL:26,belief @k10,real gain at the stop,1.6935752353147677,,2.266999999999996,-0.5734247646852282,,,2023_07_spain
+fresh_tyre_gain,HUL:43,belief @k10,real gain at the stop,1.7089138104327901,,1.1435000000000173,0.5654138104327728,,,2023_07_spain
+fresh_tyre_gain,LEC:16,belief @k10,real gain at the stop,1.2625514624939598,,0.8919999999999959,0.37055146249396387,,,2023_07_spain
+fresh_tyre_gain,LEC:41,belief @k10,real gain at the stop,-1.4288742338842582,,1.8299999999999983,-3.2588742338842565,,,2023_07_spain
+fresh_tyre_gain,MAG:24,belief @k10,real gain at the stop,1.3118729490269914,,2.528500000000008,-1.2166270509730168,,,2023_07_spain
+fresh_tyre_gain,MAG:42,belief @k10,real gain at the stop,1.7972775599551767,,1.8909999999999911,-0.09372244004481445,,,2023_07_spain
+fresh_tyre_gain,NOR:22,belief @k10,real gain at the stop,2.231082651538628,,1.6280000000000001,0.6030826515386281,,,2023_07_spain
+fresh_tyre_gain,NOR:50,belief @k10,real gain at the stop,1.9932427848435168,,1.7964999999999947,0.19674278484352214,,,2023_07_spain
+fresh_tyre_gain,OCO:13,belief @k10,real gain at the stop,1.159573079912974,,0.8915000000000077,0.26807307991296625,,,2023_07_spain
+fresh_tyre_gain,OCO:35,belief @k10,real gain at the stop,2.0752775216025157,,1.8149999999999977,0.26027752160251794,,,2023_07_spain
+fresh_tyre_gain,PER:27,belief @k10,real gain at the stop,2.5102269187081276,,2.4375,0.07272691870812764,,,2023_07_spain
+fresh_tyre_gain,PER:50,belief @k10,real gain at the stop,2.176346934429148,,2.3954999999999984,-0.21915306557085046,,,2023_07_spain
+fresh_tyre_gain,PIA:17,belief @k10,real gain at the stop,1.502897122439407,,1.592000000000013,-0.08910287756060598,,,2023_07_spain
+fresh_tyre_gain,PIA:39,belief @k10,real gain at the stop,2.3616248618150735,,1.718999999999994,0.6426248618150794,,,2023_07_spain
+fresh_tyre_gain,RUS:25,belief @k10,real gain at the stop,1.6618049447928058,,2.350999999999999,-0.6891950552071933,,,2023_07_spain
+fresh_tyre_gain,RUS:45,belief @k10,real gain at the stop,1.2298382122680067,,1.2809999999999917,-0.05116178773198499,,,2023_07_spain
+fresh_tyre_gain,SAI:15,belief @k10,real gain at the stop,1.2747237274404029,,0.8114999999999952,0.46322372744040763,,,2023_07_spain
+fresh_tyre_gain,SAI:41,belief @k10,real gain at the stop,2.456979807890278,,0.8160000000000025,1.6409798078902753,,,2023_07_spain
+fresh_tyre_gain,SAR:17,belief @k10,real gain at the stop,1.5981496637428165,,2.419000000000011,-0.8208503362571946,,,2023_07_spain
+fresh_tyre_gain,SAR:36,belief @k10,real gain at the stop,2.058517387711916,,1.6690000000000111,0.3895173877119049,,,2023_07_spain
+fresh_tyre_gain,STR:14,belief @k10,real gain at the stop,0.737714322719512,,0.7420000000000044,-0.00428567728049245,,,2023_07_spain
+fresh_tyre_gain,STR:34,belief @k10,real gain at the stop,1.7240863894978986,,0.8384999999999962,0.8855863894979024,,,2023_07_spain
+fresh_tyre_gain,TSU:34,belief @k10,real gain at the stop,2.5137322194580207,,1.0634999999999906,1.4502322194580302,,,2023_07_spain
+fresh_tyre_gain,VER:26,belief @k10,real gain at the stop,2.456979807890292,,1.1759999999999877,1.2809798078903043,,,2023_07_spain
+fresh_tyre_gain,VER:52,belief @k10,real gain at the stop,2.4573789317292665,,1.375,1.0823789317292665,,,2023_07_spain
+fresh_tyre_gain,ZHO:36,belief @k10,real gain at the stop,3.187211991431738,,1.5409999999999968,1.6462119914317412,,,2023_07_spain
+fresh_tyre_gain,ALB:37,belief @k20,real gain at the stop,1.9095879642970175,,1.4835000000000065,0.426087964297011,,,2023_07_spain
+fresh_tyre_gain,ALO:44,belief @k20,real gain at the stop,1.2015058498393785,,1.6335000000000122,-0.4319941501606337,,,2023_07_spain
+fresh_tyre_gain,BOT:39,belief @k20,real gain at the stop,3.1765624161578074,,1.7654999999999887,1.4110624161578187,,,2023_07_spain
+fresh_tyre_gain,DEV:38,belief @k20,real gain at the stop,2.749340816567141,,1.866500000000002,0.8828408165671391,,,2023_07_spain
+fresh_tyre_gain,GAS:39,belief @k20,real gain at the stop,1.334000956573277,,1.9590000000000032,-0.6249990434267261,,,2023_07_spain
+fresh_tyre_gain,HAM:24,belief @k20,real gain at the stop,1.1063057861225047,,1.2665000000000077,-0.160194213877503,,,2023_07_spain
+fresh_tyre_gain,HAM:50,belief @k20,real gain at the stop,1.2463957680840565,,0.4830000000000041,0.7633957680840524,,,2023_07_spain
+fresh_tyre_gain,HUL:26,belief @k20,real gain at the stop,1.2005254842410409,,2.266999999999996,-1.066474515758955,,,2023_07_spain
+fresh_tyre_gain,HUL:43,belief @k20,real gain at the stop,1.489711538161984,,1.1435000000000173,0.3462115381619668,,,2023_07_spain
+fresh_tyre_gain,LEC:41,belief @k20,real gain at the stop,-1.496695967616688,,1.8299999999999983,-3.3266959676166863,,,2023_07_spain
+fresh_tyre_gain,MAG:24,belief @k20,real gain at the stop,0.9335745395765827,,2.528500000000008,-1.5949254604234255,,,2023_07_spain
+fresh_tyre_gain,MAG:42,belief @k20,real gain at the stop,1.5666529871250248,,1.8909999999999911,-0.32434701287496637,,,2023_07_spain
+fresh_tyre_gain,NOR:22,belief @k20,real gain at the stop,1.9095879642970317,,1.6280000000000001,0.2815879642970316,,,2023_07_spain
+fresh_tyre_gain,NOR:50,belief @k20,real gain at the stop,1.3798712404162785,,1.7964999999999947,-0.41662875958371615,,,2023_07_spain
+fresh_tyre_gain,OCO:35,belief @k20,real gain at the stop,1.4674764289054991,,1.8149999999999977,-0.3475235710944986,,,2023_07_spain
+fresh_tyre_gain,PER:27,belief @k20,real gain at the stop,1.7731374521653294,,2.4375,-0.6643625478346706,,,2023_07_spain
+fresh_tyre_gain,PER:50,belief @k20,real gain at the stop,1.7760107383368933,,2.3954999999999984,-0.6194892616631051,,,2023_07_spain
+fresh_tyre_gain,PIA:39,belief @k20,real gain at the stop,2.01455707083079,,1.718999999999994,0.29555707083079596,,,2023_07_spain
+fresh_tyre_gain,RUS:25,belief @k20,real gain at the stop,1.0569896833811754,,2.350999999999999,-1.2940103166188237,,,2023_07_spain
+fresh_tyre_gain,RUS:45,belief @k20,real gain at the stop,0.8459693510873763,,1.2809999999999917,-0.43503064891261545,,,2023_07_spain
+fresh_tyre_gain,SAI:41,belief @k20,real gain at the stop,1.7344273735699574,,0.8160000000000025,0.9184273735699549,,,2023_07_spain
+fresh_tyre_gain,SAR:36,belief @k20,real gain at the stop,1.7141364484342603,,1.6690000000000111,0.04513644843424913,,,2023_07_spain
+fresh_tyre_gain,STR:34,belief @k20,real gain at the stop,1.0782155929859982,,0.8384999999999962,0.23971559298600198,,,2023_07_spain
+fresh_tyre_gain,TSU:34,belief @k20,real gain at the stop,2.159527996369974,,1.0634999999999906,1.0960279963699833,,,2023_07_spain
+fresh_tyre_gain,VER:26,belief @k20,real gain at the stop,1.7344273735699431,,1.1759999999999877,0.5584273735699554,,,2023_07_spain
+fresh_tyre_gain,VER:52,belief @k20,real gain at the stop,2.0416019551968247,,1.375,0.6666019551968247,,,2023_07_spain
+fresh_tyre_gain,ZHO:36,belief @k20,real gain at the stop,2.609944615845791,,1.5409999999999968,1.068944615845794,,,2023_07_spain
+fresh_tyre_gain,ALB:37,belief @k33,real gain at the stop,1.582108483817251,,1.4835000000000065,0.09860848381724452,,,2023_07_spain
+fresh_tyre_gain,ALO:44,belief @k33,real gain at the stop,1.1928626795644561,,1.6335000000000122,-0.44063732043555603,,,2023_07_spain
+fresh_tyre_gain,BOT:39,belief @k33,real gain at the stop,2.478168516303427,,1.7654999999999887,0.7126685163034381,,,2023_07_spain
+fresh_tyre_gain,DEV:38,belief @k33,real gain at the stop,2.20435101262683,,1.866500000000002,0.33785101262682815,,,2023_07_spain
+fresh_tyre_gain,GAS:39,belief @k33,real gain at the stop,1.0846339734599724,,1.9590000000000032,-0.8743660265400308,,,2023_07_spain
+fresh_tyre_gain,HAM:50,belief @k33,real gain at the stop,1.0476405450352502,,0.4830000000000041,0.5646405450352461,,,2023_07_spain
+fresh_tyre_gain,HUL:43,belief @k33,real gain at the stop,1.2709872194124472,,1.1435000000000173,0.1274872194124299,,,2023_07_spain
+fresh_tyre_gain,LEC:41,belief @k33,real gain at the stop,-0.8370275174975887,,1.8299999999999983,-2.667027517497587,,,2023_07_spain
+fresh_tyre_gain,MAG:42,belief @k33,real gain at the stop,1.3368845190038314,,1.8909999999999911,-0.5541154809961597,,,2023_07_spain
+fresh_tyre_gain,NOR:50,belief @k33,real gain at the stop,1.1616858973982715,,1.7964999999999947,-0.6348141026017231,,,2023_07_spain
+fresh_tyre_gain,OCO:35,belief @k33,real gain at the stop,1.198679325823008,,1.8149999999999977,-0.6163206741769898,,,2023_07_spain
+fresh_tyre_gain,PER:50,belief @k33,real gain at the stop,1.4001359472673442,,2.3954999999999984,-0.9953640527326542,,,2023_07_spain
+fresh_tyre_gain,PIA:39,belief @k33,real gain at the stop,1.6598887999184484,,1.718999999999994,-0.05911120008154569,,,2023_07_spain
+fresh_tyre_gain,RUS:45,belief @k33,real gain at the stop,0.7055044879461576,,1.2809999999999917,-0.5754955120538341,,,2023_07_spain
+fresh_tyre_gain,SAI:41,belief @k33,real gain at the stop,1.4267700305490791,,0.8160000000000025,0.6107700305490766,,,2023_07_spain
+fresh_tyre_gain,SAR:36,belief @k33,real gain at the stop,1.35899584082469,,1.6690000000000111,-0.3100041591753211,,,2023_07_spain
+fresh_tyre_gain,STR:34,belief @k33,real gain at the stop,1.050558855344363,,0.8384999999999962,0.21205885534436675,,,2023_07_spain
+fresh_tyre_gain,TSU:34,belief @k33,real gain at the stop,1.7901792025512435,,1.0634999999999906,0.726679202551253,,,2023_07_spain
+fresh_tyre_gain,VER:52,belief @k33,real gain at the stop,1.5765553658828964,,1.375,0.20155536588289635,,,2023_07_spain
+fresh_tyre_gain,ZHO:36,belief @k33,real gain at the stop,2.00500440265391,,1.5409999999999968,0.46400440265391296,,,2023_07_spain
+compound_gap,SOFT-MEDIUM,belief @k0,"race (judge full fit, fresh tyre, mid-race)",0.1398207305324064,,-0.008580860478005548,0.14840159101041195,,,2023_07_spain
+compound_gap,MEDIUM-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.19159671121803967,,-0.20578264199845364,0.014185930780413969,,,2023_07_spain
+compound_gap,SOFT-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.05177598068563327,,-0.2143635024764592,0.16258752179082592,,,2023_07_spain
+compound_gap,SOFT-MEDIUM,belief @k10,"race (judge full fit, fresh tyre, mid-race)",0.37601251987334194,,-0.008580860478005548,0.3845933803513475,,,2023_07_spain
+compound_gap,MEDIUM-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",0.2255510362911366,,-0.20578264199845364,0.43133367828959024,,,2023_07_spain
+compound_gap,SOFT-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",0.6015635561644785,,-0.2143635024764592,0.8159270586409377,,,2023_07_spain
+compound_gap,SOFT-MEDIUM,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.40663496622080686,,-0.008580860478005548,0.4152158266988124,,,2023_07_spain
+compound_gap,MEDIUM-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.12788906789768362,,-0.20578264199845364,0.33367170989613726,,,2023_07_spain
+compound_gap,SOFT-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.5345240341184905,,-0.2143635024764592,0.7488875365949497,,,2023_07_spain
+compound_gap,SOFT-MEDIUM,belief @k33,"race (judge full fit, fresh tyre, mid-race)",0.3803760357585446,,-0.008580860478005548,0.38895689623655016,,,2023_07_spain
+compound_gap,MEDIUM-HARD,belief @k33,"race (judge full fit, fresh tyre, mid-race)",-0.012649517891006212,,-0.20578264199845364,0.19313312410744743,,,2023_07_spain
+compound_gap,SOFT-HARD,belief @k33,"race (judge full fit, fresh tyre, mid-race)",0.3677265178675384,,-0.2143635024764592,0.5820900203439976,,,2023_07_spain
+fuel,fuel,prior (config),race (judge full fit),-0.045,,-0.05825304512954398,0.013253045129543985,,,2023_07_spain
+fuel,fuel,belief @k0,race (judge full fit),-0.045,0.008,-0.05825304512954398,0.013253045129543985,0.0,0.0,2023_07_spain
+fuel,fuel,belief @k10,race (judge full fit),-0.04618528876830506,0.004835110222802046,-0.05825304512954398,0.01206775636123892,0.0,0.0,2023_07_spain
+fuel,fuel,belief @k20,race (judge full fit),-0.048913791392317704,0.003989364409604758,-0.05825304512954398,0.009339253737226279,0.0,0.0,2023_07_spain
+fuel,fuel,belief @k33,race (judge full fit),-0.054014283081578345,0.0025564906920211754,-0.05825304512954398,0.0042387620479656385,0.0,0.0,2023_07_spain
+pit_loss,green,prior (code constant),"whole race, robust (median of green stops)",22.0,,23.588143969626486,-1.5881439696264863,,,2023_07_spain
+pit_loss,green,prior (code constant),"whole race, mean (RaceParams.pit_loss_s)",22.0,,24.94,-2.9400000000000013,,,2023_07_spain
+pit_loss,green,belief charged @k0,"whole race, robust (median of green stops)",24.94,,23.588143969626486,1.351856030373515,,,2023_07_spain
+pit_loss,green,belief charged @k0,"whole race, mean (RaceParams.pit_loss_s)",24.94,,24.94,0.0,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, robust (median of green stops)",,,23.588143969626486,,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,24.94,,,,2023_07_spain
+pit_loss,green,belief charged @k10,"whole race, robust (median of green stops)",24.94,,23.588143969626486,1.351856030373515,,,2023_07_spain
+pit_loss,green,belief charged @k10,"whole race, mean (RaceParams.pit_loss_s)",24.94,,24.94,0.0,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k10, n=5)","whole race, robust (median of green stops)",23.19549000000609,,23.588143969626486,-0.39265396962039745,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k10, n=5)","whole race, mean (RaceParams.pit_loss_s)",23.19549000000609,,24.94,-1.7445099999939124,,,2023_07_spain
+pit_loss,green,belief charged @k20,"whole race, robust (median of green stops)",24.94,,23.588143969626486,1.351856030373515,,,2023_07_spain
+pit_loss,green,belief charged @k20,"whole race, mean (RaceParams.pit_loss_s)",24.94,,24.94,0.0,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k20, n=16)","whole race, robust (median of green stops)",23.613810850743718,,23.588143969626486,0.02566688111723181,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k20, n=16)","whole race, mean (RaceParams.pit_loss_s)",23.613810850743718,,24.94,-1.3261891492562832,,,2023_07_spain
+pit_loss,green,belief charged @k33,"whole race, robust (median of green stops)",24.94,,23.588143969626486,1.351856030373515,,,2023_07_spain
+pit_loss,green,belief charged @k33,"whole race, mean (RaceParams.pit_loss_s)",24.94,,24.94,0.0,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k33, n=23)","whole race, robust (median of green stops)",23.511571854099685,,23.588143969626486,-0.0765721155268011,,,2023_07_spain
+pit_loss,green,"as-of data (green stops to k33, n=23)","whole race, mean (RaceParams.pit_loss_s)",23.511571854099685,,24.94,-1.428428145900316,,,2023_07_spain
+lap1_and_warmup,lap1_extra,prior (config),observed (median lap-1 residual + prior),9.0,,9.06,-0.0600000000000005,,,2023_07_spain
+lap1_and_warmup,out_lap_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,0.0,,-0.3960942165428847,0.3960942165428847,,,2023_07_spain
+traffic_rejoin,ALB:16,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,ALB:37,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,ALO:19,judge rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2023_07_spain
+traffic_rejoin,ALO:44,judge rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2023_07_spain
+traffic_rejoin,BOT:5,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,BOT:39,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,DEV:9,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,DEV:38,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_07_spain
+traffic_rejoin,GAS:19,judge rejoin position (horizon 2),real position after the out-lap,15.0,,16.0,-1.0,,,2023_07_spain
+traffic_rejoin,GAS:39,judge rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2023_07_spain
+traffic_rejoin,HAM:24,judge rejoin position (horizon 2),real position after the out-lap,5.0,,5.0,0.0,,,2023_07_spain
+traffic_rejoin,HAM:50,judge rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2023_07_spain
+traffic_rejoin,HUL:8,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,HUL:26,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2023_07_spain
+traffic_rejoin,HUL:43,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,LEC:16,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2023_07_spain
+traffic_rejoin,LEC:41,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_07_spain
+traffic_rejoin,MAG:10,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,MAG:24,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,MAG:42,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,NOR:1,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,NOR:22,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,NOR:50,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,OCO:13,judge rejoin position (horizon 2),real position after the out-lap,15.0,,13.0,2.0,,,2023_07_spain
+traffic_rejoin,OCO:35,judge rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2023_07_spain
+traffic_rejoin,PER:27,judge rejoin position (horizon 2),real position after the out-lap,10.0,,9.0,1.0,,,2023_07_spain
+traffic_rejoin,PER:50,judge rejoin position (horizon 2),real position after the out-lap,5.0,,5.0,0.0,,,2023_07_spain
+traffic_rejoin,PIA:17,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_07_spain
+traffic_rejoin,PIA:39,judge rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2023_07_spain
+traffic_rejoin,RUS:25,judge rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2023_07_spain
+traffic_rejoin,RUS:45,judge rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2023_07_spain
+traffic_rejoin,SAI:15,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_07_spain
+traffic_rejoin,SAI:41,judge rejoin position (horizon 2),real position after the out-lap,6.0,,6.0,0.0,,,2023_07_spain
+traffic_rejoin,SAR:17,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,SAR:36,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,STR:14,judge rejoin position (horizon 2),real position after the out-lap,12.0,,11.0,1.0,,,2023_07_spain
+traffic_rejoin,STR:34,judge rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2023_07_spain
+traffic_rejoin,TSU:10,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,TSU:34,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_07_spain
+traffic_rejoin,VER:26,judge rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2023_07_spain
+traffic_rejoin,VER:52,judge rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2023_07_spain
+traffic_rejoin,ZHO:9,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,ZHO:36,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_07_spain
+traffic_rejoin,ALB:16,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,ALB:37,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,ALO:19,belief rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2023_07_spain
+traffic_rejoin,ALO:44,belief rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2023_07_spain
+traffic_rejoin,BOT:5,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,BOT:39,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,DEV:9,belief rejoin position (horizon 2),real position after the out-lap,20.0,,19.0,1.0,,,2023_07_spain
+traffic_rejoin,DEV:38,belief rejoin position (horizon 2),real position after the out-lap,18.0,,17.0,1.0,,,2023_07_spain
+traffic_rejoin,GAS:19,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,GAS:39,belief rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2023_07_spain
+traffic_rejoin,HAM:24,belief rejoin position (horizon 2),real position after the out-lap,5.0,,5.0,0.0,,,2023_07_spain
+traffic_rejoin,HAM:50,belief rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2023_07_spain
+traffic_rejoin,HUL:8,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,HUL:26,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2023_07_spain
+traffic_rejoin,HUL:43,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,LEC:16,belief rejoin position (horizon 2),real position after the out-lap,19.0,,18.0,1.0,,,2023_07_spain
+traffic_rejoin,LEC:41,belief rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_07_spain
+traffic_rejoin,MAG:10,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,MAG:24,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,MAG:42,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_07_spain
+traffic_rejoin,NOR:1,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,NOR:22,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,NOR:50,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,OCO:13,belief rejoin position (horizon 2),real position after the out-lap,15.0,,13.0,2.0,,,2023_07_spain
+traffic_rejoin,OCO:35,belief rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2023_07_spain
+traffic_rejoin,PER:27,belief rejoin position (horizon 2),real position after the out-lap,10.0,,9.0,1.0,,,2023_07_spain
+traffic_rejoin,PER:50,belief rejoin position (horizon 2),real position after the out-lap,5.0,,5.0,0.0,,,2023_07_spain
+traffic_rejoin,PIA:17,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_07_spain
+traffic_rejoin,PIA:39,belief rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2023_07_spain
+traffic_rejoin,RUS:25,belief rejoin position (horizon 2),real position after the out-lap,8.0,,6.0,2.0,,,2023_07_spain
+traffic_rejoin,RUS:45,belief rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2023_07_spain
+traffic_rejoin,SAI:15,belief rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_07_spain
+traffic_rejoin,SAI:41,belief rejoin position (horizon 2),real position after the out-lap,6.0,,6.0,0.0,,,2023_07_spain
+traffic_rejoin,SAR:17,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,SAR:36,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_07_spain
+traffic_rejoin,STR:14,belief rejoin position (horizon 2),real position after the out-lap,12.0,,11.0,1.0,,,2023_07_spain
+traffic_rejoin,STR:34,belief rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2023_07_spain
+traffic_rejoin,TSU:10,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,TSU:34,belief rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_07_spain
+traffic_rejoin,VER:26,belief rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2023_07_spain
+traffic_rejoin,VER:52,belief rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2023_07_spain
+traffic_rejoin,ZHO:9,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_07_spain
+traffic_rejoin,ZHO:36,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_07_spain
+neutralisations,sc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2023_07_spain
+neutralisations,vsc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2023_07_spain
+neutralisations,sc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2023_07_spain
+neutralisations,vsc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2023_07_spain
+neutralisations,sc_lap_factor,judge config,observed (mean SC lap / ref lap),1.36,,,,,,2023_07_spain
+neutralisations,vsc_lap_factor,judge config,observed (median VSC lap / green prediction),1.3,,,,,,2023_07_spain
+neutralisations,sc_periods,belief expected (rate),occurred,0.99,,0.0,0.99,,,2023_07_spain
+neutralisations,vsc_periods,belief expected (rate),occurred,1.32,,0.0,1.32,,,2023_07_spain
+neutralisations,sc_laps,belief expected (rate),occurred,2.9699999999999998,,0.0,2.9699999999999998,,,2023_07_spain
+neutralisations,vsc_laps,belief expected (rate),occurred,2.64,,0.0,2.64,,,2023_07_spain
+neutralisations,sc_lap_factor,belief config,observed (mean SC lap / ref lap),1.36,,,,,,2023_07_spain
+neutralisations,vsc_lap_factor,belief config,observed (median VSC lap / green prediction),1.3,,,,,,2023_07_spain
+tyre_life,HARD,belief support edge @k0,oldest age run,29.0,,29.0,0.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k0,median stint-end age,29.0,,17.0,12.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k0,oldest age run,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k0,median stint-end age,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k0,oldest age run,25.0,,25.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k0,median stint-end age,25.0,,15.0,10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k0, practice)",oldest age run,19.0,,29.0,-10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k0, practice)",median stint-end age,19.0,,17.0,2.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",oldest age run,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",median stint-end age,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k0, practice)",oldest age run,21.0,,25.0,-4.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k0, practice)",median stint-end age,21.0,,15.0,6.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k10,oldest age run,29.0,,29.0,0.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k10,median stint-end age,29.0,,17.0,12.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k10,oldest age run,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k10,median stint-end age,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k10,oldest age run,25.0,,25.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k10,median stint-end age,25.0,,15.0,10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k10, practice)",oldest age run,19.0,,29.0,-10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k10, practice)",median stint-end age,19.0,,17.0,2.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",oldest age run,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",median stint-end age,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k10, practice)",oldest age run,21.0,,25.0,-4.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k10, practice)",median stint-end age,21.0,,15.0,6.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k20,oldest age run,29.0,,29.0,0.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k20,median stint-end age,29.0,,17.0,12.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k20,oldest age run,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k20,median stint-end age,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k20,oldest age run,25.0,,25.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k20,median stint-end age,25.0,,15.0,10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k20, practice)",oldest age run,19.0,,29.0,-10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k20, practice)",median stint-end age,19.0,,17.0,2.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",oldest age run,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",median stint-end age,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k20, practice)",oldest age run,21.0,,25.0,-4.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k20, practice)",median stint-end age,21.0,,15.0,6.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k28,oldest age run,29.0,,29.0,0.0,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k28,median stint-end age,29.0,,17.0,12.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k28,oldest age run,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,MEDIUM,belief support edge @k28,median stint-end age,10.0,,10.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k28,oldest age run,25.0,,25.0,0.0,,,2023_01_bahrain
+tyre_life,SOFT,belief support edge @k28,median stint-end age,25.0,,15.0,10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k28, practice)",oldest age run,19.0,,29.0,-10.0,,,2023_01_bahrain
+tyre_life,HARD,"as-of data (race to k28, practice)",median stint-end age,19.0,,17.0,2.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k28, practice)",oldest age run,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,MEDIUM,"as-of data (race to k28, practice)",median stint-end age,20.0,,10.0,10.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k28, practice)",oldest age run,21.0,,25.0,-4.0,,,2023_01_bahrain
+tyre_life,SOFT,"as-of data (race to k28, practice)",median stint-end age,21.0,,15.0,6.0,,,2023_01_bahrain
+wear_rate,HARD,belief @k0,within-stint slope less fuel,0.14216468704071983,0.03,0.10970902708540343,0.03245565995531639,0.0,1.0,2023_01_bahrain
+wear_rate,MEDIUM,belief @k0,within-stint slope less fuel,0.07485477836495959,0.03,0.30842356254994574,-0.23356878418498617,0.0,0.0,2023_01_bahrain
+wear_rate,SOFT,belief @k0,within-stint slope less fuel,0.1788919496572667,0.03,0.17666909993937774,0.0022228497178889695,1.0,1.0,2023_01_bahrain
+wear_rate,HARD,belief @k10,within-stint slope less fuel,0.16291206046304155,0.02815171069039461,0.10970902708540343,0.05320303337763811,0.0,0.0,2023_01_bahrain
+wear_rate,MEDIUM,belief @k10,within-stint slope less fuel,0.11990260934239677,0.08322959492249743,0.30842356254994574,-0.18852095320754897,0.0,0.0,2023_01_bahrain
+wear_rate,SOFT,belief @k10,within-stint slope less fuel,0.11834569583525958,0.020786270690633653,0.17666909993937774,-0.058323404104118154,0.0,0.0,2023_01_bahrain
+wear_rate,HARD,belief @k20,within-stint slope less fuel,0.16799794157525166,0.020167627279776668,0.10970902708540343,0.05828891448984823,0.0,0.0,2023_01_bahrain
+wear_rate,MEDIUM,belief @k20,within-stint slope less fuel,0.10863826128899802,0.08097856029066017,0.30842356254994574,-0.19978530126094773,0.0,0.0,2023_01_bahrain
+wear_rate,SOFT,belief @k20,within-stint slope less fuel,0.10863826128899802,0.014261218314747512,0.17666909993937774,-0.06803083865037972,0.0,0.0,2023_01_bahrain
+wear_rate,HARD,belief @k28,within-stint slope less fuel,0.13213031432964942,0.012267952389208008,0.10970902708540343,0.022421287244245983,0.0,0.0,2023_01_bahrain
+wear_rate,MEDIUM,belief @k28,within-stint slope less fuel,0.11170811687280738,0.08061119763651547,0.30842356254994574,-0.19671544567713836,0.0,0.0,2023_01_bahrain
+wear_rate,SOFT,belief @k28,within-stint slope less fuel,0.11170811687280738,0.012909547401373584,0.17666909993937774,-0.06496098306657036,0.0,0.0,2023_01_bahrain
+wear_rate,HARD,judge (full fit),within-stint slope less fuel,0.09809845417363326,,0.10970902708540343,-0.011610572911770173,,,2023_01_bahrain
+wear_rate,MEDIUM,judge (full fit),within-stint slope less fuel,0.3084235625500037,,0.30842356254994574,5.795364188543317e-14,,,2023_01_bahrain
+wear_rate,SOFT,judge (full fit),within-stint slope less fuel,0.10248134372290094,,0.17666909993937774,-0.0741877562164768,,,2023_01_bahrain
+fresh_tyre_gain,ALB:11,belief @k0,real gain at the stop,1.4322436476008562,,2.4835000000000065,-1.0512563523991503,,,2023_01_bahrain
+fresh_tyre_gain,ALB:26,belief @k0,real gain at the stop,1.5199794787269383,,2.0459999999999923,-0.526020521273054,,,2023_01_bahrain
+fresh_tyre_gain,ALB:40,belief @k0,real gain at the stop,2.229478837910193,,1.1604999999999848,1.0689788379102083,,,2023_01_bahrain
+fresh_tyre_gain,ALO:14,belief @k0,real gain at the stop,1.8777633780414789,,2.796999999999997,-0.9192366219585182,,,2023_01_bahrain
+fresh_tyre_gain,ALO:34,belief @k0,real gain at the stop,2.4546349926515347,,1.0264999999999986,1.428134992651536,,,2023_01_bahrain
+fresh_tyre_gain,BOT:11,belief @k0,real gain at the stop,0.8044116800978571,,2.411500000000018,-1.6070883199021608,,,2023_01_bahrain
+fresh_tyre_gain,BOT:29,belief @k0,real gain at the stop,2.170305618570069,,1.6244999999999976,0.5458056185700713,,,2023_01_bahrain
+fresh_tyre_gain,DEV:11,belief @k0,real gain at the stop,0.8044116800978571,,2.742999999999995,-1.9385883199021379,,,2023_01_bahrain
+fresh_tyre_gain,DEV:27,belief @k0,real gain at the stop,1.8859762444886456,,2.5500000000000114,-0.6640237555113657,,,2023_01_bahrain
+fresh_tyre_gain,GAS:25,belief @k0,real gain at the stop,1.8859762444886599,,1.266999999999996,0.618976244488664,,,2023_01_bahrain
+fresh_tyre_gain,GAS:40,belief @k0,real gain at the stop,2.371643524950912,,2.8175000000000097,-0.44585647504909787,,,2023_01_bahrain
+fresh_tyre_gain,HAM:12,belief @k0,real gain at the stop,1.5199794787269383,,2.1029999999999944,-0.5830205212730561,,,2023_01_bahrain
+fresh_tyre_gain,HAM:30,belief @k0,real gain at the stop,2.170305618570069,,0.7664999999999793,1.4038056185700896,,,2023_01_bahrain
+fresh_tyre_gain,HUL:11,belief @k0,real gain at the stop,1.2071955794123994,,2.305499999999995,-1.0983044205875956,,,2023_01_bahrain
+fresh_tyre_gain,HUL:26,belief @k0,real gain at the stop,1.7438115574479127,,2.8855000000000075,-1.1416884425520948,,,2023_01_bahrain
+fresh_tyre_gain,HUL:40,belief @k0,real gain at the stop,1.6928029889383964,,1.483000000000004,0.20980298893839233,,,2023_01_bahrain
+fresh_tyre_gain,MAG:15,belief @k0,real gain at the stop,1.7438115574479127,,3.3999999999999915,-1.6561884425520788,,,2023_01_bahrain
+fresh_tyre_gain,MAG:29,belief @k0,real gain at the stop,2.229478837910193,,1.1884999999999906,1.0409788379102025,,,2023_01_bahrain
+fresh_tyre_gain,MAG:40,belief @k0,real gain at the stop,1.4322436476008704,,1.7384999999999877,-0.3062563523991173,,,2023_01_bahrain
+fresh_tyre_gain,NOR:10,belief @k0,real gain at the stop,0.625519730440601,,1.407999999999987,-0.782480269559386,,,2023_01_bahrain
+fresh_tyre_gain,NOR:17,belief @k0,real gain at the stop,0.6976501796533654,,0.7095000000000198,-0.011849820346654383,,,2023_01_bahrain
+fresh_tyre_gain,NOR:27,belief @k0,real gain at the stop,0.11715645756589765,,1.0109999999999957,-0.893843542434098,,,2023_01_bahrain
+fresh_tyre_gain,NOR:37,belief @k0,real gain at the stop,1.4798384179548236,,2.191500000000005,-0.7116615820451813,,,2023_01_bahrain
+fresh_tyre_gain,NOR:47,belief @k0,real gain at the stop,0.8113603414609827,,2.001499999999993,-1.1901396585390103,,,2023_01_bahrain
+fresh_tyre_gain,PER:17,belief @k0,real gain at the stop,2.684487295201734,,1.1354999999999933,1.5489872952017407,,,2023_01_bahrain
+fresh_tyre_gain,PER:34,belief @k0,real gain at the stop,2.2355472773560194,,1.2135000000000105,1.022047277356009,,,2023_01_bahrain
+fresh_tyre_gain,RUS:13,belief @k0,real gain at the stop,1.6988714283841944,,3.451999999999998,-1.7531285716158038,,,2023_01_bahrain
+fresh_tyre_gain,RUS:31,belief @k0,real gain at the stop,2.170305618570069,,1.4004999999999939,0.769805618570075,,,2023_01_bahrain
+fresh_tyre_gain,SAI:13,belief @k0,real gain at the stop,1.6988714283841944,,2.3044999999999902,-0.6056285716157959,,,2023_01_bahrain
+fresh_tyre_gain,SAI:31,belief @k0,real gain at the stop,2.170305618570069,,1.0640000000000072,1.1063056185700617,,,2023_01_bahrain
+fresh_tyre_gain,SAR:12,belief @k0,real gain at the stop,1.6111355972581407,,2.609499999999997,-0.9983644027418563,,,2023_01_bahrain
+fresh_tyre_gain,SAR:30,belief @k0,real gain at the stop,2.056655327698735,,1.909000000000006,0.1476553276987289,,,2023_01_bahrain
+fresh_tyre_gain,SAR:40,belief @k0,real gain at the stop,1.6608200897473182,,1.5739999999999839,0.08682008974733435,,,2023_01_bahrain
+fresh_tyre_gain,STR:15,belief @k0,real gain at the stop,2.056655327698735,,2.7439999999999998,-0.6873446723012648,,,2023_01_bahrain
+fresh_tyre_gain,STR:30,belief @k0,real gain at the stop,1.7438115574479127,,1.8384999999999962,-0.09468844255208353,,,2023_01_bahrain
+fresh_tyre_gain,TSU:10,belief @k0,real gain at the stop,0.625519730440601,,1.6209999999999951,-0.9954802695593941,,,2023_01_bahrain
+fresh_tyre_gain,TSU:26,belief @k0,real gain at the stop,1.8859762444886314,,2.1259999999999906,-0.24002375551135913,,,2023_01_bahrain
+fresh_tyre_gain,TSU:40,belief @k0,real gain at the stop,1.6928029889383964,,1.4189999999999827,0.2738029889384137,,,2023_01_bahrain
+fresh_tyre_gain,VER:14,belief @k0,real gain at the stop,2.505595345544478,,0.8119999999999834,1.6935953455444945,,,2023_01_bahrain
+fresh_tyre_gain,VER:36,belief @k0,real gain at the stop,2.7722231263277877,,1.472999999999999,1.2992231263277887,,,2023_01_bahrain
+fresh_tyre_gain,ZHO:12,belief @k0,real gain at the stop,0.5816277807833501,,1.9110000000000014,-1.3293722192166513,,,2023_01_bahrain
+fresh_tyre_gain,ZHO:32,belief @k0,real gain at the stop,2.545791111182723,,2.232500000000016,0.313291111182707,,,2023_01_bahrain
+fresh_tyre_gain,ALB:11,belief @k10,real gain at the stop,0.9897224395483875,,2.4835000000000065,-1.493777560451619,,,2023_01_bahrain
+fresh_tyre_gain,ALB:26,belief @k10,real gain at the stop,0.7387514143613174,,2.0459999999999923,-1.3072485856386749,,,2023_01_bahrain
+fresh_tyre_gain,ALB:40,belief @k10,real gain at the stop,2.514776981860109,,1.1604999999999848,1.3542769818601244,,,2023_01_bahrain
+fresh_tyre_gain,ALO:14,belief @k10,real gain at the stop,0.9754428060318503,,2.796999999999997,-1.8215571939681467,,,2023_01_bahrain
+fresh_tyre_gain,ALO:34,belief @k10,real gain at the stop,2.7678955361102453,,1.0264999999999986,1.7413955361102467,,,2023_01_bahrain
+fresh_tyre_gain,BOT:11,belief @k10,real gain at the stop,0.26536863102026587,,2.411500000000018,-2.146131368979752,,,2023_01_bahrain
+fresh_tyre_gain,BOT:29,belief @k10,real gain at the stop,2.4420714151841594,,1.6244999999999976,0.8175714151841618,,,2023_01_bahrain
+fresh_tyre_gain,DEV:11,belief @k10,real gain at the stop,0.26536863102026587,,2.742999999999995,-2.477631368979729,,,2023_01_bahrain
+fresh_tyre_gain,DEV:27,belief @k10,real gain at the stop,2.1162472942580877,,2.5500000000000114,-0.4337527057419237,,,2023_01_bahrain
+fresh_tyre_gain,GAS:25,belief @k10,real gain at the stop,2.1162472942580735,,1.266999999999996,0.8492472942580775,,,2023_01_bahrain
+fresh_tyre_gain,GAS:40,belief @k10,real gain at the stop,2.677689042323152,,2.8175000000000097,-0.13981095767685758,,,2023_01_bahrain
+fresh_tyre_gain,HAM:12,belief @k10,real gain at the stop,0.7387514143613174,,2.1029999999999944,-1.364248585638677,,,2023_01_bahrain
+fresh_tyre_gain,HAM:30,belief @k10,real gain at the stop,2.442071415184145,,0.7664999999999793,1.6755714151841659,,,2023_01_bahrain
+fresh_tyre_gain,HUL:11,belief @k10,real gain at the stop,0.5423856648661882,,2.305499999999995,-1.7631143351338068,,,2023_01_bahrain
+fresh_tyre_gain,HUL:26,belief @k10,real gain at the stop,1.9533352337950447,,2.8855000000000075,-0.9321647662049628,,,2023_01_bahrain
+fresh_tyre_gain,HUL:40,belief @k10,real gain at the stop,2.159739894354331,,1.483000000000004,0.676739894354327,,,2023_01_bahrain
+fresh_tyre_gain,MAG:15,belief @k10,real gain at the stop,1.9533352337950305,,3.3999999999999915,-1.446664766204961,,,2023_01_bahrain
+fresh_tyre_gain,MAG:29,belief @k10,real gain at the stop,2.514776981860109,,1.1884999999999906,1.3262769818601186,,,2023_01_bahrain
+fresh_tyre_gain,MAG:40,belief @k10,real gain at the stop,0.9897224395483875,,1.7384999999999877,-0.7487775604516003,,,2023_01_bahrain
+fresh_tyre_gain,NOR:17,belief @k10,real gain at the stop,1.0193554711130446,,0.7095000000000198,0.3098554711130248,,,2023_01_bahrain
+fresh_tyre_gain,NOR:27,belief @k10,real gain at the stop,1.0669522211928069,,1.0109999999999957,0.05595222119281118,,,2023_01_bahrain
+fresh_tyre_gain,NOR:37,belief @k10,real gain at the stop,0.07065318967865153,,2.191500000000005,-2.1208468103213534,,,2023_01_bahrain
+fresh_tyre_gain,NOR:47,belief @k10,real gain at the stop,1.31172590300703,,2.001499999999993,-0.6897740969929629,,,2023_01_bahrain
+fresh_tyre_gain,PER:17,belief @k10,real gain at the stop,1.8181423103952028,,1.1354999999999933,0.6826423103952095,,,2023_01_bahrain
+fresh_tyre_gain,PER:34,belief @k10,real gain at the stop,1.2121341977023548,,1.2135000000000105,-0.001365802297655705,,,2023_01_bahrain
+fresh_tyre_gain,RUS:13,belief @k10,real gain at the stop,0.8570971101965768,,3.451999999999998,-2.5949028898034214,,,2023_01_bahrain
+fresh_tyre_gain,RUS:31,belief @k10,real gain at the stop,2.4420714151841594,,1.4004999999999939,1.0415714151841655,,,2023_01_bahrain
+fresh_tyre_gain,SAI:13,belief @k10,real gain at the stop,0.8570971101965768,,2.3044999999999902,-1.4474028898034135,,,2023_01_bahrain
+fresh_tyre_gain,SAI:31,belief @k10,real gain at the stop,2.4420714151841594,,1.0640000000000072,1.3780714151841522,,,2023_01_bahrain
+fresh_tyre_gain,SAR:12,belief @k10,real gain at the stop,1.1080681353836468,,2.609499999999997,-1.5014318646163503,,,2023_01_bahrain
+fresh_tyre_gain,SAR:30,belief @k10,real gain at the stop,1.0937885018670954,,1.909000000000006,-0.8152114981329106,,,2023_01_bahrain
+fresh_tyre_gain,SAR:40,belief @k10,real gain at the stop,1.8631287400079373,,1.5739999999999839,0.2891287400079534,,,2023_01_bahrain
+fresh_tyre_gain,STR:15,belief @k10,real gain at the stop,1.0937885018670954,,2.7439999999999998,-1.6502114981329044,,,2023_01_bahrain
+fresh_tyre_gain,STR:30,belief @k10,real gain at the stop,1.9533352337950305,,1.8384999999999962,0.11483523379503424,,,2023_01_bahrain
+fresh_tyre_gain,TSU:26,belief @k10,real gain at the stop,2.1162472942580877,,2.1259999999999906,-0.0097527057419029,,,2023_01_bahrain
+fresh_tyre_gain,TSU:40,belief @k10,real gain at the stop,2.159739894354331,,1.4189999999999827,0.7407398943543484,,,2023_01_bahrain
+fresh_tyre_gain,VER:14,belief @k10,real gain at the stop,1.6997966145599719,,0.8119999999999834,0.8877966145599885,,,2023_01_bahrain
+fresh_tyre_gain,VER:36,belief @k10,real gain at the stop,1.5671712852081328,,1.472999999999999,0.09417128520813378,,,2023_01_bahrain
+fresh_tyre_gain,ZHO:12,belief @k10,real gain at the stop,0.14965416587595826,,1.9110000000000014,-1.761345834124043,,,2023_01_bahrain
+fresh_tyre_gain,ZHO:32,belief @k10,real gain at the stop,3.1372122571325747,,2.232500000000016,0.9047122571325588,,,2023_01_bahrain
+fresh_tyre_gain,ALB:26,belief @k20,real gain at the stop,1.6744174955280755,,2.0459999999999923,-0.37158250447191676,,,2023_01_bahrain
+fresh_tyre_gain,ALB:40,belief @k20,real gain at the stop,1.6838369231220156,,1.1604999999999848,0.5233369231220308,,,2023_01_bahrain
+fresh_tyre_gain,ALO:34,belief @k20,real gain at the stop,2.929594129563341,,1.0264999999999986,1.9030941295633426,,,2023_01_bahrain
+fresh_tyre_gain,BOT:29,belief @k20,real gain at the stop,2.5935982464128102,,1.6244999999999976,0.9690982464128126,,,2023_01_bahrain
+fresh_tyre_gain,DEV:27,belief @k20,real gain at the stop,2.257602363262322,,2.5500000000000114,-0.2923976367376895,,,2023_01_bahrain
+fresh_tyre_gain,GAS:25,belief @k20,real gain at the stop,2.2576023632623077,,1.266999999999996,0.9906023632623118,,,2023_01_bahrain
+fresh_tyre_gain,GAS:40,belief @k20,real gain at the stop,1.8518348646972527,,2.8175000000000097,-0.965665135302757,,,2023_01_bahrain
+fresh_tyre_gain,HAM:30,belief @k20,real gain at the stop,2.5935982464128102,,0.7664999999999793,1.827098246412831,,,2023_01_bahrain
+fresh_tyre_gain,HUL:26,belief @k20,real gain at the stop,2.0896044216870564,,2.8855000000000075,-0.7958955783129511,,,2023_01_bahrain
+fresh_tyre_gain,HUL:40,belief @k20,real gain at the stop,1.3579221392550238,,1.483000000000004,-0.12507786074498028,,,2023_01_bahrain
+fresh_tyre_gain,MAG:29,belief @k20,real gain at the stop,1.6838369231220156,,1.1884999999999906,0.49533692312202504,,,2023_01_bahrain
+fresh_tyre_gain,MAG:40,belief @k20,real gain at the stop,1.002094893382278,,1.7384999999999877,-0.7364051066177097,,,2023_01_bahrain
+fresh_tyre_gain,NOR:27,belief @k20,real gain at the stop,1.2193714159602962,,1.0109999999999957,0.2083714159603005,,,2023_01_bahrain
+fresh_tyre_gain,NOR:37,belief @k20,real gain at the stop,0.9160438381122304,,2.191500000000005,-1.2754561618877744,,,2023_01_bahrain
+fresh_tyre_gain,NOR:47,belief @k20,real gain at the stop,0.5290606164658413,,2.001499999999993,-1.4724393835341516,,,2023_01_bahrain
+fresh_tyre_gain,PER:34,belief @k20,real gain at the stop,2.1089705406840693,,1.2135000000000105,0.8954705406840588,,,2023_01_bahrain
+fresh_tyre_gain,RUS:31,belief @k20,real gain at the stop,2.5935982464128102,,1.4004999999999939,1.1930982464128164,,,2023_01_bahrain
+fresh_tyre_gain,SAI:31,belief @k20,real gain at the stop,2.5935982464128102,,1.0640000000000072,1.529598246412803,,,2023_01_bahrain
+fresh_tyre_gain,SAR:30,belief @k20,real gain at the stop,2.0003322793950673,,1.909000000000006,0.09133227939506128,,,2023_01_bahrain
+fresh_tyre_gain,SAR:40,belief @k20,real gain at the stop,1.0118451568210105,,1.5739999999999839,-0.5621548431789734,,,2023_01_bahrain
+fresh_tyre_gain,STR:30,belief @k20,real gain at the stop,2.0896044216870564,,1.8384999999999962,0.25110442168706015,,,2023_01_bahrain
+fresh_tyre_gain,TSU:26,belief @k20,real gain at the stop,2.257602363262322,,2.1259999999999906,0.13160236326233132,,,2023_01_bahrain
+fresh_tyre_gain,TSU:40,belief @k20,real gain at the stop,1.3579221392550238,,1.4189999999999827,-0.06107786074495891,,,2023_01_bahrain
+fresh_tyre_gain,VER:36,belief @k20,real gain at the stop,2.434885324551061,,1.472999999999999,0.9618853245510621,,,2023_01_bahrain
+fresh_tyre_gain,ZHO:32,belief @k20,real gain at the stop,2.3659097887065172,,2.232500000000016,0.13340978870650133,,,2023_01_bahrain
+fresh_tyre_gain,ALB:40,belief @k28,real gain at the stop,1.5607373966533373,,1.1604999999999848,0.40023739665335256,,,2023_01_bahrain
+fresh_tyre_gain,ALO:34,belief @k28,real gain at the stop,2.413733419578236,,1.0264999999999986,1.3872334195782372,,,2023_01_bahrain
+fresh_tyre_gain,BOT:29,belief @k28,real gain at the stop,2.1494727909189493,,1.6244999999999976,0.5249727909189517,,,2023_01_bahrain
+fresh_tyre_gain,GAS:40,belief @k28,real gain at the stop,1.6928677109829806,,2.8175000000000097,-1.124632289017029,,,2023_01_bahrain
+fresh_tyre_gain,HAM:30,belief @k28,real gain at the stop,2.1494727909189493,,0.7664999999999793,1.38297279091897,,,2023_01_bahrain
+fresh_tyre_gain,HUL:40,belief @k28,real gain at the stop,1.2256130460349084,,1.483000000000004,-0.2573869539650957,,,2023_01_bahrain
+fresh_tyre_gain,MAG:29,belief @k28,real gain at the stop,1.5607373966533373,,1.1884999999999906,0.37223739665334676,,,2023_01_bahrain
+fresh_tyre_gain,MAG:40,belief @k28,real gain at the stop,1.0816052084135066,,1.7384999999999877,-0.6568947915864811,,,2023_01_bahrain
+fresh_tyre_gain,NOR:37,belief @k28,real gain at the stop,0.915674794980319,,2.191500000000005,-1.2758252050196859,,,2023_01_bahrain
+fresh_tyre_gain,NOR:47,belief @k28,real gain at the stop,0.5485876525466438,,2.001499999999993,-1.4529123474533492,,,2023_01_bahrain
+fresh_tyre_gain,PER:34,belief @k28,real gain at the stop,2.0354842803429705,,1.2135000000000105,0.82198428034296,,,2023_01_bahrain
+fresh_tyre_gain,RUS:31,belief @k28,real gain at the stop,2.1494727909189493,,1.4004999999999939,0.7489727909189554,,,2023_01_bahrain
+fresh_tyre_gain,SAI:31,belief @k28,real gain at the stop,2.1494727909189493,,1.0640000000000072,1.085472790918942,,,2023_01_bahrain
+fresh_tyre_gain,SAR:30,belief @k28,real gain at the stop,1.9237761634701798,,1.909000000000006,0.014776163470173742,,,2023_01_bahrain
+fresh_tyre_gain,SAR:40,belief @k28,real gain at the stop,1.0322161393347358,,1.5739999999999839,-0.5417838606652481,,,2023_01_bahrain
+fresh_tyre_gain,STR:30,belief @k28,real gain at the stop,1.7530818479300052,,1.8384999999999962,-0.08541815206999104,,,2023_01_bahrain
+fresh_tyre_gain,TSU:40,belief @k28,real gain at the stop,1.2256130460349084,,1.4189999999999827,-0.19338695396507433,,,2023_01_bahrain
+fresh_tyre_gain,VER:36,belief @k28,real gain at the stop,2.3706086309613994,,1.472999999999999,0.8976086309614004,,,2023_01_bahrain
+fresh_tyre_gain,ZHO:32,belief @k28,real gain at the stop,2.0183949320127965,,2.232500000000016,-0.2141050679872194,,,2023_01_bahrain
+compound_gap,SOFT-MEDIUM,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-1.8289268462879562,,0.7233203188736042,-2.5522471651615604,,,2023_01_bahrain
+compound_gap,MEDIUM-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",1.146003984860144,,-0.6536653741608802,1.7996693590210242,,,2023_01_bahrain
+compound_gap,SOFT-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.6829228614278122,,0.06965494471272393,-0.7525778061405362,,,2023_01_bahrain
+compound_gap,SOFT-MEDIUM,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-0.15712623976540385,,0.7233203188736042,-0.880446558639008,,,2023_01_bahrain
+compound_gap,MEDIUM-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-0.5003780218210352,,-0.6536653741608802,0.15328735233984503,,,2023_01_bahrain
+compound_gap,SOFT-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-0.657504261586439,,0.06965494471272393,-0.727159206299163,,,2023_01_bahrain
+compound_gap,SOFT-MEDIUM,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.0,,0.7233203188736042,-0.7233203188736042,,,2023_01_bahrain
+compound_gap,MEDIUM-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.32680907741918475,,-0.6536653741608802,0.980474451580065,,,2023_01_bahrain
+compound_gap,SOFT-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.32680907741918475,,0.06965494471272393,0.2571541327064608,,,2023_01_bahrain
+compound_gap,SOFT-MEDIUM,belief @k28,"race (judge full fit, fresh tyre, mid-race)",0.0,,0.7233203188736042,-0.7233203188736042,,,2023_01_bahrain
+compound_gap,MEDIUM-HARD,belief @k28,"race (judge full fit, fresh tyre, mid-race)",0.09084743313228216,,-0.6536653741608802,0.7445128072931624,,,2023_01_bahrain
+compound_gap,SOFT-HARD,belief @k28,"race (judge full fit, fresh tyre, mid-race)",0.09084743313228216,,0.06965494471272393,0.02119248841955823,,,2023_01_bahrain
+fuel,fuel,prior (config),race (judge full fit),-0.045,,-0.0730307054070832,0.028030705407083203,,,2023_01_bahrain
+fuel,fuel,belief @k0,race (judge full fit),-0.045,0.008,-0.0730307054070832,0.028030705407083203,0.0,0.0,2023_01_bahrain
+fuel,fuel,belief @k10,race (judge full fit),-0.04032564217539536,0.00784174004165816,-0.0730307054070832,0.03270506323168784,0.0,0.0,2023_01_bahrain
+fuel,fuel,belief @k20,race (judge full fit),-0.06040676608982461,0.006053772320468771,-0.0730307054070832,0.012623939317258595,0.0,0.0,2023_01_bahrain
+fuel,fuel,belief @k28,race (judge full fit),-0.07491209757596166,0.004778462926601681,-0.0730307054070832,-0.0018813921688784624,1.0,1.0,2023_01_bahrain
+pit_loss,green,prior (code constant),"whole race, robust (median of green stops)",22.0,,24.580918079081826,-2.580918079081826,,,2023_01_bahrain
+pit_loss,green,prior (code constant),"whole race, mean (RaceParams.pit_loss_s)",22.0,,26.59,-4.59,,,2023_01_bahrain
+pit_loss,green,belief charged @k0,"whole race, robust (median of green stops)",26.59,,24.580918079081826,2.009081920918174,,,2023_01_bahrain
+pit_loss,green,belief charged @k0,"whole race, mean (RaceParams.pit_loss_s)",26.59,,26.59,0.0,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, robust (median of green stops)",,,24.580918079081826,,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,26.59,,,,2023_01_bahrain
+pit_loss,green,belief charged @k10,"whole race, robust (median of green stops)",26.59,,24.580918079081826,2.009081920918174,,,2023_01_bahrain
+pit_loss,green,belief charged @k10,"whole race, mean (RaceParams.pit_loss_s)",26.59,,26.59,0.0,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k10, n=1)","whole race, robust (median of green stops)",23.25746662531158,,24.580918079081826,-1.3234514537702466,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k10, n=1)","whole race, mean (RaceParams.pit_loss_s)",23.25746662531158,,26.59,-3.3325333746884205,,,2023_01_bahrain
+pit_loss,green,belief charged @k20,"whole race, robust (median of green stops)",26.59,,24.580918079081826,2.009081920918174,,,2023_01_bahrain
+pit_loss,green,belief charged @k20,"whole race, mean (RaceParams.pit_loss_s)",26.59,,26.59,0.0,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k20, n=18)","whole race, robust (median of green stops)",24.42244420728374,,24.580918079081826,-0.15847387179808692,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k20, n=18)","whole race, mean (RaceParams.pit_loss_s)",24.42244420728374,,26.59,-2.1675557927162608,,,2023_01_bahrain
+pit_loss,green,belief charged @k28,"whole race, robust (median of green stops)",26.59,,24.580918079081826,2.009081920918174,,,2023_01_bahrain
+pit_loss,green,belief charged @k28,"whole race, mean (RaceParams.pit_loss_s)",26.59,,26.59,0.0,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k28, n=24)","whole race, robust (median of green stops)",24.706654613378937,,24.580918079081826,0.1257365342971113,,,2023_01_bahrain
+pit_loss,green,"as-of data (green stops to k28, n=24)","whole race, mean (RaceParams.pit_loss_s)",24.706654613378937,,26.59,-1.8833453866210625,,,2023_01_bahrain
+lap1_and_warmup,lap1_extra,prior (config),observed (median lap-1 residual + prior),9.0,,5.96,3.04,,,2023_01_bahrain
+lap1_and_warmup,out_lap_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,0.0,,-0.26921395349475574,0.26921395349475574,,,2023_01_bahrain
+traffic_rejoin,ALB:11,judge rejoin position (horizon 2),real position after the out-lap,16.0,,15.0,1.0,,,2023_01_bahrain
+traffic_rejoin,ALB:26,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_01_bahrain
+traffic_rejoin,ALB:40,judge rejoin position (horizon 2),real position after the out-lap,15.0,,9.0,6.0,,,2023_01_bahrain
+traffic_rejoin,ALO:14,judge rejoin position (horizon 2),real position after the out-lap,9.0,,8.0,1.0,,,2023_01_bahrain
+traffic_rejoin,ALO:34,judge rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2023_01_bahrain
+traffic_rejoin,BOT:11,judge rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2023_01_bahrain
+traffic_rejoin,BOT:29,judge rejoin position (horizon 2),real position after the out-lap,11.0,,11.0,0.0,,,2023_01_bahrain
+traffic_rejoin,DEV:11,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,DEV:27,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_01_bahrain
+traffic_rejoin,GAS:9,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_01_bahrain
+traffic_rejoin,GAS:25,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,GAS:40,judge rejoin position (horizon 2),real position after the out-lap,16.0,,10.0,6.0,,,2023_01_bahrain
+traffic_rejoin,HAM:12,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_01_bahrain
+traffic_rejoin,HAM:30,judge rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2023_01_bahrain
+traffic_rejoin,HUL:11,judge rejoin position (horizon 2),real position after the out-lap,18.0,,20.0,-2.0,,,2023_01_bahrain
+traffic_rejoin,HUL:26,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,HUL:40,judge rejoin position (horizon 2),real position after the out-lap,17.0,,16.0,1.0,,,2023_01_bahrain
+traffic_rejoin,MAG:15,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2023_01_bahrain
+traffic_rejoin,MAG:29,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,MAG:40,judge rejoin position (horizon 2),real position after the out-lap,16.0,,15.0,1.0,,,2023_01_bahrain
+traffic_rejoin,NOR:10,judge rejoin position (horizon 2),real position after the out-lap,18.0,,20.0,-2.0,,,2023_01_bahrain
+traffic_rejoin,NOR:17,judge rejoin position (horizon 2),real position after the out-lap,18.0,,19.0,-1.0,,,2023_01_bahrain
+traffic_rejoin,NOR:27,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,NOR:37,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,NOR:47,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,NOR:54,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,PER:17,judge rejoin position (horizon 2),real position after the out-lap,3.0,,3.0,0.0,,,2023_01_bahrain
+traffic_rejoin,PER:34,judge rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2023_01_bahrain
+traffic_rejoin,RUS:13,judge rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2023_01_bahrain
+traffic_rejoin,RUS:31,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_01_bahrain
+traffic_rejoin,SAI:13,judge rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2023_01_bahrain
+traffic_rejoin,SAI:31,judge rejoin position (horizon 2),real position after the out-lap,5.0,,5.0,0.0,,,2023_01_bahrain
+traffic_rejoin,SAR:12,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_01_bahrain
+traffic_rejoin,SAR:30,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_01_bahrain
+traffic_rejoin,SAR:40,judge rejoin position (horizon 2),real position after the out-lap,16.0,,14.0,2.0,,,2023_01_bahrain
+traffic_rejoin,STR:15,judge rejoin position (horizon 2),real position after the out-lap,10.0,,9.0,1.0,,,2023_01_bahrain
+traffic_rejoin,STR:30,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_01_bahrain
+traffic_rejoin,TSU:10,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2023_01_bahrain
+traffic_rejoin,TSU:26,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_01_bahrain
+traffic_rejoin,TSU:40,judge rejoin position (horizon 2),real position after the out-lap,16.0,,13.0,3.0,,,2023_01_bahrain
+traffic_rejoin,VER:14,judge rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2023_01_bahrain
+traffic_rejoin,VER:36,judge rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2023_01_bahrain
+traffic_rejoin,ZHO:12,judge rejoin position (horizon 2),real position after the out-lap,19.0,,20.0,-1.0,,,2023_01_bahrain
+traffic_rejoin,ZHO:32,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_01_bahrain
+traffic_rejoin,ZHO:54,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_01_bahrain
+traffic_rejoin,ALB:11,belief rejoin position (horizon 2),real position after the out-lap,16.0,,15.0,1.0,,,2023_01_bahrain
+traffic_rejoin,ALB:26,belief rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_01_bahrain
+traffic_rejoin,ALB:40,belief rejoin position (horizon 2),real position after the out-lap,15.0,,9.0,6.0,,,2023_01_bahrain
+traffic_rejoin,ALO:14,belief rejoin position (horizon 2),real position after the out-lap,9.0,,8.0,1.0,,,2023_01_bahrain
+traffic_rejoin,ALO:34,belief rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2023_01_bahrain
+traffic_rejoin,BOT:11,belief rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2023_01_bahrain
+traffic_rejoin,BOT:29,belief rejoin position (horizon 2),real position after the out-lap,11.0,,11.0,0.0,,,2023_01_bahrain
+traffic_rejoin,DEV:11,belief rejoin position (horizon 2),real position after the out-lap,20.0,,19.0,1.0,,,2023_01_bahrain
+traffic_rejoin,DEV:27,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_01_bahrain
+traffic_rejoin,GAS:9,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_01_bahrain
+traffic_rejoin,GAS:25,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,GAS:40,belief rejoin position (horizon 2),real position after the out-lap,15.0,,10.0,5.0,,,2023_01_bahrain
+traffic_rejoin,HAM:12,belief rejoin position (horizon 2),real position after the out-lap,10.0,,8.0,2.0,,,2023_01_bahrain
+traffic_rejoin,HAM:30,belief rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2023_01_bahrain
+traffic_rejoin,HUL:11,belief rejoin position (horizon 2),real position after the out-lap,19.0,,20.0,-1.0,,,2023_01_bahrain
+traffic_rejoin,HUL:26,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,HUL:40,belief rejoin position (horizon 2),real position after the out-lap,17.0,,16.0,1.0,,,2023_01_bahrain
+traffic_rejoin,MAG:15,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2023_01_bahrain
+traffic_rejoin,MAG:29,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,MAG:40,belief rejoin position (horizon 2),real position after the out-lap,16.0,,15.0,1.0,,,2023_01_bahrain
+traffic_rejoin,NOR:10,belief rejoin position (horizon 2),real position after the out-lap,19.0,,20.0,-1.0,,,2023_01_bahrain
+traffic_rejoin,NOR:17,belief rejoin position (horizon 2),real position after the out-lap,18.0,,19.0,-1.0,,,2023_01_bahrain
+traffic_rejoin,NOR:27,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,NOR:37,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2023_01_bahrain
+traffic_rejoin,NOR:47,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,NOR:54,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2023_01_bahrain
+traffic_rejoin,PER:17,belief rejoin position (horizon 2),real position after the out-lap,3.0,,3.0,0.0,,,2023_01_bahrain
+traffic_rejoin,PER:34,belief rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2023_01_bahrain
+traffic_rejoin,RUS:13,belief rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2023_01_bahrain
+traffic_rejoin,RUS:31,belief rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_01_bahrain
+traffic_rejoin,SAI:13,belief rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2023_01_bahrain
+traffic_rejoin,SAI:31,belief rejoin position (horizon 2),real position after the out-lap,6.0,,5.0,1.0,,,2023_01_bahrain
+traffic_rejoin,SAR:12,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_01_bahrain
+traffic_rejoin,SAR:30,belief rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2023_01_bahrain
+traffic_rejoin,SAR:40,belief rejoin position (horizon 2),real position after the out-lap,16.0,,14.0,2.0,,,2023_01_bahrain
+traffic_rejoin,STR:15,belief rejoin position (horizon 2),real position after the out-lap,11.0,,9.0,2.0,,,2023_01_bahrain
+traffic_rejoin,STR:30,belief rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2023_01_bahrain
+traffic_rejoin,TSU:10,belief rejoin position (horizon 2),real position after the out-lap,19.0,,18.0,1.0,,,2023_01_bahrain
+traffic_rejoin,TSU:26,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_01_bahrain
+traffic_rejoin,TSU:40,belief rejoin position (horizon 2),real position after the out-lap,16.0,,13.0,3.0,,,2023_01_bahrain
+traffic_rejoin,VER:14,belief rejoin position (horizon 2),real position after the out-lap,2.0,,2.0,0.0,,,2023_01_bahrain
+traffic_rejoin,VER:36,belief rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2023_01_bahrain
+traffic_rejoin,ZHO:12,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2023_01_bahrain
+traffic_rejoin,ZHO:32,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2023_01_bahrain
+traffic_rejoin,ZHO:54,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2023_01_bahrain
+neutralisations,sc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2023_01_bahrain
+neutralisations,vsc_periods,judge expected (none),occurred,0.0,,1.0,-1.0,,,2023_01_bahrain
+neutralisations,sc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2023_01_bahrain
+neutralisations,vsc_laps,judge expected (none),occurred,0.0,,2.0,-2.0,,,2023_01_bahrain
+neutralisations,sc_lap_factor,judge config,observed (mean SC lap / ref lap),1.36,,,,,,2023_01_bahrain
+neutralisations,vsc_lap_factor,judge config,observed (median VSC lap / green prediction),1.3,,1.168,0.13200000000000012,,,2023_01_bahrain
+neutralisations,sc_periods,belief expected (rate),occurred,0.855,,0.0,0.855,,,2023_01_bahrain
+neutralisations,vsc_periods,belief expected (rate),occurred,1.1400000000000001,,1.0,0.14000000000000012,,,2023_01_bahrain
+neutralisations,sc_laps,belief expected (rate),occurred,2.565,,0.0,2.565,,,2023_01_bahrain
+neutralisations,vsc_laps,belief expected (rate),occurred,2.2800000000000002,,2.0,0.28000000000000025,,,2023_01_bahrain
+neutralisations,sc_lap_factor,belief config,observed (mean SC lap / ref lap),1.36,,,,,,2023_01_bahrain
+neutralisations,vsc_lap_factor,belief config,observed (median VSC lap / green prediction),1.3,,1.168,0.13200000000000012,,,2023_01_bahrain
+tyre_life,HARD,belief support edge @k0,oldest age run,40.0,,40.0,0.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k0,median stint-end age,40.0,,31.0,9.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k0,oldest age run,39.0,,39.0,0.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k0,median stint-end age,39.0,,18.0,21.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k0,oldest age run,23.0,,23.0,0.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k0,median stint-end age,23.0,,15.0,8.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k0, practice)",oldest age run,20.0,,40.0,-20.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k0, practice)",median stint-end age,20.0,,31.0,-11.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",oldest age run,25.0,,39.0,-14.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",median stint-end age,25.0,,18.0,7.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k0, practice)",oldest age run,22.0,,23.0,-1.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k0, practice)",median stint-end age,22.0,,15.0,7.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k10,oldest age run,40.0,,40.0,0.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k10,median stint-end age,40.0,,31.0,9.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k10,oldest age run,39.0,,39.0,0.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k10,median stint-end age,39.0,,18.0,21.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k10,oldest age run,23.0,,23.0,0.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k10,median stint-end age,23.0,,15.0,8.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k10, practice)",oldest age run,20.0,,40.0,-20.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k10, practice)",median stint-end age,20.0,,31.0,-11.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",oldest age run,25.0,,39.0,-14.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",median stint-end age,25.0,,18.0,7.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k10, practice)",oldest age run,22.0,,23.0,-1.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k10, practice)",median stint-end age,22.0,,15.0,7.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k20,oldest age run,40.0,,40.0,0.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k20,median stint-end age,40.0,,31.0,9.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k20,oldest age run,39.0,,39.0,0.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k20,median stint-end age,39.0,,18.0,21.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k20,oldest age run,23.0,,23.0,0.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k20,median stint-end age,23.0,,15.0,8.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k20, practice)",oldest age run,20.0,,40.0,-20.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k20, practice)",median stint-end age,20.0,,31.0,-11.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",oldest age run,25.0,,39.0,-14.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",median stint-end age,25.0,,18.0,7.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k20, practice)",oldest age run,23.0,,23.0,0.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k20, practice)",median stint-end age,23.0,,15.0,8.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k26,oldest age run,40.0,,40.0,0.0,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k26,median stint-end age,40.0,,31.0,9.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k26,oldest age run,39.0,,39.0,0.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,belief support edge @k26,median stint-end age,39.0,,18.0,21.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k26,oldest age run,23.0,,23.0,0.0,,,2019_10_united_kingdom
+tyre_life,SOFT,belief support edge @k26,median stint-end age,23.0,,15.0,8.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k26, practice)",oldest age run,20.0,,40.0,-20.0,,,2019_10_united_kingdom
+tyre_life,HARD,"as-of data (race to k26, practice)",median stint-end age,20.0,,31.0,-11.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k26, practice)",oldest age run,25.0,,39.0,-14.0,,,2019_10_united_kingdom
+tyre_life,MEDIUM,"as-of data (race to k26, practice)",median stint-end age,25.0,,18.0,7.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k26, practice)",oldest age run,23.0,,23.0,0.0,,,2019_10_united_kingdom
+tyre_life,SOFT,"as-of data (race to k26, practice)",median stint-end age,23.0,,15.0,8.0,,,2019_10_united_kingdom
+wear_rate,HARD,belief @k0,within-stint slope less fuel,0.0,0.03,0.014779914425451714,-0.014779914425451714,1.0,1.0,2019_10_united_kingdom
+wear_rate,MEDIUM,belief @k0,within-stint slope less fuel,0.019069935507001538,0.03,0.007135125425123234,0.011934810081878303,1.0,1.0,2019_10_united_kingdom
+wear_rate,SOFT,belief @k0,within-stint slope less fuel,0.02903320920715282,0.03,0.020661786586460916,0.008371422620691904,1.0,1.0,2019_10_united_kingdom
+wear_rate,HARD,belief @k10,within-stint slope less fuel,0.0,0.02532770546352816,0.014779914425451714,-0.014779914425451714,1.0,1.0,2019_10_united_kingdom
+wear_rate,MEDIUM,belief @k10,within-stint slope less fuel,0.0,0.018018308957541942,0.007135125425123234,-0.007135125425123234,1.0,1.0,2019_10_united_kingdom
+wear_rate,SOFT,belief @k10,within-stint slope less fuel,0.0,0.020201420452608008,0.020661786586460916,-0.020661786586460916,0.0,1.0,2019_10_united_kingdom
+wear_rate,HARD,belief @k20,within-stint slope less fuel,0.0,0.028082905770187357,0.014779914425451714,-0.014779914425451714,1.0,1.0,2019_10_united_kingdom
+wear_rate,MEDIUM,belief @k20,within-stint slope less fuel,0.0,0.01267755350507132,0.007135125425123234,-0.007135125425123234,1.0,1.0,2019_10_united_kingdom
+wear_rate,SOFT,belief @k20,within-stint slope less fuel,0.0,0.01877156139408878,0.020661786586460916,-0.020661786586460916,0.0,1.0,2019_10_united_kingdom
+wear_rate,HARD,belief @k26,within-stint slope less fuel,0.0,0.027485420812974257,0.014779914425451714,-0.014779914425451714,1.0,1.0,2019_10_united_kingdom
+wear_rate,MEDIUM,belief @k26,within-stint slope less fuel,0.0,0.012811325541042667,0.007135125425123234,-0.007135125425123234,1.0,1.0,2019_10_united_kingdom
+wear_rate,SOFT,belief @k26,within-stint slope less fuel,0.0,0.01898399783924669,0.020661786586460916,-0.020661786586460916,0.0,1.0,2019_10_united_kingdom
+wear_rate,HARD,judge (full fit),within-stint slope less fuel,0.011543130347825566,,0.014779914425451714,-0.003236784077626148,,,2019_10_united_kingdom
+wear_rate,MEDIUM,judge (full fit),within-stint slope less fuel,0.01311356190049223,,0.007135125425123234,0.005978436475368996,,,2019_10_united_kingdom
+wear_rate,SOFT,judge (full fit),within-stint slope less fuel,0.014823559918660597,,0.020661786586460916,-0.005838226667800319,,,2019_10_united_kingdom
+fresh_tyre_gain,ALB:13,belief @k0,real gain at the stop,0.6617970056530709,,0.8095000000000141,-0.14770299434694323,,,2019_10_united_kingdom
+fresh_tyre_gain,BOT:16,belief @k0,real gain at the stop,0.5041889036190383,,0.2645000000000124,0.23968890361902595,,,2019_10_united_kingdom
+fresh_tyre_gain,BOT:45,belief @k0,real gain at the stop,0.4943166833006387,,0.9654999999999916,-0.47118331669935287,,,2019_10_united_kingdom
+fresh_tyre_gain,GAS:12,belief @k0,real gain at the stop,-1.400659377700947,,-0.1694999999999851,-1.231159377700962,,,2019_10_united_kingdom
+fresh_tyre_gain,HAM:20,belief @k0,real gain at the stop,-1.2221698291519374,,0.890500000000003,-2.1126698291519403,,,2019_10_united_kingdom
+fresh_tyre_gain,HUL:13,belief @k0,real gain at the stop,-1.2538711612603493,,0.789999999999992,-2.0438711612603413,,,2019_10_united_kingdom
+fresh_tyre_gain,KUB:20,belief @k0,real gain at the stop,-1.0925195066869264,,1.3114999999999952,-2.4040195066869217,,,2019_10_united_kingdom
+fresh_tyre_gain,KVY:12,belief @k0,real gain at the stop,0.48759775041014564,,0.5620000000000118,-0.07440224958986619,,,2019_10_united_kingdom
+fresh_tyre_gain,KVY:21,belief @k0,real gain at the stop,-1.3213587327709604,,0.35299999999999443,-1.6743587327709548,,,2019_10_united_kingdom
+fresh_tyre_gain,LEC:13,belief @k0,real gain at the stop,0.5465207807177563,,0.6510000000000105,-0.10447921928225412,,,2019_10_united_kingdom
+fresh_tyre_gain,LEC:21,belief @k0,real gain at the stop,-1.3091489262499465,,0.8935000000000031,-2.2026489262499496,,,2019_10_united_kingdom
+fresh_tyre_gain,NOR:13,belief @k0,real gain at the stop,0.6037305872387577,,-0.1490000000000009,0.7527305872387586,,,2019_10_united_kingdom
+fresh_tyre_gain,NOR:35,belief @k0,real gain at the stop,-1.3053097001659353,,0.3185000000000002,-1.6238097001659355,,,2019_10_united_kingdom
+fresh_tyre_gain,PER:46,belief @k0,real gain at the stop,0.6154981381072844,,0.9335000000000093,-0.31800186189272495,,,2019_10_united_kingdom
+fresh_tyre_gain,RAI:17,belief @k0,real gain at the stop,-1.0406593777009334,,0.5064999999999884,-1.5471593777009218,,,2019_10_united_kingdom
+fresh_tyre_gain,RIC:12,belief @k0,real gain at the stop,0.5746973780316154,,0.36249999999999716,0.2121973780316182,,,2019_10_united_kingdom
+fresh_tyre_gain,RIC:20,belief @k0,real gain at the stop,-1.3213587327709604,,0.242999999999995,-1.5643587327709554,,,2019_10_united_kingdom
+fresh_tyre_gain,RUS:21,belief @k0,real gain at the stop,-1.0925195066869264,,0.37999999999999545,-1.4725195066869219,,,2019_10_united_kingdom
+fresh_tyre_gain,SAI:20,belief @k0,real gain at the stop,-1.1184495711799372,,0.3714999999999975,-1.4899495711799347,,,2019_10_united_kingdom
+fresh_tyre_gain,STR:13,belief @k0,real gain at the stop,-1.5219391197289553,,0.208500000000015,-1.7304391197289704,,,2019_10_united_kingdom
+fresh_tyre_gain,STR:39,belief @k0,real gain at the stop,2.000736462539038,,0.8400000000000034,1.1607364625390346,,,2019_10_united_kingdom
+fresh_tyre_gain,VER:13,belief @k0,real gain at the stop,0.459944129344521,,0.367999999999995,0.091944129344526,,,2019_10_united_kingdom
+fresh_tyre_gain,VER:20,belief @k0,real gain at the stop,-1.4563587327709513,,1.1040000000000134,-2.5603587327709647,,,2019_10_united_kingdom
+fresh_tyre_gain,VET:20,belief @k0,real gain at the stop,-0.8866054876031342,,1.0090000000000146,-1.8956054876031487,,,2019_10_united_kingdom
+fresh_tyre_gain,VET:38,belief @k0,real gain at the stop,2.17635873277095,,0.33450000000000557,1.8418587327709446,,,2019_10_united_kingdom
+fresh_tyre_gain,ALB:13,belief @k10,real gain at the stop,0.07942144885183211,,0.8095000000000141,-0.730078551148182,,,2019_10_united_kingdom
+fresh_tyre_gain,BOT:16,belief @k10,real gain at the stop,0.22863966804003155,,0.2645000000000124,-0.03586033195998084,,,2019_10_united_kingdom
+fresh_tyre_gain,BOT:45,belief @k10,real gain at the stop,0.377857887228231,,0.9654999999999916,-0.5876421127717606,,,2019_10_united_kingdom
+fresh_tyre_gain,GAS:12,belief @k10,real gain at the stop,-2.3123480774710714,,-0.1694999999999851,-2.1428480774710863,,,2019_10_united_kingdom
+fresh_tyre_gain,HAM:20,belief @k10,real gain at the stop,-2.255188160461074,,0.890500000000003,-3.145688160461077,,,2019_10_united_kingdom
+fresh_tyre_gain,HUL:13,belief @k10,real gain at the stop,-2.461566296659271,,0.789999999999992,-3.251566296659263,,,2019_10_united_kingdom
+fresh_tyre_gain,KUB:20,belief @k10,real gain at the stop,-1.9693885754110312,,1.3114999999999952,-3.2808885754110264,,,2019_10_united_kingdom
+fresh_tyre_gain,KVY:12,belief @k10,real gain at the stop,0.07942144885183211,,0.5620000000000118,-0.4825785511481797,,,2019_10_united_kingdom
+fresh_tyre_gain,KVY:21,belief @k10,real gain at the stop,-1.9693885754110312,,0.35299999999999443,-2.3223885754110256,,,2019_10_united_kingdom
+fresh_tyre_gain,LEC:13,belief @k10,real gain at the stop,0.07942144885183211,,0.6510000000000105,-0.5715785511481783,,,2019_10_united_kingdom
+fresh_tyre_gain,LEC:21,belief @k10,real gain at the stop,-2.0265484924210426,,0.8935000000000031,-2.9200484924210457,,,2019_10_united_kingdom
+fresh_tyre_gain,NOR:13,belief @k10,real gain at the stop,0.07942144885183211,,-0.1490000000000009,0.22842144885183302,,,2019_10_united_kingdom
+fresh_tyre_gain,NOR:35,belief @k10,real gain at the stop,-2.3123480774710714,,0.3185000000000002,-2.6308480774710716,,,2019_10_united_kingdom
+fresh_tyre_gain,PER:46,belief @k10,real gain at the stop,0.22863966804003155,,0.9335000000000093,-0.7048603319599778,,,2019_10_united_kingdom
+fresh_tyre_gain,RAI:17,belief @k10,real gain at the stop,-1.8550687413910225,,0.5064999999999884,-2.361568741391011,,,2019_10_united_kingdom
+fresh_tyre_gain,RIC:12,belief @k10,real gain at the stop,0.07942144885183211,,0.36249999999999716,-0.28307855114816505,,,2019_10_united_kingdom
+fresh_tyre_gain,RIC:20,belief @k10,real gain at the stop,-1.9693885754110312,,0.242999999999995,-2.212388575411026,,,2019_10_united_kingdom
+fresh_tyre_gain,RUS:21,belief @k10,real gain at the stop,-1.9693885754110312,,0.37999999999999545,-2.3493885754110266,,,2019_10_united_kingdom
+fresh_tyre_gain,SAI:20,belief @k10,real gain at the stop,-2.0265484924210426,,0.3714999999999975,-2.39804849242104,,,2019_10_united_kingdom
+fresh_tyre_gain,STR:13,belief @k10,real gain at the stop,-2.369507994481083,,0.208500000000015,-2.578007994481098,,,2019_10_united_kingdom
+fresh_tyre_gain,STR:39,belief @k10,real gain at the stop,3.004585508254351,,0.8400000000000034,2.1645855082543477,,,2019_10_united_kingdom
+fresh_tyre_gain,VER:13,belief @k10,real gain at the stop,0.25721962654503727,,0.367999999999995,-0.11078037345495773,,,2019_10_united_kingdom
+fresh_tyre_gain,VER:20,belief @k10,real gain at the stop,-2.1408683264410513,,1.1040000000000134,-3.2448683264410647,,,2019_10_united_kingdom
+fresh_tyre_gain,VET:20,belief @k10,real gain at the stop,-2.2900865456292507,,1.0090000000000146,-3.2990865456292653,,,2019_10_united_kingdom
+fresh_tyre_gain,VET:38,belief @k10,real gain at the stop,3.0554269986011633,,0.33450000000000557,2.7209269986011577,,,2019_10_united_kingdom
+fresh_tyre_gain,BOT:45,belief @k20,real gain at the stop,0.4539813106730435,,0.9654999999999916,-0.5115186893269481,,,2019_10_united_kingdom
+fresh_tyre_gain,KVY:21,belief @k20,real gain at the stop,-0.38449425276465377,,0.35299999999999443,-0.7374942527646482,,,2019_10_united_kingdom
+fresh_tyre_gain,LEC:21,belief @k20,real gain at the stop,-0.45619583688230136,,0.8935000000000031,-1.3496958368823044,,,2019_10_united_kingdom
+fresh_tyre_gain,NOR:35,belief @k20,real gain at the stop,-0.8147037574704541,,0.3185000000000002,-1.1332037574704543,,,2019_10_united_kingdom
+fresh_tyre_gain,PER:46,belief @k20,real gain at the stop,0.28680633647053355,,0.9335000000000093,-0.6466936635294758,,,2019_10_united_kingdom
+fresh_tyre_gain,RUS:21,belief @k20,real gain at the stop,-0.38449425276465377,,0.37999999999999545,-0.7644942527646492,,,2019_10_united_kingdom
+fresh_tyre_gain,STR:39,belief @k20,real gain at the stop,1.6630437807905025,,0.8400000000000034,0.8230437807904991,,,2019_10_united_kingdom
+fresh_tyre_gain,VET:38,belief @k20,real gain at the stop,1.7468243509997023,,0.33450000000000557,1.4123243509996968,,,2019_10_united_kingdom
+fresh_tyre_gain,BOT:45,belief @k26,real gain at the stop,0.49560233489253847,,0.9654999999999916,-0.4698976651074531,,,2019_10_united_kingdom
+fresh_tyre_gain,NOR:35,belief @k26,real gain at the stop,-0.3613079662278409,,0.3185000000000002,-0.6798079662278411,,,2019_10_united_kingdom
+fresh_tyre_gain,PER:46,belief @k26,real gain at the stop,0.3177066228822696,,0.9335000000000093,-0.6157933771177397,,,2019_10_united_kingdom
+fresh_tyre_gain,STR:39,belief @k26,real gain at the stop,1.2937569075835,,0.8400000000000034,0.4537569075834966,,,2019_10_united_kingdom
+fresh_tyre_gain,VET:38,belief @k26,real gain at the stop,1.393854490595217,,0.33450000000000557,1.0593544905952115,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k0,"race (judge full fit, fresh tyre, mid-race)",0.06038716620270179,,-0.16516038082082218,0.22554754702352398,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k0,qualifying,0.06038716620270179,,-0.07246598322466169,0.13285314942736348,,,2019_10_united_kingdom
+compound_gap,MEDIUM-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-1.9021734425524528,,-0.18785304427855465,-1.7143203982738981,,,2019_10_united_kingdom
+compound_gap,SOFT-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-1.841786276349751,,-0.35301342509937683,-1.4887728512503742,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-0.14921821918819944,,-0.16516038082082218,0.015942161632622742,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k10,qualifying,-0.14921821918819944,,-0.07246598322466169,-0.07675223596353775,,,2019_10_united_kingdom
+compound_gap,MEDIUM-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-2.5981476625211144,,-0.18785304427855465,-2.4102946182425597,,,2019_10_united_kingdom
+compound_gap,SOFT-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-2.747365881709314,,-0.35301342509937683,-2.394352456609937,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k20,"race (judge full fit, fresh tyre, mid-race)",-0.16717497420250993,,-0.16516038082082218,-0.002014593381687746,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k20,qualifying,-0.16717497420250993,,-0.07246598322466169,-0.09470899097784824,,,2019_10_united_kingdom
+compound_gap,MEDIUM-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",-1.173211678058621,,-0.18785304427855465,-0.9853586337800664,,,2019_10_united_kingdom
+compound_gap,SOFT-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",-1.340386652261131,,-0.35301342509937683,-0.9873732271617541,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k26,"race (judge full fit, fresh tyre, mid-race)",-0.17789571201026888,,-0.16516038082082218,-0.012735331189446697,,,2019_10_united_kingdom
+compound_gap,SOFT-MEDIUM,belief @k26,qualifying,-0.17789571201026888,,-0.07246598322466169,-0.10542972878560719,,,2019_10_united_kingdom
+compound_gap,MEDIUM-HARD,belief @k26,"race (judge full fit, fresh tyre, mid-race)",-0.7584412448306779,,-0.18785304427855465,-0.5705882005521232,,,2019_10_united_kingdom
+compound_gap,SOFT-HARD,belief @k26,"race (judge full fit, fresh tyre, mid-race)",-0.9363369568409468,,-0.35301342509937683,-0.5833235317415699,,,2019_10_united_kingdom
+fuel,fuel,prior (config),race (judge full fit),-0.045,,-0.07304360476827951,0.02804360476827951,,,2019_10_united_kingdom
+fuel,fuel,belief @k0,race (judge full fit),-0.045,0.008,-0.07304360476827951,0.02804360476827951,0.0,0.0,2019_10_united_kingdom
+fuel,fuel,belief @k10,race (judge full fit),-0.05715991701000763,0.007744255880265188,-0.07304360476827951,0.015883687758271876,0.0,0.0,2019_10_united_kingdom
+fuel,fuel,belief @k20,race (judge full fit),-0.07170158411763357,0.006472339123839849,-0.07304360476827951,0.0013420206506459392,1.0,1.0,2019_10_united_kingdom
+fuel,fuel,belief @k26,race (judge full fit),-0.0794266557205677,0.0063335814516027305,-0.07304360476827951,-0.006383050952288194,0.0,1.0,2019_10_united_kingdom
+pit_loss,green,prior (code constant),"whole race, robust (median of green stops)",22.0,,20.547328480762417,1.4526715192375832,,,2019_10_united_kingdom
+pit_loss,green,prior (code constant),"whole race, mean (RaceParams.pit_loss_s)",22.0,,24.61,-2.6099999999999994,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k0,"whole race, robust (median of green stops)",24.61,,20.547328480762417,4.062671519237583,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k0,"whole race, mean (RaceParams.pit_loss_s)",24.61,,24.61,0.0,,,2019_10_united_kingdom
+pit_loss,sc,belief charged @k0,"whole race, SC stops",12.305,,10.459249999999999,1.8457500000000007,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, robust (median of green stops)",,,20.547328480762417,,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,24.61,,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k10,"whole race, robust (median of green stops)",24.61,,20.547328480762417,4.062671519237583,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k10,"whole race, mean (RaceParams.pit_loss_s)",24.61,,24.61,0.0,,,2019_10_united_kingdom
+pit_loss,sc,belief charged @k10,"whole race, SC stops",12.305,,10.459249999999999,1.8457500000000007,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k10, n=0)","whole race, robust (median of green stops)",,,20.547328480762417,,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k10, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,24.61,,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k20,"whole race, robust (median of green stops)",24.61,,20.547328480762417,4.062671519237583,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k20,"whole race, mean (RaceParams.pit_loss_s)",24.61,,24.61,0.0,,,2019_10_united_kingdom
+pit_loss,sc,belief charged @k20,"whole race, SC stops",12.305,,10.459249999999999,1.8457500000000007,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k20, n=12)","whole race, robust (median of green stops)",20.387403168235274,,20.547328480762417,-0.15992531252714315,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k20, n=12)","whole race, mean (RaceParams.pit_loss_s)",20.387403168235274,,24.61,-4.222596831764726,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k26,"whole race, robust (median of green stops)",24.61,,20.547328480762417,4.062671519237583,,,2019_10_united_kingdom
+pit_loss,green,belief charged @k26,"whole race, mean (RaceParams.pit_loss_s)",24.61,,24.61,0.0,,,2019_10_united_kingdom
+pit_loss,sc,belief charged @k26,"whole race, SC stops",12.305,,10.459249999999999,1.8457500000000007,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k26, n=13)","whole race, robust (median of green stops)",20.545559934323563,,20.547328480762417,-0.001768546438853491,,,2019_10_united_kingdom
+pit_loss,green,"as-of data (green stops to k26, n=13)","whole race, mean (RaceParams.pit_loss_s)",20.545559934323563,,24.61,-4.064440065676436,,,2019_10_united_kingdom
+lap1_and_warmup,lap1_extra,prior (config),observed (median lap-1 residual + prior),9.0,,7.44,1.5599999999999996,,,2019_10_united_kingdom
+lap1_and_warmup,out_lap_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,0.0,,-0.1279413556718545,0.1279413556718545,,,2019_10_united_kingdom
+traffic_rejoin,ALB:13,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,BOT:16,judge rejoin position (horizon 2),real position after the out-lap,3.0,,3.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,BOT:45,judge rejoin position (horizon 2),real position after the out-lap,4.0,,2.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,GAS:12,judge rejoin position (horizon 2),real position after the out-lap,13.0,,10.0,3.0,,,2019_10_united_kingdom
+traffic_rejoin,HAM:20,judge rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,HUL:13,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,KUB:20,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,KVY:12,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,KVY:21,judge rejoin position (horizon 2),real position after the out-lap,17.0,,15.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,LEC:13,judge rejoin position (horizon 2),real position after the out-lap,9.0,,4.0,5.0,,,2019_10_united_kingdom
+traffic_rejoin,LEC:21,judge rejoin position (horizon 2),real position after the out-lap,1.0,,6.0,-5.0,,,2019_10_united_kingdom
+traffic_rejoin,NOR:13,judge rejoin position (horizon 2),real position after the out-lap,13.0,,12.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,NOR:35,judge rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,PER:18,judge rejoin position (horizon 2),real position after the out-lap,13.0,,12.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,PER:24,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,PER:46,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,RAI:17,judge rejoin position (horizon 2),real position after the out-lap,17.0,,15.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,RIC:12,judge rejoin position (horizon 2),real position after the out-lap,16.0,,15.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,RIC:20,judge rejoin position (horizon 2),real position after the out-lap,10.0,,11.0,-1.0,,,2019_10_united_kingdom
+traffic_rejoin,RUS:21,judge rejoin position (horizon 2),real position after the out-lap,17.0,,16.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,SAI:20,judge rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,STR:13,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,STR:39,judge rejoin position (horizon 2),real position after the out-lap,14.0,,14.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,VER:13,judge rejoin position (horizon 2),real position after the out-lap,9.0,,5.0,4.0,,,2019_10_united_kingdom
+traffic_rejoin,VER:20,judge rejoin position (horizon 2),real position after the out-lap,6.0,,6.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,VET:20,judge rejoin position (horizon 2),real position after the out-lap,4.0,,3.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,VET:38,judge rejoin position (horizon 2),real position after the out-lap,13.0,,17.0,-4.0,,,2019_10_united_kingdom
+traffic_rejoin,ALB:13,belief rejoin position (horizon 2),real position after the out-lap,16.0,,14.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,BOT:16,belief rejoin position (horizon 2),real position after the out-lap,3.0,,3.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,BOT:45,belief rejoin position (horizon 2),real position after the out-lap,4.0,,2.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,GAS:12,belief rejoin position (horizon 2),real position after the out-lap,14.0,,10.0,4.0,,,2019_10_united_kingdom
+traffic_rejoin,HAM:20,belief rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,HUL:13,belief rejoin position (horizon 2),real position after the out-lap,18.0,,15.0,3.0,,,2019_10_united_kingdom
+traffic_rejoin,KUB:20,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,KVY:12,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,KVY:21,belief rejoin position (horizon 2),real position after the out-lap,17.0,,15.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,LEC:13,belief rejoin position (horizon 2),real position after the out-lap,9.0,,4.0,5.0,,,2019_10_united_kingdom
+traffic_rejoin,LEC:21,belief rejoin position (horizon 2),real position after the out-lap,3.0,,6.0,-3.0,,,2019_10_united_kingdom
+traffic_rejoin,NOR:13,belief rejoin position (horizon 2),real position after the out-lap,14.0,,12.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,NOR:35,belief rejoin position (horizon 2),real position after the out-lap,16.0,,14.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,PER:18,belief rejoin position (horizon 2),real position after the out-lap,16.0,,12.0,4.0,,,2019_10_united_kingdom
+traffic_rejoin,PER:24,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,PER:46,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,RAI:17,belief rejoin position (horizon 2),real position after the out-lap,18.0,,15.0,3.0,,,2019_10_united_kingdom
+traffic_rejoin,RIC:12,belief rejoin position (horizon 2),real position after the out-lap,17.0,,15.0,2.0,,,2019_10_united_kingdom
+traffic_rejoin,RIC:20,belief rejoin position (horizon 2),real position after the out-lap,11.0,,11.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,RUS:21,belief rejoin position (horizon 2),real position after the out-lap,17.0,,16.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,SAI:20,belief rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,STR:13,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2019_10_united_kingdom
+traffic_rejoin,STR:39,belief rejoin position (horizon 2),real position after the out-lap,15.0,,14.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,VER:13,belief rejoin position (horizon 2),real position after the out-lap,9.0,,5.0,4.0,,,2019_10_united_kingdom
+traffic_rejoin,VER:20,belief rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,VET:20,belief rejoin position (horizon 2),real position after the out-lap,4.0,,3.0,1.0,,,2019_10_united_kingdom
+traffic_rejoin,VET:38,belief rejoin position (horizon 2),real position after the out-lap,13.0,,17.0,-4.0,,,2019_10_united_kingdom
+neutralisations,sc_periods,judge expected (none),occurred,0.0,,1.0,-1.0,,,2019_10_united_kingdom
+neutralisations,vsc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2019_10_united_kingdom
+neutralisations,sc_laps,judge expected (none),occurred,0.0,,4.0,-4.0,,,2019_10_united_kingdom
+neutralisations,vsc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2019_10_united_kingdom
+neutralisations,sc_lap_factor,judge config,observed (mean SC lap / ref lap),1.36,,1.377,-0.016999999999999904,,,2019_10_united_kingdom
+neutralisations,vsc_lap_factor,judge config,observed (median VSC lap / green prediction),1.3,,,,,,2019_10_united_kingdom
+neutralisations,sc_periods,belief expected (rate),occurred,0.78,,1.0,-0.21999999999999997,,,2019_10_united_kingdom
+neutralisations,vsc_periods,belief expected (rate),occurred,1.04,,0.0,1.04,,,2019_10_united_kingdom
+neutralisations,sc_laps,belief expected (rate),occurred,2.34,,4.0,-1.6600000000000001,,,2019_10_united_kingdom
+neutralisations,vsc_laps,belief expected (rate),occurred,2.08,,0.0,2.08,,,2019_10_united_kingdom
+neutralisations,sc_lap_factor,belief config,observed (mean SC lap / ref lap),1.36,,1.377,-0.016999999999999904,,,2019_10_united_kingdom
+neutralisations,vsc_lap_factor,belief config,observed (median VSC lap / green prediction),1.3,,,,,,2019_10_united_kingdom
+tyre_life,HARD,belief support edge @k0,oldest age run,41.0,,41.0,0.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k0,median stint-end age,41.0,,34.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k0,oldest age run,16.0,,16.0,0.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k0,median stint-end age,16.0,,15.0,1.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k0, practice)",oldest age run,19.0,,41.0,-22.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k0, practice)",median stint-end age,19.0,,34.0,-15.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",oldest age run,23.0,,16.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",median stint-end age,23.0,,15.0,8.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k10,oldest age run,41.0,,41.0,0.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k10,median stint-end age,41.0,,34.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k10,oldest age run,16.0,,16.0,0.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k10,median stint-end age,16.0,,15.0,1.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k10, practice)",oldest age run,19.0,,41.0,-22.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k10, practice)",median stint-end age,19.0,,34.0,-15.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",oldest age run,23.0,,16.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",median stint-end age,23.0,,15.0,8.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k20,oldest age run,41.0,,41.0,0.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k20,median stint-end age,41.0,,34.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k20,oldest age run,16.0,,16.0,0.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k20,median stint-end age,16.0,,15.0,1.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k20, practice)",oldest age run,22.0,,41.0,-19.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k20, practice)",median stint-end age,22.0,,34.0,-12.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",oldest age run,23.0,,16.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",median stint-end age,23.0,,15.0,8.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k25,oldest age run,41.0,,41.0,0.0,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k25,median stint-end age,41.0,,34.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k25,oldest age run,16.0,,16.0,0.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,belief support edge @k25,median stint-end age,16.0,,15.0,1.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k25, practice)",oldest age run,27.0,,41.0,-14.0,,,2022_02_saudi_arabia
+tyre_life,HARD,"as-of data (race to k25, practice)",median stint-end age,27.0,,34.0,-7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k25, practice)",oldest age run,23.0,,16.0,7.0,,,2022_02_saudi_arabia
+tyre_life,MEDIUM,"as-of data (race to k25, practice)",median stint-end age,23.0,,15.0,8.0,,,2022_02_saudi_arabia
+wear_rate,HARD,belief @k0,within-stint slope less fuel,0.0,0.03,0.01340375726804055,-0.01340375726804055,1.0,1.0,2022_02_saudi_arabia
+wear_rate,MEDIUM,belief @k0,within-stint slope less fuel,0.12438728910749432,0.03,0.08987007488262422,0.0345172142248701,0.0,1.0,2022_02_saudi_arabia
+wear_rate,HARD,belief @k10,within-stint slope less fuel,0.0,0.03143034430363097,0.01340375726804055,-0.01340375726804055,1.0,1.0,2022_02_saudi_arabia
+wear_rate,MEDIUM,belief @k10,within-stint slope less fuel,0.08859269785558002,0.027007055646094055,0.08987007488262422,-0.0012773770270441964,1.0,1.0,2022_02_saudi_arabia
+wear_rate,HARD,belief @k20,within-stint slope less fuel,0.0,0.024523358955547976,0.01340375726804055,-0.01340375726804055,1.0,1.0,2022_02_saudi_arabia
+wear_rate,MEDIUM,belief @k20,within-stint slope less fuel,0.05988144763104301,0.019001913019659752,0.08987007488262422,-0.02998862725158121,0.0,1.0,2022_02_saudi_arabia
+wear_rate,HARD,belief @k25,within-stint slope less fuel,0.019336094654162788,0.01652025177592829,0.01340375726804055,0.005932337386122238,1.0,1.0,2022_02_saudi_arabia
+wear_rate,MEDIUM,belief @k25,within-stint slope less fuel,0.07089527056269807,0.01891463016388759,0.08987007488262422,-0.018974804319926153,0.0,1.0,2022_02_saudi_arabia
+wear_rate,HARD,judge (full fit),within-stint slope less fuel,0.023548162783027515,,0.01340375726804055,0.010144405514986965,,,2022_02_saudi_arabia
+wear_rate,MEDIUM,judge (full fit),within-stint slope less fuel,0.06371553905837089,,0.08987007488262422,-0.026154535824253325,,,2022_02_saudi_arabia
+fresh_tyre_gain,ALB:13,belief @k0,real gain at the stop,0.6128235998722715,,0.8354999999999961,-0.2226764001277246,,,2022_02_saudi_arabia
+fresh_tyre_gain,GAS:15,belief @k0,real gain at the stop,0.7372108889797886,,1.1084999999999923,-0.3712891110202037,,,2022_02_saudi_arabia
+fresh_tyre_gain,HAM:40,belief @k0,real gain at the stop,1.3166620020951711,,0.003500000000016712,1.3131620020951544,,,2022_02_saudi_arabia
+fresh_tyre_gain,HUL:37,belief @k0,real gain at the stop,0.8985001347726893,,0.9575000000000102,-0.058999865227320925,,,2022_02_saudi_arabia
+fresh_tyre_gain,LEC:16,belief @k0,real gain at the stop,0.8059854671947733,,0.8699999999999903,-0.06401453280521707,,,2022_02_saudi_arabia
+fresh_tyre_gain,MAG:37,belief @k0,real gain at the stop,0.7741128456651865,,1.1225000000000023,-0.3483871543348158,,,2022_02_saudi_arabia
+fresh_tyre_gain,NOR:16,belief @k0,real gain at the stop,0.8959854671947767,,1.0804999999999865,-0.1845145328052098,,,2022_02_saudi_arabia
+fresh_tyre_gain,OCO:16,belief @k0,real gain at the stop,0.8959854671947767,,1.3325000000000102,-0.43651453280523356,,,2022_02_saudi_arabia
+fresh_tyre_gain,PER:15,belief @k0,real gain at the stop,0.7715981780872738,,1.0859999999999985,-0.3144018219127247,,,2022_02_saudi_arabia
+fresh_tyre_gain,RUS:16,belief @k0,real gain at the stop,0.8509854671947608,,0.9719999999999942,-0.12101453280523344,,,2022_02_saudi_arabia
+fresh_tyre_gain,SAI:16,belief @k0,real gain at the stop,0.8509854671947608,,1.2720000000000198,-0.421014532805259,,,2022_02_saudi_arabia
+fresh_tyre_gain,STR:13,belief @k0,real gain at the stop,0.6975172444260238,,1.0579999999999927,-0.3604827555739689,,,2022_02_saudi_arabia
+fresh_tyre_gain,VER:16,belief @k0,real gain at the stop,0.8509854671947608,,1.304000000000002,-0.4530145328052413,,,2022_02_saudi_arabia
+fresh_tyre_gain,ZHO:16,belief @k0,real gain at the stop,0.8959854671947767,,0.6225000000000023,0.2734854671947744,,,2022_02_saudi_arabia
+fresh_tyre_gain,ZHO:27,belief @k0,real gain at the stop,0.1799999999999926,,1.3215000000000003,-1.1415000000000077,,,2022_02_saudi_arabia
+fresh_tyre_gain,ALB:13,belief @k10,real gain at the stop,0.2593996407435668,,0.8354999999999961,-0.5761003592564293,,,2022_02_saudi_arabia
+fresh_tyre_gain,GAS:15,belief @k10,real gain at the stop,0.34799233859914125,,1.1084999999999923,-0.760507661400851,,,2022_02_saudi_arabia
+fresh_tyre_gain,HAM:40,belief @k10,real gain at the stop,1.417205322316562,,0.003500000000016712,1.4137053223165452,,,2022_02_saudi_arabia
+fresh_tyre_gain,HUL:37,belief @k10,real gain at the stop,1.1025788575076092,,0.9575000000000102,0.14507885750759897,,,2022_02_saudi_arabia
+fresh_tyre_gain,LEC:16,belief @k10,real gain at the stop,0.32978424934142936,,0.8699999999999903,-0.540215750658561,,,2022_02_saudi_arabia
+fresh_tyre_gain,MAG:37,belief @k10,real gain at the stop,1.0139861596520348,,1.1225000000000023,-0.10851384034796752,,,2022_02_saudi_arabia
+fresh_tyre_gain,NOR:16,belief @k10,real gain at the stop,0.42748099182585975,,1.0804999999999865,-0.6530190081741267,,,2022_02_saudi_arabia
+fresh_tyre_gain,OCO:16,belief @k10,real gain at the stop,0.42748099182585975,,1.3325000000000102,-0.9050190081741505,,,2022_02_saudi_arabia
+fresh_tyre_gain,PER:15,belief @k10,real gain at the stop,0.3388882939702853,,1.0859999999999985,-0.7471117060297132,,,2022_02_saudi_arabia
+fresh_tyre_gain,RUS:16,belief @k10,real gain at the stop,0.37863262058365876,,0.9719999999999942,-0.5933673794163354,,,2022_02_saudi_arabia
+fresh_tyre_gain,SAI:16,belief @k10,real gain at the stop,0.37863262058365876,,1.2720000000000198,-0.893367379416361,,,2022_02_saudi_arabia
+fresh_tyre_gain,STR:13,belief @k10,real gain at the stop,0.32812017529246873,,1.0579999999999927,-0.729879824707524,,,2022_02_saudi_arabia
+fresh_tyre_gain,VER:16,belief @k10,real gain at the stop,0.37863262058365876,,1.304000000000002,-0.9253673794163433,,,2022_02_saudi_arabia
+fresh_tyre_gain,ZHO:16,belief @k10,real gain at the stop,0.42748099182585975,,0.6225000000000023,-0.19501900817414253,,,2022_02_saudi_arabia
+fresh_tyre_gain,ZHO:27,belief @k10,real gain at the stop,0.19539348496886078,,1.3215000000000003,-1.1261065150311396,,,2022_02_saudi_arabia
+fresh_tyre_gain,HAM:40,belief @k20,real gain at the stop,1.213248707744853,,0.003500000000016712,1.2097487077448363,,,2022_02_saudi_arabia
+fresh_tyre_gain,HUL:37,belief @k20,real gain at the stop,0.9793937160320354,,0.9575000000000102,0.021893716032025168,,,2022_02_saudi_arabia
+fresh_tyre_gain,MAG:37,belief @k20,real gain at the stop,0.9195122684009789,,1.1225000000000023,-0.2029877315990234,,,2022_02_saudi_arabia
+fresh_tyre_gain,ZHO:27,belief @k20,real gain at the stop,0.21684259527880556,,1.3215000000000003,-1.1046574047211948,,,2022_02_saudi_arabia
+fresh_tyre_gain,HAM:40,belief @k25,real gain at the stop,1.5987180916528132,,0.003500000000016712,1.5952180916527965,,,2022_02_saudi_arabia
+fresh_tyre_gain,HUL:37,belief @k25,real gain at the stop,1.3167128358806224,,0.9575000000000102,0.35921283588061215,,,2022_02_saudi_arabia
+fresh_tyre_gain,MAG:37,belief @k25,real gain at the stop,1.2651536599720998,,1.1225000000000023,0.14265365997209756,,,2022_02_saudi_arabia
+fresh_tyre_gain,ZHO:27,belief @k25,real gain at the stop,0.1999333977197324,,1.3215000000000003,-1.121566602280268,,,2022_02_saudi_arabia
+compound_gap,MEDIUM-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-1.1882429357564064,,-0.3695006326631045,-0.8187423030933019,,,2022_02_saudi_arabia
+compound_gap,MEDIUM-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-1.2081557704044315,,-0.3695006326631045,-0.8386551377413269,,,2022_02_saudi_arabia
+compound_gap,MEDIUM-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",-0.923596337453489,,-0.3695006326631045,-0.5540957047903845,,,2022_02_saudi_arabia
+compound_gap,MEDIUM-HARD,belief @k25,"race (judge full fit, fresh tyre, mid-race)",-0.5333935286854512,,-0.3695006326631045,-0.1638928960223467,,,2022_02_saudi_arabia
+fuel,fuel,prior (config),race (judge full fit),-0.045,,-0.10035030507896797,0.055350305078967973,,,2022_02_saudi_arabia
+fuel,fuel,belief @k0,race (judge full fit),-0.045,0.008,-0.10035030507896797,0.055350305078967973,0.0,0.0,2022_02_saudi_arabia
+fuel,fuel,belief @k10,race (judge full fit),-0.04884837124221832,0.009417238631991266,-0.10035030507896797,0.05150193383674965,0.0,0.0,2022_02_saudi_arabia
+fuel,fuel,belief @k20,race (judge full fit),-0.054210648819703736,0.008668480963704622,-0.10035030507896797,0.046139656259264236,0.0,0.0,2022_02_saudi_arabia
+fuel,fuel,belief @k25,race (judge full fit),-0.06931944408409116,0.007622954745403653,-0.10035030507896797,0.031030860994876813,0.0,0.0,2022_02_saudi_arabia
+pit_loss,green,prior (code constant),"whole race, robust (median of green stops)",22.0,,21.516662450524436,0.4833375494755643,,,2022_02_saudi_arabia
+pit_loss,green,prior (code constant),"whole race, mean (RaceParams.pit_loss_s)",22.0,,15.05,6.949999999999999,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k0,"whole race, robust (median of green stops)",15.05,,21.516662450524436,-6.466662450524435,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k0,"whole race, mean (RaceParams.pit_loss_s)",15.05,,15.05,0.0,,,2022_02_saudi_arabia
+pit_loss,sc,belief charged @k0,"whole race, SC stops",7.525,,21.371,-13.845999999999998,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, robust (median of green stops)",,,21.516662450524436,,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,15.05,,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k10,"whole race, robust (median of green stops)",15.05,,21.516662450524436,-6.466662450524435,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k10,"whole race, mean (RaceParams.pit_loss_s)",15.05,,15.05,0.0,,,2022_02_saudi_arabia
+pit_loss,sc,belief charged @k10,"whole race, SC stops",7.525,,21.371,-13.845999999999998,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k10, n=0)","whole race, robust (median of green stops)",,,21.516662450524436,,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k10, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,15.05,,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k20,"whole race, robust (median of green stops)",15.05,,21.516662450524436,-6.466662450524435,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k20,"whole race, mean (RaceParams.pit_loss_s)",15.05,,15.05,0.0,,,2022_02_saudi_arabia
+pit_loss,sc,belief charged @k20,"whole race, SC stops",7.525,,21.371,-13.845999999999998,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k20, n=2)","whole race, robust (median of green stops)",21.176278412697606,,21.516662450524436,-0.3403840378268299,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k20, n=2)","whole race, mean (RaceParams.pit_loss_s)",21.176278412697606,,15.05,6.126278412697605,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k25,"whole race, robust (median of green stops)",15.05,,21.516662450524436,-6.466662450524435,,,2022_02_saudi_arabia
+pit_loss,green,belief charged @k25,"whole race, mean (RaceParams.pit_loss_s)",15.05,,15.05,0.0,,,2022_02_saudi_arabia
+pit_loss,sc,belief charged @k25,"whole race, SC stops",7.525,,21.371,-13.845999999999998,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k25, n=2)","whole race, robust (median of green stops)",21.89111465884065,,21.516662450524436,0.37445220831621384,,,2022_02_saudi_arabia
+pit_loss,green,"as-of data (green stops to k25, n=2)","whole race, mean (RaceParams.pit_loss_s)",21.89111465884065,,15.05,6.841114658840649,,,2022_02_saudi_arabia
+lap1_and_warmup,lap1_extra,prior (config),observed (median lap-1 residual + prior),9.0,,6.14,2.8600000000000003,,,2022_02_saudi_arabia
+lap1_and_warmup,out_lap_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,0.0,,0.7940021784112048,-0.7940021784112048,,,2022_02_saudi_arabia
+traffic_rejoin,ALB:13,judge rejoin position (horizon 2),real position after the out-lap,17.0,,18.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,GAS:15,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,HAM:40,judge rejoin position (horizon 2),real position after the out-lap,8.0,,12.0,-4.0,,,2022_02_saudi_arabia
+traffic_rejoin,HUL:37,judge rejoin position (horizon 2),real position after the out-lap,13.0,,14.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,LEC:16,judge rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,MAG:37,judge rejoin position (horizon 2),real position after the out-lap,9.0,,12.0,-3.0,,,2022_02_saudi_arabia
+traffic_rejoin,NOR:16,judge rejoin position (horizon 2),real position after the out-lap,12.0,,13.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,OCO:16,judge rejoin position (horizon 2),real position after the out-lap,7.0,,11.0,-4.0,,,2022_02_saudi_arabia
+traffic_rejoin,PER:15,judge rejoin position (horizon 2),real position after the out-lap,5.0,,4.0,1.0,,,2022_02_saudi_arabia
+traffic_rejoin,RUS:16,judge rejoin position (horizon 2),real position after the out-lap,1.0,,5.0,-4.0,,,2022_02_saudi_arabia
+traffic_rejoin,SAI:16,judge rejoin position (horizon 2),real position after the out-lap,1.0,,4.0,-3.0,,,2022_02_saudi_arabia
+traffic_rejoin,STR:13,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,VER:16,judge rejoin position (horizon 2),real position after the out-lap,1.0,,2.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,ZHO:16,judge rejoin position (horizon 2),real position after the out-lap,13.0,,15.0,-2.0,,,2022_02_saudi_arabia
+traffic_rejoin,ZHO:27,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,ALB:13,belief rejoin position (horizon 2),real position after the out-lap,17.0,,18.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,GAS:15,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,HAM:40,belief rejoin position (horizon 2),real position after the out-lap,8.0,,12.0,-4.0,,,2022_02_saudi_arabia
+traffic_rejoin,HUL:37,belief rejoin position (horizon 2),real position after the out-lap,13.0,,14.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,LEC:16,belief rejoin position (horizon 2),real position after the out-lap,1.0,,1.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,MAG:37,belief rejoin position (horizon 2),real position after the out-lap,9.0,,12.0,-3.0,,,2022_02_saudi_arabia
+traffic_rejoin,NOR:16,belief rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,OCO:16,belief rejoin position (horizon 2),real position after the out-lap,9.0,,11.0,-2.0,,,2022_02_saudi_arabia
+traffic_rejoin,PER:15,belief rejoin position (horizon 2),real position after the out-lap,5.0,,4.0,1.0,,,2022_02_saudi_arabia
+traffic_rejoin,RUS:16,belief rejoin position (horizon 2),real position after the out-lap,1.0,,5.0,-4.0,,,2022_02_saudi_arabia
+traffic_rejoin,SAI:16,belief rejoin position (horizon 2),real position after the out-lap,1.0,,4.0,-3.0,,,2022_02_saudi_arabia
+traffic_rejoin,STR:13,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2022_02_saudi_arabia
+traffic_rejoin,VER:16,belief rejoin position (horizon 2),real position after the out-lap,1.0,,2.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,ZHO:16,belief rejoin position (horizon 2),real position after the out-lap,14.0,,15.0,-1.0,,,2022_02_saudi_arabia
+traffic_rejoin,ZHO:27,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2022_02_saudi_arabia
+neutralisations,sc_periods,judge expected (none),occurred,0.0,,1.0,-1.0,,,2022_02_saudi_arabia
+neutralisations,vsc_periods,judge expected (none),occurred,0.0,,1.0,-1.0,,,2022_02_saudi_arabia
+neutralisations,sc_laps,judge expected (none),occurred,0.0,,5.0,-5.0,,,2022_02_saudi_arabia
+neutralisations,vsc_laps,judge expected (none),occurred,0.0,,3.0,-3.0,,,2022_02_saudi_arabia
+neutralisations,sc_lap_factor,judge config,observed (mean SC lap / ref lap),1.36,,1.564,-0.20399999999999996,,,2022_02_saudi_arabia
+neutralisations,vsc_lap_factor,judge config,observed (median VSC lap / green prediction),1.3,,1.311,-0.010999999999999899,,,2022_02_saudi_arabia
+neutralisations,sc_periods,belief expected (rate),occurred,0.75,,1.0,-0.25,,,2022_02_saudi_arabia
+neutralisations,vsc_periods,belief expected (rate),occurred,1.0,,1.0,0.0,,,2022_02_saudi_arabia
+neutralisations,sc_laps,belief expected (rate),occurred,2.25,,5.0,-2.75,,,2022_02_saudi_arabia
+neutralisations,vsc_laps,belief expected (rate),occurred,2.0,,3.0,-1.0,,,2022_02_saudi_arabia
+neutralisations,sc_lap_factor,belief config,observed (mean SC lap / ref lap),1.36,,1.564,-0.20399999999999996,,,2022_02_saudi_arabia
+neutralisations,vsc_lap_factor,belief config,observed (median VSC lap / green prediction),1.3,,1.311,-0.010999999999999899,,,2022_02_saudi_arabia
+tyre_life,HARD,belief support edge @k0,oldest age run,54.0,,54.0,0.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k0,median stint-end age,54.0,,36.5,17.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k0,oldest age run,38.0,,38.0,0.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k0,median stint-end age,38.0,,23.5,14.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k0,oldest age run,8.0,,8.0,0.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k0,median stint-end age,8.0,,7.0,1.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k0, practice)",oldest age run,26.0,,54.0,-28.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k0, practice)",median stint-end age,26.0,,36.5,-10.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",oldest age run,26.0,,38.0,-12.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k0, practice)",median stint-end age,26.0,,23.5,2.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k0, practice)",oldest age run,17.0,,8.0,9.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k0, practice)",median stint-end age,17.0,,7.0,10.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k10,oldest age run,54.0,,54.0,0.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k10,median stint-end age,54.0,,36.5,17.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k10,oldest age run,38.0,,38.0,0.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k10,median stint-end age,38.0,,23.5,14.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k10,oldest age run,8.0,,8.0,0.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k10,median stint-end age,8.0,,7.0,1.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k10, practice)",oldest age run,26.0,,54.0,-28.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k10, practice)",median stint-end age,26.0,,36.5,-10.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",oldest age run,26.0,,38.0,-12.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k10, practice)",median stint-end age,26.0,,23.5,2.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k10, practice)",oldest age run,17.0,,8.0,9.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k10, practice)",median stint-end age,17.0,,7.0,10.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k20,oldest age run,54.0,,54.0,0.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k20,median stint-end age,54.0,,36.5,17.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k20,oldest age run,38.0,,38.0,0.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k20,median stint-end age,38.0,,23.5,14.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k20,oldest age run,8.0,,8.0,0.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k20,median stint-end age,8.0,,7.0,1.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k20, practice)",oldest age run,26.0,,54.0,-28.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k20, practice)",median stint-end age,26.0,,36.5,-10.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",oldest age run,26.0,,38.0,-12.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k20, practice)",median stint-end age,26.0,,23.5,2.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k20, practice)",oldest age run,17.0,,8.0,9.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k20, practice)",median stint-end age,17.0,,7.0,10.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k31,oldest age run,54.0,,54.0,0.0,,,2024_07_emilia_romagna
+tyre_life,HARD,belief support edge @k31,median stint-end age,54.0,,36.5,17.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k31,oldest age run,38.0,,38.0,0.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,belief support edge @k31,median stint-end age,38.0,,23.5,14.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k31,oldest age run,8.0,,8.0,0.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,belief support edge @k31,median stint-end age,8.0,,7.0,1.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k31, practice)",oldest age run,31.0,,54.0,-23.0,,,2024_07_emilia_romagna
+tyre_life,HARD,"as-of data (race to k31, practice)",median stint-end age,31.0,,36.5,-5.5,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k31, practice)",oldest age run,32.0,,38.0,-6.0,,,2024_07_emilia_romagna
+tyre_life,MEDIUM,"as-of data (race to k31, practice)",median stint-end age,32.0,,23.5,8.5,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k31, practice)",oldest age run,17.0,,8.0,9.0,,,2024_07_emilia_romagna
+tyre_life,SOFT,"as-of data (race to k31, practice)",median stint-end age,17.0,,7.0,10.0,,,2024_07_emilia_romagna
+wear_rate,HARD,belief @k0,within-stint slope less fuel,0.05133359016232779,0.03,0.047350453334712106,0.0039831368276156826,1.0,1.0,2024_07_emilia_romagna
+wear_rate,MEDIUM,belief @k0,within-stint slope less fuel,0.1084808727310622,0.03,0.07512217999885112,0.03335869273221108,0.0,1.0,2024_07_emilia_romagna
+wear_rate,SOFT,belief @k0,within-stint slope less fuel,0.1084808727310622,0.08184444237606152,,,,,2024_07_emilia_romagna
+wear_rate,HARD,belief @k10,within-stint slope less fuel,0.07951093962424727,0.016409492548815345,0.047350453334712106,0.03216048628953516,0.0,0.0,2024_07_emilia_romagna
+wear_rate,MEDIUM,belief @k10,within-stint slope less fuel,0.10230450706334662,0.01388924178871991,0.07512217999885112,0.0271823270644955,0.0,0.0,2024_07_emilia_romagna
+wear_rate,SOFT,belief @k10,within-stint slope less fuel,0.08762574886972692,0.0346325853036547,,,,,2024_07_emilia_romagna
+wear_rate,HARD,belief @k20,within-stint slope less fuel,0.08116074250346336,0.009193291703175299,0.047350453334712106,0.033810289168751256,0.0,0.0,2024_07_emilia_romagna
+wear_rate,MEDIUM,belief @k20,within-stint slope less fuel,0.08100639288425313,0.00710814479151741,0.07512217999885112,0.0058842128854020015,1.0,1.0,2024_07_emilia_romagna
+wear_rate,SOFT,belief @k20,within-stint slope less fuel,0.08742889236556799,0.03219786491041001,,,,,2024_07_emilia_romagna
+wear_rate,HARD,belief @k31,within-stint slope less fuel,0.08873360082724598,0.004945032769577666,0.047350453334712106,0.04138314749253387,0.0,0.0,2024_07_emilia_romagna
+wear_rate,MEDIUM,belief @k31,within-stint slope less fuel,0.0842131341424943,0.00533833499225693,0.07512217999885112,0.009090954143643179,0.0,0.0,2024_07_emilia_romagna
+wear_rate,SOFT,belief @k31,within-stint slope less fuel,0.08781664329683159,0.032365919910946776,,,,,2024_07_emilia_romagna
+wear_rate,HARD,judge (full fit),within-stint slope less fuel,0.046541418464394385,,0.047350453334712106,-0.0008090348703177208,,,2024_07_emilia_romagna
+wear_rate,MEDIUM,judge (full fit),within-stint slope less fuel,0.07689940242026459,,0.07512217999885112,0.0017772224214134685,,,2024_07_emilia_romagna
+wear_rate,SOFT,judge (full fit),within-stint slope less fuel,-0.018259609427590605,,,,,,2024_07_emilia_romagna
+fresh_tyre_gain,ALO:7,belief @k0,real gain at the stop,-0.38349520944254323,,1.1259999999999906,-1.5094952094425338,,,2024_07_emilia_romagna
+fresh_tyre_gain,ALO:40,belief @k0,real gain at the stop,2.376164280375221,,2.4639999999999986,-0.08783571962477765,,,2024_07_emilia_romagna
+fresh_tyre_gain,BOT:8,belief @k0,real gain at the stop,-0.15071395731220605,,0.9995000000000118,-1.1502139573122179,,,2024_07_emilia_romagna
+fresh_tyre_gain,GAS:8,belief @k0,real gain at the stop,-0.2236807465491495,,0.9825000000000017,-1.2061807465491512,,,2024_07_emilia_romagna
+fresh_tyre_gain,GAS:30,belief @k0,real gain at the stop,1.868642071158348,,1.8100000000000023,0.05864207115834574,,,2024_07_emilia_romagna
+fresh_tyre_gain,HAM:27,belief @k0,real gain at the stop,1.846941751846927,,1.3289999999999935,0.5179417518469336,,,2024_07_emilia_romagna
+fresh_tyre_gain,HUL:13,belief @k0,real gain at the stop,0.3916904063430877,,0.7064999999999912,-0.31480959365690353,,,2024_07_emilia_romagna
+fresh_tyre_gain,LEC:25,belief @k0,real gain at the stop,1.693460879115861,,1.3400000000000034,0.35346087911585755,,,2024_07_emilia_romagna
+fresh_tyre_gain,MAG:37,belief @k0,real gain at the stop,2.992064556807435,,1.7365000000000066,1.2555645568074283,,,2024_07_emilia_romagna
+fresh_tyre_gain,NOR:22,belief @k0,real gain at the stop,1.3166846707603383,,1.1465000000000032,0.17018467076033517,,,2024_07_emilia_romagna
+fresh_tyre_gain,OCO:25,belief @k0,real gain at the stop,1.693460879115861,,1.380500000000012,0.3129608791158489,,,2024_07_emilia_romagna
+fresh_tyre_gain,PER:37,belief @k0,real gain at the stop,2.6323123334309173,,1.917500000000004,0.7148123334309133,,,2024_07_emilia_romagna
+fresh_tyre_gain,PIA:23,belief @k0,real gain at the stop,1.4251655434914312,,1.7985000000000184,-0.3733344565085872,,,2024_07_emilia_romagna
+fresh_tyre_gain,RIC:11,belief @k0,real gain at the stop,0.17472866088097305,,0.5619999999999976,-0.38727133911902456,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:21,belief @k0,real gain at the stop,1.2595373881916032,,1.3004999999999995,-0.04096261180839633,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:52,belief @k0,real gain at the stop,2.113682637157183,,2.1344999999999885,-0.020817362842805665,,,2024_07_emilia_romagna
+fresh_tyre_gain,SAI:27,belief @k0,real gain at the stop,1.904089034415648,,0.8779999999999859,1.0260890344156621,,,2024_07_emilia_romagna
+fresh_tyre_gain,SAR:31,belief @k0,real gain at the stop,2.3306443826192833,,2.197499999999991,0.1331443826192924,,,2024_07_emilia_romagna
+fresh_tyre_gain,STR:37,belief @k0,real gain at the stop,3.0460450442950133,,1.6880000000000166,1.3580450442949967,,,2024_07_emilia_romagna
+fresh_tyre_gain,TSU:12,belief @k0,real gain at the stop,0.2832095336120517,,1.1315000000000026,-0.8482904663879509,,,2024_07_emilia_romagna
+fresh_tyre_gain,VER:24,belief @k0,real gain at the stop,1.5849800063847965,,1.1629999999999967,0.4219800063847998,,,2024_07_emilia_romagna
+fresh_tyre_gain,ZHO:33,belief @k0,real gain at the stop,2.401571126578432,,2.3995000000000033,0.0020711265784285615,,,2024_07_emilia_romagna
+fresh_tyre_gain,ALO:40,belief @k10,real gain at the stop,3.257929900636583,,2.4639999999999986,0.7939299006365843,,,2024_07_emilia_romagna
+fresh_tyre_gain,GAS:30,belief @k10,real gain at the stop,2.406103132208969,,1.8100000000000023,0.5961031322089667,,,2024_07_emilia_romagna
+fresh_tyre_gain,HAM:27,belief @k10,real gain at the stop,1.6762867476247578,,1.3289999999999935,0.3472867476247643,,,2024_07_emilia_romagna
+fresh_tyre_gain,HUL:13,belief @k10,real gain at the stop,0.3018288434452927,,0.7064999999999912,-0.40467115655469854,,,2024_07_emilia_romagna
+fresh_tyre_gain,LEC:25,belief @k10,real gain at the stop,1.5294829282054678,,1.3400000000000034,0.18948292820546442,,,2024_07_emilia_romagna
+fresh_tyre_gain,MAG:37,belief @k10,real gain at the stop,2.739631199331484,,1.7365000000000066,1.0031311993314773,,,2024_07_emilia_romagna
+fresh_tyre_gain,NOR:22,belief @k10,real gain at the stop,1.143058467391171,,1.1465000000000032,-0.0034415326088321763,,,2024_07_emilia_romagna
+fresh_tyre_gain,OCO:25,belief @k10,real gain at the stop,1.5294829282054678,,1.380500000000012,0.14898292820545578,,,2024_07_emilia_romagna
+fresh_tyre_gain,PER:37,belief @k10,real gain at the stop,3.5637555993044003,,1.917500000000004,1.6462555993043964,,,2024_07_emilia_romagna
+fresh_tyre_gain,PIA:23,belief @k10,real gain at the stop,1.2453629744545225,,1.7985000000000184,-0.5531370255454959,,,2024_07_emilia_romagna
+fresh_tyre_gain,RIC:11,belief @k10,real gain at the stop,0.09721982931861817,,0.5619999999999976,-0.46478017068137945,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:21,belief @k10,real gain at the stop,1.120264899952062,,1.3004999999999995,-0.18023510004793764,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:52,belief @k10,real gain at the stop,2.9170925747005043,,2.1344999999999885,0.7825925747005158,,,2024_07_emilia_romagna
+fresh_tyre_gain,SAI:27,belief @k10,real gain at the stop,1.6990803150638811,,0.8779999999999859,0.8210803150638952,,,2024_07_emilia_romagna
+fresh_tyre_gain,SAR:31,belief @k10,real gain at the stop,3.121701588827193,,2.197499999999991,0.9242015888272022,,,2024_07_emilia_romagna
+fresh_tyre_gain,STR:37,belief @k10,real gain at the stop,2.744918953136448,,1.6880000000000166,1.0569189531364316,,,2024_07_emilia_romagna
+fresh_tyre_gain,TSU:12,belief @k10,real gain at the stop,0.19952433638195544,,1.1315000000000026,-0.9319756636180472,,,2024_07_emilia_romagna
+fresh_tyre_gain,VER:24,belief @k10,real gain at the stop,1.4271784211421021,,1.1629999999999967,0.26417842114210544,,,2024_07_emilia_romagna
+fresh_tyre_gain,ZHO:33,belief @k10,real gain at the stop,3.2518208707219998,,2.3995000000000033,0.8523208707219965,,,2024_07_emilia_romagna
+fresh_tyre_gain,ALO:40,belief @k20,real gain at the stop,3.1958098476519012,,2.4639999999999986,0.7318098476519026,,,2024_07_emilia_romagna
+fresh_tyre_gain,GAS:30,belief @k20,real gain at the stop,2.302887330494599,,1.8100000000000023,0.49288733049459665,,,2024_07_emilia_romagna
+fresh_tyre_gain,HAM:27,belief @k20,real gain at the stop,1.3268386609559144,,1.3289999999999935,-0.0021613390440791136,,,2024_07_emilia_romagna
+fresh_tyre_gain,LEC:25,belief @k20,real gain at the stop,1.2028664921900543,,1.3400000000000034,-0.13713350780994915,,,2024_07_emilia_romagna
+fresh_tyre_gain,MAG:37,belief @k20,real gain at the stop,2.1558457234901454,,1.7365000000000066,0.41934572349013877,,,2024_07_emilia_romagna
+fresh_tyre_gain,NOR:22,belief @k20,real gain at the stop,0.8786865710338247,,1.1465000000000032,-0.26781342896617844,,,2024_07_emilia_romagna
+fresh_tyre_gain,OCO:25,belief @k20,real gain at the stop,1.2028664921900543,,1.380500000000012,-0.1776335078099578,,,2024_07_emilia_romagna
+fresh_tyre_gain,PER:37,belief @k20,real gain at the stop,3.482103501424703,,1.917500000000004,1.564603501424699,,,2024_07_emilia_romagna
+fresh_tyre_gain,PIA:23,belief @k20,real gain at the stop,0.9596929639180587,,1.7985000000000184,-0.8388070360819597,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:21,belief @k20,real gain at the stop,0.8788409206530332,,1.3004999999999995,-0.42165907934696634,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:52,belief @k20,real gain at the stop,2.871321227257269,,2.1344999999999885,0.7368212272572805,,,2024_07_emilia_romagna
+fresh_tyre_gain,SAI:27,belief @k20,real gain at the stop,1.326684311336706,,0.8779999999999859,0.44868431133672004,,,2024_07_emilia_romagna
+fresh_tyre_gain,SAR:31,belief @k20,real gain at the stop,3.0333340130257653,,2.197499999999991,0.8358340130257744,,,2024_07_emilia_romagna
+fresh_tyre_gain,STR:37,belief @k20,real gain at the stop,2.1365938905600217,,1.6880000000000166,0.4485938905600051,,,2024_07_emilia_romagna
+fresh_tyre_gain,VER:24,belief @k20,real gain at the stop,1.121860099305792,,1.1629999999999967,-0.04113990069420481,,,2024_07_emilia_romagna
+fresh_tyre_gain,ZHO:33,belief @k20,real gain at the stop,3.1766351895313676,,2.3995000000000033,0.7771351895313643,,,2024_07_emilia_romagna
+fresh_tyre_gain,ALO:40,belief @k31,real gain at the stop,3.362021894013438,,2.4639999999999986,0.8980218940134392,,,2024_07_emilia_romagna
+fresh_tyre_gain,MAG:37,belief @k31,real gain at the stop,2.341324052758111,,1.7365000000000066,0.6048240527581044,,,2024_07_emilia_romagna
+fresh_tyre_gain,PER:37,belief @k31,real gain at the stop,3.669688633317236,,1.917500000000004,1.7521886333172318,,,2024_07_emilia_romagna
+fresh_tyre_gain,RUS:52,belief @k31,real gain at the stop,3.0116079573892165,,2.1344999999999885,0.877107957389228,,,2024_07_emilia_romagna
+fresh_tyre_gain,STR:37,belief @k31,real gain at the stop,2.315429987413154,,1.6880000000000166,0.6274299874131373,,,2024_07_emilia_romagna
+fresh_tyre_gain,ZHO:33,belief @k31,real gain at the stop,3.338388062010864,,2.3995000000000033,0.9388880620108608,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.07296678923695765,,1.0298641055813107,-1.1028308948182683,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k0,qualifying,-0.07296678923695765,,-0.4263486842105738,0.35338189497361616,,,2024_07_emilia_romagna
+compound_gap,MEDIUM-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.8503583720895449,,-0.5460782325523184,-0.30428013953722655,,,2024_07_emilia_romagna
+compound_gap,SOFT-HARD,belief @k0,"race (judge full fit, fresh tyre, mid-race)",-0.9233251613265026,,0.48378587302899234,-1.407111034355495,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k10,"race (judge full fit, fresh tyre, mid-race)",0.9849844574192019,,1.0298641055813107,-0.044879648162108765,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k10,qualifying,0.9849844574192019,,-0.4263486842105738,1.4113331416297759,,,2024_07_emilia_romagna
+compound_gap,MEDIUM-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",-0.8310993207073096,,-0.5460782325523184,-0.2850210881549913,,,2024_07_emilia_romagna
+compound_gap,SOFT-HARD,belief @k10,"race (judge full fit, fresh tyre, mid-race)",0.1538851367118923,,0.48378587302899234,-0.32990073631710004,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.8872461314052771,,1.0298641055813107,-0.1426179741760336,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k20,qualifying,0.8872461314052771,,-0.4263486842105738,1.313594815615851,,,2024_07_emilia_romagna
+compound_gap,MEDIUM-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",-0.6698993374769486,,-0.5460782325523184,-0.12382110492463028,,,2024_07_emilia_romagna
+compound_gap,SOFT-HARD,belief @k20,"race (judge full fit, fresh tyre, mid-race)",0.21734679392832845,,0.48378587302899234,-0.2664390791006639,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k31,"race (judge full fit, fresh tyre, mid-race)",0.8885338189955974,,1.0298641055813107,-0.14133028658571334,,,2024_07_emilia_romagna
+compound_gap,SOFT-MEDIUM,belief @k31,qualifying,0.8885338189955974,,-0.4263486842105738,1.3148825032061713,,,2024_07_emilia_romagna
+compound_gap,MEDIUM-HARD,belief @k31,"race (judge full fit, fresh tyre, mid-race)",-0.5935006892841415,,-0.5460782325523184,-0.047422456731823104,,,2024_07_emilia_romagna
+compound_gap,SOFT-HARD,belief @k31,"race (judge full fit, fresh tyre, mid-race)",0.2950331297114559,,0.48378587302899234,-0.18875274331753644,,,2024_07_emilia_romagna
+fuel,fuel,prior (config),race (judge full fit),-0.045,,-0.04338064153731321,-0.001619358462686786,,,2024_07_emilia_romagna
+fuel,fuel,belief @k0,race (judge full fit),-0.045,0.008,-0.04338064153731321,-0.001619358462686786,1.0,1.0,2024_07_emilia_romagna
+fuel,fuel,belief @k10,race (judge full fit),-0.044499312355962634,0.0048176021709656295,-0.04338064153731321,-0.0011186708186494213,1.0,1.0,2024_07_emilia_romagna
+fuel,fuel,belief @k20,race (judge full fit),-0.042965775881622904,0.004085214779007238,-0.04338064153731321,0.000414865655690308,1.0,1.0,2024_07_emilia_romagna
+fuel,fuel,belief @k31,race (judge full fit),-0.045986403506821615,0.0032791365725867204,-0.04338064153731321,-0.0026057619695084022,1.0,1.0,2024_07_emilia_romagna
+pit_loss,green,prior (code constant),"whole race, robust (median of green stops)",22.0,,27.998620642462598,-5.998620642462598,,,2024_07_emilia_romagna
+pit_loss,green,prior (code constant),"whole race, mean (RaceParams.pit_loss_s)",22.0,,28.46,-6.460000000000001,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k0,"whole race, robust (median of green stops)",28.46,,27.998620642462598,0.4613793575374032,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k0,"whole race, mean (RaceParams.pit_loss_s)",28.46,,28.46,0.0,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, robust (median of green stops)",,,27.998620642462598,,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k0, n=0)","whole race, mean (RaceParams.pit_loss_s)",,,28.46,,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k10,"whole race, robust (median of green stops)",28.46,,27.998620642462598,0.4613793575374032,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k10,"whole race, mean (RaceParams.pit_loss_s)",28.46,,28.46,0.0,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k10, n=3)","whole race, robust (median of green stops)",27.835006072073412,,27.998620642462598,-0.1636145703891856,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k10, n=3)","whole race, mean (RaceParams.pit_loss_s)",27.835006072073412,,28.46,-0.6249939279265888,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k20,"whole race, robust (median of green stops)",28.46,,27.998620642462598,0.4613793575374032,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k20,"whole race, mean (RaceParams.pit_loss_s)",28.46,,28.46,0.0,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k20, n=6)","whole race, robust (median of green stops)",27.512227472258374,,27.998620642462598,-0.4863931702042237,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k20, n=6)","whole race, mean (RaceParams.pit_loss_s)",27.512227472258374,,28.46,-0.9477725277416269,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k31,"whole race, robust (median of green stops)",28.46,,27.998620642462598,0.4613793575374032,,,2024_07_emilia_romagna
+pit_loss,green,belief charged @k31,"whole race, mean (RaceParams.pit_loss_s)",28.46,,28.46,0.0,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k31, n=15)","whole race, robust (median of green stops)",27.86853337869394,,27.998620642462598,-0.1300872637686581,,,2024_07_emilia_romagna
+pit_loss,green,"as-of data (green stops to k31, n=15)","whole race, mean (RaceParams.pit_loss_s)",27.86853337869394,,28.46,-0.5914666213060613,,,2024_07_emilia_romagna
+lap1_and_warmup,lap1_extra,prior (config),observed (median lap-1 residual + prior),9.0,,6.68,2.3200000000000003,,,2024_07_emilia_romagna
+lap1_and_warmup,out_lap_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,0.0,,-0.1770433484435756,0.1770433484435756,,,2024_07_emilia_romagna
+traffic_rejoin,ALO:7,judge rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ALO:40,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ALO:59,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,BOT:8,judge rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,GAS:8,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,GAS:30,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,HAM:27,judge rejoin position (horizon 2),real position after the out-lap,9.0,,9.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,HUL:13,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,LEC:25,judge rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2024_07_emilia_romagna
+traffic_rejoin,MAG:37,judge rejoin position (horizon 2),real position after the out-lap,16.0,,17.0,-1.0,,,2024_07_emilia_romagna
+traffic_rejoin,NOR:22,judge rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,OCO:25,judge rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,PER:37,judge rejoin position (horizon 2),real position after the out-lap,11.0,,11.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,PIA:23,judge rejoin position (horizon 2),real position after the out-lap,8.0,,8.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,RIC:11,judge rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,RUS:21,judge rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,RUS:52,judge rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,SAI:27,judge rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2024_07_emilia_romagna
+traffic_rejoin,SAR:31,judge rejoin position (horizon 2),real position after the out-lap,18.0,,19.0,-1.0,,,2024_07_emilia_romagna
+traffic_rejoin,STR:37,judge rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,TSU:12,judge rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,VER:24,judge rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ZHO:33,judge rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ALO:7,belief rejoin position (horizon 2),real position after the out-lap,20.0,,20.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ALO:40,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ALO:59,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,BOT:8,belief rejoin position (horizon 2),real position after the out-lap,18.0,,18.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,GAS:8,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,GAS:30,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,HAM:27,belief rejoin position (horizon 2),real position after the out-lap,9.0,,9.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,HUL:13,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,LEC:25,belief rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2024_07_emilia_romagna
+traffic_rejoin,MAG:37,belief rejoin position (horizon 2),real position after the out-lap,16.0,,17.0,-1.0,,,2024_07_emilia_romagna
+traffic_rejoin,NOR:22,belief rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,OCO:25,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,PER:37,belief rejoin position (horizon 2),real position after the out-lap,11.0,,11.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,PIA:23,belief rejoin position (horizon 2),real position after the out-lap,9.0,,8.0,1.0,,,2024_07_emilia_romagna
+traffic_rejoin,RIC:11,belief rejoin position (horizon 2),real position after the out-lap,16.0,,16.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,RUS:21,belief rejoin position (horizon 2),real position after the out-lap,10.0,,10.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,RUS:52,belief rejoin position (horizon 2),real position after the out-lap,7.0,,7.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,SAI:27,belief rejoin position (horizon 2),real position after the out-lap,7.0,,6.0,1.0,,,2024_07_emilia_romagna
+traffic_rejoin,SAR:31,belief rejoin position (horizon 2),real position after the out-lap,19.0,,19.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,STR:37,belief rejoin position (horizon 2),real position after the out-lap,13.0,,13.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,TSU:12,belief rejoin position (horizon 2),real position after the out-lap,15.0,,15.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,VER:24,belief rejoin position (horizon 2),real position after the out-lap,4.0,,4.0,0.0,,,2024_07_emilia_romagna
+traffic_rejoin,ZHO:33,belief rejoin position (horizon 2),real position after the out-lap,17.0,,17.0,0.0,,,2024_07_emilia_romagna
+neutralisations,sc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2024_07_emilia_romagna
+neutralisations,vsc_periods,judge expected (none),occurred,0.0,,0.0,0.0,,,2024_07_emilia_romagna
+neutralisations,sc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2024_07_emilia_romagna
+neutralisations,vsc_laps,judge expected (none),occurred,0.0,,0.0,0.0,,,2024_07_emilia_romagna
+neutralisations,sc_lap_factor,judge config,observed (mean SC lap / ref lap),1.36,,,,,,2024_07_emilia_romagna
+neutralisations,vsc_lap_factor,judge config,observed (median VSC lap / green prediction),1.3,,,,,,2024_07_emilia_romagna
+neutralisations,sc_periods,belief expected (rate),occurred,0.945,,0.0,0.945,,,2024_07_emilia_romagna
+neutralisations,vsc_periods,belief expected (rate),occurred,1.26,,0.0,1.26,,,2024_07_emilia_romagna
+neutralisations,sc_laps,belief expected (rate),occurred,2.835,,0.0,2.835,,,2024_07_emilia_romagna
+neutralisations,vsc_laps,belief expected (rate),occurred,2.52,,0.0,2.52,,,2024_07_emilia_romagna
+neutralisations,sc_lap_factor,belief config,observed (mean SC lap / ref lap),1.36,,,,,,2024_07_emilia_romagna
+neutralisations,vsc_lap_factor,belief config,observed (median VSC lap / green prediction),1.3,,,,,,2024_07_emilia_romagna
