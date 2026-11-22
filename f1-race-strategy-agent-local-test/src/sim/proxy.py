@@ -85,6 +85,9 @@ SOURCES = {1: "race", 2: "practice", 3: "qualifying", 4: "same_circuit", 5: "cro
 # qualifying_gaps: the robust trim of data.robust_filter (k 2.5 robust sd, 2 passes, MAD floor)
 QUALI_K_RESID, QUALI_N_ITER, QUALI_MIN_SCALE_S = 2.5, 2, 0.05
 QUALI_MIN_DRIVERS = 2   # drivers linking a compound to another one before its gap is used
+# qualifying_driver_offsets: a best lap slower than this share over its segment's fastest is not a
+# push lap (an aborted run, a red flag) and is left out; an offset is clipped at QUALI_DRIVER_CLIP_S
+QUALI_PUSH_SHARE, QUALI_DRIVER_CLIP_S = 1.03, 2.5
 
 
 def pair_key(soft, hard) -> str:
@@ -278,6 +281,42 @@ def qualifying_gaps(q):
         return float(cov[at[("compound", a)], at[("compound", b)]])
     return {"gap": gap, "cov": {(a, b): v(a, b) for a in comps for b in comps},
             "n_drivers": {c: len(_linking(k, c)) for c in comps}, "n_rows": int(len(k)), "reference": ref}
+
+
+def qualifying_driver_offsets(q):
+    """{driver: s}, each driver's qualifying pace against the field (centred, sum 0), or None.
+    Per segment the compound most drivers set their best timed lap on; each driver's best timed
+    lap there is one row; lap = driver + segment by least squares, trimmed as qualifying_gaps
+    trims (QUALI_K_RESID robust sds, QUALI_N_ITER passes, fast rows never cut). A driver with no
+    row kept is left out. Pre-race information: the belief's driver-effect prior mean
+    (degradation driver_prior "qualifying")."""
+    if q is None or len(q) == 0:
+        return None
+    t = q[q["timed"].astype(bool) & q["compound"].isin(SOFTNESS)]
+    t = t.assign(segment=t["segment"].fillna("Q"))
+    if not len(t):
+        return None
+    main = t.groupby("segment")["compound"].agg(lambda s: s.value_counts().index[0])
+    t = t[t["compound"] == t["segment"].map(main)]
+    g = t.groupby(["driver", "segment"], as_index=False)["lap_time_s"].min()
+    g = g[g["lap_time_s"] <= QUALI_PUSH_SHARE * g.groupby("segment")["lap_time_s"].transform("min")]
+    drivers = sorted(g["driver"].unique())
+    if len(drivers) < 2:
+        return None
+    segs = sorted(g["segment"].unique())
+    cols = [(g["driver"] == d).to_numpy(dtype=float) for d in drivers]
+    cols += [(g["segment"] == s).to_numpy(dtype=float) for s in segs[1:]]
+    X, y = np.column_stack(cols), g["lap_time_s"].to_numpy(dtype=float)
+    keep = np.ones(len(g), dtype=bool)
+    for _ in range(QUALI_N_ITER + 1):
+        beta = np.linalg.lstsq(X[keep], y[keep], rcond=None)[0]
+        resid = y - X @ beta
+        scale = max(1.4826 * np.median(np.abs(resid - np.median(resid))), QUALI_MIN_SCALE_S)
+        keep = resid < QUALI_K_RESID * scale
+    seen = X[keep][:, :len(drivers)].sum(axis=0) > 0
+    u = np.asarray(beta[:len(drivers)], dtype=float)[seen]
+    u = np.clip(u - u.mean(), -QUALI_DRIVER_CLIP_S, QUALI_DRIVER_CLIP_S)
+    return {d: float(v) for d, v in zip(np.array(drivers)[seen], u - u.mean())}
 
 
 def quali_step(gaps, c, a):

@@ -58,6 +58,16 @@ def _history_for(race_id):
     return earlier_races(race_id, _history_recorded())
 
 
+def _map_recorded():
+    from .race_history import load_map
+    return sorted(map(str, load_map()["race_id"]))
+
+
+def _map_for(race_id):
+    from .race_history import earlier_races
+    return earlier_races(race_id, _map_recorded())
+
+
 def _periods_recorded():
     from .race_history import load_periods
     return sorted(set(map(str, load_periods()["race_id"])))
@@ -132,7 +142,9 @@ POLICY_SIDE = {
         "as_of", _periods_recorded, _periods_for, ("configs/sim/neutralised_history.csv",)),
     "pre_race_base_delta": Artifact(
         "configs/sim/race_history.csv base_delta_s: the practice-to-race base level (as_of_history calibrator), "
-        "a priori race_history.A_PRIORI with no earlier race", "as_of", _history_recorded, _history_for, ("configs/sim/race_history.csv",)),
+        "a priori race_history.A_PRIORI with no earlier race; under the calibrator param base_delta "
+        "\"per_compound\" also base_delta_s[<compound>], each compound's offset from it as of the race "
+        "(race_history.as_of_compound_delta), offset 0 with no earlier race", "as_of", _history_recorded, _history_for, ("configs/sim/race_history.csv",)),
     "fuel_prior": Artifact(
         "configs/sim/race_history.csv target: the circuit-history fuel prior (fuel_prior.circuit_history_prediction "
         "as of the race), the a priori physics prior (fuel_prior.practice_longrun_prediction) with fewer than two "
@@ -147,6 +159,12 @@ POLICY_SIDE = {
         "configs/sim/race_history.csv sc_lap_factor, lap1_extra_s: the belief's SC lap factor and lap-1 extra "
         "(as_of_history calibrator), a priori race_history.A_PRIORI with no earlier race",
         "as_of", _history_recorded, _history_for, ("configs/sim/race_history.csv",)),
+    "practice_map": Artifact(
+        "configs/sim/practice_map_history.csv: per race and compound the belief's practice fit and the judge's "
+        "full-race fit; under the as_of_history calibrator param practice_map \"as_of\" (off by default) the "
+        "practice wear and the compound's base delta move by the earlier races' median change "
+        "(race_history.as_of_practice_map), nothing with no earlier race",
+        "as_of", _map_recorded, _map_for, ("configs/sim/practice_map_history.csv",)),
     "shrinkage": Artifact(
         "SimConfig.shrinkage base_s 0.5 and wear_s_per_lap 0.03 (and the hinge tau): engineering priors set in "
         "a8d9d3a; under as_of_history the base and fuel taus are the as-of sds instead",

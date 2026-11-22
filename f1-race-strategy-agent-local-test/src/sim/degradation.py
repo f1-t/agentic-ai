@@ -174,6 +174,13 @@ def _sum_to_zero_basis(m):
 
 
 DRIVER_EFFECTS = ("off", "race", "all")
+DRIVER_PRIORS = ("off", "qualifying")
+
+
+def _driver_prior(value):
+    """The driver_prior the engine resolved ({driver: s}), else None: "off", None and a mode name
+    the engine has not resolved (a fit with no qualifying) give no prior."""
+    return value if isinstance(value, dict) and value else None
 
 
 def driver_effects_mode(value):
@@ -523,7 +530,7 @@ def _hold_columns(X, y, prec, beta0, hold, fallback_s2, n_comps, bound=None):
 
 
 def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False, driver_effects=False, sd_scale=None):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects=False, sd_scale=None, driver_prior=None):
     """Penalised fit of the race rows toward `prior`. Returns (comps, beta, report).
     `wear_lower_bound` and `driver_effects`: see the module docstring.
 
@@ -550,6 +557,10 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
     beta holds the hinge coefficients after the fuel slope; report["hinge"] has every compound.
     With `driver_effects` the driver contrasts follow, last, shrunk toward 0 with tau
     shrinkage["driver_s"] (else shrinkage["base_s"]); report["driver_effects"] has the offsets.
+    `driver_prior` ({driver: s}, SimConfig.degradation.params driver_prior "qualifying": the
+    weekend's qualifying pace offsets, Simulator.quali_driver_offsets; None: off) moves that
+    prior mean from 0 to the offsets, centred over the fit's drivers (a driver without one gets
+    their mean), so a car seen early on one compound only is not taken for that compound's pace.
 
     report["residual_components"] (_residual_components): the race rows' residuals split into a
     per-driver offset, a per-stint offset and the lap-to-lap part (the engine's "persistent" lap
@@ -592,7 +603,12 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
         tau_driver = float(shrinkage.get("driver_s", shrinkage["base_s"]))
         drivers, dcols, Q = _driver_design(d)
         cols += dcols
-        beta0 += [0.0] * len(dcols)
+        if driver_prior and len(dcols):
+            u0 = np.array([driver_prior.get(x, np.nan) for x in drivers], dtype=float)
+            u0 = np.where(np.isnan(u0), np.nanmean(u0) if np.isfinite(u0).any() else 0.0, u0)
+            beta0 += list(Q.T @ (u0 - u0.mean()))
+        else:
+            beta0 += [0.0] * len(dcols)
         prec += [tau_driver ** -2] * len(dcols)
     X = np.column_stack(cols) if cols else np.empty((len(d), 0))
     beta0, prec = np.asarray(beta0, dtype=float), np.asarray(prec, dtype=float)
@@ -989,13 +1005,13 @@ class LinearFuelDegradation(_ParameterDraws):
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None,
             collinear_hold=None, divide_data_by_s2=False, driver_effects="off", fuel_anchor=None, sd_scale=None,
-            **_):
+            driver_prior=None, **_):
         driver_effects = driver_effects_mode(driver_effects)
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
                                        wear_lower_bound=wear_lower_bound, collinear_hold=collinear_hold,
                                        divide_data_by_s2=divide_data_by_s2, driver_effects=driver_effects,
-                                       sd_scale=sd_scale)
+                                       sd_scale=sd_scale, driver_prior=_driver_prior(driver_prior))
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), rep).with_draw(draw, clip_wear_at_zero,
                                                                                        wear_lower_bound)
         coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
@@ -1178,7 +1194,7 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
             clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False,
             driver_effects="off", knot_life_fraction=None, hinge_lower_bound=None, fuel_anchor=None,
-            sd_scale=None, **_):
+            sd_scale=None, driver_prior=None, **_):
         driver_effects = driver_effects_mode(driver_effects)
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
@@ -1186,7 +1202,8 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
             knots.update(_life_knots(data, knot_life_fraction))
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound,
-                                       collinear_hold, divide_data_by_s2, driver_effects, sd_scale)
+                                       collinear_hold, divide_data_by_s2, driver_effects, sd_scale,
+                                       _driver_prior(driver_prior))
             hinges = {c: rep["hinge"][c]["value"] for c in comps}
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
                        rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)

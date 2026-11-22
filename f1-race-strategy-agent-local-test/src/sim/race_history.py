@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 
 from ..contracts import CalibrationOutput
-from .calibrators import CALIBRATORS, ShrinkageCalibrator, split_factor
+from .calibrators import CALIBRATORS, ShrinkageCalibrator, factor_name, split_factor
 from .config import EventModel
 from .race_ids import as_of, canonical_race_id, parse_race_id
 
@@ -116,6 +116,168 @@ def as_of_factor(race_id, name, history: pd.DataFrame | None = None) -> dict:
         return {"mean": mean0, "sd": sd0, "source": "a priori (no earlier race)", "races": []}
     sd = max(float(v.std(ddof=1)), SD_FLOOR[name]) if len(v) >= 2 else sd0
     return {"mean": float(v.median()), "sd": sd, "source": f"as of {len(v)} earlier race(s)", "races": races}
+
+
+# per-compound base delta (AsOfHistoryCalibrator param base_delta "per_compound"): the a priori
+# prior strength, in races, a compound's own offset is shrunk with toward the common delta (as
+# tyre_history's shrinkage.prior_strength_races; stated, not fitted)
+COMPOUND_DELTA_PRIOR_RACES = 2.0
+BASE_DELTA_MODES = ("common", "per_compound")
+PRACTICE_ANCHOR_MODES = ("off", "pace", "pace_wear")
+
+
+def as_of_compound_delta(race_id, compound, history: pd.DataFrame | None = None) -> dict:
+    """{mean, sd, source, races, offset, n}: the practice-to-race base delta of `compound` for
+    `race_id` from the races before it. The common delta (as_of_factor "base_delta_s") plus the
+    compound's own offset from it: per earlier race with a base_delta_s[compound] value, that value
+    minus the race's mean over its compounds (base_delta_s); the median over those races, shrunk
+    by n / (n + COMPOUND_DELTA_PRIOR_RACES). Practice long runs on one compound come from one or
+    two cars in a fit without driver or session terms, so a compound's practice pace can sit
+    seconds off the others' in the same direction race after race (HARD in 2019-2022); the common
+    delta cannot see that. The sd is the common delta's. No earlier race with the compound: the
+    common delta alone (offset 0)."""
+    h = load_history() if history is None else history
+    common = as_of_factor(race_id, "base_delta_s", h)
+    col = f"base_delta_s[{compound}]"
+    earlier = set(earlier_races(race_id, h["race_id"]))
+    rows = h[h["race_id"].isin(earlier)] if col in h and "base_delta_s" in h else h.iloc[0:0]
+    rel = (pd.to_numeric(rows[col], errors="coerce") - pd.to_numeric(rows["base_delta_s"], errors="coerce")).dropna() \
+        if len(rows) else pd.Series(dtype=float)
+    n = len(rel)
+    offset = float(rel.median()) * n / (n + COMPOUND_DELTA_PRIOR_RACES) if n else 0.0
+    races = sorted(rows.loc[rel.index, "race_id"]) if n else []
+    return {"mean": common["mean"] + offset, "sd": common["sd"], "offset": offset, "n": n,
+            "source": f"{common['source']}; {compound} offset as of {n} earlier race(s)", "races": races}
+
+
+def anchored_gap_offsets(practice_model, config, race_id, quali=None, kinds=("pace",)) -> dict:
+    """{compound: {"pace": s, "wear": s/lap, "ref", "gap_practice", "gap_anchored", "sources"}}: how
+    far each practice compound's fresh-pace gap (and, with "wear" in `kinds`, its wear difference)
+    to the reference compound moves when the practice step is blended with the other sources the
+    compound proxy uses (proxy._blend: qualifying for pace, the as-of cross-race neighbour step,
+    with the proxy's as-of weights, proxy.as_of_config, races strictly before `race_id`). The
+    reference is the practice compound with the most practice rows; it moves by 0. Practice long
+    runs on a compound often come from one or two cars, so its practice gap carries their pace;
+    the blend gives it the weight its validation error earns. {} without a practice fit, with
+    fewer than two practice compounds, or with the compound proxy off."""
+    from . import proxy
+    if practice_model is None or not config.compound_proxy.enabled:
+        return {}
+    coefs = {c: v for c, v in practice_model.coefs.items() if c in proxy.SOFTNESS}
+    if len(coefs) < 2:
+        return {}
+    n_rows = (practice_model.fit_report or {}).get("n_rows") or {}
+    ref = max(coefs, key=lambda c: (n_rows.get(c, 0), -proxy.SOFTNESS.index(c)))
+    px = proxy.as_of_config(config.compound_proxy, race_id)
+    out = {}
+    for c in coefs:
+        if c == ref:
+            continue
+        e = {"ref": ref, "pace": 0.0, "wear": 0.0}
+        for kind in kinds:
+            j = 0 if kind == "pace" else 1
+            srcs = list(proxy.WEIGHT_SOURCES[kind])
+            b = proxy._blend(kind, c, [ref], coefs, practice_model, quali, px, {}, srcs)
+            if b is None:
+                continue
+            e[kind] = float(b["value"] - coefs[c][j])
+            e[f"{kind}_sources"] = b["source"]
+        out[c] = e
+    return out
+
+
+# --- the practice-to-race map per compound (AsOfHistoryCalibrator param practice_map "as_of") -------
+MAP_FILE = ROOT / "configs" / "sim" / "practice_map_history.csv"
+PRACTICE_MAP_MODES = ("off", "as_of")
+MAP_COMPOUNDS = ("HARD", "MEDIUM", "SOFT")
+
+
+def load_map(path=MAP_FILE) -> pd.DataFrame:
+    key = ("map", str(path))
+    if key not in _TABLES:
+        _TABLES[key] = pd.read_csv(path) if Path(path).is_file() else pd.DataFrame(columns=["race_id"])
+    return _TABLES[key]
+
+
+def as_of_practice_map(race_id, compound, history: pd.DataFrame | None = None) -> dict:
+    """{wear, base, n, races}: how the belief's practice prior of `compound` moves at `race_id`,
+    from the races before it in the practice-map table (one row per race: per compound the
+    belief's practice fit, practice_base / practice_wear, and the judge's full-race fit,
+    judge_base / judge_wear, a compound the judge prices by proxy left out).
+      wear: the median over earlier races of judge_wear - practice_wear, shrunk by
+            n / (n + COMPOUND_DELTA_PRIOR_RACES): added to this weekend's practice wear;
+      base: the median over earlier races of the compound's practice-to-race base change less that
+            race's mean change over its compounds, shrunk the same way: added to the compound's
+            base delta (the common level stays the as-of base delta's).
+    Practice long runs on a compound come from a handful of cars and short runs, so their wear
+    slope and fresh-tyre intercept are poorly separated, and race after race in the same
+    direction; the two move together here because they were measured together. No earlier race
+    with the compound: 0 and 0."""
+    h = load_map() if history is None else history
+    need = [f"practice_wear[{compound}]", f"judge_wear[{compound}]", f"practice_base[{compound}]",
+            f"judge_base[{compound}]"]
+    earlier = set(earlier_races(race_id, h["race_id"]))
+    if not all(c in h for c in need):
+        return {"wear": 0.0, "base": 0.0, "n": 0, "races": []}
+    rows = h[h["race_id"].isin(earlier)].dropna(subset=need)
+    n = len(rows)
+    if not n:
+        return {"wear": 0.0, "base": 0.0, "n": 0, "races": []}
+    shrink = n / (n + COMPOUND_DELTA_PRIOR_RACES)
+    wear = float((rows[need[1]] - rows[need[0]]).median()) * shrink
+    deltas = {c: rows[f"judge_base[{c}]"] - rows[f"practice_base[{c}]"] for c in MAP_COMPOUNDS
+              if f"judge_base[{c}]" in rows and f"practice_base[{c}]" in rows}
+    mean = pd.concat(deltas.values(), axis=1).mean(axis=1, skipna=True)
+    base = float((deltas[compound] - mean).median()) * shrink
+    return {"wear": wear, "base": base, "n": n, "races": sorted(map(str, rows["race_id"]))}
+
+
+def practice_map_row(data, belief_config) -> dict:
+    """One race's practice-map row (as_of_practice_map): the belief's practice fit (Simulator
+    physics_prior under `belief_config`, this race's fuel anchoring) and the judge's full-race
+    fit (the eval's default world), per compound."""
+    from ..eval.score import default_world_config
+    from . import config as _config, proxy
+    from .engine import Simulator
+    rid = canonical_race_id(data.race_id)
+    belief = Simulator(data.frame, belief_config, data.practice, qualifying=getattr(data, "qualifying", None))
+    raw = belief.physics_prior(None, data.race)
+    world_cfg = default_world_config(getattr(_config, "world_default", lambda c: c)(data.config))
+    world = Simulator(data.frame, world_cfg, data.practice, qualifying=getattr(data, "qualifying", None))
+    jdeg = world.degradation
+    borrowed = proxy.proxied(jdeg.fit_report)
+    row = {"race_id": rid}
+    n_rows = ((raw.fit_report or {}).get("n_rows") or {}) if raw is not None else {}
+    for c in MAP_COMPOUNDS:
+        if raw is not None and c in raw.coefs:
+            row[f"practice_base[{c}]"], row[f"practice_wear[{c}]"] = map(float, raw.coefs[c])
+            row[f"practice_rows[{c}]"] = int(n_rows.get(c, 0))
+        if c in jdeg.coefs and c not in borrowed:
+            row[f"judge_base[{c}]"], row[f"judge_wear[{c}]"] = map(float, jdeg.coefs[c])
+    return row
+
+
+def build_map(races, path=MAP_FILE, belief_file=None):
+    """The practice-map table over `races` (held-out races refused before anything is loaded)."""
+    import yaml
+    from . import cross_race, jobs
+    from .compute import load_profile
+    from .config import SimConfig
+    cross_race.guard_held_out(races)
+    belief_file = belief_file or ROOT / "configs" / "sim" / "belief.yaml"
+    cfg = SimConfig.model_validate(yaml.safe_load(Path(belief_file).read_text()))
+    rows = []
+    for rid in sorted(races, key=lambda r: parse_race_id(r)[:2]):
+        try:
+            rows.append(practice_map_row(jobs.load_race(rid, load_profile()), cfg))
+        except Exception as exc:   # noqa: BLE001  a race the loader cannot build is left out, said so
+            print(f"{rid}: left out ({type(exc).__name__}: {exc})", flush=True)
+            continue
+        print(f"{rid}: {rows[-1]}", flush=True)
+    h = pd.DataFrame(rows)
+    h.to_csv(path, index=False)
+    _TABLES.clear()
+    return h
 
 
 FUEL_MODES = ("circuit_history", "anchored")
@@ -257,17 +419,67 @@ class AsOfHistoryCalibrator(ShrinkageCalibrator):
     lap1_extra_s (drawn per sample with their sd). The wear tau and the hinge tau stay
     SimConfig.shrinkage's, engineering priors. The diagnostics name each source and its races.
     The fuel prior's mode (as_of_fuel) is SimConfig.fuel_anchor.prior, "circuit_history" (the
-    default, #102) or "anchored"; a param `fuel` overrides it."""
+    default, #102) or "anchored"; a param `fuel` overrides it. The param `base_delta`
+    "common" (the default) gives every practice compound the one as-of delta; "per_compound"
+    gives each its own (as_of_compound_delta: the common delta plus the compound's shrunk as-of
+    offset from it)."""
     name = "as_of_history"
+
+    def __init__(self, **params):
+        super().__init__(**params)
+        if self.params.get("base_delta", "common") not in BASE_DELTA_MODES:
+            raise ValueError(f"as_of_history base_delta must be one of {BASE_DELTA_MODES}, got {params['base_delta']!r}")
+        if self.params.get("practice_map", "off") not in PRACTICE_MAP_MODES:
+            raise ValueError(f"as_of_history practice_map must be one of {PRACTICE_MAP_MODES}, got {params['practice_map']!r}")
+        if self.params.get("practice_anchor", "off") not in PRACTICE_ANCHOR_MODES:
+            raise ValueError(f"as_of_history practice_anchor must be one of {PRACTICE_ANCHOR_MODES}, "
+                             f"got {params['practice_anchor']!r}")
 
     def calibrate(self, ctx):
         out = super().calibrate(ctx)
         rid = ctx.race.race_id
         factors, sources = dict(out.factors), {}
         bd = as_of_factor(rid, "base_delta_s")
+        mode = self.params.get("base_delta", "common")
+        anchor = self.params.get("practice_anchor", "off")
+        moved = (anchored_gap_offsets(ctx.practice_model, ctx.config, rid, ctx.qualifying_gaps,
+                                      ("pace",) if anchor == "pace" else ("pace", "wear"))
+                 if anchor != "off" else {})
         for k in list(factors):
-            if split_factor(k)[0] == "base_delta_s":
-                factors[k] = (bd["mean"], bd["sd"])
+            name, comp = split_factor(k)
+            if name == "base_delta_s":
+                if mode == "per_compound" and comp is not None:
+                    got = as_of_compound_delta(rid, comp)
+                    factors[k] = (got["mean"], got["sd"])
+                    sources[k] = got
+                else:
+                    factors[k] = (bd["mean"], bd["sd"])
+                if comp in moved:
+                    factors[k] = (factors[k][0] + moved[comp]["pace"], factors[k][1])
+        if anchor == "pace_wear" and ctx.practice_model is not None:
+            for comp, e in moved.items():
+                w = float(ctx.practice_model.coefs[comp][1]) + e["wear"]
+                floor = ctx.config.degradation.params.get("wear_lower_bound")
+                key = factor_name("wear_s_per_lap", comp)
+                sd = factors.get(key, (None, 0.0))[1]
+                factors[key] = (max(w, float(floor)) if floor is not None else w, sd)
+        if self.params.get("practice_map", "off") == "as_of" and ctx.practice_model is not None:
+            floor = ctx.config.degradation.params.get("wear_lower_bound")
+            for comp, (_, w0) in ctx.practice_model.coefs.items():
+                if comp not in MAP_COMPOUNDS:
+                    continue
+                got = as_of_practice_map(rid, comp)
+                if not got["n"]:
+                    continue
+                kb, kw = factor_name("base_delta_s", comp), factor_name("wear_s_per_lap", comp)
+                if kb in factors:
+                    factors[kb] = (factors[kb][0] + got["base"], factors[kb][1])
+                w = float(w0) + got["wear"]
+                factors[kw] = (max(w, float(floor)) if floor is not None else w, factors.get(kw, (None, 0.0))[1])
+                sources[f"practice_map[{comp}]"] = {"source": f"as of {got['n']} earlier race(s)", "races": got["races"]}
+        if moved:
+            sources["practice_anchor"] = {"source": f"proxy blend ({anchor})", "races": [],
+                                          **{c: {kk: v for kk, v in e.items()} for c, e in moved.items()}}
         fuel = as_of_fuel(ctx.race, practice_model=ctx.practice_model, practice=ctx.practice,
                           mode=self.params.get("fuel", ctx.config.fuel_anchor.prior))
         factors["fuel_s_per_lap"] = (fuel["mean"], fuel["sd"])
@@ -331,9 +543,14 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
     b.add_argument("--races", nargs="+", default=list(CALIBRATION_RACES))
+    m = sub.add_parser("build-map", help="the practice-map table (as_of_practice_map)")
+    m.add_argument("--races", nargs="+", default=list(CALIBRATION_RACES))
+    m.add_argument("--belief", default=None, help="the belief config whose practice fit is recorded (default belief.yaml)")
     args = ap.parse_args(argv)
     if args.cmd == "build":
         print(build(args.races).to_string(index=False))
+    elif args.cmd == "build-map":
+        print(build_map(args.races, belief_file=args.belief).to_string(index=False))
     return 0
 
 

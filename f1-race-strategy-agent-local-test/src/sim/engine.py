@@ -313,6 +313,8 @@ class Simulator:
                   hinge_knots=cfg.hinge_knots, hinge_knot_default=cfg.hinge_knot_default, **spec.params)
         if cfg.fuel_anchor.full_fit and cfg.fit_window == "full" and "shrinkage" not in extra:
             kw["fuel_anchor"] = self.judge_fuel_anchor()
+        if kw.get("driver_prior", "off") != "off":   # "qualifying": the weekend's qualifying pace offsets
+            kw["driver_prior"] = self.quali_driver_offsets()
         kw.update(extra)
         return DEGRADATION.get(spec.name).fit(frame, **kw)
 
@@ -383,6 +385,13 @@ class Simulator:
         if self._quali_gaps is None and self.qualifying is not None:
             self._quali_gaps = _proxy.qualifying_gaps(self.qualifying) or {}
         return self._quali_gaps or None
+
+    def quali_driver_offsets(self) -> dict:
+        """proxy.qualifying_driver_offsets of `qualifying` ({driver: s}), computed once; {} without."""
+        if getattr(self, "_quali_drivers", None) is None:
+            got = _proxy.qualifying_driver_offsets(self.qualifying) if self.qualifying is not None else None
+            self._quali_drivers = got or {}
+        return self._quali_drivers
 
     def _proxied(self, model, prior=None):
         """proxy.apply on a fitted model: the tier-2 steps from `prior` (the to_snapshot fit's
@@ -522,7 +531,8 @@ class Simulator:
             weather_so_far=self.weather[self.weather.index <= k0] if self.weather is not None else None,
             sc_history=Scenario(sc_laps=[x for x in snapshot.sc_laps if x <= k0],
                                 vsc_laps=[x for x in snapshot.vsc_laps if x <= k0]),
-            race_features=self.race_features, pre_race_output=pre, previous_output=previous)
+            race_features=self.race_features, pre_race_output=pre, previous_output=previous,
+            qualifying_gaps=self.quali_gaps())
         out = self.calibrator.calibrate(ctx)
         if len(self._outputs) >= FIT_CACHE_SIZE:
             del self._outputs[next(iter(self._outputs))]
@@ -767,7 +777,8 @@ class Simulator:
         if cliffs:
             cols = sorted(set(self.config.compound_classes) | set(cliffs))
             z_cl = (batch_normals(seed, CLIFF_STREAM, n, len(cols))
-                    if any(cl.prior_sd > 0 for cl in cliffs.values()) else np.zeros((n, len(cols))))
+                    if any(cl.prior_sd > 0 for cl in cliffs.values()) and self.config.belief_cliff_edge == "draw"
+                    else np.zeros((n, len(cols))))
             cliff_age = {name: cl.sample_ages(z_cl[:, cols.index(name)]) for name, cl in cliffs.items()}
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent

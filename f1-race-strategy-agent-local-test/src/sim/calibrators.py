@@ -95,6 +95,7 @@ class CalibrationContext:
     resid_s). practice_model: the practice fit with no base delta (None without practice).
     pre_race_output: this race's lap-0 output (None when k is 0). previous_output: the
     output at the latest earlier calibration point computed, else pre_race_output.
+    qualifying_gaps: proxy.qualifying_gaps of this weekend's qualifying (None without it).
     """
     k: int
     config: SimConfig
@@ -109,6 +110,7 @@ class CalibrationContext:
     race_features: dict | None = None
     pre_race_output: CalibrationOutput | None = None
     previous_output: CalibrationOutput | None = None
+    qualifying_gaps: dict | None = None   # proxy.qualifying_gaps of this weekend's qualifying (pre-race)
 
 
 class Calibrator:
