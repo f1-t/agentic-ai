@@ -22,6 +22,7 @@ _ACTIVE_CONTRACT: Snapshot | None = None
 _SHOWN: RaceSnapshot | None = None   # the view the model sees (anonymised unless show_identity)
 _IDENTITY: dict = {}                 # the harness's mapping: {"race_id", "labels": {code: label}}
 _SCRUB: list = []                    # (compiled pattern, replacement), applied by present()
+_PLANS: dict = {}                    # this snapshot's evaluated plans: plan -> the first action label
 YEAR_LABEL = "<year>"
 
 
@@ -34,6 +35,7 @@ def set_snapshot(snapshot: Snapshot | RaceSnapshot | dict[str, Any], *,
     The real names stay here (identity()); present() applies the same mapping to every tool
     output and error string."""
     global _ACTIVE_SNAPSHOT, _ACTIVE_CONTRACT, _SHOWN, _IDENTITY
+    _PLANS.clear()
     if isinstance(snapshot, Snapshot):
         contract, view = snapshot, RaceSnapshot.from_contract(snapshot)
     else:
@@ -152,11 +154,34 @@ def _belief(fn, *args, **kwargs):
     return fn(contract, *args, **kwargs)
 
 
+def pit_window():
+    """agent_tools.pit_window for the active snapshot: whether pitting now is legal and the earliest
+    and latest legal stop laps (the regulations and the laps so far only)."""
+    return agent_tools.pit_window(_contract())
+
+
+def shown_snapshot() -> dict:
+    """The snapshot as the model is first shown it: the view plus the pit window."""
+    _snapshot()
+    return {**_SHOWN.to_dict(), "pit_window": pit_window()}
+
+
 def get_race_snapshot():
     """Return the immutable decision-time state supplied to this run, as the model is shown it
-    (anonymised unless AGENT_SHOW_IDENTITY)."""
-    _snapshot()
-    return _SHOWN.to_dict()
+    (anonymised unless AGENT_SHOW_IDENTITY), with the pit window."""
+    return shown_snapshot()
+
+
+def check_submission(rec) -> str | None:
+    """agent_tools.submission_error for the active snapshot: why the scorer would reject `rec`, said
+    with the legal alternative, or None when it would accept it (None too when no belief can be built
+    for the race: the scorer decides then)."""
+    contract = _contract()
+    try:
+        agent_tools.belief_simulator(contract)
+    except (ValueError, KeyError, OSError):
+        return None
+    return present(agent_tools.submission_error(contract, rec))
 
 
 def estimate_tyre_degradation(compound):
@@ -183,7 +208,8 @@ def estimate_pit_loss():
 
 
 def get_model_report(ages=None):
-    return _belief(agent_tools.model_report, ages)
+    out = _belief(agent_tools.model_report, ages)
+    return out if "error" in out else {**out, "pit_window": pit_window()}
 
 
 def compare_plans(candidates):
@@ -218,6 +244,12 @@ def evaluate_strategy(action):
     if "error" in out:
         return {**out, "recoverable": out.get("recoverable", True),
                 "hint": "Correct the action and call evaluate_strategy again."}
+    # two requests that resolve to the same plan (a stay of k is a minimum): said once, plainly
+    label = agent_tools.action_label(sim_action)
+    if out.get("plan") is not None:
+        first = _PLANS.setdefault(str(out["plan"]), label)
+        if first != label:
+            out = {**out, "same_plan_as": f"same plan as {first}: this request resolves to the plan evaluated there"}
     return {
         **out,
         "action": clean,
@@ -248,6 +280,12 @@ _EVALUATE_GAPS = (
     "gap_reading says which side is faster in what share of the draws, and the gap (action minus alternative, "
     "negative: the action is faster) with its 90% interval; the interval is the model's own spread of the "
     "difference over shared draws, so errors common to both plans cancel in it.")
+_EVALUATE_STAY = (
+    " A STAY_OUT of k laps is a minimum: continuation says the plan it resolves to (where its first stop is), and "
+    "same_plan_as says when two requests are the same plan. When pitting now is not legal the alternative is the "
+    "earliest legal stop (note says so); with no legal stop left, note says STAY_OUT to the flag is the only legal "
+    "action. stop_lap_scan gives, in one call, a stop at each of several laps against this plan, so there is no "
+    "need to ask k = 3, 5, 7, 10 one at a time.")
 
 TOOL_SPECS = [
     {
@@ -292,7 +330,7 @@ TOOL_SPECS = [
     },
     {
         "name": "evaluate_strategy",
-        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; " + _EVALUATE_GAPS + " When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
+        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; " + _EVALUATE_GAPS + _EVALUATE_STAY + " When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
         "input_schema": {
             "type": "object",
             "properties": {

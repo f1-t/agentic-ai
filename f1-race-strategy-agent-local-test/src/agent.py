@@ -273,7 +273,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     system_prompt = (SYSTEM_PROMPT if tools.agent_tools.gap_yardstick() == "paired"
                      else SYSTEM_PROMPT.replace(GAP_SENTENCE, ""))
     prompt = question or "Decide the best immediate strategy action from this snapshot."
-    messages = [{"role": "user", "content": prompt + "\n\nRace snapshot:\n" + json.dumps(snapshot.to_dict(), ensure_ascii=False)}]
+    # the view plus the pit window (whether pitting now is legal, the earliest and latest legal stop)
+    messages = [{"role": "user", "content": prompt + "\n\nRace snapshot:\n" + json.dumps(tools.shown_snapshot(), ensure_ascii=False)}]
     trajectory = []
     tool_calls_used = 0
     run_calls = {}   # (tool, sorted-key arguments) -> (call_index, output) of the evidence call that ran
@@ -387,6 +388,10 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             key = (call.name, json.dumps(args, sort_keys=True, default=str))
             if call.name == "submit_recommendation":
                 rec, error = _normalise_submission(args)
+                if error is None:
+                    # the scorer's own checks: a submission accepted here is one it can score
+                    error = tools.check_submission(rec)
+                    rec = None if error else rec
                 out = {"accepted": error is None} if error is None else {"error": error, "recoverable": True}
             elif phase == "grace":
                 out = {"error": "Evidence turns are spent; call not run. Submit your recommendation now with "

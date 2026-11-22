@@ -1358,6 +1358,25 @@ any scenario of any race (the lap-0 same-race guard is gone):
   with the gap between them read from the belief's paired draws ("Plan gaps and rule
   replies" below); the times include traffic from the projected field, and the outputs
   carry it compactly ("Traffic" below);
+- the pit window up front: the first message's snapshot, `get_race_snapshot` and
+  `get_model_report` carry `pit_window` (`agent_tools.pit_window`: whether pitting now is legal,
+  the earliest and latest laps at whose end a stop is legal, in numbers and words), from the
+  regulations and the laps so far only;
+- a stay-out evaluation is compared with the nearest legal alternative: pitting now when that is
+  legal; otherwise a stop at the end of the earliest legal lap (`at_end_of_lap`, with a `note`);
+  with no legal stop left, a `note` says STAY_OUT to the flag is the only legal action and there
+  is nothing to compare. A stay of k laps is a minimum (the best continuation picks its own stop),
+  so every evaluation says what its plan is (`continuation`: "staying out at least k laps; ... the
+  first stop is at the end of lap X onto C"), a request that resolves to a plan already evaluated
+  in the episode says so in one line (`same_plan_as`), and a stay carries `stop_lap_scan`: up to
+  five stop laps from the earliest legal one (over at most 20 laps) onto the alternative's
+  compound, each against the evaluated plan under the same draws (mean difference, share faster);
+- `submit_recommendation` refuses what the scorer would reject (`agent_tools.submission_error`:
+  the decision, a fittable compound for a PIT that is legal now, a whole `reassess_after_laps` of
+  at least 1, a confidence in [0, 1], then the scorer's own expansion, `decisions.to_plan`, and the
+  rules), with the cause and the legal alternative ("only STAY_OUT to the flag is legal: use
+  reassess_after_laps = 3"), so the model corrects it within the episode; anything it accepts the
+  scorer scores (tests/test_agent_contract.py);
 - `run_agent(scenario.snapshot, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
@@ -2489,6 +2508,11 @@ the arm, the artifacts, `belief_learned.yaml` and the report.
 
 ## Limitations
 
+- **Wide, lopsided gap intervals on a prior-dominated compound.** A compound with no race laps
+  yet (its pace and wear from practice and the prior) gives gap intervals tens of seconds wide and
+  far from symmetric about the median (for example 2021 Spain mid-race, PIT HARD against staying
+  out: +26 s, 90% -40 to +96 s). The intervals are the belief's own draws, percentiles not mean
+  -+ sd, and the width is the belief saying how little it knows; it is not narrowed.
 - **The world is fitted on hindsight.** It reads every race lap (`full` window); only the
   belief is held to the laps up to the snapshot (above, "Who sees what").
 - **Tyre life is a cliff, priced, not a limit** ("The wear cliff"). The R8 stint limit that read

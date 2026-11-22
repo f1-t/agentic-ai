@@ -260,8 +260,10 @@ def test_a_pit_too_early_says_which_stint_and_the_earliest_legal_stop(syn):
            "the latest at the end of lap 42.")
     out = agent_tools.evaluate_action(early, {"action": "pit", "compound": "MEDIUM"}, sim=sim, profile=PROFILE)
     assert out["errors"] == [msg] and out["error"] == msg
+    # a stay is compared with the nearest legal alternative, the earliest legal stop (lap 8), not "pit now"
     stay = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)
-    assert stay["alternative"]["errors"] == [msg]
+    assert stay["alternative"]["action"]["at_end_of_lap"] == 8 and stay["alternative"]["valid"]
+    assert "at the end of lap 8" in stay["gap_reading"] and "earliest legal stop" in stay["note"]
 
 
 def test_a_pit_too_late_says_only_staying_out_is_legal(syn):
@@ -328,9 +330,13 @@ def test_evaluate_action_errors_and_edges(syn):
     assert bad["valid"] is False and bad["error"]
     early = syn_snap(k=2)   # 2 laps on the set: a pit now is a 3-lap stint, below the 8-lap minimum
     out = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)
-    assert out["alternative"]["valid"] is False and out["alternative"]["errors"]
-    assert out["relative_race_time_delta_s"] == {"optimistic": None, "median": None, "pessimistic": None}
-    assert out["gap_reading"] is None and out["probability_improves_outcome"] is None
+    # compared with the earliest legal stop instead of an illegal "pit now"
+    assert out["alternative"]["valid"] and out["probability_improves_outcome"] is not None
+    # no stop fits (3 laps left): STAY_OUT to the flag is the only legal action, nothing to compare
+    late = agent_tools.evaluate_action(syn_snap(k=47), {"action": "stay", "laps": 3}, sim=sim, profile=PROFILE)
+    assert late["alternative"] is None and "only STAY_OUT to the flag is legal" in late["note"]
+    assert late["relative_race_time_delta_s"] == {"optimistic": None, "median": None, "pessimistic": None}
+    assert late["gap_reading"] is None and late["probability_improves_outcome"] is None
     # a stay past the flag runs the current set to the end, which breaks R3 on one compound
     flag = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 99}, sim=sim, profile=PROFILE)
     assert "two different compounds" in flag["error"]
