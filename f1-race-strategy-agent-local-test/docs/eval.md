@@ -580,6 +580,11 @@ planned from there, bit for bit as before: with no period in progress there is n
 and the two constructions differ only in whether events are drawn over the n stay laps. A PIT is
 unchanged. The agent's tools (`evaluate_action`, `compare_plans`, `submit_recommendation`'s check)
 expand a stay with the same function, so the plan the model is shown is the plan that is scored.
+The tools' comparison plans with a stop at the end of a later lap X onto C (`_stop_at`: the
+earliest-legal-stop alternative and `stop_lap_scan`) follow the same rule: under SC or VSC each is
+the belief's best full plan from the decision snapshot whose first stop is at the end of lap X onto
+C (`optimize_batch(min_first_laps = max_first_laps = X - laps_completed, next_compound=C)`,
+`as_continuation(...).stop_plan`); under green, and for a stop now, they are built as before.
 
 A submission that cannot become a legal plan (no compound, a compound the belief does not
 model, n below 1, no legal continuation) is an invalid row.

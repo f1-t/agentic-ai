@@ -75,3 +75,28 @@ def test_min_first_laps_one_is_the_unconstrained_optimizer(sim):
     a = optimize_batch(snap, sim, seed=3, n_samples=N, max_stops=2, return_times=True)
     b = optimize_batch(snap, sim, seed=3, n_samples=N, max_stops=2, return_times=True, min_first_laps=1)
     assert a.plan == b.plan and (a.diagnostics["times"] == b.diagnostics["times"]).all()
+
+
+# --- the tools' stop at a later lap (agent_tools._stop_at: stop_lap_scan, the earliest-stop alternative)
+@pytest.mark.parametrize("status", ["sc", "vsc"])
+@pytest.mark.parametrize("lap", [13, 16, 22])
+def test_a_later_stop_under_neutralisation_is_planned_from_the_snapshot(sim, status, lap):
+    snap = mid_race(track_status=status, **NEUTRALISED[status])
+    cont = agent_tools._continuation(sim, N, 2)
+    plan, errors = agent_tools._stop_at(sim, snap, lap, "MEDIUM", cont)
+    assert errors == []
+    w = lap - snap.laps_completed
+    assert plan == optimize_batch(snap, sim, seed=agent_tools.SEED, n_samples=N, max_stops=2, min_first_laps=w,
+                                  max_first_laps=w, next_compound="MEDIUM").plan
+    assert plan.pit_laps(snap)[0] == lap and plan.stints[1].compound == "MEDIUM"
+
+
+@pytest.mark.parametrize("lap", [11, 13, 16, 22])
+def test_a_green_later_stop_and_a_stop_now_are_unchanged(sim, lap):
+    cont = agent_tools._continuation(sim, N, 2)
+    for snap in (mid_race(), mid_race(track_status="sc", **NEUTRALISED["sc"])):
+        if snap.track_status != "green" and lap > snap.laps_completed + 1:
+            continue   # a later stop under SC: the test above
+        # the old path: the same continuation without stay_plan / stop_plan
+        assert (agent_tools._stop_at(sim, snap, lap, "MEDIUM", cont)
+                == agent_tools._stop_at(sim, snap, lap, "MEDIUM", lambda adv: cont(adv)))
