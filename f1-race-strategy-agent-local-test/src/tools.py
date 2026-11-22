@@ -11,26 +11,106 @@ from __future__ import annotations
 
 from typing import Any
 
+import re
+
 from .contracts import Snapshot
 from .sim import agent_tools
-from .snapshot import RaceSnapshot
+from .snapshot import OTHER_LABEL, RACE_LABEL, RaceSnapshot, pseudonyms, show_identity
 
 _ACTIVE_SNAPSHOT: RaceSnapshot | None = None
 _ACTIVE_CONTRACT: Snapshot | None = None
+_SHOWN: RaceSnapshot | None = None   # the view the model sees (anonymised unless show_identity)
+_IDENTITY: dict = {}                 # the harness's mapping: {"race_id", "labels": {code: label}}
+_SCRUB: list = []                    # (compiled pattern, replacement), applied by present()
+YEAR_LABEL = "<year>"
 
 
-def set_snapshot(snapshot: Snapshot | RaceSnapshot | dict[str, Any]) -> RaceSnapshot:
+def set_snapshot(snapshot: Snapshot | RaceSnapshot | dict[str, Any], *,
+                 identity: bool | None = None) -> RaceSnapshot:
     """Make `snapshot` the state every tool reads. A contracts.Snapshot is kept as it is and
     the agent's view built from it; a RaceSnapshot or dict is the view, and its contract is
-    rebuilt (agent_tools.contract_of). Returns the view."""
-    global _ACTIVE_SNAPSHOT, _ACTIVE_CONTRACT
+    rebuilt (agent_tools.contract_of). Returns the view the model is shown: anonymised
+    (RaceSnapshot.anonymised) unless show_identity(identity), the AGENT_SHOW_IDENTITY ablation.
+    The real names stay here (identity()); present() applies the same mapping to every tool
+    output and error string."""
+    global _ACTIVE_SNAPSHOT, _ACTIVE_CONTRACT, _SHOWN, _IDENTITY
     if isinstance(snapshot, Snapshot):
         contract, view = snapshot, RaceSnapshot.from_contract(snapshot)
     else:
         view = snapshot if isinstance(snapshot, RaceSnapshot) else RaceSnapshot.from_dict(snapshot)
         contract = agent_tools.contract_of(view)
     _ACTIVE_SNAPSHOT, _ACTIVE_CONTRACT = view, contract
-    return _ACTIVE_SNAPSHOT
+    if show_identity(identity):
+        _SHOWN, _IDENTITY = view, {"shown": True, "race_id": contract.race.race_id, "labels": {}}
+        _SCRUB.clear()
+    else:
+        labels = pseudonyms(view.driver, [c.get("driver") for c in view.nearby_cars])
+        _SHOWN = view.anonymised(labels)
+        _IDENTITY = {"shown": False, "race_id": contract.race.race_id, "labels": labels}
+        _SCRUB[:] = _scrub_rules(contract, view, labels)
+    return _SHOWN
+
+
+def identity() -> dict:
+    """The active snapshot's real identity, kept in the harness and never shown to the model:
+    {"shown": AGENT_SHOW_IDENTITY was on, "race_id", "labels": {real code: label}}."""
+    return dict(_IDENTITY)
+
+
+def _field_codes(contract) -> set[str]:
+    """Every driver code of the race (the belief's frame and qualifying), empty when the race is
+    not in the cache."""
+    try:
+        sim = agent_tools.belief_simulator(contract)
+    except (ValueError, KeyError, OSError):   # as _belief: no race data in the cache
+        return set()
+    codes = set(sim.laps["driver"].dropna().astype(str)) if "driver" in sim.laps else set()
+    if getattr(sim, "qualifying", None) is not None and "driver" in sim.qualifying:
+        codes |= set(sim.qualifying["driver"].dropna().astype(str))
+    return codes
+
+
+def _scrub_rules(contract, view, labels) -> list:
+    """present()'s replacements: the race id, its season and event slug (and any year), each
+    labelled driver code by its label, every other code of the field by OTHER_LABEL."""
+    from .sim.race_ids import canonical_race_id, parse_race_id
+
+    rid = str(contract.race.race_id)
+    names = {rid, canonical_race_id(rid)}
+    words = set()
+    try:
+        _, _, slug = parse_race_id(canonical_race_id(rid))
+        words |= {slug, slug.replace("_", " ")}
+    except ValueError:
+        pass
+    if view.event:
+        words |= {str(view.event), str(view.event).replace("_", " ")}
+    rules = [(re.compile(re.escape(n)), RACE_LABEL) for n in sorted(names, key=len, reverse=True) if n]
+    rules += [(re.compile(r"\b" + re.escape(w) + r"\b", re.IGNORECASE), RACE_LABEL)
+              for w in sorted(words, key=len, reverse=True) if len(w) >= 3]
+    rules.append((re.compile(r"(?<![\w.])(?:19|20)\d{2}(?![\w.]?\d)"), YEAR_LABEL))   # a year, not a digit run
+    others = (_field_codes(contract) | set(labels)) - set(labels.values())
+    for code in sorted(others, key=len, reverse=True):
+        if code and code.isalnum():
+            rules.append((re.compile(r"\b" + re.escape(code) + r"\b"), labels.get(code, OTHER_LABEL)))
+    return rules
+
+
+def present(value):
+    """`value` (a tool output or error) as the model is shown it: every string, keys included,
+    with the active snapshot's real race and driver names replaced (set_snapshot); unchanged
+    under AGENT_SHOW_IDENTITY."""
+    if not _SCRUB:
+        return value
+    if isinstance(value, str):
+        for pattern, label in _SCRUB:
+            value = pattern.sub(label, value)
+        return value
+    if isinstance(value, dict):
+        return {present(k): present(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [present(v) for v in value]
+    return value
 
 
 def _snapshot() -> RaceSnapshot:
@@ -56,8 +136,10 @@ def _belief(fn, *args, **kwargs):
 
 
 def get_race_snapshot():
-    """Return the immutable decision-time state supplied to this run."""
-    return _snapshot().to_dict()
+    """Return the immutable decision-time state supplied to this run, as the model is shown it
+    (anonymised unless AGENT_SHOW_IDENTITY)."""
+    _snapshot()
+    return _SHOWN.to_dict()
 
 
 def estimate_tyre_degradation(compound):

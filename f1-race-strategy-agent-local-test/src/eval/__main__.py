@@ -51,7 +51,10 @@ def main(argv=None):
     p.add_argument("--version", required=True, help="e.g. v1; never reuse a published version")
     p.add_argument("--out", required=True)
     p.add_argument("--drivers", nargs="+", help="limit to these driver codes")
-    p.add_argument("--max-laps-down", type=int, default=2)
+    p.add_argument("--rule", choices=["as_of", "legacy"], default="as_of",
+                   help="sampling rule (src/eval/scenarios.py): as_of reads nothing after each decision "
+                        "moment; legacy is the rule sets up to dev6 and d4 were sampled under")
+    p.add_argument("--max-laps-down", type=int, default=2, help="legacy rule only")
     p.add_argument("--max-per-race", type=int, help="seeded subsample of each race's decision points")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--eval-set", help="the registered eval split (default data/eval_set.json): when it "
@@ -117,9 +120,10 @@ def main(argv=None):
 
     if args.command == "scenarios":
         from ..sim.compute import load_profile
+        legacy = {"max_laps_down": args.max_laps_down} if args.rule == "legacy" else {}
         out = build_set(args.races, args.version, profile=load_profile(args.profile), drivers=args.drivers,
-                        max_laps_down=args.max_laps_down, max_per_race=args.max_per_race, seed=args.seed,
-                        eval_set=args.eval_set, development=args.development)
+                        max_per_race=args.max_per_race, seed=args.seed, rule=args.rule,
+                        eval_set=args.eval_set, development=args.development, **legacy)
         path = out.save(args.out)
         kind = "development set" if out.development else "report set"
         print(f"{out.version} ({kind}): {len(out.items)} scenarios, {len(out.skipped)} skipped, "

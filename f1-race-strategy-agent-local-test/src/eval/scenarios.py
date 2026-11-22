@@ -7,11 +7,24 @@ sampling, the builder or the race list changes; never edit a published file.
 
     python -m src.eval scenarios --races 2021_04_spain --version v1 --out data/scenarios/v1.json
 
-Sampling, per race: drivers whose laps run 1..n without a gap and who finished at most
-`max_laps_down` laps behind the race length (DNFs are out), at the decision laps of
-calibration.default_laps_k (every 5th lap plus the laps either side of each SC and VSC
-period) that leave room for one more stint, optionally subsampled to `max_per_race` with a
-seeded rng.
+Sampling, per race, under sampling["rule"] (docs/eval.md "Information contract"):
+
+  as_of   (the default for new sets) every driver still running at the decision lap, at
+          decision_laps_as_of (every 5th lap plus the laps a neutralisation is in progress or
+          has just ended, read off the driver's own record up to that lap), snapshots by
+          calibration.snapshot_as_of (scheduled distance, nominated compounds, records
+          completed by the decision moment only). A driver who later retired or was lapped
+          is sampled like any other; the world scores every plan over the scheduled distance.
+  legacy  every set committed before the leak fixes (v1 to dev6, d2 to d4; their sampling
+          carries no "rule"): drivers whose laps run 1..n without a gap and who finished at
+          most `max_laps_down` laps behind the race length (DNFs are out), at the decision
+          laps of calibration.default_laps_k (every 5th lap plus the laps either side of each
+          SC and VSC period), snapshots by calibration.snapshot_at (the driver's own lap count
+          as the race length). Both the selection and the race length read the future; the
+          sets stay loadable and scoreable as they were.
+
+Either way the laps leave room for one more stint, optionally subsampled to `max_per_race`
+with a seeded rng.
 
 The registered eval split (docs/eval.md "Development and report sets"). data/eval_set.json,
 written by the data team's register_eval_set, lists the races held out for reporting:
@@ -50,7 +63,8 @@ SCHEMA_VERSION = 1
 EVAL_SET = Path(__file__).resolve().parents[2] / "data" / "eval_set.json"
 # The data team's snapshot builder replaces this; it has the same signature.
 SnapshotBuilder = Callable[[pd.DataFrame, RaceParams, str, int], Snapshot]
-DEFAULT_BUILDER = "src.sim.calibration.snapshot_at"
+DEFAULT_BUILDER = "src.sim.calibration.snapshot_at"   # the legacy builder, and a set's default field
+AS_OF_BUILDER = "src.sim.calibration.snapshot_as_of"   # the as_of rule's builder (docs/eval.md "Information contract")
 
 
 # Snapshot fields added to the contract after sets were published (SPEC 0014 I). The digest
@@ -140,18 +154,69 @@ def decision_laps(frame: pd.DataFrame, race: RaceParams, driver_laps: int) -> li
             if k <= driver_laps - race.min_stint_laps]
 
 
-def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuilder = calibration.snapshot_at,
+GRID_EVERY = 5          # as_of decision laps: every 5th lap from 0
+GRID_END_MARGIN = 10   # ... to the scheduled distance less this many laps
+
+
+def _neutralised(status) -> bool:
+    s = str(status)
+    return "4" in s or "6" in s or "7" in s
+
+
+def decision_laps_as_of(frame: pd.DataFrame, race: RaceParams, driver: str) -> list[int]:
+    """The as_of rule's decision laps for one driver; each lap L reads nothing completed after
+    the driver's lap L. A fixed grid (every GRID_EVERY laps from 0 to the scheduled distance
+    less GRID_END_MARGIN), plus every lap whose own record shows a neutralisation in progress
+    (SC or VSC in the driver's lap-L track status) and the first green lap after one (lap L - 1
+    neutralised, lap L not). A lap L is kept while the driver was still running at it (laps
+    1..L recorded without a gap; lap 0 always) and it leaves at least one minimum stint of the
+    scheduled distance to run. Whether the car later retired or was lapped is not read."""
+    g = frame[frame["driver"] == driver]
+    status = {int(lap): st for lap, st in zip(g["lap"], g["track_status"])}
+    laps = set(range(0, race.total_laps - GRID_END_MARGIN + 1, GRID_EVERY))
+    for lap, st in status.items():
+        if _neutralised(st) or (lap > 1 and _neutralised(status.get(lap - 1, "")) and not _neutralised(st)):
+            laps.add(lap)
+    recorded = sorted(status)
+    running = 0   # laps 1..running recorded without a gap
+    while running < len(recorded) and recorded[running] == running + 1:
+        running += 1
+    return sorted(k for k in laps if 0 <= k <= running and k <= race.total_laps - race.min_stint_laps)
+
+
+SAMPLING_RULES = ("as_of", "legacy")
+
+
+def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuilder | None = None,
                 drivers: list[str] | None = None, max_laps_down: int = 2,
-                max_per_race: int | None = None, seed: int = 0) -> tuple[list[Scenario], list[dict]]:
-    """(scenarios, skipped) for one race, in (driver, lap) order."""
+                max_per_race: int | None = None, seed: int = 0,
+                rule: str = "as_of") -> tuple[list[Scenario], list[dict]]:
+    """(scenarios, skipped) for one race, in (driver, lap) order.
+
+    rule "as_of" (the default for new sets): every driver on the grid, at
+    decision_laps_as_of, built by calibration.snapshot_as_of unless `builder` says otherwise;
+    max_laps_down is not read. rule "legacy": the rule every set up to dev6 and d4 was sampled
+    under, which reads the future: eligible_drivers (finishers at most max_laps_down laps down)
+    at decision_laps (default_laps_k: the lap before each SC and VSC period too), built by
+    calibration.snapshot_at by default."""
+    if rule not in SAMPLING_RULES:
+        raise ValueError(f"sampling rule must be one of {SAMPLING_RULES}, got {rule!r}")
     race_id = race.race_id
-    pool = eligible_drivers(frame, race.total_laps, max_laps_down)
+    if builder is None:
+        builder = calibration.snapshot_as_of if rule == "as_of" else calibration.snapshot_at
+    if rule == "as_of":
+        pool = sorted(str(d) for d in frame["driver"].dropna().unique())
+    else:
+        pool = eligible_drivers(frame, race.total_laps, max_laps_down)
     if drivers is not None:
         pool = [d for d in pool if d in set(drivers)]
     points = []
     for driver in pool:
-        n = int((frame["driver"] == driver).sum())
-        points += [(driver, k) for k in decision_laps(frame, race, n)]
+        if rule == "as_of":
+            points += [(driver, k) for k in decision_laps_as_of(frame, race, driver)]
+        else:
+            n = int((frame["driver"] == driver).sum())
+            points += [(driver, k) for k in decision_laps(frame, race, n)]
     if max_per_race is not None and len(points) > max_per_race:
         points = sorted(random.Random(f"{seed}:{race_id}").sample(points, max_per_race))
     items, skipped = [], []
@@ -208,9 +273,9 @@ def check_schedule_ids(race_ids) -> None:
             raise ValueError(f"race id {rid!r}: the {season} schedule names round {rnd} {expected!r}")
 
 
-def build_set(race_ids: list[str], version: str, *, profile=None, builder: SnapshotBuilder = calibration.snapshot_at,
-              builder_name: str = DEFAULT_BUILDER, eval_set=None, development: bool = False,
-              **sampling) -> ScenarioSet:
+def build_set(race_ids: list[str], version: str, *, profile=None, builder: SnapshotBuilder | None = None,
+              builder_name: str | None = None, eval_set=None, development: bool = False,
+              rule: str = "as_of", **sampling) -> ScenarioSet:
     """Sample every race in `race_ids` from the committed cache (sim.jobs.load_race).
 
     `eval_set` is the registered split's file, data/eval_set.json when None. When it exists,
@@ -218,7 +283,9 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     report set (development False) stamped with sampling["eval_set_digest"]. Without it the
     set is a development set. `development` True asks for a development set while the split
     exists: any race is sampled and the digest is still recorded. A CALIBRATION_ONLY race
-    raises CalibrationOnly in either mode, before anything is sampled."""
+    raises CalibrationOnly in either mode, before anything is sampled. `rule` is sample_race's
+    ("as_of" by default), recorded as sampling["rule"]; the builder defaults to the rule's
+    (AS_OF_BUILDER or DEFAULT_BUILDER), and its name is recorded as the set's builder."""
     from ..sim import jobs
     from ..sim.compute import load_profile
 
@@ -238,12 +305,16 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     profile = profile or load_profile()
     check_schedule_ids(race_ids)
     items, skipped = [], []
+    if builder is None:
+        builder = calibration.snapshot_as_of if rule == "as_of" else calibration.snapshot_at
+        builder_name = builder_name or (AS_OF_BUILDER if rule == "as_of" else DEFAULT_BUILDER)
     for race_id in race_ids:
         data = jobs.load_race(race_id, profile)
-        got, miss = sample_race(data.frame, data.race, builder=builder, **sampling)
+        got, miss = sample_race(data.frame, data.race, builder=builder, rule=rule, **sampling)
         items += got
         skipped += miss
-    return ScenarioSet(version=version, builder=builder_name,
-                       sampling={"races": [canonical_race_id(r) for r in race_ids], **sampling, **split},
+    return ScenarioSet(version=version, builder=builder_name or DEFAULT_BUILDER,
+                       sampling={"races": [canonical_race_id(r) for r in race_ids], "rule": rule, **sampling,
+                                 **split},
                        sim_code_version=calibration.SIM_CODE_VERSION, items=items, skipped=skipped,
                        development=development or registered is None)

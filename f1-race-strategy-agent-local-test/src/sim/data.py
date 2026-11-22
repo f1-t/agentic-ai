@@ -301,7 +301,14 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, k
     Either way every row gets the gap columns (gap_columns, with `free_air_gap_s`). They
     feed no fit unless SimConfig.fit_free_air_only is set.
     """
-    df = _columns(laps)
+    return derive_columns(_columns(laps), outlier_factor=outlier_factor, k_resid=k_resid, n_iter=n_iter,
+                          min_samples=min_samples, knot=knot, free_air_gap_s=free_air_gap_s)
+
+
+def derive_columns(df, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT,
+                   free_air_gap_s=FREE_AIR_GAP_S):
+    """lap_frame's derived columns (clean, pace_resid_s, driver_offset_s and the gap columns)
+    set on `df`, a frame of _columns' columns, from all of its rows. Returns `df`."""
     base = _green(df) & (df["lap"] > 1)
     if outlier_factor is not None:
         df["pace_resid_s"] = np.nan
@@ -315,6 +322,30 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, k
 
     df = robust_filter(df, base, design, k_resid=k_resid, n_iter=n_iter, min_samples=min_samples)
     return gap_columns(df, free_air_gap_s)
+
+
+def visible_rows(frame, t):
+    """The rows of a race lap frame completed at or before session time `t` (end_s <= t): what
+    the timing screens had shown by then. A row without an end_s is left out."""
+    end = pd.to_numeric(frame["end_s"], errors="coerce").to_numpy(dtype=float)
+    return frame[np.isfinite(end) & (end <= t)]
+
+
+def as_of_columns(rows, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT, free_air_gap_s=FREE_AIR_GAP_S):
+    """`rows` (a slice of a race lap frame, visible_rows say) with every column lap_frame
+    derives across rows recomputed from these rows alone: clean, pace_resid_s and
+    driver_offset_s by robust_filter's reference model fitted on them (lap_frame's defaults),
+    and the gap columns from their line crossings (a car behind that had not crossed by then
+    has no gap). Recomputed only where the frame has them: clean and the pace columns when it
+    carries pace_resid_s (a lap_frame output; a hand-built frame's own clean flags are kept),
+    the gap columns when it carries gap_ahead_s and end_s. A copy; `rows` is not changed."""
+    rows = rows.copy()
+    if "pace_resid_s" in rows:
+        return derive_columns(rows, k_resid=k_resid, n_iter=n_iter, min_samples=min_samples, knot=knot,
+                              free_air_gap_s=free_air_gap_s)
+    if "gap_ahead_s" in rows and "end_s" in rows:
+        rows = gap_columns(rows, free_air_gap_s)
+    return rows
 
 
 def _weighted_median(values, weights):

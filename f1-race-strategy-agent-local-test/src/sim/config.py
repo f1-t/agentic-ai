@@ -139,6 +139,24 @@ def _blend_section(key, path=COMPOUND_STEPS_FILE) -> dict:
     return {k: float(v) for k, v in sec.items()}
 
 
+class PolicyView(_Cfg):
+    """What a windowed fit (to_snapshot, and the calibrator's laps_so_far) may read of the race
+    frame at a snapshot (driver D after lap L; docs/eval.md "Information contract"). The full
+    window (the world) reads every row whatever this says.
+
+    window_cut   "time": the rows completed at or before the session time D completed lap L
+                 (end_s <= t); another car's lap L that ended later is not visible, a car a lap
+                 ahead's lap L + 1 that ended earlier is. "lap": every row with lap <= L, as
+                 before (legacy).
+    clean        "as_of": clean, pace_resid_s, driver_offset_s and the gap columns recomputed
+                 on the visible rows alone (data.as_of_columns). "race": the lap frame's own,
+                 whose robust filter saw every lap of the race (legacy).
+    The defaults are leak-free; {"window_cut": "lap", "clean": "race"} reproduces the belief as
+    it was before."""
+    window_cut: Literal["time", "lap"] = "time"
+    clean: Literal["as_of", "race"] = "as_of"
+
+
 class CompoundProxy(_Cfg):
     """Pricing of dry compounds the race laps do not model (proxy.py, docs/eval.md "Proxied
     compounds"). With `enabled` False the simulator is exactly what it was before proxying.
@@ -179,6 +197,9 @@ class SimConfig(_Cfg):
     #   pre_race     practice long runs only
     fit_window: Literal["full", "to_snapshot", "pre_race"] = "full"
     exclude_snapshot_driver: bool = False   # leave the snapshot driver's laps out of the fit
+    # what a windowed fit may read of the race frame at the snapshot (PolicyView); left out of
+    # config_hash while at its default
+    policy_view: PolicyView = Field(default_factory=PolicyView)
     # fit on free-air rows only: every degradation fit (all windows), the hazard fit and
     # ref_lap_s use the clean rows with data.lap_frame's free_air True; practice rows pass
     # (Simulator._fit). ref_lap_s becomes the free-air median, while sc_lap_factor (1.36) was

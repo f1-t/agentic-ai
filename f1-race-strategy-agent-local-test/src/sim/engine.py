@@ -13,6 +13,7 @@ from . import calibrators as _cal
 from . import model_report as _report
 from . import proxy as _proxy
 from .config import SimConfig, class_names, compound_class
+from .data import as_of_columns, visible_rows
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
 from .hazard import HAZARD
@@ -206,6 +207,7 @@ class Simulator:
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
         self._fits = {}
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
+        self._windows = {}   # window_rows, shared with the windowed copies
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
         tr = self.config.track
@@ -305,6 +307,9 @@ class Simulator:
         k0 = (_cal.calibration_point(snapshot, cfg.calibration_every, self.weather, cfg.recalibrate_temp_delta_c)
               if cfg.fit_window == "to_snapshot" else None)
         key = (cfg.fit_window, k0, snapshot.driver if cfg.exclude_snapshot_driver else None)
+        t = self.cut_time(snapshot.driver, k0 or 0)
+        if t is not None:   # cut by session time: one fit per cut, the time the driver completed k0
+            key = (*key, t)
         if key not in self._fits:
             if len(self._fits) >= FIT_CACHE_SIZE:
                 del self._fits[next(iter(self._fits))]
@@ -327,17 +332,56 @@ class Simulator:
             self._physics[drop] = self._model(practice, base_delta=0.0) if practice is not None else None
         return self._physics[drop]
 
+    def cut_time(self, driver, k0: int) -> float | None:
+        """The session time a windowed fit at calibration point k0 is cut at under
+        policy_view.window_cut "time": the end_s of `driver`'s lap k0, else (no such row, a
+        made-up snapshot) the earliest end_s of any car's lap k0, which shows no more. None when
+        the cut is by lap: window_cut "lap", k0 0 (no race lap is visible), or a frame without
+        driver and end_s columns (a hand-built one)."""
+        if (self.config.policy_view.window_cut != "time" or k0 <= 0
+                or "end_s" not in self.laps or "driver" not in self.laps):
+            return None
+        at = self.laps[self.laps["lap"] == k0]
+        end = pd.to_numeric(at["end_s"], errors="coerce")
+        own = end[(at["driver"] == driver).to_numpy()].dropna()
+        if len(own):
+            return float(own.iloc[0])
+        return float(end.min()) if end.notna().any() else None
+
+    def window_rows(self, snapshot: Snapshot, k0: int, drop=None) -> pd.DataFrame:
+        """The race rows a windowed fit at calibration point k0 may read (SimConfig.policy_view):
+        cut by session time at cut_time (else by lap number, lap <= k0), with the derived
+        columns recomputed on those rows (data.as_of_columns) under clean "as_of"; then the
+        excluded driver `drop` taken out. Cached per (k0, cut time, drop)."""
+        t = self.cut_time(snapshot.driver, k0)
+        key = (k0, t, drop)
+        if key not in self._windows:
+            race = self.laps
+            race = race[race["lap"] <= k0] if t is None else visible_rows(race, t)
+            if self.config.policy_view.clean == "as_of" and len(race):
+                race = as_of_columns(race)
+            if len(self._windows) >= FIT_CACHE_SIZE:
+                del self._windows[next(iter(self._windows))]
+            self._windows[key] = self._keep(drop)(race)
+        return self._windows[key]
+
     def _calibrate(self, snapshot: Snapshot, k0: int, drop):
-        """The calibrator's output at k0, cached per (calibrator, k0, exclusion, driver)."""
+        """The calibrator's output at k0, cached per (calibrator, k0, exclusion, cut time)."""
         cfg, every = self.config, self.config.calibration_every
-        key = (self.calibrator.name, k0, drop)
+        t = self.cut_time(snapshot.driver, k0)
+        key = (self.calibrator.name, k0, drop, t)
         if key in self._outputs:
             return self._outputs[key]
         pre = self._calibrate(snapshot, 0, drop) if k0 > 0 else None
-        earlier = [k for (n, k, d) in self._outputs if n == key[0] and d == drop and k < k0]
-        previous = self._outputs[(key[0], max(earlier), drop)] if earlier else pre
-        race = self._keep(drop)(self.laps)
-        race = race[race["lap"] <= k0]
+        # an earlier point that saw no more than this one (by time when the window is cut by time)
+        earlier = [(k, s) for (n, k, d, s) in self._outputs
+                   if n == key[0] and d == drop and k < k0 and (t is None or s is None or s <= t)]
+        if earlier:
+            k_prev, t_prev = max(earlier, key=lambda e: (e[0], -1.0 if e[1] is None else e[1]))
+            previous = self._outputs[(key[0], k_prev, drop, t_prev)]
+        else:
+            previous = pre
+        race = self.window_rows(snapshot, k0, drop)
         practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
         raw = self.physics_prior(drop)
         ctx = _cal.CalibrationContext(
@@ -359,7 +403,8 @@ class Simulator:
 
         full: every race lap. pre_race: the calibrator's lap-0 prior, held (for "none" and
         "shrinkage" the practice fit plus the config base delta). to_snapshot: every car's
-        race laps up to the calibration point k0 (they are public), shrunk toward the prior
+        race laps visible at the calibration point k0 (window_rows: completed by the time the
+        snapshot driver completed lap k0, their clean flags their own), shrunk toward the prior
         with the calibrator's sds as taus; practice enters only through the prior, and
         ref_lap_s is the median of both. When the sds are all 0 ("none") the prior is held
         and the instance is the pre_race one. Exclusion drops the snapshot driver from
@@ -368,10 +413,9 @@ class Simulator:
         cfg = self.config
         drop = snapshot.driver if cfg.exclude_snapshot_driver else None
         keep = self._keep(drop)
-        race = keep(self.laps)
         if cfg.fit_window == "full":
-            return self._fit(race)
-        race = race[race["lap"] <= (k0 if cfg.fit_window == "to_snapshot" else 0)]
+            return self._fit(keep(self.laps))
+        race = self.window_rows(snapshot, k0 if cfg.fit_window == "to_snapshot" else 0, drop)
         practice = keep(self.practice.assign(lap=np.nan)) if self._has_practice else None
         if practice is None and race.empty:
             raise ValueError("fit window needs practice laps")

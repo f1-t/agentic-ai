@@ -43,6 +43,63 @@ Rows carry `belief_config_hash`, `world_config_hash` and `belief_window`. The co
 leaves `fit_window` out, so the two hashes are equal under the defaults and
 `belief_window` says which window the policies planned on.
 
+## Information contract
+
+A policy decides at a snapshot: race R, driver D, after lap L. Let t be the session time at
+which D completed lap L. **Everything a policy can read must be a deterministic function only
+of**
+
+- (a) the raw timing records of race R with timestamps at or before t;
+- (b) this weekend's sessions before the race start;
+- (c) published regulations and the tyre allocation;
+- (d) artifacts built only from races whose start precedes R's start, each with a committed
+  manifest of its source races.
+
+"What a policy can read" is the snapshot and the agent's view, every tool output and error
+string, the belief simulator's fit, draws, constants and rules, the continuation behind an
+agent decision, and every baseline's input. The world simulator and the hindsight reference
+are the scorer: they keep the whole race.
+
+`tests/test_eval_information_contract.py` checks it. It builds one synthetic race three ways,
+each as `lap_frame` would (the whole-race derived columns recomputed on the rows given): as
+run, truncated at t, and with everything after t altered (lap times, compounds including rain
+to come, tyre ages, stops, track status, positions and clock, a retirement, the snapshot
+driver lapped, a longer race). The snapshot, the anonymised view, the belief's fit, every
+agent tool's output and error strings, `belief_optimum`, `to_plan` (the continuation), the
+bridged baselines, the rule baselines and the sampler's decision points up to t must be
+identical across the three. Each legacy switch below is shown to fail the same check on its
+own. The R8 stint limit and the pit loss (items 1 and 2 of the leakage audit) are fixed on
+other branches; the harness runs the belief with R8 off and a fixed pit loss until they land.
+
+What each fix does (the legacy switch reproduces the old behaviour, so old results stay
+reproducible):
+
+| item | was | now | legacy switch |
+| --- | --- | --- | --- |
+| 3 clean flag and the other derived columns | the frame's `clean`, `pace_resid_s`, `driver_offset_s` and gap columns, from a robust filter fitted on every lap of the race, chose the belief's fit rows, `ref_lap_s` (the SC lap) and the lap-noise sd | `data.as_of_columns` recomputes them on the rows the window can see (`Simulator.window_rows`); the world keeps the whole-race ones | `SimConfig.policy_view.clean: race` |
+| 6 window cut by lap number | `lap <= L` for the fit and the calibrator's `laps_so_far`: another car's lap L that ended up to minutes later was in | `end_s <= t` (`Simulator.cut_time`: D's lap-L end; a car a lap ahead's lap L + 1 that ended earlier is in) | `SimConfig.policy_view.window_cut: lap` |
+| 4 race length | `snapshot_at` set `total_laps` to D's own lap count: a lapped or retiring car showed it | `calibration.snapshot_as_of` keeps the scheduled distance (`session.total_laps`) | the builder `snapshot_at` |
+| 5 compounds | `RaceParams.compounds`: every compound raced in the whole race (2021 Spain showed MEDIUM, SOFT; a wet race would show INTERMEDIATE) | the nominated dry three, HARD, MEDIUM and SOFT (`calibrate.race_compounds`), plus any compound a car had run by t (a wet start) | `calibrate --compounds raced`, `calibrate.DEFAULT_COMPOUND_SOURCE = "raced"` |
+| 6 snapshot reads | positions, gaps and the car behind came from the lap L + 1 rows | `snapshot_as_of` reads rows completed by t: the car ahead and its gap at the end of lap L, the car behind at the previous crossing (the last one it had made by t), each car's position at its last lap by t, the stint history from D's laps up to L; an in-lap is not a decision point (the stop is under way, and the new set sits on a row that ends after t) | `snapshot_at` |
+| 7 race identity | the view showed season, event slug and real driver codes | the model sees `"event": "anonymised race"`, no season, its own car as "Car A" and the nearby cars as "Car B", "Car C", ...; `tools.present` applies the same mapping, plus any other code of the field to "another car" and any year to `<year>`, to every tool output and error string. Lap count and pit loss stay (the tools give them). The mapping stays in the harness: `tools.identity()`, `run_agent`'s `stats["identity"]` and the agent row's `meta["identity"]`; scoring and the trajectory file names keep the real ids, the trajectory events hold what the model saw | `AGENT_SHOW_IDENTITY=1` (ablation only, default off) |
+| S scenario selection | finishers at most two laps down only, and the lap before each SC or VSC period | `scenarios --rule as_of` (the default for new sets): every driver still running at the decision lap (laps 1..L recorded), at a fixed grid (every 5th lap to the scheduled distance less 10) plus the laps D's own record shows a neutralisation in progress or just ended, capped to leave one minimum stint of the scheduled distance | `scenarios --rule legacy` |
+
+`SimConfig.policy_view` is left out of `config_hash` while it holds its default, so a config
+that does not set it keeps its hash; the behaviour change under the default shows in
+`sim_code_version`. Sets sampled before these fixes (v1, pilot1, d2, d3, d4, dev6) have no
+`sampling["rule"]`: they were sampled under the legacy rule with `snapshot_at`, and their
+snapshots embed the driver's own lap count and the raced compounds. They load and score as
+before; a new set records `"rule": "as_of"` and the builder `snapshot_as_of`.
+
+**Scoring a car that was lapped or later retired.** Every plan covers the scheduled
+distance, the reference's included, and the world scores all of it with its whole-race fit
+(the world has no per-car pace and draws no retirement). Policy and reference then cover the
+same laps under the same draws, so regret stays a like-for-like difference. Truncating to the
+laps the car really ran would need the scorer to cut every plan, the reference's too, at a
+number no policy may know, and a retired car has no such number at all. The
+`actual_strategy` comparator runs its last recorded set on to the flag when the car covered
+fewer laps.
+
 ## Decisions
 
 The agent submits one decision at a snapshot, not a whole plan: PIT with a compound, or
@@ -408,6 +465,10 @@ on carry the registry's value, 3 by default (docs/rules.md R2).
 
 Next versions: v2 once Sarah's snapshot builder and the new races land (pass it as
 `builder=` to `build_set`; it has the same signature as `snapshot_at`).
+
+Every set listed here was sampled under the legacy rule, which reads the future (above,
+"Information contract"). New sets default to `--rule as_of` and the builder
+`calibration.snapshot_as_of`; `--rule legacy` reproduces the old sampling.
 
 ### Development and report sets
 
