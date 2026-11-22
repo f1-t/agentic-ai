@@ -1,0 +1,73 @@
+# Default factor switches for `python -m src.sim.fidelity ablate` (docs/eval.md "Simulator
+# fidelity"). Each factor is an overlay on the base configuration: `both` goes to the judge (world)
+# and the predictive simulator (belief), `world` / `belief` to one of them, `world_file` /
+# `belief_file` read a config file as the overlay, `world_race` overrides the judge's race
+# constants (pit_loss_s: a number or "prior"). `requires` lists modules the switch needs. A factor
+# whose switch is not on the branch (a module missing, a file missing, or an overlay SimConfig
+# rejects because the field does not exist yet) is skipped with a note, never an error, so this
+# file can name switches that land later. `all_on` is the chosen "everything on" configuration
+# (its absent factors are left out).
+#
+# The base is the eval's default world (config.WORLD_DEGRADATION: linear_fuel_hinge with driver
+# effects; the wear cliff with world_edge "history"; R8 retired; SC/VSC off) and
+# configs/sim/belief.yaml (linear_fuel, wear bound 0, as-of pit loss and cliff).
+factors:
+  # traffic (sim/traffic.py, docs/eval.md "Traffic"): the order measures are why it exists
+  world_traffic:
+    note: the judge with ghost-car traffic (configs/sim/world.yaml, score.WORLD_TRAFFIC_CONFIG; recorded ghosts, own pace, earned passes, auto dirty air)
+    world_file: configs/sim/world.yaml
+  belief_traffic:
+    note: the belief with the projected field (configs/sim/belief_traffic.yaml, score.BELIEF_TRAFFIC_CONFIG; visible rows only)
+    belief_file: configs/sim/belief_traffic.yaml
+  traffic_both:
+    note: traffic in the judge and the belief
+    world_file: configs/sim/world.yaml
+    belief_file: configs/sim/belief_traffic.yaml
+  world_events_hybrid:
+    note: the judge with SC/VSC (configs/sim/world_hybrid.yaml); whole-race replays run it as `recorded` (every period and its recorded lap times), the plan panel as `hybrid` (the period in progress as recorded, later ones drawn)
+    world: {events: {name: hybrid, params: {lap_times: recorded}}}
+  world_no_driver_effects:
+    note: the judge's wear fit, hinge only (linear_fuel_hinge without driver effects)
+    world: {degradation: {params: {driver_effects: "off"}}}
+  world_no_hinge:
+    note: the judge's wear fit, driver effects only (linear_fuel with driver effects)
+    world: {degradation: {name: linear_fuel}}
+  world_linear:
+    note: the judge's wear fit, neither (linear_fuel, no driver effects; the world before WORLD_DEGRADATION)
+    world: {degradation: {name: linear_fuel, params: {driver_effects: "off"}}}
+  belief_driver_effects:
+    note: driver effects in the belief's fits too
+    belief: {degradation: {params: {driver_effects: race}}}
+  belief_hinge:
+    note: the belief on linear_fuel_hinge
+    belief: {degradation: {name: linear_fuel_hinge}}
+  wear_lower_bound_judge:
+    note: wear bounded below at 0 in the judge too (the belief already has it)
+    world: {degradation: {params: {wear_lower_bound: 0.0}}}
+  no_wear_lower_bound_belief:
+    note: the belief without its wear bound
+    belief: {degradation: {params: {wear_lower_bound: null}}}
+  compound_proxy_off:
+    note: no proxy pricing of unraced compounds, judge and belief
+    both: {compound_proxy: {enabled: false}}
+  belief_pit_loss_prior_only:
+    note: the belief prices stops at the snapshot's pre-race prior, not the as-of estimate updated with this race's stops
+    belief: {pit_loss: {source: snapshot}}
+  learned_trained:
+    note: the belief with the trained learned calibrator (configs/sim/belief_learned.yaml, committed artifacts)
+    belief_file: configs/sim/belief_learned.yaml
+  # the wear cliff's edge in the judge (sim/cliff.py world_cliffs; base "history": the historical
+  # prior extended by this race's ages)
+  cliff_edge_history_only:
+    note: the judge's edge from the historical prior only, nothing from this race (no hindsight)
+    world: {wear_cliff: {world_edge: history_only}}
+  cliff_edge_race:
+    note: the judge's edge from this race alone (the oldest age raced, the earlier design)
+    world: {wear_cliff: {world_edge: race}}
+  wear_cliff_off:
+    note: no wear cliff in either simulator (and no R8), linear wear past every edge
+    both: {wear_cliff: {enabled: false}}
+  r8_legacy:
+    note: the retired R8 hindsight limit on and the cliff off in both (configs/sim/legacy/*_r8.yaml)
+    both: {stint_limit_margin_laps: 3, wear_cliff: {enabled: false}}
+all_on: [traffic_both, world_events_hybrid]

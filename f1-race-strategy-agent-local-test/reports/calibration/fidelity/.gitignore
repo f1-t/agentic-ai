@@ -1,0 +1,2 @@
+# the per-(race, section, config, code version) cache of `python -m src.sim.fidelity`; rebuilt on demand
+.cache/
