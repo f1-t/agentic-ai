@@ -2416,7 +2416,25 @@ Measures (each one line; `pace` and `fit` columns say what every number was fitt
 | C | the scorecard for the base, each factor overlay alone and `all_on` (configs/sim/fidelity/ablation.yaml); headline changes pooled with a race-cluster bootstrap 95% interval over the races every configuration ran, and the ledger change. A factor whose switch is not on the branch (a module or file it `requires`, or an overlay SimConfig rejects) is skipped with a note |
 
 Before numbers on main (2026-11-22, f7be251: wear cliff, R8 retired, traffic off by default) are in `reports/calibration/fidelity/main/scorecard.md`
-and the ablation in `reports/calibration/fidelity/ablation/ablation.md`.
+and the ablation in `reports/calibration/fidelity/ablation/ablation.md`, both computed on main f7be251
+over 18 calibration races (2022_11_austria did not load then).
+
+### What the ablation says (f7be251, selection rule applied)
+
+Changes against the base (the default world and `belief.yaml`), pooled, race-cluster 95% intervals:
+
+- **Adopt-candidates.**
+  - Hybrid SC/VSC in the judge: close-pair order +0.016 [0.000, +0.038], relative gaps −2.4 s [−4.4, −0.5], regret −0.36 s, 90% coverage +0.46. It is the only factor that clearly improves order and gaps together.
+  - The judge's wear fit without the hinge (driver effects only): close pairs +0.025 [−0.003, +0.060], rank agreement +0.010, regret −0.48 s.
+  - Driver effects in the belief: rank agreement +0.031 [+0.007, +0.053], regret −1.0 s [−1.8, −0.3], predictive order +0.021.
+  - The history-only tyre-life edge in the judge: close pairs +0.025 [0.000, +0.060], and no hindsight.
+- **Keep.**
+  - The wear cost past the edge: switching it off costs rank −0.13 and regret +5.4 s.
+  - The belief's wear bound: removing it costs regret +6.9 s.
+- **Reject.**
+  - The learned (trained) calibrator: regret +0.76 s [+0.18, +1.57], though coverage improves.
+  - The hinge in the judge: driver effects alone or neither do better on close pairs.
+- **Undecided: traffic.** In the per-car replay the other cars are their recorded trajectories, so traffic cannot change order there; it costs regret +0.4 s. It is judged on the whole-field replay (`src/sim/field_replay.py`) instead.
 
 ## Tests
 
