@@ -1589,8 +1589,11 @@ set `development: false`. Without it a set is `development: true`.
 - **v1 is the development set**: sampled before the split, from the race we tuned on.
   Its numbers are for debugging the harness and the baselines, not for the report.
 - **A set sampled from the eval races is the report set**: the numbers the report quotes.
-  Today that is d4, built and scored once at tag `d4-final-eval` (see "The registered split"
-  below and "d4, the held-out result").
+  Under the corrected protocol that is `test9`, the nine races of `data/eval_set.json`, built
+  once by the rerun pipeline (`scenarios --set test9 --final`, "Rerunning the evaluation").
+  The earlier report set, d4, was built and scored once at tag `d4-final-eval` ("The registered
+  split" below and "d4, the earlier held-out result (superseded)"); that result is superseded
+  ("Result files").
 
 `scenarios --development` (`build_set(..., development=True)`) still samples a development
 set once the split exists, a Spain debug set say: no race is refused, the set is marked
@@ -1693,15 +1696,17 @@ Scenario sets under the split:
   of 2019 Monaco and 2023 Spain). Both are records: they still load and are not regenerated.
   d3 is the Milestone-era set and is no longer the report set. Since half of it is a held-out
   race, no new references, baselines or agent runs are made on d3. Its Monaco baseline rows
-  stay in the repo as they are, are not regenerated, and are superseded by d4 at the final run.
-- **d4** is the report set: the four held-out races, 25 scenarios each, seed 0,
-  `development: false`. Its scenario file is built only after sprint-weekend support lands
-  (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
-  it until the final run. d4's Monaco scenarios may coincide with d3's, since both sample 25
-  per race at seed 0; the final run will state whether they do. `data/scenarios/d4.json`
+  stay in the repo as they are, are not regenerated, and were superseded by d4's (themselves
+  superseded now, "Result files").
+- **d4** was the report set of the earlier protocol: the four races of that split, 25 scenarios
+  each, seed 0, `development: false`. It was built after sprint-weekend support landed (2024
+  Austria is a sprint weekend) and scored once at tag `d4-final-eval` ("d4, the earlier held-out
+  result (superseded)"). Its 25 Monaco scenario ids are d3's. That result is superseded: it ran
+  before the information-contract fixes and under R8 ("Result files"). `data/scenarios/d4.json`
   records the four-race split's `eval_set_digest` (`98edff4380e1...`), not the nine-race file's.
   Like d2 and d3, it is a record of the split it was sampled under, and it still loads. It is
-  not regenerated.
+  not regenerated. The report set of the corrected protocol is `test9` (the nine races, built
+  by the rerun pipeline).
 - **dev6** (`data/scenarios/dev6.json`, 150 scenarios, digest `8823b7b73c87`) is a
   **development set on calibration races, not a held-out result**: 25 scenarios each of the six
   non-sprint calibration races 2021_04_spain, 2023_07_spain, 2023_01_bahrain,
@@ -1880,7 +1885,8 @@ per stage, under `--out-dir` (default `reports/eval/rerun/<set>`). The sets are 
 
 - `dev20`: the nineteen calibration races that are ever sampled (the six development races and
   thirteen 2021-22 weekends; 2025 Qatar, the twentieth calibration race, is calibration only), 25
-  scenarios per race, seed 0, a development set.
+  scenarios per race, seed 0, a development set. Its final pass, at tag `eval-v2-dev2`, is
+  committed in `reports/eval/rerun/dev20/` ("Development result (dev20) at eval-v2-dev2").
 - `test9`: the nine races of `data/eval_set.json`, 25 per race, seed 0, a report set, tables split
   by era (2019-20, 2021, 2022, 2024-25). It is built once, later, on the owner's word: the
   `scenarios` stage refuses a report set without `--final`, because building it is the first load
@@ -2051,12 +2057,16 @@ python -m src.eval reference --scenarios data/scenarios/v1.json [--world-config 
 python -m src.eval reference --check        # cached references from another sim_code_version
 ```
 
-**Expected exception: d3.** d3 is rebuilt at the final evaluation. Until then its cached
-reference (`data/references/d3/9f933a611bea.parquet`, sim_code_version `b62094155bde`) is
-stale on purpose and is neither rebuilt nor rescored. `reference --check` lists it apart,
-under "expected stale (docs/eval.md)" with that reason, and does not count it as stale
-(`reference.EXPECTED_STALE`). `stale_references` still returns it, so a real run's
-references stage rebuilds it when that run is made.
+**Expected exceptions: d3 and d4.** Both are records of the superseded protocol, and half of d3
+and all of d4 are held-out races, so neither is rebuilt or rescored. The final evaluation is the
+rerun pipeline's `test9` ("Rerunning the evaluation"), which builds its own references.
+d3's cached reference (`data/references/d3/9f933a611bea.parquet`, sim_code_version `b62094155bde`)
+and d4's (`data/references/d4/39bf1bbb4aa9.parquet`, sim_code_version `58b50a00e0e3`, stale
+since the tyre-life change) stay stale on purpose. `reference --check` lists them apart, under
+"expected stale (docs/eval.md)" with a reason each, and does not count them as stale
+(`reference.EXPECTED_STALE`). The reason strings in the code were written earlier ("d3 is
+rebuilt at the final evaluation"; d4 "is re-evaluated in a later, separate step"). The step
+they refer to is `test9`: no run rebuilds d3 or d4. `stale_references` still returns both.
 
 It writes `data/references/<set version>/<key>.parquet`, with the inputs in `<key>.json`
 beside it, where `key = sha256(set digest, world config hash, sim_code_version, seed,
@@ -2118,8 +2128,8 @@ effects code (off by default) moved the physics version. They were rebuilt once 
 sidecars' inputs and the stale files removed. The new parquet files are byte-identical to the
 ones they replace (every scenario's plan, per-draw times and near-tie columns), so under the
 default world none of those changes moves a v1, pilot1 or d2 reference, and the `*_r8` result
-files below, scored on the old keys, hold for the new ones. `reference --check` now lists only
-d3, the expected exception.
+files below, scored on the old keys, hold for the new ones. `reference --check` then listed only
+d3, the expected exception (d4 joined it with the tyre-life change).
 
 v1 scored on these references (baselines with the limit-aware wrapper, and the recorded run):
 `reports/eval/v1_baselines_r8.csv`; pilot1 and d2 baselines: `pilot1_baselines_r8.csv` and
@@ -2196,45 +2206,348 @@ standard error mean 0.19 s (median 0.19, max 0.29); the runner-up's gap has medi
 is not told apart from the next plan on most scenarios, while regrets of a few seconds are
 well outside the noise (a regret_se_s of about 0.3 s).
 
-## physics-v1
+## The frozen simulator and the evaluation tags
 
-`physics-v1` is the simulator release the report numbers are computed against: a git tag
-at the end of sprint 2, with the sim_code_version below. Report runs score with
-`--require-reference` against references cached at that sim_code_version, so a report
-number cannot come from another simulator version without failing.
+`physics-v1` was the planned name of a simulator release at the end of sprint 2. That tag was
+never made, and no result refers to it. The simulators were frozen instead at commit `5f2ec28`
+(main after #125, 2026-11-22; SIM_CODE_VERSION `938d268003fa`), with the configuration the
+fidelity scorecard chose ("The current configuration (adopted from the scorecard)"). #126 then
+finished the agent's tools and committed the pre-registered reporting choices
+(`configs/eval/reporting.yaml`). It did not change the simulator: SIM_CODE_VERSION stayed
+`938d268003fa`. Its merge is the evaluation commit, tagged `eval-v2-dev`. The only change after
+that is #127, under the rule in "Changes after the freeze".
+
+| tag | commit | SIM_CODE_VERSION | what |
+| --- | --- | --- | --- |
+| `eval-v2-dev` | `6ed9f5e9` | `938d268003fa` | simulators frozen, agent tools final; the first final development pass ran here (superseded, not committed) |
+| `eval-v2-dev2` | `9770eb54` | `c8f30186efed` | `eval-v2-dev` plus #127; the development result below, and the code the held-out run uses |
+| `d4-final-eval` | `cd1b937` | `58b50a00e0e3` | the earlier held-out run, under the superseded protocol ("Result files") |
+
+World config hash `5069228b35e7` and belief config hash `351f4124ff22` are the same at both
+`eval-v2-*` tags (#127 changed code, not configuration). A run under the rerun pipeline builds its
+references in its own directory at the run's SIM_CODE_VERSION, and every row carries the
+`sim_code_version`, `world_config_hash` and `belief_config_hash` stamps, which `provenance.json`
+lists, so a number cannot come from another simulator version unnoticed.
 `data/ground_truth.json` stays the frozen legacy check (`legacy_tools.optimal_strategy`,
 `tests/test_case.py`) and is not regenerated from this simulator.
 
-| tag | sim_code_version | commit |
-| --- | --- | --- |
-| physics-v1 | tagged at the end of sprint 2 (Nov 20); its SIM_CODE_VERSION is recorded here when the tag is made | not tagged yet |
+## Development result (dev20) at eval-v2-dev2
 
-TODO (end of sprint 2, the user): apply the tag with `git tag physics-v1 <commit>` on the
-commit that freezes the simulator, put the commit here, and record the sim_code_version
-above from `python -c "from src.sim.calibration import SIM_CODE_VERSION as v; print(v)"` at
-that commit. Then
-rebuild the report references (`python -m src.eval reference ...`) and check
-`python -m src.eval reference --check` lists nothing.
+**These are the races the simulators were calibrated on.** dev20 is a development set: the
+nineteen calibration races that are ever sampled. The simulators' fits and choices were made on
+these races, so the numbers say how the agent and the baselines behave where the model fits best.
+They are not an estimate for unseen races. The held-out result is a separate run on `test9` (the
+nine races of `data/eval_set.json`) and is reported separately. Nothing in this section is a
+held-out number.
+
+**What was run.** At tag `eval-v2-dev2` (commit `9770eb54`, tree clean), the five stages of
+"Rerunning the evaluation" over set `dev20`, with these settings:
+
+- the set: 25 scenarios per race, seed 0, rule `as_of`, 469 scenarios (six sampled points of 2022
+  Austria are skipped: a set with no recorded compound), digest `a269f07b5b76`;
+- the configs: `--world-config default` (config hash `5069228b35e7`) and `--belief-config default`
+  (`configs/sim/belief.yaml`, config hash `351f4124ff22`); SIM_CODE_VERSION `c8f30186efed`;
+- the reporting choices: `configs/eval/reporting.yaml`, sha256 `7bf04ee516bd...`;
+- the model: `qwen3-30b-a3b` on the voyager backend (1024-token reply cap, the backend's default
+  temperature);
+- the loop: `max_steps` 10 and `AGENT_TURN_REPEAT=run`, with the other loop switches unset;
+- the agent stage: an isolated timing sample of 24 scenarios run one at a time, then one pass over
+  all 469 at `--jobs 10`.
+
+These are the run settings `reporting.yaml` fixes for the held-out run.
+
+The outputs are committed in `reports/eval/rerun/dev20/`: the scenarios, the references, the
+baselines, the agent rows, the trajectories, the timing sample, the tables (the pre-registered
+`reporting_*` among them) and `provenance.json`. They take 30 MB in 516 files; the 469
+trajectories are 22.6 MB. Its README lists the commands and wall times. The intermediates
+(`parts/`) and the logs are not committed. In `provenance.json` the run's scratch output
+directory is written `<out-dir>`, and the belief config path is written relative to the project.
+Nothing else was edited.
+
+**How the numbers below were computed.** Every number is read from that directory:
+
+- pooled: `tables/chart_regret_s.csv` (mean and its 95% (race, driver) cluster interval),
+  `tables/tail.csv` and `tables/reporting_counts.csv`;
+- per race: `tables/summary.csv`;
+- paired: `tables/reporting_paired.csv` and `tables/reporting_paired_by_era.csv`;
+- tail: `tables/reporting_tail.csv`;
+- decision time: `tables/agent_latency.csv` and `agent_latency_paired.csv`;
+- reliability, decisions and tokens: `agent.csv` (submitted = `decision` set; voluntary = not
+  `submitted_in_grace`);
+- track status: `scenarios.json`.
+
+The tables are the `tables` stage's output. Running that stage again on a copy of the directory
+(`python -m src.eval.rerun tables --set dev20 --out-dir <copy>`, no model calls) regenerates all
+14 table files byte-identical. `python -m src.eval.smoke reports/eval/rerun/dev20` (the
+trajectory lint) reports 0 findings. The run-to-run estimate also reads the `eval-v2-dev` pass's
+`agent.csv`, which is not committed (below).
+
+Fidelity context, from `reporting.yaml`: the judge orders close finishers correctly 0.753 of the
+time (ceiling 0.745), and its gap between two cars is off by 13.2 s on average (floor 3.2 s).
+Absolute regrets of 4-10 s sit inside that error, so the paired differences carry the claims.
+
+**Pooled** (regret in seconds against the world's reference; 95% interval by (race, driver)
+cluster bootstrap):
+
+| policy | scored / unavailable | mean regret s (95% CI) | median | p90 | worst | over 10 s | over 20 s | over 30 s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| agent | 469 / 0 | 3.96 (3.38, 4.57) | 0.74 | 13.18 | 28.95 | 0.147 | 0.043 | 0.000 |
+| belief_optimizer | 469 / 0 | 3.82 (3.24, 4.43) | 0.55 | 13.00 | 29.13 | 0.139 | 0.043 | 0.000 |
+| actual_strategy | 428 / 41 | 7.02 (5.73, 8.34) | 2.25 | 19.51 | 69.15 | 0.250 | 0.096 | 0.037 |
+| run_to_flag | 469 / 0 | 9.61 (8.34, 10.98) | 4.20 | 24.25 | 79.12 | 0.382 | 0.154 | 0.043 |
+| one_stop_total | 469 / 0 | 10.44 (9.04, 11.99) | 4.03 | 25.67 | 79.83 | 0.382 | 0.175 | 0.060 |
+| fixed_one_stop | 457 / 12 | 14.81 (13.44, 16.20) | 13.64 | 25.33 | 79.83 | 0.624 | 0.193 | 0.068 |
+| fixed_two_stop | 432 / 37 | 24.99 (23.75, 26.22) | 24.43 | 39.61 | 66.63 | 0.894 | 0.674 | 0.343 |
+| greedy_crossover | 80 / 389 | 91.91 (78.95, 105.76) | 70.30 | 186.74 | 237.06 | 1.000 | 1.000 | 0.838 |
+
+No row of any policy is invalid, and none has negative regret. The unavailable rows are plans
+that break a published rule before they start: `tables/status.csv` gives the reasons. Most are a
+stop at once that leaves no first stint; `actual_strategy` also has 13 rows on a compound the
+simulator does not price.
+
+**Per race**, mean regret in seconds (`actual_strategy` over the rows it scored, in brackets):
+
+| race | scenarios | agent | belief_optimizer | run_to_flag | one_stop_total | actual_strategy (scored) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2019_10_united_kingdom | 25 | 4.76 | 5.00 | 1.99 | 1.99 | 5.14 (23) |
+| 2021_01_bahrain | 25 | 4.54 | 4.18 | 13.36 | 13.36 | 8.05 (22) |
+| 2021_04_spain | 25 | 2.85 | 2.48 | 9.55 | 14.21 | 7.94 (25) |
+| 2021_09_austrian | 25 | 6.35 | 6.50 | 3.12 | 2.70 | 2.85 (25) |
+| 2021_20_qatar | 25 | 5.48 | 4.92 | 8.78 | 9.63 | 7.32 (20) |
+| 2021_22_united_arab_emirates | 25 | 5.96 | 5.70 | 4.78 | 5.17 | 11.13 (24) |
+| 2022_01_bahrain | 25 | 2.09 | 2.08 | 17.73 | 17.73 | 6.15 (22) |
+| 2022_02_saudi_arabia | 25 | 1.33 | 1.33 | 8.22 | 7.94 | 4.28 (25) |
+| 2022_06_spain | 25 | 1.52 | 0.91 | 20.73 | 21.20 | 13.95 (24) |
+| 2022_08_azerbaijan | 25 | 7.20 | 7.08 | 3.00 | 3.06 | 6.11 (25) |
+| 2022_09_canada | 25 | 0.74 | 0.74 | 4.29 | 4.29 | 3.83 (24) |
+| 2022_11_austria | 19 | 3.57 | 3.40 | 18.08 | 17.53 | 15.68 (4) |
+| 2022_12_france | 25 | 3.01 | 3.45 | 6.40 | 6.40 | 3.74 (25) |
+| 2022_20_mexico | 25 | 5.06 | 4.95 | 12.14 | 15.04 | 9.57 (22) |
+| 2022_21_brazil | 25 | 1.59 | 0.59 | 20.89 | 20.89 | 3.75 (22) |
+| 2022_22_united_arab_emirates | 25 | 4.50 | 4.38 | 4.56 | 4.67 | 2.39 (23) |
+| 2023_01_bahrain | 25 | 2.00 | 2.17 | 11.08 | 15.82 | 7.43 (24) |
+| 2023_07_spain | 25 | 1.65 | 1.61 | 4.46 | 6.90 | 3.16 (24) |
+| 2024_07_emilia_romagna | 25 | 10.93 | 10.94 | 11.48 | 11.48 | 17.83 (25) |
+
+**Paired, pre-registered** (`tables/reporting_paired.csv`): agent minus each comparator, the mean
+paired regret difference on the scenarios both scored. Negative means the agent is better. The
+primary interval is a 95% percentile cluster bootstrap over (race, driver), with the race-cluster
+interval beside it (2,000 resamples, seed 0). The verdict comes from the primary interval.
+W / T / L counts the agent's wins, ties and losses.
+
+| role | X | paired (clusters) | agent mean | X mean | agent - X | 95% CI (race, driver) | 95% CI (race) | W / T / L | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| lead | run_to_flag | 469 (274) | 3.96 | 9.61 | -5.65 | (-7.14, -4.23) | (-9.02, -2.71) | 226 / 145 / 98 | ahead |
+| lead | one_stop_total | 469 (274) | 3.96 | 10.44 | -6.48 | (-8.10, -4.97) | (-9.87, -3.32) | 226 / 145 / 98 | ahead |
+| secondary | actual_strategy | 428 (252) | 3.84 | 7.02 | -3.18 | (-4.55, -1.90) | (-4.87, -1.59) | 186 / 156 / 86 | ahead |
+| secondary | belief_optimizer | 469 (274) | 3.96 | 3.82 | +0.14 | (+0.02, +0.28) | (-0.002, +0.29) | 102 / 232 / 135 | behind |
+| reference only | fixed_one_stop | 457 (273) | 4.06 | 14.81 | -10.74 | (-12.40, -9.15) | (-14.87, -7.12) | 355 / 2 / 100 | ahead |
+| reference only | fixed_two_stop | 432 (270) | 4.27 | 24.99 | -20.73 | (-22.17, -19.27) | (-23.46, -17.93) | 392 / 0 / 40 | ahead |
+| footnote | greedy_crossover | 80 (74) | 6.75 | 91.91 | -85.16 | (-99.05, -71.98) | (-105.11, -64.13) | 80 / 0 / 0 | ahead |
+
+By era (`tables/reporting_paired_by_era.csv`), agent minus X with the primary interval and the
+verdict. The race-cluster interval is not computed for an era with one race.
+
+| era (races) | run_to_flag | one_stop_total | actual_strategy | belief_optimizer |
+| --- | --- | --- | --- | --- |
+| 2019-20 (1) | +2.77 (+1.04, +4.59) behind | +2.77 (+1.04, +4.59) behind | -0.40 (-4.38, +3.43) level | -0.24 (-0.60, +0.14) level |
+| 2021 (5) | -2.88 (-5.19, -0.61) ahead | -3.98 (-7.02, -1.17) ahead | -2.74 (-5.28, -0.33) ahead | +0.28 (+0.02, +0.56) behind |
+| 2022 (10) | -8.40 (-10.76, -6.13) ahead | -8.69 (-11.24, -6.30) ahead | -3.19 (-5.30, -1.51) ahead | +0.17 (+0.01, +0.36) behind |
+| 2023 (2) | -5.95 (-8.71, -3.58) ahead | -9.54 (-14.25, -5.33) ahead | -3.58 (-7.84, -0.82) ahead | -0.07 (-0.50, +0.28) level |
+| 2024-25 (1) | -0.55 (-5.39, +4.03) level | -0.55 (-5.39, +4.03) level | -6.90 (-13.12, -1.15) ahead | -0.01 (-0.24, +0.19) level |
+
+**What the paired table says.** On these races the agent is ahead of both lead rules, by 5.65 s
+against `run_to_flag` and 6.48 s against `one_stop_total`. It is also ahead of the teams' actual
+strategy, by 3.18 s. Both intervals exclude zero for all three. Per race the rules do better at
+4 of the 19: 2019 Britain, 2021 Austria, 2021 Abu Dhabi and 2022 Azerbaijan. The agent is behind
+`belief_optimizer`, the optimizer its tools run, by 0.14 s: the primary interval (+0.02, +0.28)
+excludes zero, and the race-cluster interval (-0.002, +0.29) just reaches it. The two tie on 232
+of 469 scenarios. So on the calibration races the language model adds nothing measurable over its
+tools, and costs a little.
+
+**Tail** (`tables/reporting_tail.csv`; the stated threshold is 20 s):
+
+| policy | scored | over 20 s (stated) | over 10 s | over 30 s | median s | worst s |
+| --- | --- | --- | --- | --- | --- | --- |
+| agent | 469 | 0.043 | 0.147 | 0.000 | 0.74 | 28.95 |
+| belief_optimizer | 469 | 0.043 | 0.139 | 0.000 | 0.55 | 29.13 |
+| actual_strategy | 428 | 0.096 | 0.250 | 0.037 | 2.25 | 69.15 |
+| run_to_flag | 469 | 0.154 | 0.382 | 0.043 | 4.20 | 79.12 |
+| one_stop_total | 469 | 0.175 | 0.382 | 0.060 | 4.03 | 79.83 |
+| fixed_one_stop | 457 | 0.193 | 0.624 | 0.068 | 13.64 | 79.83 |
+| fixed_two_stop | 432 | 0.674 | 0.894 | 0.343 | 24.43 | 66.63 |
+| greedy_crossover | 80 | 1.000 | 1.000 | 0.838 | 70.30 | 237.06 |
+
+**Reliability.** All 469 episodes submitted a decision: 439 voluntarily and 30 in a grace turn.
+There were 0 invalid rows, 0 error rows and 0 API retries. The decisions were 48 PIT and 421
+STAY_OUT. The scenarios were 429 green, 17 under a safety car and 23 under a VSC.
+
+**Decision time.** The isolated timing sample ran 24 episodes one at a time: mean 32.9 s, median
+27.6 s, p90 49.4 s. No other evaluation or test process ran during it. Another CPU-heavy process
+did, though: a desktop application using about 4.5 cores, with a load average of 5 to 11 on 16
+threads. The tools' local computation therefore ran on a loaded machine, so 32.9 s is an upper
+bound on the isolated decision time. The concurrent figures, beside it:
+
+| run | episodes | latency mean / median / p90 s | input / output tokens per episode | tool calls |
+| --- | --- | --- | --- | --- |
+| isolated (timing sample, 1 job) | 24 | 32.9 / 27.6 / 49.4 | 80.5k / 806 | 17.9 |
+| concurrent (`--jobs 10`), the same 24 | 24 | 52.9 / 53.2 / 89.0 | 81.5k / 845 | 17.3 |
+| concurrent (`--jobs 10`), all | 469 | 54.9 / 48.4 / 98.8 | 83.2k / 919 | 17.6 |
+
+On the same 24 scenarios, concurrent minus isolated is +20.1 s (95% t interval +8.5 to +31.6), a
+ratio of means of 1.61. The pass took 2,660 s of wall time for 469 episodes at 10 jobs, about
+5.7 s per episode.
+
+**Tokens and calls.** Over the pass the mean episode used 83.2k input and 919 output tokens
+(median 57.7k and 789) and 17.6 tool calls: 15.6 evidence calls, of which 4.2 repeated an earlier
+call. The pass used 39.0 million input and 0.43 million output tokens in all.
+
+**Run to run.** The `eval-v2-dev` pass ran the same 469 scenarios with the same model and settings,
+before #127. #127 changed only what happens under SC or VSC; under green the tools' outputs and the
+scoring are byte-identical across the two tags ("Changes after the freeze"). So on the 429 green
+scenarios the two passes differ only by the model's run-to-run variation:
+
+- the same PIT / STAY_OUT decision on 407 of 429 (94.9%), and the same scored plan on 311;
+- regret, this pass minus the earlier one, +0.035 s per scenario, with a 95% interval of -0.100 to
+  +0.192 (`eval.compare.cluster_bootstrap` over (race, driver), 2,000 resamples, seed 0, 264
+  clusters).
+
+Under SC and VSC the decision was the same on 17 of 17 and 22 of 23 scenarios, but the tools
+changed there, so those are not a run-to-run measure. The timing sample against the pass is a
+second, smaller check: the same decision on 22 of 24 (`agent_latency_paired.csv`). The earlier
+pass's `agent.csv` is kept with the team's run notes and is not committed. It is superseded.
+
+## Changes after the freeze
+
+**The rule.** The simulators were frozen at `5f2ec28` and the evaluation commit was tagged
+`eval-v2-dev`. After that, a change is allowed only if all four of these hold:
+
+1. it fixes a defect with a stated mechanism: what the code does, and why that is wrong;
+2. the defect was found on development data;
+3. the fix follows from the definition of the behaviour, not from its effect on a result;
+4. the recorded decisions are re-scored under the fix, and the re-score is shown: what moved and
+   what did not.
+
+Once the held-out scenario file exists, no change of any kind is made. A defect found after that
+is reported as a limitation, not fixed.
+
+**Applied.** One change met the rule: PR #127 (`eval-v2-dev` to `eval-v2-dev2`, commits `4efdd11`
+and `ab3fd11`).
+
+- *Found* in the `eval-v2-dev` development pass on dev20, in the agent's STAY_OUT decisions under
+  SC or VSC (35 rows).
+- *Mechanism.* `Simulator.expand_action` turned STAY_OUT k into a plan by advancing the snapshot k
+  laps (`engine._advance`), and `_advance` keeps `track_status`. A stay decided under SC or VSC
+  therefore planned its continuation as if the neutralisation were certainly still on at the
+  reassess lap, so the continuation stopped at once at the reduced SC/VSC pit loss. Two places
+  used this expansion:
+  - the scorer's expansion of the agent's stays;
+  - the tools' stay continuations (`evaluate_action`, `compare_plans`, the submission check), so
+    the model was shown the same wrong plans.
+
+  The tools' "stop at the end of lap X" plans had the same carry after the stop (`_stop_at`: the
+  earliest-legal-stop alternative and `stop_lap_scan`). References, baselines and
+  `belief_optimizer` plan from the snapshot and were not affected.
+- *Fix, from the definition.* A policy decides at the snapshot ("Information contract"), where the
+  neutralisation's end is unknown. STAY_OUT k means no stop in the next k laps, then the best plan
+  available. So a STAY_OUT k under SC or VSC is the belief's best full plan from the decision
+  snapshot, with no stop before the end of lap `laps_completed + k + 1`. It uses the same fit,
+  seed, samples and rules as `belief_optimizer`, and the period in progress runs on per sample as
+  the belief's event model draws it ("Decisions" has the definition). The tools' later-stop plans
+  follow the same rule. Green stays and every PIT keep the old path, bit for bit.
+  SIM_CODE_VERSION moved from `938d268003fa` to `c8f30186efed`; the config hashes did not change.
+- *Three examples* (the reproducer's snapshots, plan before and after):
+
+  | scenario | k | before | after |
+  | --- | --- | --- | --- |
+  | 2022 Brazil BOT:05 (SC) | 10 | SOFT 12, SOFT 27, HARD 27 | SOFT 20, SOFT 25, MEDIUM 21 |
+  | 2022 Azerbaijan VET:10 (VSC) | 2 | HARD 3, MEDIUM 18, MEDIUM 20 | HARD 13, MEDIUM 28 |
+  | 2022 Azerbaijan GAS:10 (VSC) | 3 | HARD 4, MEDIUM 19, MEDIUM 18 | HARD 13, MEDIUM 28 |
+
+- *Re-score.* The 469 decisions recorded by the `eval-v2-dev` pass were re-scored at `eval-v2-dev`
+  and with the fix, together with every non-LLM policy, with no model calls. Each accepted
+  submission was read from its trajectory. Under the fix, 7 rows changed, all of them agent
+  STAY_OUT rows under SC or VSC (1 SC and 6 VSC of the 35). The other 28 had a constrained optimum
+  equal to the old plan. All 3,283 non-agent rows are bit-identical (references, every baseline,
+  `belief_optimizer`), and every regret is still at least 0.
+
+  | scenario | k | agent regret before -> after (s) |
+  | --- | --- | --- |
+  | 2022_21_brazil:BOT:05 (SC) | 10 | 30.82 -> 1.47 |
+  | 2022_08_azerbaijan:VET:10 (VSC) | 1 | 28.26 -> 15.87 |
+  | 2022_08_azerbaijan:GAS:10 (VSC) | 10 | 22.56 -> 16.23 |
+  | 2021_01_bahrain:HAM:05 (VSC) | 3 | 3.96 -> 7.03 |
+  | 2021_01_bahrain:RAI:05 (VSC) | 10 | 4.44 -> 6.21 |
+  | 2022_09_canada:HAM:10 (VSC) | 2 | 0.17 -> 0.00 |
+  | 2022_09_canada:LAT:10 (VSC) | 1 | 0.03 -> 0.00 |
+
+  | rows | n | agent mean regret before -> after (s) | agent - belief_optimizer before -> after (s) |
+  | --- | --- | --- | --- |
+  | all | 469 | 4.013 -> 3.921 | +0.197 -> +0.104 |
+  | STAY_OUT, green | 383 | 3.872 -> 3.872 | +0.079 -> +0.079 |
+  | STAY_OUT, SC | 15 | 3.041 -> 1.085 | +1.941 -> -0.016 |
+  | STAY_OUT, VSC | 20 | 3.620 -> 2.917 | +0.704 -> +0.000 |
+  | PIT (green 46, SC 2, VSC 3) | 51 | unchanged | unchanged |
+
+  These are decisions the model made while its tools showed the defective plans, so the re-score
+  is not a result. The fresh pass at `eval-v2-dev2` is: "Development result (dev20) at
+  eval-v2-dev2" above. Its agent minus `belief_optimizer` is +0.14 s, where the re-score gives
+  +0.104 and the `eval-v2-dev` pass gave +0.197. Its references and every non-agent row are
+  identical to the `eval-v2-dev` pass's apart from the `sim_code_version` stamp.
+
+**Known follow-up, not changed.** Green stays still use the older expansion path: the snapshot
+advanced k laps under green, then the continuation planned from there. That path ignores a
+neutralisation that starts inside the k laps: the belief's draws of a period starting in those
+laps do not enter the plan. The held-out run uses `eval-v2-dev2` as it is. This is listed under
+"Limitations".
+
+A PIT now under SC or VSC still plans its continuation from the snapshot one lap on, as before.
+That is by definition, not a defect: the in-lap really is run under the neutralisation.
 
 ## Result files
 
-Which committed table is current. Every current file has its `*_summary.csv` beside it.
+**Current: one development result.** `reports/eval/rerun/dev20/` is the development result at tag
+`eval-v2-dev2` ("Development result (dev20) at eval-v2-dev2"). It is on the calibration races. The
+held-out result will be `reports/eval/rerun/test9/`, from the same code, and is not here yet. No
+other committed result is current.
 
-**Superseded by the tyre-life change.** Every result below that was scored before it was
-produced under the hindsight stint limit R8 (docs/rules.md R8, retired) and without the wear
-cliff, so all of them are superseded: the held-out d4 result at tag `d4-final-eval`
-(`d4_baselines.csv`, `d4_agent.csv`, `d4_combined*.csv`, `d4_rule_baselines.csv` and their
-compare tables), the dev6 live agent runs 1-3 (`dev6_agent_pass1*`, `dev6_run2_*`,
-`dev6_run3_*`), the rule-baseline files (`dev6_rule_baselines.csv`, `d4_rule_baselines.csv`,
-`*_combined_rules.csv`, `*_rules_compare_*`), the dev6 baselines (`dev6_baselines.csv`,
-`dev6_run2_baselines.csv`) and the v1, pilot1 and d2 `*_r8` tables. They stay as the record of
-that setting; `configs/sim/legacy/world_r8.yaml` with `configs/sim/legacy/belief_r8.yaml`
-reproduces it. The current development table is the first row. d4 is re-evaluated in a later,
-separate step (its reference is on the expected-stale list); until then no held-out number is
-current.
+**Everything else is superseded and kept as the record.** No file is deleted.
 
-| set | current | superseded (kept as the record) |
+- Every file in `reports/eval/` outside `rerun/`: the `v1*`, `pilot1*`, `d2*`, `d3*`, `dev6*` and
+  `d4*` tables, `case_b/` and `trajectories/`. The table below and the sections after it describe
+  them as they were when made. The "current" column means current at that time.
+- The tag `d4-final-eval`. It was produced by an evaluation that passed race-wide tyre life (the
+  hindsight stint limit R8) and other future information to the policies:
+  - the whole-race compound list, lap count, clean-lap filter and pit loss;
+  - the snapshot read from the lap after the decision;
+  - cross-race tables that held later races.
+
+  See both "Information contract" sections. The corrected protocol ("Rerunning the evaluation")
+  replaces it.
+- Two development passes on dev20 that were never committed:
+  - the provisional pass, before the simulators were frozen;
+  - the first final pass at `eval-v2-dev`, before #127 ("Changes after the freeze").
+
+**Superseded by the tyre-life change** (the record of that change). Every result below that was
+scored before it was produced under the hindsight stint limit R8 (docs/rules.md R8, retired) and
+without the wear cliff:
+
+- the d4 result at tag `d4-final-eval` (`d4_baselines.csv`, `d4_agent.csv`, `d4_combined*.csv`,
+  `d4_rule_baselines.csv` and their compare tables);
+- the dev6 live agent runs 1-3 (`dev6_agent_pass1*`, `dev6_run2_*`, `dev6_run3_*`);
+- the rule-baseline files (`dev6_rule_baselines.csv`, `d4_rule_baselines.csv`,
+  `*_combined_rules.csv`, `*_rules_compare_*`);
+- the dev6 baselines (`dev6_baselines.csv`, `dev6_run2_baselines.csv`);
+- the v1, pilot1 and d2 `*_r8` tables.
+
+`configs/sim/legacy/world_r8.yaml` with `configs/sim/legacy/belief_r8.yaml` reproduces that
+setting. `dev6_tyrelife_baselines.csv`, the first row, was the development table after the
+change. It is superseded too: it ran before the information-contract fixes, the as-of tables and
+the simulator freeze.
+
+| set | current at the time (all superseded now) | superseded earlier (kept as the record) |
 | --- | --- | --- |
+| dev20, every policy and the live agent, at `eval-v2-dev2` (development, calibration races; **the current result**) | `reports/eval/rerun/dev20/` (scenarios, references, baselines, agent rows, trajectories, timing sample, tables, provenance) | the provisional and `eval-v2-dev` dev20 passes (not committed) |
 | dev6, non-LLM policies under the tyre-life physics (development, a sanity check, not a result to tune against) | `reports/eval/dev6_tyrelife_baselines.csv` (baselines, `belief_optimizer`, `run_to_flag`, `one_stop_total`; world `config.WORLD_DEGRADATION` with the cliff, R8 off; reference rebuilt on this branch) | every R8-era dev6 table below |
 | v1, baselines + recorded run | `reports/eval/v1_baselines_r8.csv` (R8 rank 1, margin 3, limit-aware baselines) | `v1_baselines_split.csv` (Milestone 2: belief/world split, before R8); `v1_baselines.csv` (before the split) |
 | v1, world traffic on | none under R8 yet | `v1_world_baselines.csv` (before R8) |
@@ -2243,12 +2556,12 @@ current.
 | d2, baselines | `reports/eval/d2_baselines_r8.csv` | `d2.csv` baseline rows (Milestone 2, before R8) |
 | d2, live agent | `d2.csv` agent rows (Milestone 2, before R8; the cited ones) | `d2_fix*.csv` is a follow-up rerun after #59, not a replacement (below) |
 | d3 | none: its Monaco rows are superseded by d4 (below); d3 is not rescored | `d3_baselines.csv` (Nov 11, before R8; its reference is the expected stale one) |
-| d4, baselines + belief_optimizer (**report set, the held-out result**) | `reports/eval/d4_baselines.csv` (reference `data/references/d4/39bf1bbb4aa9.parquet`) | supersedes d3's 2019 Monaco baseline rows |
-| d4, live agent, one pass (**report set, the held-out result**) | `reports/eval/d4_agent.csv`, trajectories in `reports/eval/trajectories/d4/`; `d4_combined.csv` (agent + baseline + belief_optimizer rows, the input to `d4_compare_regret_s_*` with driver clusters and `d4_compare_race_regret_s_*` with race clusters); per-race paired table `d4_compare_per_race_regret_s_paired.csv`; figure table `d4_chart.csv` | |
+| d4, baselines + belief_optimizer (report set; the held-out result at tag `d4-final-eval`, **superseded**) | `reports/eval/d4_baselines.csv` (reference `data/references/d4/39bf1bbb4aa9.parquet`) | supersedes d3's 2019 Monaco baseline rows |
+| d4, live agent, one pass (report set; the held-out result at tag `d4-final-eval`, **superseded**) | `reports/eval/d4_agent.csv`, trajectories in `reports/eval/trajectories/d4/`; `d4_combined.csv` (agent + baseline + belief_optimizer rows, the input to `d4_compare_regret_s_*` with driver clusters and `d4_compare_race_regret_s_*` with race clusters); per-race paired table `d4_compare_per_race_regret_s_paired.csv`; figure table `d4_chart.csv` | |
 | dev6, baselines (development, calibration races) | `reports/eval/dev6_baselines.csv` (R8 rank 1, margin 3, limit-aware baselines) | |
 | dev6, live agent pass 1 (development, calibration races) | `reports/eval/dev6_agent_pass1.csv`, trajectories in `reports/eval/trajectories/dev6_pass1/`; `dev6_pass1_combined.csv` (agent + baseline rows, the input to `dev6_pass1_compare_regret_s_*` with driver clusters and `dev6_pass1_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_pass1_compare_per_race_regret_s_paired.csv`; figure table `dev6_pass1_chart.csv` | |
 | dev6, baselines + belief_optimizer, run 2 (development, calibration races) | `reports/eval/dev6_run2_baselines.csv` (compound proxy on, reference `fbb33ef732dd`) | `dev6_baselines.csv` (before the proxy) is the record pass 1 was compared with |
-| d4, rule baselines, scored once after the d4 results (**report set**) | `reports/eval/d4_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, frozen at `5a2bc41`); `d4_combined_rules.csv` (`d4_combined.csv`'s rows plus these) and `d4_rules_compare_*` ("Rule baselines added after the held-out run") | `d4_combined.csv` stays as committed |
+| d4, rule baselines, scored once after the d4 results (report set, **superseded**) | `reports/eval/d4_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, frozen at `5a2bc41`); `d4_combined_rules.csv` (`d4_combined.csv`'s rows plus these) and `d4_rules_compare_*` ("Rule baselines added after the held-out run") | `d4_combined.csv` stays as committed |
 | dev6, rule baselines (development, calibration races) | `reports/eval/dev6_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, reference `fbb33ef732dd`); `dev6_run2_combined_rules.csv` (run 2's rows plus these) and `dev6_run2_rules_compare_*` ("Rule baselines added after the held-out run") | |
 | dev6, live agent run 2 (development, calibration races) | `reports/eval/dev6_run2_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run2/`; `dev6_run2_combined.csv` (agent + baseline + belief_optimizer rows, the input to `dev6_run2_compare_regret_s_*` with driver clusters and `dev6_run2_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run2_compare_per_race_regret_s_paired.csv`; figure table `dev6_run2_chart.csv` | pass 1 stays as the record of the earlier loop and world |
 | dev6, live agent run 3 (variance repeat of run 2; development, calibration races) | `reports/eval/dev6_run3_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run3/`; `dev6_run3_combined.csv` (run 3's agent rows + run 2's baseline and belief_optimizer rows, the input to `dev6_run3_compare_regret_s_*` with driver clusters and `dev6_run3_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run3_compare_per_race_regret_s_paired.csv`; figure table `dev6_run3_chart.csv` | not a replacement: run 2 stays the cited dev6 result; run 3 only measures run-to-run variation |
@@ -2257,7 +2570,9 @@ current.
 Rows scored under R8 carry `stint_limit_rank` and `stint_limit_margin_laps`; rows scored after
 the tyre-life change carry a blank `stint_limit_margin_laps` (R8 off).
 
-## Current numbers (v1, R8, deterministic)
+## v1 numbers under R8 (deterministic; superseded)
+
+Superseded with every file outside `reports/eval/rerun/` ("Result files"); kept as the record.
 
 `reports/eval/v1_baselines_r8.csv`: `python -m src.eval score --scenarios data/scenarios/v1.json
 --policies baselines --recorded data/eval/baseline_agent_sample_run.json --require-reference
@@ -2577,8 +2892,15 @@ the arm, the artifacts, `belief_learned.yaml` and the report.
   default world draws no events; the opt-in hybrid world (configs/sim/world_hybrid.yaml) draws later
   periods with the same rates ("Safety cars and VSC in the scoring world"). Position regret has the
   traffic limits of docs/traffic.md.
-- **d3 is rebuilt at the final evaluation**; its committed reference and baselines predate R8
-  ("Reference cache").
+- **d3 and d4 are records, not rebuilt.** Their committed references and result files predate
+  the tyre-life change (d3's predate R8 too), and both sets include held-out races, so no new
+  run is made on them ("Reference cache", "Result files"). The held-out result is the rerun
+  pipeline's `test9`.
+- **A green STAY_OUT's continuation ignores a neutralisation that starts inside the stay.** A
+  STAY_OUT k under green is still expanded by advancing the snapshot k laps and planning from
+  there, so the belief's draws of an SC or VSC starting in those k laps do not enter the
+  continuation. Under SC or VSC at the snapshot the stay is planned from the snapshot ("Decisions",
+  "Changes after the freeze"). Found after the freeze and left as it is.
 
 ## Running on Sol
 
@@ -3049,6 +3371,12 @@ test calls a model.
 
 ## Live agent runs for the Milestone 2 report
 
+**Every run in this section is superseded** ("Result files"): pilot1, d2, Case B, the dev6 runs,
+d4 at tag `d4-final-eval` and the rule baselines scored after it. They ran under the earlier
+protocol, before the information-contract fixes. They are kept as the record of
+how the agent and the protocol got here. The current development result is "Development result
+(dev20) at eval-v2-dev2"; the held-out result is the rerun pipeline's `test9`.
+
 The live-agent outputs in `reports/eval/case_b/`, `reports/eval/pilot1*.csv` and
 `reports/eval/trajectories/` were produced on ASU RC Voyager with `LLM_BACKEND=voyager`,
 `VOYAGER_BASE_URL=https://openai.rc.asu.edu/v1`, `VOYAGER_MODEL=qwen3-30b-a3b` and the default
@@ -3119,7 +3447,8 @@ at 72k mean input tokens (pass 1: 100k). The PIT / STAY_OUT decision is the same
 limit. dev6 is a development set on calibration races, not a held-out result.
 
 **dev6, run 3 (variance repeat).** `reports/eval/dev6_run3_agent.csv` is an identical repeat of
-run 2, made only to measure run-to-run variation; **run 2 stays the cited development result**.
+run 2, made only to measure run-to-run variation; run 2 was the cited development result of that
+setting (superseded, "Result files").
 Same command, scenarios, reference (`fbb33ef732dd`), sim_code_version `58b50a00e0e3`, world and
 belief config (`ccb08edf391b` / `0002e90cb6fe`), model (qwen3-30b-a3b on Voyager, default
 temperature, seed 0) and agent loop (main's defaults, the four `AGENT_*` / `VOYAGER_TEMPERATURE`
@@ -3197,12 +3526,17 @@ run 4 minus run 2 regret +0.04 s per scenario, 124 identical); the four run 3 ep
 again (regret 0.00, 0.60, 0.00 and 5.38 s, against invalid, 4.96, 15.12 and 25.73 in run 3).
 What got worse is cost: with calls that used to be lost now running, an episode makes 2.5 more
 evidence calls and reads 16% more input tokens than in run 2, 4.6 s slower. The held-out d4
-result (tag `d4-final-eval`) was produced by the loop before this fix; rerunning it is the
-owner's decision.
+result (tag `d4-final-eval`) was produced by the loop before this fix. It was not rerun: it is
+superseded, and the held-out result is the rerun pipeline's `test9` ("Result files").
 
-### d4, the held-out result
+### d4, the earlier held-out result (superseded)
 
-d4 is the report set and this is the held-out result, declared in advance and run once at tag
+**Superseded.** This run passed race-wide tyre life (R8) and other future information to the
+policies ("Information contract"), so its numbers are not a result of the corrected protocol;
+the held-out result is the rerun pipeline's `test9`, and the current development result is
+"Development result (dev20) at eval-v2-dev2". Kept as the record of that run.
+
+d4 was the report set and this was the held-out result, declared in advance and run once at tag
 `d4-final-eval` (commit cd1b937, main after #82), with no code or config change. Steps, each run
 once: `scenarios --races 2019_06_monaco 2020_16_sakhir 2025_11_austria 2024_11_austria --version
 d4 --max-per-race 25 --seed 0` (report set, `development: false`, 100 scenarios, 25 per race,
@@ -3241,6 +3575,10 @@ references, fitted on every race lap, use SOFT; every policy's regret there is a
 (-3.25 [-5.50, -1.25] on dev6) is not there on d4.
 
 ### Rule baselines added after the held-out run
+
+Superseded with the d4 run they follow (above). The two rules, in their current form (the as-of
+tyre-life estimate in place of R8, "Rule baselines: run_to_flag and one_stop_total"), are the
+lead comparisons of the dev20 result and of the held-out run.
 
 **Why.** `fixed_one_stop` always makes exactly one more stop from the snapshot, also after the
 driver has made their stop, when the best plan is usually to run to the flag. Split by whether
