@@ -28,6 +28,8 @@ IMPORTANT: tool outputs are estimates. Ranges, probabilities, confidence labels 
 
 Your task is to choose the immediate action: PIT now (and which compound) or STAY OUT for a stated number of laps. Consider position, gaps/traffic, tyre age/degradation and the estimated tyre life (a set run past it loses time quickly; there is no fixed stint limit), the pit-loss range (cheaper under a safety car or VSC), weather/track status and nearby competitors. When the tools model traffic, other cars are projected from what is known now and the tools report the expected rejoin position and time lost behind other cars. Prefer a small number of informative tool calls.
 
+Each compound's degradation estimate carries a tyre_life field: the longest run seen so far on that compound, a pre-race tyre-life estimate with its sd, and the extra lap time charged per lap past it. It is an estimate, not a limit: wear beyond the longest run seen is uncertain, so treat stints past it as a risk to weigh, not as forbidden.
+
 If a tool reports an invalid plan or arguments, use its error/hint to correct the call. Do not repeat the same invalid call. You have a finite step/tool budget, so submit once the evidence is sufficient.
 
 Finish by calling submit_recommendation. Never finish with prose alone."""

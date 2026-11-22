@@ -49,6 +49,9 @@ BASELINE_POLICIES = ("fixed_one_stop", "fixed_two_stop", "greedy_crossover", "ac
 RULES = ("as_of", "stratified")
 BLAS_ENV = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS")
 TAIL_S = (10.0, 20.0, 30.0)
+# the environment provenance.json records as the model: the backend and the model id of each backend
+# (and the voyager reply cap), never a key, token or endpoint
+MODEL_ENV = ("LLM_BACKEND", "ANTHROPIC_MODEL", "HF_MODEL", "VOYAGER_MODEL", "VOYAGER_MAX_TOKENS", "VOYAGER_TEMPERATURE")
 ERAS = (("2019-20", 2019, 2020), ("2021", 2021, 2021), ("2022", 2022, 2022), ("2023", 2023, 2023),
         ("2024-25", 2024, 2025))
 
@@ -421,8 +424,8 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
            "set_digest": s.digest if s else None, "set_kind": s.kind if s else None,
            "sampling": s.sampling if s else None, "world": cfg(world), "belief": cfg(belief),
            "sim_code_version": calibration.SIM_CODE_VERSION, "profile": prof.model_dump(mode="json"),
-           "model": {k: os.environ.get(k) for k in ("LLM_BACKEND", "ANTHROPIC_MODEL", "HF_MODEL", "OPENAI_MODEL",
-                                                     "OPENAI_BASE_URL")},
+           # the backend and model id only: never a key, a token or an endpoint
+           "model": {k: os.environ.get(k) for k in MODEL_ENV},
            "loop": {"max_steps": prof.agent.max_steps,
                     **{k: os.environ.get(k) for k in ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS",
                                                        "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",

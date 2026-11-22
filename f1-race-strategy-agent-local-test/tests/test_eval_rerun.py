@@ -87,6 +87,17 @@ def test_tail_and_status_tables_and_eras():
         ["2019-20", "2019-20", "2021", "2022", "2024-25"]
 
 
+def test_provenance_records_the_model_never_a_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "voyager")
+    monkeypatch.setenv("VOYAGER_MODEL", "some-model")
+    monkeypatch.setenv("VOYAGER_API_KEY", "sk-test-secret")
+    monkeypatch.setenv("VOYAGER_BASE_URL", "https://example.invalid")
+    prov = json.loads(rerun.write_provenance(args(tmp_path)).read_text())
+    assert prov["model"]["LLM_BACKEND"] == "voyager" and prov["model"]["VOYAGER_MODEL"] == "some-model"
+    text = (tmp_path / "provenance.json").read_text()
+    assert "sk-test-secret" not in text and "example.invalid" not in text
+
+
 def test_tables_write_every_output_and_a_provenance_file(tmp_path):
     spec = tmp_path / "sets.yaml"
     spec.write_text("t:\n  races: [2019_06_x, 2021_04_y, 2024_11_z]\n  per_race: 4\n  seed: 0\n  development: false\n"
