@@ -2495,6 +2495,32 @@ Before numbers on main (2026-11-22, f7be251: wear cliff, R8 retired, traffic off
 and the ablation in `reports/calibration/fidelity/ablation/ablation.md`, both computed on main f7be251
 over 18 calibration races (2022_11_austria did not load then).
 
+### The noise floor (9c225f5's default judge, 18 calibration races)
+
+The headline replay handed the real race step by step (`ceiling_pooled.csv`; 365 close pairs;
+race-cluster 95% intervals):
+
+| level | close-pair order | rel gap MAE s | Spearman | abs MAE s |
+| --- | --- | --- | --- | --- |
+| 0 judge (the headline) | 0.682 [0.595, 0.744] | 15.5 [10.1, 21.4] | 0.945 | 32.2 |
+| 1 + each stint's own pace | 0.677 [0.581, 0.748] | 15.1 [9.7, 21.1] | 0.946 | 32.5 |
+| 2 + in/out laps as recorded (real stop durations) | 0.693 [0.617, 0.753] | 14.5 [9.0, 20.5] | 0.951 | 28.5 |
+| 3 + SC/VSC laps as recorded | 0.608 [0.557, 0.667] | 5.2 [4.2, 6.3] | 0.943 | 8.9 |
+| 4 + lap 1 as recorded | 0.745 [0.683, 0.804] | 3.2 [2.5, 3.9] | 0.967 | 7.9 |
+| pit laps alone | 0.710 [0.635, 0.762] | 14.9 | 0.951 | 28.3 |
+| SC/VSC laps alone | 0.551 [0.506, 0.607] | 8.2 | 0.882 | 13.8 |
+| lap 1 alone | 0.685 [0.597, 0.749] | 16.0 | 0.946 | 32.6 |
+
+Reading: about 0.75 close-pair order and 3 s relative gap error is the ceiling for a judge that
+knows every stint's pace, every stop, every neutralised lap and the start; what is left sits on
+the non-clean green laps (blue flags, incidents, off-track moments). Most of today's relative gap
+error is the neutralised laps (15.5 to 5.2 s), not tyre or pace physics: per-stint pace known
+moves the headline by -0.005 order and -0.4 s, the real stops by +0.011 to +0.028 order and
+-0.6 to -1.0 s. Recorded SC/VSC laps without the cars' real positions at the restart make the
+order worse (0.55 alone): a recorded SC lap closes the real gap to the car ahead, not the
+simulated one, so the neutralised laps need the queue (whose order the earlier laps decide)
+rather than their lap times.
+
 ### What the ablation says (f7be251, selection rule applied)
 
 Changes against the base (the default world and `belief.yaml`), pooled, race-cluster 95% intervals:
