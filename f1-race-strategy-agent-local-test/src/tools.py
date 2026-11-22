@@ -232,6 +232,11 @@ def evaluate_plan(plan=None, first_stop_lap=None, compound=None):
     return _belief(agent_tools.evaluate_plan, plan, first_stop_lap, compound)
 
 
+def race_picture():
+    """agent_tools.race_picture for the active snapshot (protocol v2free)."""
+    return _belief(agent_tools.race_picture)
+
+
 def _validate_action(action: dict[str, Any]):
     s = _snapshot()
     kind = str(action.get("action", "")).lower()
@@ -391,4 +396,16 @@ TOOL_SPECS_V2 = [
         "fn": evaluate_plan,
     },
     *[spec for spec in TOOL_SPECS if spec["name"] in _V2_KEPT],
+]
+
+# Protocol v2free (the default): v2's tools plus the race as a strategist sees it.
+TOOL_SPECS_V2FREE = [
+    *TOOL_SPECS_V2[:2],
+    {
+        "name": "race_picture",
+        "description": "Everything visible now that the look-ahead does not fully weigh, in one call. car: position, gaps, laps left, track status and how long a safety car or VSC has lasted, the pit window, the stints so far, the current set and its last lap times, and set_wear (the set's observed wear in s/lap of tyre age from its clean laps, fuel-corrected, against the model's value and sd: is this set wearing faster or slower than the simulator thinks?). nearby: the cars around (position, gap, compound, tyre age, stops so far). rejoin: cars within the pit loss behind now and the position a stop now would rejoin at, from the gaps. compounds: per compound the race laps behind the fit, the longest run seen in the race, the field's observed wear against the model's, the base pace sd, how a compound with no race laps is priced, and the tyre-life estimate with its sd and source.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": race_picture,
+    },
+    *TOOL_SPECS_V2[2:],
 ]

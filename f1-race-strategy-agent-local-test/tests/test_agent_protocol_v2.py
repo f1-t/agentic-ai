@@ -285,3 +285,136 @@ def test_with_no_turn_left_the_submission_is_not_held(snaps, monkeypatch):
     stats = {}
     rec, _ = run_agent(snaps["mid"], verbose=False, backend=backend, max_steps=1, submit_grace_steps=0, stats=stats)
     assert rec["decision"] == "PIT" and stats["check_fired"] is False
+
+
+# --- v2free (the default): v2's tools plus the full picture, the choice left to the model ----------
+def test_v2free_is_the_default_and_leaves_the_choice_to_the_model(snaps, monkeypatch):
+    monkeypatch.delenv("AGENT_PROTOCOL", raising=False)
+    assert agent.protocol() == "v2free"
+    assert "copy its submit" not in agent.SYSTEM_PROMPT_V2FREE and "plan 1 is the default" not in agent.SYSTEM_PROMPT_V2FREE
+    backend = Recording([ModelTurn(tool_calls=[submit(reassess_after_laps=3)])])
+    run_agent(snaps["mid"], verbose=False, backend=backend, max_steps=2)
+    assert backend.prompts[0] == agent.SYSTEM_PROMPT_V2FREE
+    assert {"rank_plans", "evaluate_plan", "race_picture"} <= set(backend.offered[0])
+
+
+@pytest.mark.agent_protocol_v2free
+def test_v2free_does_not_hold_a_departure_from_plan_one(snaps, plan1, monkeypatch):
+    fake_rank(monkeypatch)
+    backend = Recording([ModelTurn(tool_calls=[ToolCall("1", "rank_plans", {}), submit(reassess_after_laps=9)])])
+    stats = {}
+    rec, traj = run_agent(snaps["mid"], verbose=False, backend=backend, max_steps=3, stats=stats)
+    assert rec["reassess_after_laps"] == 9 and stats["check_fired"] is False and traj[-1]["output"]["accepted"]
+
+
+@pytest.mark.agent_protocol_v2free
+@pytest.mark.parametrize("confirm", [True, False])
+def test_v2free_holds_once_a_submission_its_reading_contradicts(snaps, plan1, monkeypatch, confirm):
+    fake_rank(monkeypatch)   # the reading: STAY_OUT's best plan faster in 93% of draws
+    pit = {"decision": "PIT", "compound": "MEDIUM"}
+    final = pit if confirm else plan1
+    backend = Recording([ModelTurn(tool_calls=[ToolCall("1", "rank_plans", {}), submit(**pit)]),
+                         ModelTurn(tool_calls=[submit(**final)])])
+    stats = {}
+    rec, traj = run_agent(snaps["mid"], verbose=False, backend=backend, max_steps=3, stats=stats)
+    held = traj[1]["output"]["held"]
+    assert "the reading you received says otherwise" in held and "93%" in held
+    assert rec["decision"] == final["decision"]
+    assert stats["check_fired"] is True and stats["check_changed"] is (not confirm)
+
+
+@pytest.mark.parametrize("name", ["mid", "late3", "lap0"])
+def test_a_named_plan_is_scored_exactly_and_the_optimizers_is_its_own(snaps, name):
+    prof = load_profile("local")
+    belief = race_simulators(prof)(RACE, "belief")
+    snap = snaps[name]
+    opt = belief_optimum(snap, belief, prof.sim.max_stops, seed=0, n_samples=prof.sim.n_samples)
+    pairs = opt.as_pairs()
+    w = pairs[0][1]
+    rec = {"decision": "PIT" if len(pairs) > 1 and w == 1 else "STAY_OUT", "reassess_after_laps": max(1, w - 1),
+           "compound": pairs[1][0] if len(pairs) > 1 else None, "plan": pairs, "confidence": 0.6}
+    with agent_tools.belief_config_as(belief.config):
+        tools.set_snapshot(snap)
+        assert tools.check_submission(rec) is None
+    assert to_plan(snap, rec, belief, prof.sim.max_stops, seed=0, n_samples=prof.sim.n_samples) == opt
+
+
+def test_a_named_plan_that_breaks_the_decision_is_refused_with_the_fix(snaps):
+    snap = snaps["mid"]
+    tools.set_snapshot(snap)
+    rest, cur, done = snap.remaining_laps, snap.compound, snap.laps_completed
+    other = "HARD" if cur != "HARD" else "MEDIUM"
+    cases = {
+        "sum to": {"decision": "STAY_OUT", "reassess_after_laps": 3, "plan": [[cur, 5], [other, rest - 4]]},
+        "first stint continues": {"decision": "STAY_OUT", "reassess_after_laps": 3, "plan": [[other, 5], [cur, rest - 5]]},
+        "1 lap": {"decision": "PIT", "compound": other, "plan": [[cur, 3], [other, rest - 3]]},
+        "allows no stop before": {"decision": "STAY_OUT", "reassess_after_laps": 6, "plan": [[cur, 5], [other, rest - 5]]},
+        "not the plan's first stop": {"decision": "STAY_OUT", "reassess_after_laps": 3, "first_stop_lap": done + 6,
+                                      "compound": other, "plan": [[cur, 5], [other, rest - 5]]},
+    }
+    for needle, rec in cases.items():
+        msg = tools.check_submission({**rec, "confidence": 0.6})
+        assert msg and msg.startswith("The named plan cannot be scored") and needle in msg, (needle, msg)
+    start = snaps["lap0"]   # no stop yet: a one-stint plan uses a single compound
+    tools.set_snapshot(start)
+    single = tools.check_submission({"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": 0.6,
+                                     "plan": [[start.compound, start.remaining_laps]]})
+    assert single and "two different compounds" in single   # the rules still apply to a named plan
+
+
+def test_v2_and_v1_drop_a_named_plan(snaps, monkeypatch):
+    snap = snaps["mid"]
+    bad = {"plan": [["WET", 1]]}   # scored, it would be refused
+    for proto in ("v1", "v2"):
+        monkeypatch.setenv("AGENT_PROTOCOL", proto)
+        rec, _ = run_agent(snap, verbose=False, backend=Recording([ModelTurn(tool_calls=[submit(**bad)])]), max_steps=2)
+        assert rec is not None and "plan" not in rec
+
+
+@pytest.mark.agent_protocol_v2free
+def test_race_picture_is_compact_anonymous_and_says_the_sets_wear(snaps):
+    tools.set_snapshot(snaps["mid"])
+    out = tools.present(tools.race_picture())
+    text = json.dumps(out)
+    assert len(text) < 3000
+    assert set(out) >= {"car", "nearby", "rejoin", "compounds"}
+    assert set(out["car"]["set_wear"]) == {"observed_s_per_lap", "clean_laps", "model"}
+    assert all(c["car"].startswith("Car ") for c in out["nearby"])
+    assert DRIVER not in text and "spain" not in text.lower() and "2021" not in text
+
+
+@pytest.mark.agent_protocol_v2free
+def test_what_v2free_accepts_the_scorer_scores(snaps):
+    """test_agent_contract's property for named plans: accepted means an ok row, scored as named."""
+    from src.eval.policies import Decision
+    from src.eval.scenarios import Scenario
+    from src.eval.score import policy_scenario, score_scenario
+    prof = load_profile("local")
+    sim_for = race_simulators(prof)
+    belief, world = sim_for(RACE, "belief"), sim_for(RACE, "world")
+    snap = snaps["mid"]
+    sc = Scenario(scenario_id=f"{RACE}:{DRIVER}:{snap.laps_completed:02d}", race_id=RACE, driver=DRIVER,
+                  lap=snap.laps_completed, snapshot=snap, actual_stints=[])
+    seen = policy_scenario(sc, belief)
+    tools.set_snapshot(seen.snapshot)
+    cur, rest = seen.snapshot.compound, seen.snapshot.remaining_laps
+    subs = []
+    for c in ("SOFT", "MEDIUM", "HARD", "WET"):
+        subs.append({"decision": "PIT", "compound": c, "plan": [[cur, 1], [c, rest - 1]]})
+        for k, w in ((2, 3), (5, 12), (5, 6)):
+            subs.append({"decision": "STAY_OUT", "reassess_after_laps": k, "plan": [[cur, w], [c, rest - w]]})
+        subs.append({"decision": "STAY_OUT", "reassess_after_laps": 1, "plan": [[cur, 4], [c, 10], [cur, rest - 14]]})
+    subs = [{**s, "confidence": 0.6} for s in subs]
+    accepted = [s for s in subs if tools.check_submission(s) is None]
+    assert accepted and len(accepted) < len(subs)
+    policies = {f"s{i}": (lambda r: (lambda scenario, b, m: Decision(None, submission=r)))(s) for i, s in enumerate(accepted)}
+    rows = score_scenario(sc, world, policies, belief=belief, n_samples=prof.sim.n_samples, max_stops=prof.sim.max_stops)
+    assert not [(r["policy"], r["status"], r.get("reason")) for r in rows if r["status"] != "ok"]
+    for r in rows:
+        named = accepted[int(r["policy"][1:])]["plan"]
+        assert json.loads(r["plan"]) == named if isinstance(r["plan"], str) else r["plan"] == named
+
+
+@pytest.mark.agent_protocol_v2free
+def test_v2free_keeps_the_named_stop_refusal_and_the_last_turn_fallback(snaps):
+    test_a_broken_named_stop_says_how_to_fix_it_and_on_the_last_turn_is_dropped(snaps, None)

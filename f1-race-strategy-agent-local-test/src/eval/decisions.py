@@ -94,6 +94,8 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     action = to_action(decision)
     if action["action"] == "stay" and action["laps"] >= snapshot.remaining_laps:
         return Plan.of([[snapshot.compound, snapshot.remaining_laps]])
+    if decision.get("plan") is not None:
+        return named_plan(snapshot, decision, action, belief_sim, max_stops)
     if decision.get("first_stop_lap") is not None:
         return kept_plan(snapshot, decision, action, belief_sim, max_stops, seed=seed, n_samples=n_samples)
     # the fit at the decision snapshot plans the continuation too, as Simulator.compare does:
@@ -115,6 +117,51 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     if errors:
         raise InvalidDecision("; ".join(errors))
     return plan
+
+
+def named_plan(snapshot: Snapshot, decision: dict, action: dict, belief_sim, max_stops: int) -> Plan:
+    """The plan of a decision that names its whole plan (agent protocol v2free's optional `plan`,
+    [[compound, laps], ...] for the remaining laps, the first stint continuing the current set): that
+    plan exactly, its later stints drawn from the inventory as any baseline plan's are
+    (optimizer_bridge.to_contract). It must agree with the decision: a PIT stops at the end of the next
+    lap onto `compound`; a STAY_OUT of k laps makes no stop before the end of lap laps_completed + k + 1;
+    with first_stop_lap or compound given, they must be the plan's. At most max_stops stops, every
+    compound modelled; the rules are the simulator's (the submission check validates it). Raises
+    InvalidDecision otherwise."""
+    from ..baselines import domain
+    from ..sim.optimizer_bridge import to_contract
+    raw = decision.get("plan")
+    try:
+        pairs = [(str(c).upper(), int(n)) for c, n in raw]
+    except (TypeError, ValueError) as exc:
+        raise InvalidDecision(f"plan must be [[compound, laps], ...], got {raw!r}") from exc
+    if not pairs or any(n < 1 for _, n in pairs):
+        raise InvalidDecision("plan needs at least one stint and every stint at least one lap")
+    if pairs[0][0] != snapshot.compound:
+        raise InvalidDecision(f"the plan's first stint continues the current set ({snapshot.compound}), got {pairs[0][0]}")
+    if sum(n for _, n in pairs) != snapshot.remaining_laps:
+        raise InvalidDecision(f"the plan's stints sum to {sum(n for _, n in pairs)} laps; "
+                              f"{snapshot.remaining_laps} remain")
+    if len(pairs) - 1 > max_stops:
+        raise InvalidDecision(f"the plan makes {len(pairs) - 1} stops; at most {max_stops}")
+    modelled = belief_sim.fitted_for(snapshot).modelled
+    if (bad := [c for c, _ in pairs[1:] if c not in modelled]):
+        raise InvalidDecision(f"the plan fits {bad[0]}, which the belief does not model (modelled: {sorted(modelled)})")
+    done, first = snapshot.laps_completed, pairs[0][1]
+    nxt = pairs[1][0] if len(pairs) > 1 else None
+    if action["action"] == "pit" and (first != 1 or len(pairs) < 2):
+        raise InvalidDecision("PIT stops at the end of the next lap: the plan's first stint must be 1 lap")
+    if action["action"] == "stay" and len(pairs) > 1 and first < action["laps"] + 1:
+        raise InvalidDecision(f"STAY_OUT {action['laps']} allows no stop before the end of lap {done + action['laps'] + 1}; "
+                              f"the plan stops at the end of lap {done + first}")
+    if decision.get("compound") and nxt and str(decision["compound"]).upper() != nxt:
+        raise InvalidDecision(f"compound {decision['compound']!r} is not the plan's first new compound {nxt}")
+    lap = decision.get("first_stop_lap")
+    if lap is not None and (nxt is None or lap != done + first):
+        raise InvalidDecision(f"first_stop_lap {lap!r} is not the plan's first stop "
+                              f"({'none' if nxt is None else done + first})")
+    plan = domain.Plan(tuple(domain.Stint(c, n) for c, n in pairs))
+    return to_contract(plan, snapshot, sources=belief_sim.config.inventory_sources)
 
 
 def kept_plan(snapshot: Snapshot, decision: dict, action: dict, belief_sim, max_stops: int, *, seed: int = 0,

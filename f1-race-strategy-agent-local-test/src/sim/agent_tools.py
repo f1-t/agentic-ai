@@ -1026,6 +1026,9 @@ def submission_error(snapshot: Snapshot, decision: dict, *, sim=None, profile=No
         plan = decisions.to_plan(snapshot, decision, sim, profile.sim.max_stops, seed=0,
                                  n_samples=profile.sim.n_samples)
     except decisions.InvalidDecision as exc:
+        if decision.get("plan") is not None:   # protocol v2free's named plan (decisions.named_plan)
+            return (f"The named plan cannot be scored: {exc}. Fix the plan ([[compound, laps], ...] for the "
+                    f"{remaining} laps left, the first stint on the current set) or leave plan out.")
         if decision.get("first_stop_lap") is not None:   # protocol v2's kept stop (decisions.kept_plan)
             return (f"The named first stop cannot be kept: {exc}. Copy first_stop_lap and compound together from "
                     f"rank_plans' submit field, or leave first_stop_lap out (the rest is then planned again).")
@@ -1312,6 +1315,129 @@ def evaluate_plan(snapshot: Snapshot, plan=None, first_stop_lap=None, compound=N
     if res.support_warnings[i]:
         out["extrapolates"] = res.support_warnings[i]
     return _jsonable(out)
+
+
+# --- protocol v2free: the race as a strategist sees it at the snapshot -----------------------------------
+def _wear_slope(rows, fuel: float):
+    """(observed wear s/lap, clean laps): the slope of fuel-corrected lap time on tyre age within each
+    (driver, stint) of `rows`' clean laps, pooled; None with fewer than 4 laps or no age spread."""
+    if rows is None or not len(rows) or "clean" not in rows:
+        return None, 0
+    r = rows[rows["clean"].fillna(False).astype(bool) & rows["tyre_age"].notna() & rows["lap_time_s"].notna()]
+    if len(r) < 4:
+        return None, int(len(r))
+    keys = [r["driver"], r["stint"].fillna(-1)]
+    y = r["lap_time_s"].astype(float) - fuel * r["lap"].astype(float)
+    a = r["tyre_age"].astype(float)
+    yd, ad = y - y.groupby(keys).transform("mean"), a - a.groupby(keys).transform("mean")
+    den = float((ad * ad).sum())
+    return (None if den <= 0 else round(float((yd * ad).sum()) / den, 3)), int(len(r))
+
+
+def race_picture(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
+    """What a strategist weighs at the snapshot beyond the look-ahead's ranking, compactly, from the
+    snapshot and the race laps visible at it (Simulator.window_rows: cut at the snapshot's moment,
+    data.visible_rows) and the belief fit at it; nothing after the snapshot enters. Driver codes are
+    the snapshot's (tools.present labels them):
+
+      car         position, gaps, laps left, track status and how long a neutralisation has lasted,
+                  the pit window, the stint history, the current set and its last lap times, and the
+                  set's observed wear (fuel-corrected lap time on tyre age) against the model's
+      nearby      the cars around: position, gap, compound, tyre age and stops so far
+      rejoin      cars within the pit loss behind at the end of the last lap (a stop now drops behind
+                  them) and the position that implies, from the gaps alone
+      compounds   per compound: race laps behind the fit, the longest run seen in the race and the
+                  field's observed wear against the model's (value and sd), the base pace sd, where pace
+                  and wear come from when proxied, and the tyre-life estimate with its sd and source"""
+    sim, profile = _setup(snapshot, sim, profile)
+    fit = sim.fitted_for(snapshot)
+    done = snapshot.laps_completed
+    rows = sim.window_rows(snapshot, done) if done > 0 else None
+    if rows is not None and len(rows):
+        rows = rows[rows["lap"] <= done]
+    deg = fit.degradation
+    fuel = float(getattr(deg, "fuel_slope", 0.0) or 0.0)
+    rep = sim.model_report(snapshot)
+    fit_report = getattr(deg, "fit_report", None) or {}
+    proxy = fit_report.get("proxy") or {}
+    cliffs = sim.cliffs_for(snapshot)
+    loss = pit_loss(snapshot, sim=sim, profile=profile)
+    window = pit_window(snapshot, sim.config)
+
+    def model_wear(c):
+        r = rep.compounds.get(c)
+        if r is None or not r.modelled:
+            return None
+        sd = r.wear_s_per_lap.sd
+        return {"value": round(float(r.wear_s_per_lap.value), 3), "sd": None if _nan(sd) else round(float(sd), 3)}
+
+    def r1(x):
+        return None if x is None or _nan(x) else round(float(x), 1)
+    car = {"position": snapshot.position, "gap_ahead_s": r1(snapshot.gap_ahead_s), "gap_behind_s": r1(snapshot.gap_behind_s),
+           "laps_left": snapshot.remaining_laps, "track_status": snapshot.track_status.upper(),
+           "neutralised_for_laps": _neutralised_for(snapshot), "pit_window": window["summary"],
+           "stints_so_far": [f"{s.compound} {s.laps}" for s in snapshot.stints],
+           "current_set": f"{snapshot.compound}, age {snapshot.tyre_age}",
+           "last_laps_s": [round(float(t), 2) for t in snapshot.recent_lap_times_s[-5:]]}
+    own = None
+    if rows is not None and len(rows):
+        mine = rows[rows["driver"] == snapshot.driver]
+        if len(mine):
+            own = mine[mine["stint"] == mine["stint"].max()]
+    slope, n = _wear_slope(own, fuel)
+    car["set_wear"] = {"observed_s_per_lap": slope, "clean_laps": n, "model": model_wear(snapshot.compound)}
+
+    nearby = []
+    for c in snapshot.field.nearby:
+        entry = {"car": c.driver, "position": c.position, "gap_s": None if c.gap_s is None else round(float(c.gap_s), 1)}
+        if rows is not None and len(rows):
+            theirs = rows[rows["driver"] == c.driver]
+            if len(theirs):
+                last = theirs.iloc[-1]
+                entry.update(compound=last["compound"], tyre_age=None if _nan(last["tyre_age"]) else int(last["tyre_age"]),
+                             stops=int(theirs["stint"].nunique()) - 1)
+        nearby.append(entry)
+
+    rejoin = None
+    now = float(loss["pit_loss_now_s"]["median"]) if loss.get("pit_loss_now_s") else None
+    if rows is not None and len(rows) and now is not None and "end_s" in rows:
+        at = rows[rows["lap"] == done]
+        ours = at.loc[at["driver"] == snapshot.driver, "end_s"]
+        if len(ours) and snapshot.position is not None:
+            behind = (pd_numeric(at["end_s"]) - float(ours.iloc[0]))
+            passing = int(((behind > 0) & (behind < now)).sum())
+            rejoin = {"pit_loss_now_s": round(now, 1), "cars_within_it_behind": passing,
+                      "rejoin_position_about": int(snapshot.position) + passing}
+
+    compounds = {}
+    for c, r in rep.compounds.items():
+        if not r.modelled:
+            continue
+        on = rows[rows["compound"] == c] if rows is not None and len(rows) else None
+        slope, n = _wear_slope(on, fuel)
+        entry = {"race_laps": int(r.n_race_rows or 0),
+                 "longest_run_seen": None if on is None or not len(on) else int(on["tyre_age"].max()),
+                 "field_wear_observed": slope, "field_clean_laps": n, "model_wear": model_wear(c),
+                 "base_pace_sd_s": None if _nan(r.base_s.sd) else round(float(r.base_s.sd), 3)}
+        tiers = proxy.get(c)
+        if tiers is not None and (tiers.get("pace_source") != "race" or tiers.get("wear_source") != "race"):
+            entry["priced_by"] = f"pace {tiers.get('pace_source')}, wear {tiers.get('wear_source')}"
+        life = cliffs.get(c)
+        if life is not None:
+            t = _tyre_life(life)
+            entry["tyre_life"] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in
+                                  {"seen": t["longest_run_seen_laps"], "prior": t["prior_life_laps"],
+                                   "prior_sd": t["prior_sd_laps"], "source": t["prior_source"]}.items()
+                                  if v is not None}
+        compounds[c] = entry
+    return _jsonable({"car": car, "nearby": nearby, "rejoin": rejoin, "compounds": compounds,
+                      "note": "observed wear: s/lap of tyre age from clean laps so far, fuel-corrected; compare with "
+                              "model_wear (the simulator's value and sd); race_laps are the laps behind the fit"})
+
+
+def pd_numeric(s):
+    import pandas as pd
+    return pd.to_numeric(s, errors="coerce")
 
 
 def recommendation_fields(snapshot: Snapshot, decision: dict) -> dict:
