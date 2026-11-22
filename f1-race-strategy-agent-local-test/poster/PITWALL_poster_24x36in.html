@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><!-- built by poster/build_poster.py --dev dev20 --fidelity reports/calibration/fidelity --><title>PITWALL poster</title><style>
+@page{size:24in 36in;margin:0}
+:root{--bg:#0f0e1c;--panel:#1a1930;--line:#3d3b58;--ink:#f4f2f8;--muted:#c9c6d8;--red:#ff4d3d;
+      --amber:#ffcf4a;--held:#ffcf4a;--dev:#9cc8ff;--pend:#b9b6cc}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;width:24in;height:36in;background:var(--bg);
+  -webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"Noto Sans","Liberation Sans",Arial,sans-serif;color:var(--ink);font-size:22pt;line-height:1.22}
+code{font-family:"DejaVu Sans Mono","Liberation Mono",monospace;font-size:.88em}
+.poster{position:relative;width:24in;height:36in;padding:.6in .7in .6in;display:flex;flex-direction:column;
+  gap:.18in;overflow:hidden;border-top:.12in solid var(--red)}
+.ribbon{flex:none;border:3px dashed var(--pend);color:var(--pend);font-size:19pt;font-weight:800;
+  padding:.04in .2in;border-radius:.08in;text-align:center;
+  background:repeating-linear-gradient(135deg,#1c1b31 0 .12in,#26253f .12in .24in)}
+.ribbon .pend{font-size:.9em}
+.ribbon.fix{border-color:#ff4d3d;color:#ff8a7d}
+.top{display:flex;justify-content:space-between;align-items:center;gap:.4in;flex:none}
+.kicker{font-size:19pt;letter-spacing:.12em;text-transform:uppercase;color:var(--red);font-weight:700}
+h1{font-size:92pt;line-height:1;margin:0;letter-spacing:.02em;font-weight:900}
+.acro{font-size:21pt;color:var(--amber);font-weight:700}
+.q{font-size:38pt;font-weight:700;margin:.02in 0 .05in;line-height:1.12}
+.authors{font-size:22pt;line-height:1.26}
+.authors span{font-size:19pt;color:var(--muted)}
+.map{margin:0;width:5.6in;flex:none;text-align:center}
+.map img{width:5.6in;height:auto;display:block}
+.map figcaption{font-size:16pt;color:var(--muted);margin-top:.02in}
+.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.1in .24in .12in;font-size:22pt;
+  line-height:1.2}
+.pts{display:grid;grid-template-columns:1fr 1.1fr 1.15fr;gap:.32in}
+.pts b{font-size:23pt;color:var(--amber)}
+.tag{display:inline-block;font-size:16pt;line-height:1.3;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:.01in .1in;border-radius:.06in;vertical-align:.12em}
+.tag.held{background:var(--held);color:#141225}
+.pend{display:inline-block;font-size:.88em;line-height:1.15;font-style:italic;font-weight:700;color:var(--pend);
+  border:2px dashed var(--pend);border-radius:.06in;padding:0 .07in;vertical-align:.04em;white-space:nowrap;
+  background:repeating-linear-gradient(135deg,#22213a 0 .07in,#2f2e4a .07in .14in)}
+.pend.big{font-size:.92em;padding:.01in .12in}
+.grid{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto 1fr;gap:.22in .32in;min-height:0}
+.p4{grid-column:1 / span 2}
+.stack{display:flex;flex-direction:column;gap:.22in;min-height:0}
+.stack .panel{flex:none}
+.stack .p7{flex:1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.14in .24in .16in;min-height:0;
+  overflow:hidden}
+h2{font-size:29pt;line-height:1.1;margin:0 0 .08in;display:flex;align-items:center;gap:.13in;white-space:nowrap}
+h2>b{display:inline-flex;align-items:center;justify-content:center;width:.5in;height:.5in;border-radius:50%;
+  background:#c42f26;font-size:21pt;flex:none}
+p{margin:0 0 .08in}
+p:last-child{margin-bottom:0}
+.small{font-size:22pt;line-height:1.2}
+.note{font-size:19pt;line-height:1.2;color:var(--muted)}
+.note b{color:var(--ink)}
+.def{border-left:.08in solid var(--amber);padding-left:.13in;font-size:22pt;line-height:1.2}
+.key{white-space:nowrap;color:var(--muted)}
+ul{margin:0;padding-left:.34in}
+li{margin-bottom:.03in}
+.diagram{display:flex;flex-direction:column;margin:.02in 0 .08in}
+.box{border:2px solid;border-radius:.08in;padding:.05in .13in}
+.box.belief{border-color:var(--dev);background:#16263a}
+.box.world{border-color:var(--held);background:#2c2614}
+.bh{font-size:21pt;font-weight:800;line-height:1.2}
+.bh span{font-size:17pt;font-weight:600;color:var(--muted);margin-left:.05in}
+.box ul{font-size:20pt;line-height:1.18;padding-left:.26in;margin-top:.02in}
+.box li{margin-bottom:.02in}
+.wall{display:flex;justify-content:space-between;align-items:center;padding:.02in .13in;font-size:18pt}
+.wall .arrow{font-weight:700}
+.wall .hidden{color:var(--muted);font-style:italic}
+.loop{font-size:22pt;line-height:1.2;background:#24233d;border-radius:.08in;padding:.07in .13in}
+.pols{font-size:20pt;line-height:1.18;margin:.02in 0 0}
+.pols li{margin-bottom:.04in}
+.leaks{font-size:20pt;line-height:1.16;margin:.01in 0 .08in;columns:2;column-gap:.3in}
+.leaks li{margin-bottom:.03in;break-inside:avoid}
+.chart{display:block;width:100%;height:auto;margin:.03in 0 .06in;font-family:"Noto Sans","Liberation Sans",Arial,sans-serif}
+.caption{font-size:20pt;font-weight:800;margin:.06in 0 .02in}
+.figs{display:grid;grid-template-columns:1fr 1fr;gap:.34in;margin:.04in 0}
+.tbl{width:100%;border-collapse:collapse;font-size:18pt;line-height:1.14;margin:.03in 0 .05in}
+.tbl th,.tbl td{padding:.025in .06in;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl thead th{font-size:16.5pt;color:var(--muted);font-weight:700;vertical-align:bottom}
+.tbl thead th.grp{text-align:center;color:var(--ink);border-bottom:2px solid var(--muted)}
+.tbl th.rl,.tbl thead th:first-child{text-align:left;font-weight:700}
+.tbl td{font-variant-numeric:tabular-nums}
+.tbl td.dvc{color:var(--muted)}
+.tbl td.pc{text-align:center;font-style:italic;font-weight:700;color:var(--pend);font-size:17pt;white-space:normal;
+  border:2px dashed var(--pend);background:repeating-linear-gradient(135deg,#22213a 0 .08in,#2f2e4a .08in .16in)}
+.tbl .cil{font-size:16.5pt;color:var(--muted)}
+.tbl .races{font-size:16.5pt;color:var(--muted);text-align:left;white-space:normal}
+.tbl.fac td{font-size:18pt;text-align:left;white-space:nowrap}
+.tbl.fac th.rl{font-weight:600;white-space:normal}
+.tbl.fac td.st{text-align:center;font-weight:700}
+.tbl tr.grp th{text-align:left;font-size:18pt;font-weight:800;color:var(--amber);padding-top:.05in}
+.tbl.adds th.rl{white-space:normal;font-weight:600}
+.tbl.adds td{width:19%}
+.sw{display:inline-block;width:.16in;height:.16in;border-radius:.03in;margin-right:.08in;vertical-align:.02em}
+.p6 ul{font-size:22pt;line-height:1.18}
+.nexth{font-size:21pt;font-weight:800;margin:.06in 0 .03in}
+.p7{background:#16263a;border-color:var(--dev)}
+.p7 p{font-size:22pt;line-height:1.22}
+footer{flex:none;border-top:2px solid var(--line);padding-top:.07in;display:flex;flex-direction:column;gap:.04in}
+.refs{font-size:13pt;line-height:1.3;color:var(--muted)}
+.refs code{font-size:1em}
+.refs [lang=ja]{font-family:"Noto Sans CJK JP","Noto Sans CJK TC",sans-serif}
+.refs .pend,.foot .pend{font-size:.95em}
+.foot{font-size:16pt;font-weight:700}
+.foot code{font-size:1em}
+</style></head><body>
+<div class="poster">
+<div class="ribbon">DRAFT: development data only. Every hatched <span class="pend">pending</span> box is filled by the held-out run; nothing in one is a result.</div>
+<header class="top">
+  <div class="title">
+    <div class="kicker">CSE 598 Agentic AI &middot; Arizona State University</div>
+    <h1>PITWALL</h1>
+    <div class="acro">Predictive Intelligence for Tactical When-to-pit Agentic Lap-wise Logic</div>
+    <div class="q">Can a language model call the pit stop?</div>
+    <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sarah Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
+      <span>Stakeholder: Manav Ananthakumar &middot; TA: Xiaoou Liu &middot; Professor: Hua Wei</span></div>
+  </div>
+  <figure class="map">
+    <img src="2023_F1_CourseLayout_Spain.svg" alt="Circuit de Barcelona-Catalunya, 2023 layout">
+    <figcaption>Barcelona-Catalunya, a development race [4]</figcaption>
+  </figure>
+</header>
+
+<div class="answer">
+  <div class="pts">
+    <div><b>Integrity, proven by test.</b> Scramble the race after the decision moment: nothing a policy sees
+      changes. 7 leaks found and removed.</div>
+    <div><b>The judge, measured.</b> Replaying 18 real races, it orders close finishers correctly
+      0.682 of the time (ceiling 0.745); gap error 15.5 s (ceiling
+      3.2 s).</div>
+    <div><span class="tag held">held-out, in our simulator</span><br><b>The agent.</b> Agent minus run to the flag, minus one stop in total, and minus the teams&rsquo; actual strategy: <span class="pend big">held-out run pending</span></div>
+  </div>
+</div>
+
+<main class="grid">
+  <article class="panel p1">
+    <h2><b>1</b>Question and system</h2>
+    <p>Each lap a strategist decides: pit now or stay out. Can a language-model agent make that call from the race so
+    far?</p>
+    <div class="diagram">
+      <div class="box belief"><div class="bh">Predictive simulator <span>every policy plans on it</span></div>
+        <ul><li>race so far, practice, earlier races; nothing later</li>
+        <li>fitted with its uncertainty; feeds the agent&rsquo;s tools and the optimizer</li></ul></div>
+      <div class="wall"><span class="arrow">&darr; each policy&rsquo;s plan</span><span class="hidden">the future stays hidden</span></div>
+      <div class="box world"><div class="bh">Judge <span>scores only</span></div>
+        <ul><li>whole race, without safety cars; its hindsight is listed: lap-time fit, clean-lap filter, safety-car lap time, pit loss, tyre life, tyres raced, driver effects</li>
+        <li>finds the hindsight reference, times every plan</li></ul></div>
+    </div>
+    <div class="caption">The agent&rsquo;s loop</div>
+    <svg class="chart" viewBox="0 0 470 236" role="img" aria-label="The agent loop"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10Z" fill="#f4f2f8"/></marker></defs><rect x="0" y="0" width="122" height="92" rx="8" fill="#16263a" stroke="#9cc8ff" stroke-width="2"/><text x="61.0" y="24" text-anchor="middle" font-size="18.5" font-weight="800" fill="#f4f2f8">Race view</text><text x="61.0" y="46" text-anchor="middle" font-size="16.5" fill="#c9c6d8">anonymised,</text><text x="61.0" y="67" text-anchor="middle" font-size="16.5" fill="#c9c6d8">laps so far</text><rect x="150" y="0" width="140" height="92" rx="8" fill="#24233d" stroke="#56B4E9" stroke-width="2"/><text x="220.0" y="24" text-anchor="middle" font-size="18.5" font-weight="800" fill="#f4f2f8">LLM</text><text x="220.0" y="46" text-anchor="middle" font-size="16.5" fill="#c9c6d8">qwen3-30b-a3b</text><text x="220.0" y="67" text-anchor="middle" font-size="16.5" fill="#c9c6d8">plans, asks</text><rect x="340" y="0" width="130" height="92" rx="8" fill="#16263a" stroke="#9cc8ff" stroke-width="2"/><text x="405.0" y="24" text-anchor="middle" font-size="18.5" font-weight="800" fill="#f4f2f8">Tools</text><text x="405.0" y="46" text-anchor="middle" font-size="16.5" fill="#c9c6d8">tyre wear,</text><text x="405.0" y="67" text-anchor="middle" font-size="16.5" fill="#c9c6d8">pit loss, plans</text><line x1="124" y1="46" x2="147" y2="46" stroke="#f4f2f8" stroke-width="2.5" marker-end="url(#ah)"/><line x1="296" y1="46" x2="334" y2="46" stroke="#f4f2f8" stroke-width="2.5" marker-end="url(#ah)" marker-start="url(#ah)"/><text x="315" y="112" text-anchor="middle" font-size="16.5" fill="#c9c6d8">up to 10 turns</text><line x1="226" y1="95" x2="226" y2="136" stroke="#f4f2f8" stroke-width="2.5" marker-end="url(#ah)"/><rect x="120" y="140" width="160" height="92" rx="8" fill="#24233d" stroke="#F0E442" stroke-width="2"/><text x="200.0" y="164" text-anchor="middle" font-size="18.5" font-weight="800" fill="#f4f2f8">Decision</text><text x="200.0" y="186" text-anchor="middle" font-size="16.5" fill="#c9c6d8">PIT + tyre</text><text x="200.0" y="207" text-anchor="middle" font-size="16.5" fill="#c9c6d8">or STAY OUT</text><rect x="322" y="140" width="148" height="92" rx="8" fill="#24233d" stroke="#E69F00" stroke-width="2"/><text x="396.0" y="164" text-anchor="middle" font-size="18.5" font-weight="800" fill="#f4f2f8">Optimizer</text><text x="396.0" y="186" text-anchor="middle" font-size="16.5" fill="#c9c6d8">completes</text><text x="396.0" y="207" text-anchor="middle" font-size="16.5" fill="#c9c6d8">the plan</text><line x1="282" y1="186" x2="319" y2="186" stroke="#f4f2f8" stroke-width="2.5" marker-end="url(#ah)"/><text x="0" y="170" font-size="16.5" fill="#c9c6d8">2 submit-only</text><text x="0" y="191" font-size="16.5" fill="#c9c6d8">turns force</text><text x="0" y="212" font-size="16.5" fill="#c9c6d8">a decision</text></svg>
+    <div class="caption">Compared with</div>
+    <ul class="pols">
+      <li><b>Run to the flag</b>: no more stops unless tyre life, estimated from earlier races, forces one.</li>
+      <li><b>One stop in total</b>: one stop at half distance if none made yet, else run to the flag.</li>
+      <li><b>Teams&rsquo; actual</b>: what the team really did. <b>Optimizer</b>: the tools&rsquo; search, no LLM.</li>
+    </ul>
+  </article>
+
+  <article class="panel p2">
+    <h2><b>2</b>Evaluation integrity</h2>
+    <p class="def">A policy reads only the race up to the decision moment, this weekend&rsquo;s practice, the rules,
+    and tables built from earlier races.</p>
+    <svg class="chart" viewBox="0 0 470 178" role="img" aria-label="Future-blindness test: the race is cut at the decision moment, everything after it is altered, and everything a policy sees must stay identical"><defs><pattern id="scr" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(30)"><rect width="12" height="12" fill="#3a2430"/><line x1="0" y1="0" x2="0" y2="12" stroke="#ff4d3d" stroke-width="3"/></pattern></defs><rect x="0" y="28" width="150" height="28" fill="#2c3d55" stroke="#c9c6d8" stroke-width="1"/><text x="75" y="48" text-anchor="middle" font-size="17" fill="#f4f2f8">laps so far</text><rect x="150" y="28" width="150" height="28" fill="#2c3d55" stroke="#c9c6d8" stroke-width="1"/><text x="160" y="48" font-size="17.5" font-weight="800" fill="#f4f2f8">as raced</text><rect x="0" y="66" width="150" height="28" fill="#2c3d55" stroke="#c9c6d8" stroke-width="1"/><text x="75" y="86" text-anchor="middle" font-size="17" fill="#f4f2f8">laps so far</text><rect x="150" y="66" width="150" height="28" fill="none" stroke="#4a4866" stroke-width="1.5" stroke-dasharray="5 4"/><text x="160" y="86" font-size="17.5" font-weight="800" fill="#f4f2f8">cut off</text><rect x="0" y="104" width="150" height="28" fill="#2c3d55" stroke="#c9c6d8" stroke-width="1"/><text x="75" y="124" text-anchor="middle" font-size="17" fill="#f4f2f8">laps so far</text><rect x="150" y="104" width="150" height="28" fill="url(#scr)" stroke="#c9c6d8" stroke-width="1"/><text x="160" y="124" font-size="17.5" font-weight="800" fill="#f4f2f8">scrambled</text><line x1="150" y1="24" x2="150" y2="146" stroke="#ff4d3d" stroke-width="4"/><text x="150" y="18" text-anchor="middle" font-size="16.5" font-weight="800" fill="#ff8a7d">decision moment</text><path d="M308,30 q10,0 10,12 v32 q0,10 10,10 q-10,0 -10,10 v32 q0,12 -10,12" fill="none" stroke="#c9c6d8" stroke-width="2"/><text x="334" y="66" font-size="17.5" font-weight="700" fill="#f4f2f8">all a policy</text><text x="334" y="88" font-size="17.5" font-weight="700" fill="#f4f2f8">sees: equal?</text><text x="334" y="116" font-size="19" font-weight="800" fill="#2BB88A">✓ yes</text><text x="0" y="172" font-size="16.5" fill="#c9c6d8">scrambled: lap times, tyres, stops, safety cars, race length</text></svg>
+    <p class="small"><b>Leaks removed</b>, each now tested (0 still open):</p>
+    <ul class="leaks"><li>tyre list of the whole race</li><li>clean-lap filter fitted on every lap</li><li>gap behind read from the next lap</li><li>fit window cut by lap, not by clock</li><li>pit loss measured over the whole race</li><li>race length from the car’s own laps</li><li>tyre stint limit from the whole race</li></ul>
+    <p class="small">The agent sees an anonymised race. Cross-race tables are read as of the race. <b>Test set:</b>
+    9 held-out races over 4 eras; five never examined, four scored
+    once under an earlier evaluation, which leaked race-wide tyre life into the policies and was discarded.</p>
+    <p class="note">Harness on the held-out commit: <span class="pend" title="held-out run">pending</span>; scorecard&rsquo;s own check: pass.</p>
+  </article>
+
+  <article class="panel p3">
+    <h2><b>3</b>How good is the judge?</h2>
+    <p class="small">Every car&rsquo;s real strategy replayed, 18 calibration races. Ceiling: the judge
+    handed every stop, safety-car lap and start as recorded.</p>
+    <svg class="chart" viewBox="0 0 470 226" role="img" aria-label="The judge against real races: close-pair order and relative gap error, today and the measured ceiling"><text x="0" y="18" font-size="18.5" font-weight="800" fill="#f4f2f8">Close finishers in the right order</text><line x1="92.0" y1="38" x2="92.0" y2="98" stroke="#4a4866"/><text x="92.0" y="114" text-anchor="middle" font-size="16.5" fill="#c9c6d8">0.5</text><line x1="164.8" y1="38" x2="164.8" y2="98" stroke="#4a4866"/><text x="164.8" y="114" text-anchor="middle" font-size="16.5" fill="#c9c6d8">0.6</text><line x1="237.6" y1="38" x2="237.6" y2="98" stroke="#4a4866"/><text x="237.6" y="114" text-anchor="middle" font-size="16.5" fill="#c9c6d8">0.7</text><line x1="310.4" y1="38" x2="310.4" y2="98" stroke="#4a4866"/><text x="310.4" y="114" text-anchor="middle" font-size="16.5" fill="#c9c6d8">0.8</text><line x1="383.2" y1="38" x2="383.2" y2="98" stroke="#4a4866"/><text x="383.2" y="114" text-anchor="middle" font-size="16.5" fill="#c9c6d8">0.9</text><line x1="456.0" y1="38" x2="456.0" y2="98" stroke="#4a4866"/><text x="456.0" y="114" text-anchor="middle" font-size="16.5" fill="#c9c6d8">1.0</text><text x="0" y="58" font-size="18.5" font-weight="700" fill="#f4f2f8">Judge</text><line x1="161.2" y1="52" x2="269.6" y2="52" stroke="#56B4E9" stroke-width="4"/><circle cx="224.6" cy="52.0" r="8.0" fill="#56B4E9" stroke="#1a1930" stroke-width="1.5"/><text x="224.6" y="39" text-anchor="middle" font-size="18" font-weight="700" fill="#f4f2f8">0.682</text><text x="0" y="82" font-size="18.5" font-weight="700" fill="#f4f2f8">Ceiling</text><line x1="225.2" y1="76" x2="313.3" y2="76" stroke="#F0E442" stroke-width="4"/><path d="M270.4,65.6L280.8,76.0L270.4,86.4L260.0,76.0Z" fill="#F0E442" stroke="#1a1930" stroke-width="1.5"/><text x="321.3" y="82" font-size="18" font-weight="700" fill="#f4f2f8">0.745</text><text x="0" y="142" font-size="18.5" font-weight="800" fill="#f4f2f8">Gap between cars: error</text><line x1="92.0" y1="150" x2="92.0" y2="206" stroke="#4a4866"/><text x="92.0" y="223" text-anchor="middle" font-size="16.5" fill="#c9c6d8">0</text><line x1="164.8" y1="150" x2="164.8" y2="206" stroke="#4a4866"/><text x="164.8" y="223" text-anchor="middle" font-size="16.5" fill="#c9c6d8">5</text><line x1="237.6" y1="150" x2="237.6" y2="206" stroke="#4a4866"/><text x="237.6" y="223" text-anchor="middle" font-size="16.5" fill="#c9c6d8">10</text><line x1="310.4" y1="150" x2="310.4" y2="206" stroke="#4a4866"/><text x="310.4" y="223" text-anchor="middle" font-size="16.5" fill="#c9c6d8">15</text><line x1="383.2" y1="150" x2="383.2" y2="206" stroke="#4a4866"/><text x="383.2" y="223" text-anchor="middle" font-size="16.5" fill="#c9c6d8">20</text><line x1="456.0" y1="150" x2="456.0" y2="206" stroke="#4a4866"/><text x="456.0" y="223" text-anchor="middle" font-size="16.5" fill="#c9c6d8">25 s</text><text x="0" y="174" font-size="18.5" font-weight="700" fill="#f4f2f8">Judge</text><line x1="239.1" y1="168" x2="403.6" y2="168" stroke="#56B4E9" stroke-width="4"/><circle cx="318.4" cy="168.0" r="8.0" fill="#56B4E9" stroke="#1a1930" stroke-width="1.5"/><text x="318.4" y="155" text-anchor="middle" font-size="18" font-weight="700" fill="#f4f2f8">15.5 s</text><text x="0" y="196" font-size="18.5" font-weight="700" fill="#f4f2f8">Ceiling</text><line x1="128.4" y1="190" x2="148.8" y2="190" stroke="#F0E442" stroke-width="4"/><path d="M138.6,179.6L149.0,190.0L138.6,200.4L128.2,190.0Z" fill="#F0E442" stroke="#1a1930" stroke-width="1.5"/><text x="156.8" y="196" font-size="18" font-weight="700" fill="#f4f2f8">3.2 s</text></svg>
+    <p class="note">Safety-car laps cause most of the gap error (5.2 s once recorded). Below, order:
+    close pairs right; plan loss: judge time lost trusting the predictive simulator&rsquo;s best plan; 95% intervals
+    over races; switched on in the results here: none of these.</p>
+    <table class="tbl fac"><thead><tr><th>switched on alone</th><th>change [95%]</th></tr></thead><tbody><tr class="grp"><th colspan="2">Helped</th></tr><tr><th class="rl">Safety cars, judge</th><td><b>+0.016</b> order <span class="cil">[0.000, 0.038]</span><br><b>−2.4 s</b> gaps <span class="cil">[−4.4, −0.5]</span></td></tr><tr><th class="rl">Tyre life from history only</th><td><b>+0.025</b> order <span class="cil">[0.000, 0.060]</span></td></tr><tr><th class="rl">Driver effects, predictive</th><td><b>−1.0 s</b> plan loss <span class="cil">[−1.8, −0.3]</span></td></tr><tr class="grp"><th colspan="2">Did not help</th></tr><tr><th class="rl">Traffic, judge</th><td><b>−0.008</b> order <span class="cil">[−0.035, 0.024]</span><br><b>+0.5 s</b> plan loss <span class="cil">[0.2, 0.8]</span></td></tr><tr><th class="rl">Learned calibrator</th><td><b>+0.8 s</b> plan loss <span class="cil">[0.2, 1.6]</span></td></tr><tr><th class="rl">Wear hinge, judge</th><td><b>+0.025</b> order if dropped <span class="cil">[−0.003, 0.060]</span></td></tr></tbody></table>
+  </article>
+
+  <article class="panel p4">
+    <h2><b>4</b>Results</h2>
+    <p class="def"><b>Regret</b>: a plan&rsquo;s extra remaining-race time, timed by the judge, over the <b>hindsight
+    reference</b> (the judge&rsquo;s best plan knowing the whole race, at most two more stops). Lower is
+    better. Bars: 95% intervals, resampling drivers within races. <span class="key">filled = held-out,
+    hollow = development</span></p>
+    <div class="figs">
+      <div><div class="caption">Agent minus each comparator, paired (s)</div><svg class="chart" viewBox="0 0 500 334" role="img" aria-label="Agent minus each comparator, mean regret in seconds with 95% intervals"><defs><pattern id="hfo" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="10" fill="#22213a"/><line x1="0" y1="0" x2="0" y2="10" stroke="#4d4b69" stroke-width="4"/></pattern></defs><line x1="178.0" y1="26" x2="178.0" y2="306.0" stroke="#4a4866" stroke-width="1"/><text x="178.0" y="328.0" text-anchor="middle" font-size="17" fill="#c9c6d8">−10</text><line x1="216.0" y1="26" x2="216.0" y2="306.0" stroke="#4a4866" stroke-width="1"/><text x="216.0" y="328.0" text-anchor="middle" font-size="17" fill="#c9c6d8">−5</text><line x1="254.0" y1="26" x2="254.0" y2="306.0" stroke="#4a4866" stroke-width="1"/><text x="254.0" y="328.0" text-anchor="middle" font-size="17" fill="#c9c6d8">0</text><line x1="292.0" y1="26" x2="292.0" y2="306.0" stroke="#4a4866" stroke-width="1"/><text x="292.0" y="328.0" text-anchor="middle" font-size="17" fill="#c9c6d8">5</text><line x1="330.0" y1="26" x2="330.0" y2="306.0" stroke="#4a4866" stroke-width="1"/><text x="330.0" y="328.0" text-anchor="middle" font-size="17" fill="#c9c6d8">10 s</text><line x1="254.0" y1="22" x2="254.0" y2="306.0" stroke="#f4f2f8" stroke-width="2"/><text x="248.0" y="18" text-anchor="end" font-size="16.5" fill="#c9c6d8">← agent better</text><text x="260.0" y="18" font-size="16.5" fill="#c9c6d8">worse →</text><text x="0" y="60.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Run to the flag</text><rect x="178.0" y="32.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="47.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><rect x="178.0" y="56.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="71.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">dev agent pass pending</text><text x="0" y="116.0" font-size="18.5" font-weight="700" fill="#f4f2f8">One stop in total</text><rect x="178.0" y="88.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="103.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><rect x="178.0" y="112.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="127.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">dev agent pass pending</text><text x="0" y="172.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Teams’ actual</text><rect x="178.0" y="144.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="159.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><rect x="178.0" y="168.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="183.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">dev agent pass pending</text><text x="0" y="228.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Optimizer, no LLM</text><rect x="178.0" y="200.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="215.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><rect x="178.0" y="224.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="239.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">dev agent pass pending</text><text x="0" y="284.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Fixed one-stop</text><rect x="178.0" y="256.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="271.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><rect x="178.0" y="280.5" width="322.0" height="19.0" rx="5" fill="url(#hfo)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="295.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">dev agent pass pending</text></svg></div>
+      <div><div class="caption">Mean regret per policy (s)</div><svg class="chart" viewBox="0 0 500 424" role="img" aria-label="Mean regret per policy in seconds with 95% intervals"><defs><pattern id="hlv" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="10" fill="#22213a"/><line x1="0" y1="0" x2="0" y2="10" stroke="#4d4b69" stroke-width="4"/></pattern></defs><line x1="178.0" y1="4" x2="178.0" y2="396.0" stroke="#4a4866" stroke-width="1"/><text x="178.0" y="418.0" text-anchor="middle" font-size="17" fill="#c9c6d8">0</text><line x1="228.7" y1="4" x2="228.7" y2="396.0" stroke="#4a4866" stroke-width="1"/><text x="228.7" y="418.0" text-anchor="middle" font-size="17" fill="#c9c6d8">10</text><line x1="279.3" y1="4" x2="279.3" y2="396.0" stroke="#4a4866" stroke-width="1"/><text x="279.3" y="418.0" text-anchor="middle" font-size="17" fill="#c9c6d8">20</text><line x1="330.0" y1="4" x2="330.0" y2="396.0" stroke="#4a4866" stroke-width="1"/><text x="330.0" y="418.0" text-anchor="middle" font-size="17" fill="#c9c6d8">30 s</text><text x="0" y="38.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Agent</text><rect x="178.0" y="10.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="25.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><rect x="178.0" y="34.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="49.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">dev agent pass pending</text><text x="0" y="94.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Optimizer, no LLM</text><rect x="178.0" y="66.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="81.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><line x1="202.1" y1="100.0" x2="209.8" y2="100.0" stroke="#E69F00" stroke-width="4"/><rect x="199.1" y="93.2" width="13.6" height="13.6" fill="#1a1930" stroke="#E69F00" stroke-width="3"/><text x="500" y="106.0" text-anchor="end" font-size="16.5" fill="#c9c6d8">5.5 [4.8, 6.3]</text><text x="0" y="150.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Teams’ actual</text><rect x="178.0" y="122.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="137.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><line x1="204.0" y1="156.0" x2="216.8" y2="156.0" stroke="#2BB88A" stroke-width="4"/><path d="M210.2,145.6L220.6,156.0L210.2,166.4L199.8,156.0Z" fill="#1a1930" stroke="#2BB88A" stroke-width="3"/><text x="500" y="162.0" text-anchor="end" font-size="16.5" fill="#c9c6d8">6.3 [5.1, 7.7]</text><text x="0" y="206.0" font-size="18.5" font-weight="700" fill="#f4f2f8">One stop in total</text><rect x="178.0" y="178.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="193.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><line x1="223.1" y1="212.0" x2="237.5" y2="212.0" stroke="#D55E00" stroke-width="4"/><path d="M230.0,202.0L240.0,220.0L220.0,220.0Z" fill="#1a1930" stroke="#D55E00" stroke-width="3"/><text x="500" y="218.0" text-anchor="end" font-size="16.5" fill="#c9c6d8">10.3 [8.9, 11.7]</text><text x="0" y="262.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Run to the flag</text><rect x="178.0" y="234.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="249.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><line x1="224.6" y1="268.0" x2="238.6" y2="268.0" stroke="#F0E442" stroke-width="4"/><path d="M231.3,278.0L241.3,260.0L221.3,260.0Z" fill="#1a1930" stroke="#F0E442" stroke-width="3"/><text x="500" y="274.0" text-anchor="end" font-size="16.5" fill="#c9c6d8">10.5 [9.2, 12.0]</text><text x="0" y="318.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Fixed one-stop</text><rect x="178.0" y="290.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="305.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><line x1="247.1" y1="324.0" x2="260.5" y2="324.0" stroke="#CC79A7" stroke-width="4"/><rect x="246.8" y="317.2" width="13.6" height="13.6" fill="#1a1930" stroke="#CC79A7" stroke-width="3"/><text x="500" y="330.0" text-anchor="end" font-size="16.5" fill="#c9c6d8">14.9 [13.6, 16.3]</text><text x="0" y="374.0" font-size="18.5" font-weight="700" fill="#f4f2f8">Fixed two-stop</text><rect x="178.0" y="346.5" width="322.0" height="19.0" rx="5" fill="url(#hlv)" stroke="#b9b6cc" stroke-width="1.5" stroke-dasharray="6 4"/><text x="339.0" y="361.9" text-anchor="middle" font-size="16.5" font-style="italic" font-weight="700" fill="#b9b6cc">held-out run pending</text><line x1="300.5" y1="380.0" x2="313.5" y2="380.0" stroke="#BDBDBD" stroke-width="4"/><path d="M299.5,372.4L314.7,387.6M314.7,372.4L299.5,387.6" stroke="#BDBDBD" stroke-width="3" fill="none"/><text x="500" y="386.0" text-anchor="end" font-size="16.5" fill="#c9c6d8">25.5 [24.2, 26.7]</text></svg></div>
+    </div>
+    <p class="note">Held-out: <span class="pend" title="held-out run">pending</span> decisions, <span class="pend" title="held-out run">pending</span> races. Development: 469 decisions,
+    19 races. With no language model, the optimizer minus run to the flag is
+    −5.0 s [−6.7, −3.5], minus the teams −0.7 s
+    [−2.3, 0.7] (development).</p>
+    <div class="caption">The tail: decisions far from the hindsight reference</div>
+    <table class="tbl tail"><thead><tr><th rowspan="2">share of decisions<br>more than x s off</th><th colspan="5" class="grp">held-out</th><th colspan="5" class="grp">development</th></tr><tr><th>&gt;10 s</th><th>&gt;20 s</th><th>&gt;30 s</th><th>median</th><th>worst</th><th>&gt;10 s</th><th>&gt;20 s</th><th>&gt;30 s</th><th>median</th><th>worst</th></tr></thead><tbody><tr><th class="rl"><i class="sw" style="background:#56B4E9"></i>Agent</th><td class="pc" colspan="5" rowspan="5">held-out run pending</td><td class="pc" colspan="5">development agent pass pending</td></tr><tr><th class="rl"><i class="sw" style="background:#E69F00"></i>Optimizer, no LLM</th><td class="dvc">22%</td><td class="dvc">8%</td><td class="dvc">1%</td><td class="dvc">1.3</td><td class="dvc">33</td></tr><tr><th class="rl"><i class="sw" style="background:#2BB88A"></i>Teams’ actual</th><td class="dvc">23%</td><td class="dvc">9%</td><td class="dvc">3%</td><td class="dvc">1.6</td><td class="dvc">72</td></tr><tr><th class="rl"><i class="sw" style="background:#D55E00"></i>One stop in total</th><td class="dvc">38%</td><td class="dvc">17%</td><td class="dvc">7%</td><td class="dvc">4.5</td><td class="dvc">84</td></tr><tr><th class="rl"><i class="sw" style="background:#F0E442"></i>Run to the flag</th><td class="dvc">41%</td><td class="dvc">19%</td><td class="dvc">7%</td><td class="dvc">5.3</td><td class="dvc">84</td></tr></tbody></table>
+    <div class="caption">By era</div>
+    <table class="tbl era"><thead><tr><th>era</th><th class="races">held-out races</th><th>n</th><th>agent</th><th>teams</th><th>agent − teams</th><th>agent − run to flag</th></tr></thead><tbody><tr><th class="rl">2019-20</th><td class="races">Monaco 2019, Sakhir 2020</td><td class="pc" colspan="5">held-out run pending</td></tr><tr><th class="rl">2021</th><td class="races">France 2021, Mexico 2021</td><td class="pc" colspan="5">held-out run pending</td></tr><tr><th class="rl">2022</th><td class="races">Miami 2022, Australia 2022, Belgium 2022</td><td class="pc" colspan="5">held-out run pending</td></tr><tr><th class="rl">2024-25</th><td class="races">Austria 2025, Austria 2024</td><td class="pc" colspan="5">held-out run pending</td></tr></tbody></table>
+  </article>
+
+  <div class="stack">
+  <article class="panel p5">
+    <h2><b>5</b>What the LLM adds</h2>
+    <table class="tbl adds"><thead><tr><th></th><th>held-out</th><th>development</th></tr></thead><tbody><tr><th class="rl">Agent − optimizer, s</th><td class="pc" colspan="1" rowspan="6">held-out<br>run<br>pending</td><td class="pc" colspan="1" rowspan="6">agent pass<br>on dev<br>pending</td></tr><tr><th class="rl">Same call as optimizer</th></tr><tr><th class="rl">Legal decision</th></tr><tr><th class="rl">Decided before forced turns</th></tr><tr><th class="rl">Median time / decision</th></tr><tr><th class="rl">Input tokens / decision</th></tr></tbody></table>
+    <p class="note">The optimizer: the search the agent&rsquo;s tools run, without the language model. Where their
+    held-out calls differ (<span class="pend" title="held-out run">pending</span>), the optimizer does better in <span class="pend" title="held-out run">pending</span>.</p>
+  </article>
+
+  <article class="panel p6">
+    <h2><b>6</b>Limitations, next</h2>
+    <ul>
+      <li>One agent pass; one modest open model, qwen3-30b-a3b.</li>
+      <li>&ldquo;In our simulator&rdquo;: the judge is a model too (order 0.682, ceiling 0.745).</li>
+      <li>Early races get default priors: no earlier seasons cached (<span class="pend" title="held-out run">pending</span> held-out races).</li>
+      <li>The judge draws no safety cars: a stop under one is priced as green.</li>
+      <li>Four held-out races were scored once before.</li>
+    </ul>
+    <p class="nexth">Next</p>
+    <ul><li>Repeat passes, a second model; scenarios decided by safety cars and rivals; the safety-car queue in
+    the judge.</li></ul>
+  </article>
+
+  <article class="panel p7">
+    <h2><b>7</b>For the stakeholder</h2>
+    <p>The evaluation cannot see the future, and a test proves it. Replaying the teams&rsquo; real decisions, our judge orders close finishers correctly 0.682 of the time (ceiling 0.745). Whether the agent beats the simple rules and matches the teams: <span class="pend big">held-out run pending</span></p>
+  </article>
+  </div>
+</main>
+
+<footer>
+  <div class="refs">
+    [1] Code and protocol (<code>docs/eval.md</code>): github.com/f1-t/agentic-ai. [2] Results:
+    <code>python -m src.eval.rerun tables</code> for development (dev20) and held-out (test9); fidelity scorecard
+    <code>reports/calibration/fidelity</code> (commit <code>f7be251</code>); every number and its computation:
+    <code>poster/numbers.md</code>. [3] Timing data: FastF1. [4] Map: &ldquo;2023 F1 CourseLayout Spain.svg&rdquo; by
+    <span lang="ja">ごひょううべこ</span>, Wikimedia Commons, CC BY-SA 4.0, unmodified. Independent student project, not
+    affiliated with Formula 1, the FIA or Pirelli.
+  </div>
+  <div class="foot">Model qwen3-30b-a3b &middot; commit <code>42da0a1</code> &middot; held-out <span class="pend" title="held-out run">pending</span> races,
+    n = <span class="pend" title="held-out run">pending</span> &middot; development 19 races, n = 469 &middot; one agent pass</div>
+</footer>
+</div></body></html>
