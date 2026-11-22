@@ -232,6 +232,16 @@ def evaluate_plan(plan=None, first_stop_lap=None, compound=None):
     return _belief(agent_tools.evaluate_plan, plan, first_stop_lap, compound)
 
 
+def rank_plans_families():
+    """agent_tools.rank_plans(families=True) for the active snapshot (protocol v2free's rank_plans)."""
+    return _belief(agent_tools.rank_plans, families=True)
+
+
+def race_picture():
+    """agent_tools.race_picture for the active snapshot (protocol v2free)."""
+    return _belief(agent_tools.race_picture)
+
+
 def _validate_action(action: dict[str, Any]):
     s = _snapshot()
     kind = str(action.get("action", "")).lower()
@@ -391,4 +401,22 @@ TOOL_SPECS_V2 = [
         "fn": evaluate_plan,
     },
     *[spec for spec in TOOL_SPECS if spec["name"] in _V2_KEPT],
+]
+
+# Protocol v2free (the default): v2's tools plus the race as a strategist sees it.
+TOOL_SPECS_V2FREE = [
+    {
+        "name": "rank_plans",
+        "description": "Call first. The simulator's look-ahead across the strategy space, in one call: the best plan of each strategy family (stops left and the compound sequence after the current set; it searches every stop lap), plan 1 the lowest mean time, at most 8 families and none more than 25 s behind (families_dropped counts the rest), plus the best PIT-now plan. Per plan: family, plan (stints, the first continuing the current set), immediate (the action it implies now), submit (the submission fields that keep it), gap_s to plan 1 with gap_90 (its 90% interval over shared draws) and faster_share (share of draws faster than plan 1), best_share (share of draws in which it is the fastest plan shown), first_stop_range (the stop laps over which a plan of that shape stays within 1 s), flags (a stint past the estimated tyre life, or past the longest run seen when the life beyond it is a generic prior) and extrapolates (a stint older than any seen so far: a note, not a flag). decision: the best PIT-now plan against the best STAY_OUT plan. flags: weak estimates (a compound with no race laps, a prior-dominated compound, a safety car or VSC in progress).",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": rank_plans_families,
+    },
+    TOOL_SPECS_V2[1],
+    {
+        "name": "race_picture",
+        "description": "Everything visible now that the look-ahead does not fully weigh, in one call. car: position, gaps, laps left, track status and how long a safety car or VSC has lasted, the pit window, the stints so far, the current set and its last lap times, and set_wear (the set's observed wear in s/lap of tyre age from its clean laps, fuel-corrected, against the model's value and sd: is this set wearing faster or slower than the simulator thinks?). nearby: the cars around (position, gap, compound, tyre age, stops so far). rejoin: cars within the pit loss behind now and the position a stop now would rejoin at, from the gaps. compounds: per compound the race laps behind the fit, the longest run seen in the race, the field's observed wear against the model's, the base pace sd, how a compound with no race laps is priced, and the tyre-life estimate with its sd and source.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": race_picture,
+    },
+    *TOOL_SPECS_V2[2:],
 ]

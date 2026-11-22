@@ -1848,9 +1848,85 @@ repeats, and 27 with the status line and cached repeats, while input
 tokens per episode went 53k, 63k, 85k. The decisions barely changed. The grace turns are
 what guarantee a submission.
 
+### Agent free choice (v2free, the default)
+
+`AGENT_PROTOCOL` = `v2free` (the default since 2026-11-22) | `v2` (copy plan 1, below) | `v1`.
+The agent gets the simulator's look-ahead and the full picture and makes the call; the ranking is
+presented as the simulator's best estimate, not the answer.
+
+- **Tools.** v2's (`rank_plans`, `evaluate_plan`, `estimate_tyre_degradation`, `estimate_pit_loss`)
+  plus `race_picture` (`agent_tools.race_picture`): position, gaps, laps left, track status and how
+  long a neutralisation has lasted, the pit window, the stints so far, the current set and its last
+  lap times; the set's observed wear (fuel-corrected lap time on tyre age over its clean laps)
+  against the model's value and sd; the cars around (position, gap, compound, tyre age, stops so
+  far); the cars within the pit loss behind and the rejoin position a stop now implies, from the
+  gaps; per compound the race laps behind the fit, the longest run seen, the field's observed wear
+  against the model's, the base pace sd, how a compound with no race laps is priced, and the
+  tyre-life estimate with its sd and source. Everything comes from the snapshot and the laps
+  visible at its moment (`Simulator.window_rows`, cut by session time), the belief fit and its
+  report; the cars are the snapshot's labels. It is a compared surface of the future-blindness
+  harness.
+- **Any plan.** A submission may name its whole plan (`plan`, [[compound, laps], ...]), which the
+  scorer plays exactly (`eval.decisions.named_plan`, its later sets drawn from the inventory as any
+  baseline plan's); it must agree with the decision (a PIT's first stint is 1 lap, a STAY_OUT k's at
+  least k + 1) and with `compound` and `first_stop_lap` when given, use at most the stop limit and
+  modelled compounds, and pass the rules; anything else is refused with the cause. `first_stop_lap`
+  and the bare decision work as under v2. v1 and v2 drop a `plan` they were never offered.
+- **Prompt.** What the judge scores (the car's race time over the remaining laps); the look-ahead
+  can be wrong where it flags a weak estimate or where the race so far contradicts it; the choice is
+  any plan; one line of evidence, and when the plan is not plan 1, what in the picture made the
+  departure.
+- **Checks.** The scorer's own (a submission is accepted only if it can be scored), the named-stop
+  and named-plan refusals with the fix and the last-turn fallback, and one contradiction check: a
+  submission whose immediate action's best plan the latest `rank_plans` reading puts behind the
+  other action's in more than 80% of draws is shown that reading once, and the next submission is
+  final. A named plan or first stop that a `rank_plans` or `evaluate_plan` reading put behind plan 1
+  in more than 80% of draws gets the same once, with the sign said in words (a positive gap is
+  slower). Leaving plan 1 is not by itself held.
+- **Candidates.** Under v2free `rank_plans` shows the best plan of each strategy family (stops left
+  and compound sequence), at most 8 and none more than 25 s behind plan 1, plus the best PIT-now
+  plan, instead of v2's top four shapes. With no model calls over the 469 dev20 scenarios, the
+  judge's best plan is among the candidates in 46% (top 4 by time: 46%; laps 0-15: 8% against 5%),
+  a plan within 0.5 s of it in 61% (58%; laps 0-15: 19% against 15%), and always picking the
+  judge's best candidate would gain 2.19 s against plan 1 (top 4: 1.46 s).
+
+**Headroom over the look-ahead, no model calls (469 dev20 scenarios, SIM_CODE_VERSION 61ec117c6e7b).**
+Picking the judge's best of the look-ahead's top 4 with hindsight would cut the judge regret from
+3.82 s to 2.35 s (laps 0-15: 7.71 to 5.34; mid: 2.32 to 1.19; late: 0.93 to 0.17), but early in the
+race the judge's best plan is among them in 5% of scenarios. No rule a harness could apply found
+that room: preferring an unflagged plan within 1 s, 2 s or the 90% gap interval when plan 1 is
+flagged changed the regret by +0.003, −0.018 and −0.016 s; preferring the fewest stops within 1 s,
+2 s or the interval by −0.021, +0.023 and −0.142 s (cluster CI −0.465, +0.209); and the plan with
+the least worst-case gap over the belief's own stress set (pace, wear and tyre-life edge ±1 sd per
+compound) cost +0.777 s (+0.446, +1.156). Where a top-4 plan beats plan 1 by the judge by more than
+0.5 s (120 scenarios), the robust plan was that plan in 2.
+
+**Development check (103 green dev20 scenarios, the v2 check sample; v2free at 7c31d5b against v2,
+--jobs 8 each).**
+
+| | v2 (copy plan 1) | v2free |
+| --- | --- | --- |
+| valid / voluntary | 103 / 102 | 103 / 102 |
+| judge regret mean / median / p90 (s) | 3.66 / 0.52 / 12.58 | 3.78 / 0.52 / 12.93 |
+| agent minus belief_optimizer (s, cluster CI) | 0.000 | +0.116 (−0.093, +0.476) |
+| plan / action agreement with the optimizer | 103 / 103 | 90 / 102 |
+| departures: helped / hurt / same (0.05 s) | 0 | 7 / 3 / 3, net +11.9 s |
+| worst departure (s) | 0 | +16.45 |
+| calls per episode; tokens in / out | 8.3; 24.8k / 371 | 7.4; 22.7k / 318 |
+| latency mean / median (s) | 18.3 / 17.7 | 12.6 / 12.0 |
+
+By stated reason, the check's departures were observed wear against the model 11 (−0.40 s each,
+6 helped, 2 hurt), field evidence on a compound 1 (−0.16), and a neutralisation 1 (+16.45: the model
+read gap_s +11.1 as faster and confirmed the plan when the check showed it the reading). On the
+design sample (100) the same code had 20 departures, 7 helped and 11 hurt (+0.108 s,
+−0.009 to +0.285). After the sign wording (d1dee25) the design sample gave +0.058 s (+0.009, +0.127),
+19 departures, 4 helped and 12 hurt, and the one +16.45 s check episode, rerun alone afterwards,
+kept plan 1. An earlier v2free with v2's top-four candidates (8540ba5) gave +0.040 s (−0.003,
++0.089) on the check, 21 departures, 6 helped and 12 hurt.
+
 ### Agent protocol v2
 
-`AGENT_PROTOCOL` = `v2` (the default since 2026-11-22) | `v1` (the prompt, tool surface, loop and
+`AGENT_PROTOCOL` = `v2` (the default from #130 until v2free) | `v1` (the prompt, tool surface, loop and
 submission handling before it, unchanged; rerun provenance records the protocol in effect). v2 is a
 development-side change made after the freeze: the held-out result above was run under v1 and
 stands as it is.
