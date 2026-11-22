@@ -551,7 +551,8 @@ SIM_CODE_VERSION = _code_version()   # report column sim_code_version, computed 
 # SimConfig fields added after hashes were published: left out of config_hash while they hold
 # their default, so a config that does not set one keeps its hash (as scenarios._ADDED_FIELDS
 # does for the set digest). A behaviour change behind a new default shows in SIM_CODE_VERSION.
-HASH_OMIT_AT_DEFAULT = ("policy_view", "cross_race_as_of", "fuel_anchor", "plan_on", "sc_queue", "pit_stops")
+HASH_OMIT_AT_DEFAULT = ("policy_view", "cross_race_as_of", "fuel_anchor", "plan_on", "sc_queue", "pit_stops",
+                        "belief_cliff_edge")
 
 
 def config_hash(config: SimConfig) -> str:
