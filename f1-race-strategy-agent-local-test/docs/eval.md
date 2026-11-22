@@ -32,16 +32,201 @@ Each race has two simulators over the same lap frame and practice
 
 A policy is called as `policy(scenario, belief, max_stops)` and never sees the world. The
 regret definition is unchanged: the policy's plan and the world optimizer's plan, both
-scored by the world. With the default world, v1 stays comparable with the numbers before
-the split. `configs/sim/world.yaml` is the world with ghost traffic on, for position regret
-(below); pass it with `--world-config`. Ghost traffic replays the recorded field, so it
-belongs to the world only, and only under the recorded events: an event model other than
-`none` (or a fixed scenario other than the record) adds `traffic_recorded_with_drawn_events`
-to every plan's support warnings (docs/traffic.md, limit 5).
+scored by the world. Traffic is a switch on each side, off by default ("Traffic" below):
+`--world-config configs/sim/world.yaml` scores with the other cars' recorded laps, and
+`--belief-config configs/sim/belief_traffic.yaml` lets the policies plan with the field
+projected from what is visible at the snapshot. The recorded ghosts are valid only under the
+recorded events: an event model other than `none` (or a fixed scenario other than the
+record) adds `traffic_recorded_with_drawn_events` to every plan's support warnings
+(docs/traffic.md, limit 5), unless `align_neutral` keeps the field's gaps on the laps where
+they differ (world.yaml sets it).
 
 Rows carry `belief_config_hash`, `world_config_hash` and `belief_window`. The config hash
-leaves `fit_window` out, so the two hashes are equal under the defaults and
-`belief_window` says which window the policies planned on.
+leaves `fit_window` out, so `belief_window` says which window the policies planned on.
+
+## Traffic
+
+Other cars can be modelled on both sides by the ghost-car model of `src/sim/traffic.py`
+(docs/traffic.md has the rule). It is a switch on each side, **off by default**; the fidelity
+scorecard (`python -m src.sim.fidelity`) decides by the finishing-order measures, with
+traffic off and on, whether it becomes the default:
+
+| side | off (default) | on | the other cars | what it reads |
+| --- | --- | --- | --- | --- |
+| world (scorer) | the default world | `--world-config configs/sim/world.yaml`: `ghost`, source `recorded`, `align_neutral`, `own_pace`, `pass_mode: earned`, `dirty_air_auto` | their recorded laps, the whole race | everything: it is the scorer, never a policy |
+| belief (policies, tools) | `configs/sim/belief.yaml` | `--belief-config configs/sim/belief_traffic.yaml` (the agent's tools: `AGENT_BELIEF_CONFIG=configs/sim/belief_traffic.yaml`): `ghost`, source `projected`, `own_pace`, `pass_mode: earned` | projected forward from the snapshot | `data.visible_rows` at the snapshot moment only |
+
+Each "on" config is its "off" config plus the traffic block and nothing else
+(tests/test_traffic_eval_params.py checks it). `score.WORLD_TRAFFIC_CONFIG` and
+`score.BELIEF_TRAFFIC_CONFIG` name them.
+
+What a policy may know about the other cars at the snapshot (driver D after lap L): every
+row that had ended when D ended lap L (`data.visible_rows`, the clock the belief window and
+the pit-loss estimate use), so a car behind has shown its lap L - 1 but not its lap L, and a
+car a lap ahead has shown its lap L + 1: their line crossings (positions and gaps, recomputed
+from those rows alone), lap times, compounds, tyre ages and stops, and the field's typical
+tyre life at the stops seen so far. It may not know what any of them does afterwards. The
+projection (traffic.py "Projected ghosts") starts each car from its own last visible
+crossing (a lap in progress ends after the cut): it laps at the belief's fitted lap time for
+its compound and age plus its own median residual over its recent green laps; a car that has
+not stopped stops once when its set reaches the field's typical life so far (per compound),
+at the latest `min_stint_laps` before the flag, and a car that has stopped stops again only
+if its set would otherwise pass 1.3 times that life; a projected stop costs the snapshot's
+pit-loss prior on the out-lap and fits the compound most used at the stops so far. A car
+with no crossing for two field laps before the cut is out of the race. Eight variants (stop
+lap +-3 laps, pace by its standard error, at least 0.15 s) are cycled over the samples, which
+gives the bands. The recorded source is refused belief-side (`agent_tools.belief_simulator`),
+and the engine checks the recorded events only for the recorded source.
+
+No future information: `tests/test_future_blindness.py` has a `traffic` surface (the belief
+with traffic on: the projected ghost table of every variant, own pace and dirty air, a plan
+set's times and positions, get_model_report, compare_plans and evaluate_strategy as shown,
+the belief optimum and run_to_flag planned with it), so its truncate, scramble and
+aggregates alterations cover traffic. `tests/test_traffic_future_blindness.py` is the
+targeted check on a synthetic race: every other car's rows that ended after the cut are
+altered (lap times, clock, compounds, tyre ages, stops, track status, positions, gaps, a
+retirement), and the traffic state, batch times and positions, the tools' outputs and every
+policy's plan (belief_optimizer, the bridged baselines, the rule baselines; actual_strategy
+excepted) come out identical; the recorded source, which reads them, does not.
+
+The agent sees, per plan or action (compare_plans `traffic`, evaluate_strategy `traffic`),
+with traffic on; every string goes through `tools.present` like any tool output and names
+no season, event or driver. 2021 Spain, the car in P2 after lap 20 (1.5 s behind the
+leader), evaluate_strategy of a pit for MEDIUM against staying out a lap (measured before
+the as-of changes of #90-#101, numbers illustrative):
+
+```json
+{"action": {"expected_rejoin_position": 3.0, "rejoin_position_band": [1.0, 5.0], "cars_in_pit_window": 5.7,
+            "time_lost_s": {"low": 0.4, "median": 1.2, "high": 3.0},
+            "final_position": {"low": 1.0, "median": 1.0, "high": 1.5}},
+ "alternative": {"expected_rejoin_position": 1.0, "rejoin_position_band": [1.0, 2.0], "cars_in_pit_window": 0.2,
+                 "time_lost_s": {"low": 0.0, "median": 0.0, "high": 0.8},
+                 "final_position": {"low": 1.0, "median": 1.0, "high": 1.5}},
+ "basis": "other cars projected from what is known at this lap only (...)"}
+```
+
+get_model_report adds `traffic`: `cars_within_pit_loss_behind_now`, `dirty_air_s`,
+`own_pace_s` and the basis in words. `time_lost_s` is included in every time the tools
+report. With traffic off the tools say traffic is not modelled.
+
+The scored quantity is still race time (`regret_s`), with the time lost in traffic in it
+when the world runs traffic. Rows then also carry `final_position_mean`,
+`opt_final_position_mean` and `position_regret` (Metrics), information only. Finishing
+positions classify the field at the flag (`traffic.flag_classification`): a car whose last
+crossing is on or after the leader's last lap took the flag, a lapped one a lap or more
+short, and is ranked on its own final lap; under the scheduled race distance a lapped
+finisher is no longer counted as a retirement.
+
+Cost: the traffic step reruns per sample only when the samples differ. A world that draws no
+events, noise or parameters has identical samples, so the engine reuses the first sample's
+traffic result for the rest (engine.simulate_batch); a projected field never does (its
+variants differ per sample).
+
+### Traffic: accuracy
+
+The numbers below were measured on main at bc73f6c, before the as-of changes (#90 pit loss,
+#95/#97 events, #98 policy view, #101 wear cost); the commands below rerun them, and the
+fidelity scorecard calls them.
+
+`python -m src.sim.traffic_accuracy --races <ids> --out reports/calibration/traffic` and
+`python -m src.sim.field_replay --races <ids> --out ...` (both refuse held-out races), on the
+calibration races 2021_04_spain 2023_07_spain 2023_01_bahrain 2019_10_united_kingdom
+2022_02_saudi_arabia 2024_07_emilia_romagna. Committed outputs:
+`reports/calibration/traffic/summary.csv`, `g_by_horizon.csv` and
+`field_replay_summary.csv`.
+
+Columns: **G** the real remaining plan replayed from every snapshot lap (calibration.midrace),
+predicted less real remaining time, horizons 10-49, pace-corrected by one definition for
+every arm (the traffic-off arm's offset, `err_common_s`), mae and signed bias in s.
+**rejoin** every real stop of a finisher replayed from the lap before the in-lap: position
+error and gap to the car ahead after the out-lap (calibration.rejoin), and the position three
+laps later. **pack left** the observed pack penalty the arm leaves unexplained (mean residual
+of clean laps within 1.5 s of the car ahead less that of clean free-air laps, full-race
+replay); **pack model** the model's own estimate (mean traffic increment on those laps less
+on free-air laps). **SG bias** stop-gain bias at real stops (moves only with the fit, so it
+is the same off and on).
+
+| race | arm | G mae | G bias | rejoin pos mae | rejoin gap mae | rejoin gap bias | rejoin+3 pos mae | pack left | pack model | SG bias |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2019_10_united_kingdom | world off | 16.84 | -10.92 | 1.30 | 5.45 | -2.68 | 1.93 | 0.02 |  | -0.04 |
+| 2019_10_united_kingdom | world on (world.yaml) | 17.41 | -8.11 | 1.52 | 5.36 | -2.67 | 2.19 | -0.07 | 0.09 | -0.04 |
+| 2019_10_united_kingdom | belief off | 32.04 | 24.23 | 1.70 | 5.57 | -1.43 | 2.44 |  |  | -0.81 |
+| 2019_10_united_kingdom | belief on (belief_traffic.yaml) | 32.39 | 24.73 | 1.70 | 5.51 | -1.38 | 2.52 |  |  | -0.81 |
+| 2021_04_spain | world off | 10.93 | -7.03 | 0.19 | 3.58 | -1.17 | 0.57 | 0.24 |  | -0.34 |
+| 2021_04_spain | world on (world.yaml) | 9.80 | -3.85 | 0.30 | 3.80 | -1.52 | 0.57 | 0.13 | 0.11 | -0.34 |
+| 2021_04_spain | belief off | 19.06 | 1.00 | 0.51 | 4.58 | -1.67 | 0.81 |  |  | -1.01 |
+| 2021_04_spain | belief on (belief_traffic.yaml) | 19.09 | 1.73 | 0.51 | 4.58 | -1.67 | 0.81 |  |  | -1.01 |
+| 2022_02_saudi_arabia | world off | 44.14 | -35.02 | 1.67 | 3.59 | -2.35 | 4.47 | 0.55 |  | 0.31 |
+| 2022_02_saudi_arabia | world on (world.yaml) | 44.09 | -32.99 | 1.67 | 3.38 | -2.13 | 4.27 | 0.38 | 0.18 | 0.31 |
+| 2022_02_saudi_arabia | belief off | 27.80 | -0.05 | 1.40 | 3.15 | -1.51 | 4.47 |  |  | -0.22 |
+| 2022_02_saudi_arabia | belief on (belief_traffic.yaml) | 27.95 | 0.67 | 1.40 | 3.15 | -1.51 | 4.47 |  |  | -0.22 |
+| 2023_01_bahrain | world off | 20.09 | 13.67 | 0.71 | 4.10 | -0.57 | 1.00 | 0.31 |  | -0.44 |
+| 2023_01_bahrain | world on (world.yaml) | 21.23 | 15.82 | 0.69 | 4.09 | -0.69 | 0.98 | 0.21 | 0.10 | -0.44 |
+| 2023_01_bahrain | belief off | 35.15 | 30.92 | 0.76 | 5.33 | -1.06 | 1.02 |  |  | -0.15 |
+| 2023_01_bahrain | belief on (belief_traffic.yaml) | 36.03 | 31.90 | 0.78 | 5.54 | -1.31 | 1.00 |  |  | -0.15 |
+| 2023_07_spain | world off | 8.07 | -1.56 | 0.19 | 1.94 | -0.19 | 0.47 | 0.11 |  | -0.53 |
+| 2023_07_spain | world on (world.yaml) | 8.09 | -0.09 | 0.21 | 1.94 | -0.25 | 0.53 | 0.01 | 0.10 | -0.53 |
+| 2023_07_spain | belief off | 11.64 | 7.24 | 0.26 | 1.94 | 0.10 | 0.47 |  |  | 0.02 |
+| 2023_07_spain | belief on (belief_traffic.yaml) | 12.02 | 8.07 | 0.28 | 1.94 | 0.17 | 0.47 |  |  | 0.02 |
+| 2024_07_emilia_romagna | world off | 13.27 | -12.09 | 0.17 | 2.20 | 0.93 | 0.50 | 0.21 |  | -0.13 |
+| 2024_07_emilia_romagna | world on (world.yaml) | 11.03 | -9.05 | 0.22 | 2.11 | 1.06 | 0.59 | 0.03 | 0.18 | -0.13 |
+| 2024_07_emilia_romagna | belief off | 17.32 | 1.56 | 0.17 | 1.81 | 0.65 | 0.45 |  |  | 0.36 |
+| 2024_07_emilia_romagna | belief on (belief_traffic.yaml) | 17.27 | 2.31 | 0.17 | 1.80 | 0.83 | 0.45 |  |  | 0.36 |
+| **mean** | world off | 18.89 | -8.83 | 0.70 | 3.48 | -1.01 | 1.49 | 0.24 |  | -0.20 |
+| **mean** | world on (world.yaml) | 18.61 | -6.38 | 0.77 | 3.45 | -1.03 | 1.52 | 0.12 | 0.13 | -0.20 |
+| **mean** | belief off | 23.83 | 10.82 | 0.80 | 3.73 | -0.82 | 1.61 |  |  | -0.30 |
+| **mean** | belief on (belief_traffic.yaml) | 24.13 | 11.57 | 0.81 | 3.75 | -0.81 | 1.62 |  |  | -0.30 |
+
+Every arm, race means (summary.csv has the rest):
+
+| arm | G mae | G bias | rejoin pos mae | rejoin+3 pos mae | pack left | pack model |
+| --- | --- | --- | --- | --- | --- | --- |
+| world off | 18.89 | -8.83 | 0.70 | 1.49 | 0.24 | |
+| world, ghost as it was (swap passes) | 19.13 | -8.66 | 0.71 | 1.52 | 0.19 | 0.06 |
+| world, + own pace | 19.01 | -8.63 | 0.73 | 1.55 | 0.20 | 0.04 |
+| world, + earned passes, no dirty air | 18.87 | -7.79 | 0.75 | 1.53 | 0.16 | 0.09 |
+| **world, + dirty air from the race (world.yaml)** | **18.61** | **-6.38** | 0.77 | 1.52 | 0.12 | 0.13 |
+| world, the same with the free-air fit | 19.10 | -7.80 | 0.76 | 1.51 | 0.17 | 0.13 |
+| belief off | 23.83 | 10.82 | 0.80 | 1.61 | | |
+| belief, projected, swap passes | 23.81 | 10.73 | 0.81 | 1.62 | | |
+| **belief, projected, earned passes (belief_traffic.yaml)** | 24.13 | 11.57 | 0.81 | 1.62 | | |
+| belief, projected, earned, as-of dirty air | 25.12 | 13.78 | 0.82 | 1.70 | | |
+
+**Whole-field replay** (`src/sim/field_replay.py`): every classified car's real strategy
+replayed together from lap k to the flag (with traffic on, each car against the other
+cars' simulated trajectories after k, two passes), against the real race. Fit
+leave-one-driver-out (the full-window fit without car D's laps predicts D); pace term in the
+engine: D's race pace up to k (`asof`; this weekend's practice at k = 0). Neither reads D's
+laps after k, so no number below is in-sample for the car it predicts; the world fit still
+reads the other cars' whole race, as the scorer does. Race means (per race in
+`field_replay_summary.csv`; the `practice` pace rows are there too):
+
+| k | time mae off / on | time bias off / on | Spearman off / on | pos mae off / on | within 1 off / on |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 37.80 / 35.23 | -22.61 / -10.40 | 0.75 / 0.75 | 2.27 / 2.35 | 0.51 / 0.47 |
+| 10 | 35.29 / 34.05 | -16.94 / -12.73 | 0.94 / 0.94 | 1.21 / 1.21 | 0.67 / 0.69 |
+| 20 | 19.83 / 19.66 | -4.52 / -0.50 | 0.94 / 0.94 | 1.18 / 1.18 | 0.69 / 0.70 |
+| 30 | 14.57 / 14.22 | -2.09 / 0.11 | 0.95 / 0.95 | 1.06 / 1.01 | 0.76 / 0.77 |
+| 40 | 9.64 / 8.94 | -4.26 / -2.80 | 0.96 / 0.96 | 0.80 / 0.72 | 0.82 / 0.86 |
+
+**What the measures said (before the merge).** The world, on against off: on lowers the G error and bias, the whole-field
+time error and bias at every calibration point, and explains half the observed pack
+penalty (0.24 s left off, 0.12 s on; the model's own estimate 0.13 s); finishing order is
+equal or better from lap 10 on and slightly worse from the start. It is worse on the
+rejoin position (0.70 to 0.77 places after the out-lap) and on two races' G (UK, Bahrain,
+where the world is already slow). Two parts were fixed rather than switched off: the old
+swap rule conjured time from every pass (net traffic time was negative), replaced by
+earned passes; and the dirty-air term, off before, is identified from the race's own laps
+(0.37 s a lap on average). The free-air fit was not kept (worse G). The belief, traffic on
+(the projected field, earned passes, no dirty air): by its own as-of measures it is
+not more accurate: G 24.13 against 23.83 s with a larger positive bias (the belief is
+already 11 s slow over these horizons, from causes outside traffic), rejoin equal. The
+as-of dirty-air estimate is not identified (0.68 s against the race's 0.37 s) and made it
+worse (25.12), so it is off. Belief traffic gives the belief the same
+physics as the world and the tools can report rejoin positions honestly; the swap rule
+would score 23.81 but only by conjuring time. If the belief's bias is fixed elsewhere this
+should be measured again. Neither side is on by default now: the fidelity scorecard decides by
+the finishing-order measures.
 
 ## Information contract
 
@@ -995,8 +1180,8 @@ any scenario of any race (the lap-0 same-race guard is gone):
 - the tools keep the contract itself (`tools.set_snapshot`) and answer from the belief
   simulator at the snapshot (`src/sim/agent_tools.py`, SPEC 0015): degradation and pit
   loss ranges, the model report, plan comparisons, and an action against its alternative,
-  with `within_sim_error` judged against the calibration error; traffic is not modelled
-  there;
+  with `within_sim_error` judged against the calibration error; the times include traffic
+  from the projected field, and the outputs carry it compactly ("Traffic" below);
 - `run_agent(scenario.snapshot, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
@@ -1398,8 +1583,8 @@ policy's plan is scored by the world under the same draws (docs/rules.md R6).
 | `decision`, `p_pit` | agent rows only: PIT or STAY_OUT, and the stated probability that pitting now is right (`confidence` for PIT, `1 - confidence` for STAY_OUT) |
 | `brier` | summary, agent rows: mean of `(p_pit - pit_now_opt)^2`. Only in tables of rows that have `p_pit`. |
 | `pit_now_agreement` | summary, agent rows: share of decisions where PIT matches `pit_now_opt` |
-| `final_position_mean`, `opt_final_position_mean` | world traffic on: the plan's and the optimizer's mean finishing position over the samples, 1 + the ghosts that finished the last lap before the plan's world time (`traffic.place`); a DNF sample is behind every finisher, ordered by `dnf_lap` against the ghosts that retired |
-| `position_regret` | `final_position_mean - opt_final_position_mean`; positive means finishing behind the reference. NaN with world traffic off (the default world) or when traffic cannot be placed (no `elapsed_s`): without ghosts there is no field to finish in |
+| `final_position_mean`, `opt_final_position_mean` | world traffic on (the default): the plan's and the optimizer's mean finishing position over the samples, 1 + the ghosts that crossed the line at the end of the last lap before the plan's car, on the traffic model's own clock (`BatchResult.final_pos`: the driver's own pace on the track and the neutral-lap alignment, "Traffic" below); a DNF sample is behind every finisher, ordered by `dnf_lap` against the ghosts that retired. Information only: the headline metric stays `regret_s` |
+| `position_regret` | `final_position_mean - opt_final_position_mean`; positive means finishing behind the reference. NaN with world traffic off or when traffic cannot be placed (no `elapsed_s`): without ghosts there is no field to finish in |
 | `mean_position_regret`, `mean_final_position` | summary, only when some row has a position |
 | `ref_models_agree` | optional (`--world-configs`): every alternative world's reference has the same number of stops and a first pit lap within 2 of the world's. `score` then also writes `*_summary_agree.csv`, the table over the agreeing rows |
 | `regret_se_s` | the paired standard error of `regret_s` under the shared draws: `sd(policy_times - reference_times) / sqrt(N)`, sd with N - 1, over the N per-draw remaining times (the reference's in float32, from the reference cache). 0 at N = 1 |

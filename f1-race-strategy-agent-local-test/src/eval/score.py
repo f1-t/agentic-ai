@@ -82,6 +82,9 @@ REGRET_TOL_S = 1e-6
 REF_AGREE_LAPS = 2   # E: first pit laps this close count as the same reference call
 ROLES = ("belief", "world")
 BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
+# the traffic switch (docs/eval.md "Traffic"): opt-in world and belief configs with traffic on
+WORLD_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "world.yaml"
+BELIEF_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief_traffic.yaml"
 
 
 def _first_pit_error(pits, ref_pits):
@@ -93,24 +96,44 @@ def _first_pit_error(pits, ref_pits):
     return abs(pits[0] - ref_pits[0])
 
 
-def finishing_positions(frame: pd.DataFrame, snapshot, times, dnf_lap) -> np.ndarray:
-    """(n_samples,) finishing position per sample of one plan: 1 + the ghosts (every other
-    driver in `frame`) that finished lap race.total_laps before our session time, anchor +
-    remaining time (traffic.place, vectorised over the samples). A DNF sample (finite
-    dnf_lap) is behind every finisher and behind the ghosts that retired no earlier than its
-    dnf_lap; its penalised time is not used."""
-    last = snapshot.race.total_laps
-    t = traffic.anchor(frame, snapshot) + np.asarray(times, dtype=float)
-    G = traffic.ghost_table(frame, snapshot.driver, [last]).G[:, 0]
-    finished = G[np.isfinite(G)]
-    pos = 1 + (finished[None, :] < t[:, None]).sum(axis=1)
+def finishing_positions(frame: pd.DataFrame, snapshot, times, dnf_lap, at_flag=None) -> np.ndarray:
+    """(n_samples,) finishing position per sample of one plan. The other drivers in `frame` are
+    classified at the flag (traffic.flag_classification): a car whose last crossing is on the
+    leader's last lap or later took the flag, a lapped one a lap or more short; one that stopped
+    crossing earlier retired. A finisher is ahead when it crossed its own final lap's line
+    before we did: our crossing of that lap is our session time (anchor + remaining time) less
+    the laps we still had to run, at our mean remaining lap. `at_flag` (the engine's
+    BatchResult.final_pos row) gives the same count on the traffic model's own lap-by-lap clock
+    (the driver's own pace and the neutral-lap alignment, traffic.py) and replaces it. The last
+    lap is snapshot.race.total_laps (the scheduled distance under snapshot_as_of), and a lapped
+    finisher is no longer taken for a retirement. A DNF sample (finite dnf_lap) is behind every
+    finisher and behind the cars that retired no earlier than its dnf_lap; its penalised time is
+    not used."""
+    k, last = snapshot.laps_completed, snapshot.race.total_laps
+    laps = np.arange(k + 1, last + 1)
+    table = traffic.ghost_table(frame, snapshot.driver, laps)
+    G = table.G
+    fin = traffic.flag_classification(G, None)
+    classified = fin >= 0
+    if at_flag is not None:
+        pos = np.asarray(at_flag, dtype=float).astype(int)
+    else:
+        rem = np.asarray(times, dtype=float)
+        t = traffic.anchor(frame, snapshot) + rem
+        per_lap = rem / max(len(laps), 1)
+        idx = np.flatnonzero(classified)
+        g_end = G[idx, fin[idx]]                            # each finisher's final crossing
+        short = (len(laps) - 1 - fin[idx]).astype(float)    # laps it finished short of our last
+        ours = t[:, None] - short[None, :] * per_lap[:, None]
+        pos = 1 + (g_end[None, :] < ours).sum(axis=1)
     dnf_lap = np.asarray(dnf_lap, dtype=float)
     dnf = np.isfinite(dnf_lap)
     if dnf.any():
         ghosts = frame[(frame["driver"] != snapshot.driver) & np.isfinite(frame["end_s"].astype(float))]
         reached = ghosts.groupby("driver")["lap"].max()
-        retired = reached[reached < last].to_numpy(dtype=float)   # lap count of each non-finisher
-        pos[dnf] = 1 + len(finished) + (retired[None, :] >= dnf_lap[dnf][:, None]).sum(axis=1)
+        out = [d for d, c in zip(table.ghosts, classified) if not c]
+        retired = reached.reindex(out).dropna().to_numpy(dtype=float)   # lap count of each non-finisher
+        pos[dnf] = 1 + int(classified.sum()) + (retired[None, :] >= dnf_lap[dnf][:, None]).sum(axis=1)
     return pos
 
 
@@ -118,7 +141,8 @@ def _positions(world, snap, batch, i):
     """finishing_positions of plan i of a world batch, None when traffic was not placed."""
     if not batch.traffic_on:
         return None
-    return finishing_positions(world.laps, snap, batch.times[i], batch.dnf_lap[i])
+    at_flag = batch.final_pos[i] if batch.final_pos is not None else None
+    return finishing_positions(world.laps, snap, batch.times[i], batch.dnf_lap[i], at_flag=at_flag)
 
 
 def references_agree(plan, other, snapshot, within: int = REF_AGREE_LAPS) -> bool:

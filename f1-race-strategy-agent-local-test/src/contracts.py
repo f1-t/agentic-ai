@@ -244,6 +244,19 @@ class TimeSummary(_Contract):
     cvar_90_s: float | None = None  # mean of the worst 10 percent of samples
 
 
+class TrafficEstimate(_Contract):
+    """What the other cars do to one plan, over the samples (src/sim/traffic.py). Bands are
+    {low, median, high}: the 5th, 50th and 95th percentiles over the samples, which carry the
+    projection's uncertainty where the field is projected. time_lost_s is included in the
+    plan's remaining time. rejoin_position and cars_in_pit_window are None without a stop."""
+
+    time_lost_s: dict[str, float]               # net time traffic added (held, passing; negative: a pass)
+    rejoin_position: dict[str, float] | None    # position after the first stop's out-lap
+    cars_in_pit_window: float | None            # mean cars within the first stop's pit loss behind
+    final_position: dict[str, float]            # position at the flag
+    passes_mean: float
+
+
 class SimResult(_Contract):
     """One plan's simulated outcome. p_dnf and p_big_loss are exclusive (a sample has at
     most one hazard event), so p_dnf + p_big_loss is the probability of any hazard event."""
@@ -267,6 +280,7 @@ class SimResult(_Contract):
     # sample 0, per remaining lap: the field's SC lap less the engine's on bunched SC laps, NaN
     # elsewhere; None when traffic is off or lap times were not requested
     sc_field_delta_s: list[float] | None = None
+    traffic: TrafficEstimate | None = None   # None when traffic is off or was not placed
 
     @property
     def race_time_s(self) -> float | None:
@@ -295,6 +309,7 @@ class CompareResult(_Contract):
     n_samples: int
     seed: int
     support_warnings: list[list[str]] = Field(default_factory=list)  # per candidate, as SimResult
+    traffic: list[TrafficEstimate | None] | None = None   # per candidate, as SimResult; None when off
 
 
 # --- Model report --------------------------------------------------------------

@@ -61,6 +61,10 @@ Policy-visible surfaces (observe), per snapshot:
   baselines   fixed_one_stop, fixed_two_stop, greedy_crossover, run_to_flag and
               one_stop_total through the eval wrapper (eval.policies): plan and meta.
               actual_strategy is left out: it is the real future by definition.
+  traffic     the belief with traffic on (configs/sim/belief_traffic.yaml, the projected
+              field, src/sim/traffic.py): the projected ghost table of every variant, own pace
+              and dirty air, a plan set's times and positions, get_model_report, compare_plans
+              and evaluate_strategy as shown, the belief optimum and run_to_flag planned with it
 
 The scoring world and the hindsight reference are allowed to see the whole race and are
 not observed.
@@ -80,7 +84,7 @@ seasons, any choice developers tuned on these races); the lap L + 1 row's start-
 which both frame alterations keep as known; how scenarios are chosen (decision laps beside SC
 periods, finishers only), which conditions the set on the future without reaching a policy;
 frozen scenario sets, which keep the snapshots they were built with; what an LLM already knows
-about a real race; surfaces not observed (traffic and weather are off or absent belief-side).
+about a real race; surfaces not observed (weather is absent belief-side).
 A dependence that happens to leave every observed output unchanged at the sampled snapshots
 is missed too: a pass is evidence, not proof.
 """
@@ -120,7 +124,7 @@ PROFILE = LOCAL.model_copy(update={"sim": LOCAL.sim.model_copy(update={"n_sample
                                                                            "max_stops": MAX_STOPS})})
 REL_TOL, ABS_TOL = 1e-9, 1e-9
 ALTERATIONS = ("truncate", "scramble", "aggregates")
-SURFACES = ("snapshot", "belief", "rules", "tools", "decisions", "baselines")
+SURFACES = ("snapshot", "belief", "rules", "tools", "decisions", "baselines", "traffic")
 OBSERVED_BASELINES = ("fixed_one_stop", "fixed_two_stop", "greedy_crossover", "run_to_flag", "one_stop_total")
 # the scenario builder new sets use (src/eval/scenarios.py, rule as_of); calibration.snapshot_at
 # is the legacy one (the race_length and gap_behind leaks, and it needs a lap L + 1 row)
@@ -777,6 +781,43 @@ def _decisions_surface(belief, snap):
     return out
 
 
+def _traffic_surface(data, snap, scenario):
+    """The belief with traffic on (configs/sim/belief_traffic.yaml, the projected field): its
+    traffic state (the projected ghost table of every variant, our own pace, dirty air), a
+    fixed plan set's times and positions, the traffic tools as the model is shown them, the
+    belief optimum and one baseline, all planned with traffic."""
+    from src.sim import traffic
+    cfg = SimConfig.from_file(score.BELIEF_TRAFFIC_CONFIG)
+    belief = score.race_simulators(PROFILE, belief_config=cfg)(data.race_id, "belief")
+    fit = belief.fitted_for(snap)
+    laps = np.arange(snap.laps_completed + 1, snap.race.total_laps + 1)
+    state = fit.traffic.prepare(snap, laps, fit.laps, snap.driver, ref_lap_s=fit.ref_lap_s, model=fit.degradation)
+    out = {"state": None if state is None else {
+        "anchor": plain(state.anchor), "own_offset_s": plain(state.own_offset_s),
+        "dirty_air_s": plain(state.dirty_air_s), "final_idx": plain(state.final_idx),
+        "variants": [{"ghosts": list(v.table.ghosts), "G": plain(v.table.G), "G_prev": plain(v.table.G_prev),
+                      "in_lap": plain(v.table.in_lap), "out_lap": plain(v.table.out_lap)}
+                     for v in state.variants]}}
+    plans = [p for k, p in plan_script(snap).items() if k.startswith(("one_stop", "single"))]
+    b = belief.simulate_batch(snap, plans, seed=agent_tools.SEED, n_samples=N_SAMPLES)
+    out["simulate_batch"] = {"times": plain(b.times), "traffic_s": plain(b.traffic_s),
+                             "final_pos": plain(b.final_pos), "rejoin_pos": plain(b.rejoin_pos),
+                             "pit_window_cars": plain(b.pit_window_cars),
+                             "support_warnings": plain(b.support_warnings)}
+    with mock.patch.dict(agent_tools._BELIEF, {"config": cfg}), \
+            mock.patch.object(agent_tools, "_SIMS", {}):
+        tools.set_snapshot(snap)
+        out["get_model_report"] = _shown(tools.get_model_report, None)
+        out["compare_plans"] = _shown(tools.compare_plans, [{"action": "pit", "compound": c} for c in DRY]
+                                      + [{"action": "stay_out", "laps": 3}])
+        out["evaluate_strategy"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": _other(snap.compound)})
+    out["belief_optimizer"] = _call(lambda: decisions.belief_optimum(snap, belief, MAX_STOPS, seed=0,
+                                                                    n_samples=N_SAMPLES).as_pairs())
+    out["run_to_flag"] = _call(lambda: plain(policies.RULE_POLICIES["run_to_flag"](scenario, belief, MAX_STOPS).plan))
+    assert traffic.GhostTraffic(**cfg.traffic.params).reads_future is False
+    return out
+
+
 def _baselines_surface(belief, scenario):
     pols = {**policies.BASELINE_POLICIES, **policies.RULE_POLICIES}
     out = {}
@@ -824,6 +865,7 @@ def observe(data: jobs.RaceData, driver: str, lap: int, *, snapshot_fix=None, pa
         out["tools"] = _tools_surface(snap)
         out["decisions"] = _decisions_surface(belief, snap)
         out["baselines"] = _baselines_surface(belief, scenario)
+        out["traffic"] = _traffic_surface(data, snap, scenario)   # raises: an error here is a bug, not an output
     return out
 
 
