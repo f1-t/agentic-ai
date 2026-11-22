@@ -100,7 +100,7 @@ def test_provenance_records_the_model_never_a_key(tmp_path, monkeypatch):
 
 def test_tables_write_every_output_and_a_provenance_file(tmp_path):
     spec = tmp_path / "sets.yaml"
-    spec.write_text("t:\n  races: [2019_06_x, 2021_04_y, 2024_11_z]\n  per_race: 4\n  seed: 0\n  development: false\n"
+    spec.write_text("t:\n  races: [2019_06_x, 2021_04_y, 2024_11_z]\n  per_race: 4\n  seed: 0\n  development: true\n"
                     "  eras: true\n")
     rows().to_csv(tmp_path / "baselines.csv", index=False)
     a = args(tmp_path, set="t", sets=str(spec))

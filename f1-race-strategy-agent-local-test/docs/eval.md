@@ -1358,6 +1358,25 @@ any scenario of any race (the lap-0 same-race guard is gone):
   with the gap between them read from the belief's paired draws ("Plan gaps and rule
   replies" below); the times include traffic from the projected field, and the outputs
   carry it compactly ("Traffic" below);
+- the pit window up front: the first message's snapshot, `get_race_snapshot` and
+  `get_model_report` carry `pit_window` (`agent_tools.pit_window`: whether pitting now is legal,
+  the earliest and latest laps at whose end a stop is legal, in numbers and words), from the
+  regulations and the laps so far only;
+- a stay-out evaluation is compared with the nearest legal alternative: pitting now when that is
+  legal; otherwise a stop at the end of the earliest legal lap (`at_end_of_lap`, with a `note`);
+  with no legal stop left, a `note` says STAY_OUT to the flag is the only legal action and there
+  is nothing to compare. A stay of k laps is a minimum (the best continuation picks its own stop),
+  so every evaluation says what its plan is (`continuation`: "staying out at least k laps; ... the
+  first stop is at the end of lap X onto C"), a request that resolves to a plan already evaluated
+  in the episode says so in one line (`same_plan_as`), and a stay carries `stop_lap_scan`: up to
+  five stop laps from the earliest legal one (over at most 20 laps) onto the alternative's
+  compound, each against the evaluated plan under the same draws (mean difference, share faster);
+- `submit_recommendation` refuses what the scorer would reject (`agent_tools.submission_error`:
+  the decision, a fittable compound for a PIT that is legal now, a whole `reassess_after_laps` of
+  at least 1, a confidence in [0, 1], then the scorer's own expansion, `decisions.to_plan`, and the
+  rules), with the cause and the legal alternative ("only STAY_OUT to the flag is legal: use
+  reassess_after_laps = 3"), so the model corrects it within the episode; anything it accepts the
+  scorer scores (tests/test_agent_contract.py);
 - `run_agent(scenario.snapshot, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
@@ -1879,6 +1898,23 @@ same K (mean difference with a 95% t interval, ratio, and whether the decision w
 runs of one scenario, a small run-to-run check). `agent_run.json` (copied into `provenance.json`)
 records K, N, each pass's start, end, wall time, model and loop switches, and which figure is the
 headline.
+
+**Pre-registered reporting** (`configs/eval/reporting.yaml`, `src/eval/reporting.py`). The
+reporting choices for the held-out run are fixed in a committed file before the held-out set
+exists: the lead comparisons (agent minus `run_to_flag`, then `one_stop_total`), the secondary ones
+(`actual_strategy`, `belief_optimizer`), the reference-only and footnoted ones; the statistic (mean
+paired regret difference, agent minus comparator, on scenarios both scored) with a 95% percentile
+cluster bootstrap on (race, driver) clusters as the primary interval and the race-cluster interval
+beside it (2,000 resamples, seed 0) and the verdict words from the primary interval ("ahead",
+"behind", "level"); the tail threshold (20 s, with 10 and 30 s beside it, median and worst); the
+three-way held-out split in order (the fresh five, the earlier four labelled a second look, all
+nine) and by era; the run settings; the handling rules; and the fidelity context printed with the
+results. The `scenarios` stage records the file's sha256 in the set's `sampling`; the `tables` stage
+refuses a report set whose recorded sha256 differs from the file's, writes
+`tables/reporting_paired.csv` (per group, the comparators in order, both intervals, the verdict),
+`reporting_tail.csv`, `reporting_counts.csv` (rows per policy and status), `reporting_paired_by_era.csv`
+and `reporting_header.txt`, and copies the file verbatim with its sha256 into `provenance.json`. A
+development set is one group, "development (all)".
 
 **Smoke run.** `python -m src.eval.rerun smoke [--n 8] [--jobs 4]` (key and `LLM_BACKEND` as for the
 agent stage) samples set `smoke` (eight development races; a held-out race is refused, `--final`
@@ -2489,6 +2525,11 @@ the arm, the artifacts, `belief_learned.yaml` and the report.
 
 ## Limitations
 
+- **Wide, lopsided gap intervals on a prior-dominated compound.** A compound with no race laps
+  yet (its pace and wear from practice and the prior) gives gap intervals tens of seconds wide and
+  far from symmetric about the median (for example 2021 Spain mid-race, PIT HARD against staying
+  out: +26 s, 90% -40 to +96 s). The intervals are the belief's own draws, percentiles not mean
+  -+ sd, and the width is the belief saying how little it knows; it is not narrowed.
 - **The world is fitted on hindsight.** It reads every race lap (`full` window); only the
   belief is held to the laps up to the snapshot (above, "Who sees what").
 - **Tyre life is a cliff, priced, not a limit** ("The wear cliff"). The R8 stint limit that read
