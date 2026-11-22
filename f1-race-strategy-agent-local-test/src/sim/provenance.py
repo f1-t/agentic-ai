@@ -132,7 +132,13 @@ POLICY_SIDE = {
     "fuel_prior": Artifact(
         "configs/sim/race_history.csv target: the circuit-history fuel prior (fuel_prior.circuit_history_prediction "
         "as of the race), the a priori physics prior (fuel_prior.practice_longrun_prediction) with fewer than two "
-        "earlier races", "as_of", _history_recorded, _history_for),
+        "earlier races; under SimConfig.fuel_anchor.prior 'anchored' (belief.yaml) the earlier races' target / physics "
+        "ratio (target, total_laps, practice_lap_s; fuel_prior.anchored_prediction)", "as_of", _history_recorded,
+        _history_for),
+    "fuel_physics": Artifact(
+        "fuel_prior.FUEL_EFFECT_S_PER_KG, FUEL_START_KG, REF_LAP_S and RATIO_PRIOR: the lap-scaled physics fuel "
+        "slope and its a priori ratio spread (the anchored prior with no earlier race, and the judge's anchor)",
+        "a_priori", _none, _none_for),
     "event_effects": Artifact(
         "configs/sim/race_history.csv sc_lap_factor, lap1_extra_s: the belief's SC lap factor and lap-1 extra "
         "(as_of_history calibrator), a priori race_history.A_PRIORI with no earlier race",

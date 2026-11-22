@@ -62,6 +62,50 @@ def test_the_fuel_prior_falls_back_to_the_physics_prior_without_history():
     assert later["races"] == ["2020_03_a", "2021_02_b"] and -0.08 < later["mean"] < -0.04
 
 
+ANCHOR_HISTORY = HISTORY.assign(total_laps=[55, 55, 55], practice_lap_s=[90.0, 90.0, 90.0],
+                                target=[-0.066, -0.054, -5.0])   # ratios 1.1, 0.9, and a later outlier
+
+
+def test_the_anchored_fuel_prior_is_lap_scaled_physics_times_the_as_of_ratio():
+    from src.sim import fuel_prior
+    practice = pd.DataFrame({"lap_time_s": [99.0, 99.0, 120.0], "clean": [True, True, False]})
+    race = RaceParams(race_id="2019_01_q", total_laps=55, pit_loss_s=20.0)
+    phys = -0.03 * (99.0 / 90.0) * 110 / 55
+    none = race_history.as_of_fuel(race, ANCHOR_HISTORY, practice=practice, mode="anchored")
+    assert none["races"] == [] and none["mean"] == pytest.approx(phys)
+    assert none["sd"] == pytest.approx(fuel_prior.RATIO_PRIOR[1] * abs(phys))
+    got = race_history.as_of_fuel(race.model_copy(update={"race_id": "2022_01_q"}), ANCHOR_HISTORY,
+                                  practice=practice, mode="anchored")
+    assert got["races"] == ["2020_03_a", "2021_02_b"]   # the 2022 outlier is later: never read
+    # two earlier ratios (mean 1.0) under RATIO_PRIOR (fewer than MIN_RATIO_RACES: its spread)
+    assert got["mean"] == pytest.approx(phys)
+    assert got["sd"] > fuel_prior.RATIO_PRIOR[1] * abs(phys)
+    # no practice: the unscaled physics slope
+    assert race_history.as_of_fuel(race, ANCHOR_HISTORY, mode="anchored")["mean"] == pytest.approx(-0.03 * 110 / 55)
+    with pytest.raises(ValueError):
+        race_history.as_of_fuel(race, ANCHOR_HISTORY, mode="nope")
+
+
+def test_the_judge_fuel_anchor_shrinks_the_full_fit_toward_the_prior():
+    from src.sim.degradation import LinearFuelDegradation
+    rng = np.random.default_rng(0)
+    rows = []
+    for d in range(6):   # pit laps and compound orders vary, so fuel and wear are identified
+        pit = 15 + 3 * d
+        for st, (a, b) in enumerate(((1, pit), (pit + 1, 45))):
+            for lap in range(a, b + 1):
+                rows.append({"driver": f"D{d}", "stint": st, "compound": ("SOFT", "MEDIUM")[(st + d) % 2], "lap": lap,
+                             "tyre_age": lap - a + 1, "clean": True,
+                             "lap_time_s": 90 + 0.05 * (lap - a + 1) - 0.06 * lap + rng.normal(0, 0.3)})
+    data = pd.DataFrame(rows)
+    free = LinearFuelDegradation.fit(data)
+    tight = LinearFuelDegradation.fit(data, fuel_anchor=(-0.02, 1e-4))
+    loose = LinearFuelDegradation.fit(data, fuel_anchor=(-0.02, 10.0))
+    assert "fuel_anchor" not in free.fit_report and tight.fit_report["fuel_anchor"] == {"mean": -0.02, "sd": 1e-4}
+    assert tight.fuel_slope == pytest.approx(-0.02, abs=1e-3)
+    assert loose.fuel_slope == pytest.approx(free.fuel_slope, abs=1e-4)
+
+
 PERIODS = pd.DataFrame({"race_id": ["2020_03_a", "2021_02_b", "2022_05_c"], "kind": ["sc", "", "sc"],
                         "start_lap": [5, np.nan, 1], "end_lap": [7, np.nan, 40], "total_laps": [50, 50, 50],
                         "wet": [False, False, False]})

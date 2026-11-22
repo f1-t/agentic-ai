@@ -914,7 +914,7 @@ class LinearFuelDegradation(_ParameterDraws):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False, driver_effects="off", **_):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects="off", fuel_anchor=None, **_):
         driver_effects = driver_effects_mode(driver_effects)
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
@@ -923,7 +923,8 @@ class LinearFuelDegradation(_ParameterDraws):
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), rep).with_draw(draw, clip_wear_at_zero,
                                                                                        wear_lower_bound)
         coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
-                                        wear_lower_bound=wear_lower_bound, driver_effects=driver_effects)
+                                        wear_lower_bound=wear_lower_bound, driver_effects=driver_effects,
+                                        fuel_anchor=fuel_anchor)
         return cls(coefs, fuel, rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
 
     @property
@@ -936,7 +937,7 @@ class LinearFuelDegradation(_ParameterDraws):
 
 
 def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None, wear_lower_bound=None,
-              driver_effects=False):
+              driver_effects=False, fuel_anchor=None):
     """The unpenalised linear_fuel fit. Returns (coefs, fuel slope, hinges, report).
 
     With `hinge_knots` ({compound: knot}, linear_fuel_hinge) a hinge column follows the
@@ -945,6 +946,11 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     knots hinges is None and the fit is exactly linear_fuel's. `wear_lower_bound` and
     `driver_effects` (unpenalised driver contrasts after the hinge columns, before the
     evolution slopes): see the module docstring.
+
+    `fuel_anchor` (mean, sd) (SimConfig.fuel_anchor.full_fit, the judge): a fitted fuel slope is
+    shrunk toward mean with prior sd `sd`: the fit is solved for the deviation from the anchor
+    with a penalty s2 / sd^2 on the fuel column, s2 the unpenalised fit's residual variance, so
+    `sd` is a prior sd in s/lap. fit_report gains "fuel_anchor": {mean, sd}. None: as before.
     """
     fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
     comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
@@ -980,13 +986,23 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     X = (np.column_stack(cols + [lap] + hcols + dcols + evo) if fitted
          else np.column_stack(cols + hcols + dcols + evo))
     target = y if fitted else y - fuel_prior * lap
+    anchor = fitted and fuel_anchor is not None
+    if anchor:   # solve for the deviation from the anchor, penalised toward 0
+        target = target - float(fuel_anchor[0]) * lap
+    prec = _evolution_prec(X.shape[1], len(evo))
     beta = _evolution_fit(X, target, len(evo))
-    sd, res, cov = _posterior_sd(X, target, beta, _evolution_prec(X.shape[1], len(evo)))
+    sd, res, cov = _posterior_sd(X, target, beta, prec)
+    if anchor and np.isfinite(res) and res > 0:
+        prec[k] = res ** 2 / float(fuel_anchor[1]) ** 2
+        beta = ridge_lstsq(X, target, prec)
+        sd, res, cov = _posterior_sd(X, target, beta, prec)
     bound_fixed, unconstrained = np.zeros(len(beta), dtype=bool), None
     if wear_lower_bound is not None:
-        prec = _evolution_prec(X.shape[1], len(evo))
         beta, bound_fixed, (sd, res, cov), unconstrained = _bound_fit(
             X, target, prec, np.zeros(len(prec)), beta, (sd, res, cov), len(comps), wear_lower_bound, True)
+    if anchor:
+        beta = beta.copy()
+        beta[k] += float(fuel_anchor[0])   # the unconstrained shift (beta - b) is unchanged
     j0 = k + 1 + h if fitted else k + h   # the first driver contrast
     driver_rep = (_driver_report(drivers, Q, beta[j0:j0 + nd], cov[j0:j0 + nd, j0:j0 + nd], None, driver_effects)
                   if driver_effects else None)
@@ -1015,6 +1031,8 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         hinges = {c: rep["hinge"][c]["value"] for c in comps}
     if driver_rep is not None:
         rep["driver_effects"] = driver_rep
+    if anchor:
+        rep["fuel_anchor"] = {"mean": float(fuel_anchor[0]), "sd": float(fuel_anchor[1])}
     return _apply_base_delta(_coefs(comps, beta), rep, base_delta), fuel, hinges, rep
 
 
@@ -1083,7 +1101,7 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
             clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False,
-            driver_effects="off", knot_life_fraction=None, hinge_lower_bound=None, **_):
+            driver_effects="off", knot_life_fraction=None, hinge_lower_bound=None, fuel_anchor=None, **_):
         driver_effects = driver_effects_mode(driver_effects)
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
@@ -1096,7 +1114,7 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
                        rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots,
-                                             wear_lower_bound, driver_effects)
+                                             wear_lower_bound, driver_effects, fuel_anchor)
         if hinge_lower_bound is not None:
             coefs, fuel, hinges, rep = _bounded_hinges(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
                                                        knots, wear_lower_bound, driver_effects, hinge_lower_bound,

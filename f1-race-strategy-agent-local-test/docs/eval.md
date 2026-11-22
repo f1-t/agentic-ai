@@ -299,7 +299,7 @@ is ever loaded or feeds a table.
 | artifact | read as of the race | no earlier race (a priori) | legacy switch |
 | --- | --- | --- | --- |
 | proxy tier 5 (`configs/sim/compound_steps.json`) | `per_race` step rows and the forward-chained `validation_rows` (each race priced with the table of the races before it: `compound_steps validate --as-of`); `proxy.as_of_config` recomputes the steps (median), the blend weights (1 / mse per source, at least 3 rows) and the sd floor (the blend's rmse) | no step, equal weights, `proxy.PRIOR_SD_FLOOR` (pace 1.0 s, wear 0.1 s/lap) | `compound_proxy.as_of: false` |
-| base delta, fuel prior, SC lap factor, lap-1 extra (`configs/sim/race_history.csv`, `python -m src.sim.race_history build`) | the `as_of_history` calibrator (belief.yaml): median of the earlier races, sd their spread floored at `race_history.SD_FLOOR`; the fuel prior is `fuel_prior`'s circuit history (#45) on the earlier races; the sds are the base and fuel taus, the event factors are drawn per sample | `race_history.A_PRIORI`: base delta 0.5 ± 1.0 s, SC lap factor 1.4 ± 0.15, lap-1 extra 8 ± 4 s; the fuel prior is the physics prior (`fuel_practice_longrun`, -0.03 s/kg x 110 kg / laps) | `calibrator: shrinkage` (the Spain-derived config values) |
+| base delta, fuel prior, SC lap factor, lap-1 extra (`configs/sim/race_history.csv`, `python -m src.sim.race_history build`) | the `as_of_history` calibrator (belief.yaml): median of the earlier races, sd their spread floored at `race_history.SD_FLOOR`; the fuel prior is the anchored prior ("Fuel anchoring": the lap-scaled physics slope times the earlier races' target / physics ratio; `fuel_anchor.prior: circuit_history` gives `fuel_prior`'s circuit history, #45); the sds are the base and fuel taus, the event factors are drawn per sample | `race_history.A_PRIORI`: base delta 0.5 ± 1.0 s, SC lap factor 1.4 ± 0.15, lap-1 extra 8 ± 4 s; the fuel prior is the physics prior (`fuel_practice_longrun`, -0.03 s/kg x 110 kg / laps) | `calibrator: shrinkage` (the Spain-derived config values) |
 | SC/VSC rates (`configs/sim/neutralised_history.csv`) | `events.rate` with `as_of: true`: `event_rates`' global posterior on the earlier dry races (#45's forward-chaining fits) | `race_history.EVENT_PRIOR`: p_sc 1/60 per lap, d_sc 3.5 laps; VSC 0.02, 2 laps | `as_of: false` (EventModel's Spain values) |
 | `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the tools fall back to the sampling spread) | `SimConfig.cross_race_as_of: false` |
 | pit-loss prior, tyre-life history | as-of already (`pit_loss.pit_loss_prior`, `cliff.life_prior` / `tyre_history`) | their constant tiers | their own |
@@ -832,6 +832,89 @@ physics prior, tau 0.03, driver effects) improves the belief's stop-gain mae 0.8
 the G difference's CI upper end, +2.20 s, is over the rule's +2 s non-inferiority margin, so the
 rule does not adopt it and belief.yaml is unchanged. The arm files
 (`configs/sim/arms/fuel_physics*.yaml`) and the calibrator's `sd_s_per_lap` stay for the follow-up.
+
+### Fuel anchoring
+
+Within a stint tyre age and race lap rise together, so the fuel slope and the wear slopes are
+confounded, most of all before the first stops. The learned ridge calibrator fixed most of the
+belief's fuel error through the fuel factor alone, but it learns from later races. Fuel anchoring
+gets that gain with no hindsight.
+
+**The prior** (`fuel_prior.anchored_prediction`, `race_history.as_of_fuel(..., mode="anchored")`).
+The physics slope is -0.03 s/kg x (practice lap / 90 s) x 110 kg / scheduled laps. The time a
+kilogram costs is taken as a fixed share of the lap, so the 0.3 s per 10 kg rule of thumb holds at
+a typical 90 s lap. The practice lap is this weekend's median clean practice lap, which is pre-race.
+The as-of history supplies the ratio target / physics of the races before this one. The target is
+each race's free-air full-window fuel slope in `configs/sim/race_history.csv`, which now also
+records `practice_lap_s`. That ratio has an a priori N(1, 0.2^2) prior and is combined with the
+ratios' mean by precision. The predictive sd is the ratios' spread, or 0.2 with fewer than three
+earlier races, plus the uncertainty of their mean, times the physics slope. With no earlier race the
+prior is the physics slope with a 20 % sd. Every constant is a priori and listed in
+`provenance.POLICY_SIDE["fuel_physics"]`.
+
+Forward-chained over the 19 calibration races, each race priced only by the races before it,
+against the hindsight target:
+
+| prior | mae s/lap | bias | 68% / 90% coverage |
+|---|---|---|---|
+| circuit history (#102, the previous default) | 0.0157 | -0.0046 | 0.53 / 0.79 |
+| lap-scaled physics, a priori | 0.0074 | +0.0031 | 0.68 / 0.89 |
+| anchored (physics x as-of ratio, adopted) | 0.0084 | -0.0009 | 0.63 / 0.89 |
+
+The unscaled physics slope has mae 0.0099. Scaling by the lap time takes it to 0.0074, and the
+ratio's spread falls from 0.21 to 0.17.
+
+**Both simulators.**
+
+- **Belief.** `fuel_anchor.prior: anchored` (read by the as_of_history calibrator) makes the anchored prior the to_snapshot fit's fuel
+  prior, with its sd as the fuel tau. `fuel_anchor.practice: anchored` fixes the practice fit's
+  in-stint fuel column at the same slope instead of -0.045, so the practice wear that the race fit
+  shrinks toward is net of the same fuel. Both are now on in belief.yaml. The posterior covariance,
+  and hence the draws, carries the fuel-wear correlation as before.
+- **Judge.** `fuel_anchor.full_fit: true` shrinks the full fit's fuel slope toward the a priori
+  physics slope, using the race's laps and practice lap and no other race. The penalty is residual
+  variance / sd^2, so the sd is a prior sd in s/lap. It is off by default (below).
+
+**Measured** with the fidelity scorecard (`python -m src.sim.fidelity run`, PR #93) on the 18
+calibration races (the six development races and twelve 2021-22 weekends). Settings: 6 drivers per
+race, a snapshot every 5 laps, 20 draws. The belief is compared with the default judge.
+
+| measure | before | belief anchored | belief and judge anchored |
+|---|---|---|---|
+| plan ranking, Spearman | 0.848 | 0.849 | 0.849 |
+| judge-regret of the belief's favourite, s | 5.47 | 5.29 | 5.32 |
+| pit-now agreement | 0.756 | 0.762 | 0.756 |
+| replay of real strategies: close-pair order | 0.637 | 0.640 | 0.640 |
+| replay: relative gap error, s | 21.74 | 21.72 | 21.72 |
+| replay against reality (G): bias, s | -3.5 | +8.8 | +8.8 |
+| G pace-offset mae / bias, s | 34.6 / +7.2 | 33.9 / +15.3 | 33.9 / +15.3 |
+| fuel against the judge: mae, s/lap | 0.017 | 0.010 | 0.010 |
+| fuel 68% / 90% coverage (component, k 0/10/20/mid) | 0.40 / 0.63 | 0.49 / 0.72 | 0.49 / 0.76 |
+| fuel 68% / 90% coverage (every B snapshot) | 0.37 / 0.55 | 0.39 / 0.60 | 0.39 / 0.60 |
+| wear 68% / 90% coverage (every B snapshot) | 0.44 / 0.60 | 0.42 / 0.57 | 0.42 / 0.57 |
+| remaining time 68% / 90% coverage | 0.55 / 0.72 | 0.49 / 0.64 | 0.49 / 0.64 |
+| plan-versus-plan gap 68% / 90% coverage | 0.50 / 0.68 | 0.51 / 0.69 | 0.51 / 0.69 |
+| belief stop-gain bias, s | +0.07 | +0.10 | +0.10 |
+
+Against the judge with driver effects (`degradation.params.driver_effects: race`) the pattern is the
+same. Spearman goes 0.834 to 0.838, regret 5.35 to 5.20 s, pit-now 0.746 to 0.753, fuel coverage
+0.40 / 0.63 to 0.43 / 0.69, and the order measures are unchanged.
+
+**Decision.** The belief's anchoring is adopted (belief.yaml). It improves plan-ranking agreement
+and regret and fuel accuracy and coverage, and it leaves the order measures as they were.
+
+The replay of real strategies moves from 3.5 s fast to 8.8 s slow. Its pace-offset mae improves
+(34.6 to 33.9 s). A uniform offset does not change a decision, and the remaining-time interval is
+widened in "Honest uncertainty" below. Anchoring the judge too leaves that offset as it is (the
+belief's bias against the judge with no SC is +10.6 s, +10.4 s with both anchored), so the offset
+is the belief's against reality and not a mismatch of anchors.
+
+The judge's anchor stays off by default. The whole-race data dominates its prior: the judge's fuel
+moves by about 0.001 s/lap. Its order measures barely move: close-pair 0.693 to 0.701 (about one
+pair), relative gap 15.58 to 15.57 s, judge stop-gain bias -0.250 to -0.256 s. That is within
+noise, so the switch is kept for the rerun to decide.
+
+Per-race fuel and wear before and after are in the PR description.
 
 ## Proxied compounds
 

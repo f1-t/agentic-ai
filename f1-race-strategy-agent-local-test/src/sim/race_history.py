@@ -13,7 +13,8 @@ refused before it is loaded):
                                       (calibrators.hindsight_targets: base_delta_s per compound and
                                       their mean, sc_lap_factor, lap1_extra_s) and its fuel target
                                       (fuel_prior.race_target, the free-air full-window fuel slope)
-                                      with the race's circuit
+                                      with the race's circuit and its median clean practice lap
+                                      (practice_lap_s, pre-race: the anchored fuel prior's scale)
   configs/sim/neutralised_history.csv the race's SC and VSC periods (calibration.observed_periods),
                                       in event_rates' neutralised_periods format
 
@@ -23,7 +24,9 @@ and the as-of readers:
                                 earlier races, sd their spread floored at SD_FLOOR (A_PRIORI's sd
                                 with one earlier race); A_PRIORI with none
   as_of_fuel(race, ...)         fuel_prior.circuit_history_prediction on the earlier races, else the
-                                physics prior (fuel_prior.practice_longrun_prediction, a priori)
+                                physics prior (fuel_prior.practice_longrun_prediction, a priori);
+                                mode "anchored": fuel_prior.anchored_prediction, the lap-scaled
+                                physics slope times the earlier races' ratio target / physics
   as_of_event_rates(race_id)    event_rates.fit on the earlier races' periods, "global" level,
                                 under the a priori EVENT_PRIOR
 
@@ -115,13 +118,28 @@ def as_of_factor(race_id, name, history: pd.DataFrame | None = None) -> dict:
     return {"mean": float(v.median()), "sd": sd, "source": f"as of {len(v)} earlier race(s)", "races": races}
 
 
-def as_of_fuel(race, history: pd.DataFrame | None = None, practice_model=None, practice=None) -> dict:
-    """{mean, sd, source, races}: the fuel prior for `race` (RaceParams), the circuit history of
-    the earlier races (fuel_prior.circuit_history_prediction), else the physics prior."""
+FUEL_MODES = ("circuit_history", "anchored")
+
+
+def as_of_fuel(race, history: pd.DataFrame | None = None, practice_model=None, practice=None,
+               mode: str = "circuit_history") -> dict:
+    """{mean, sd, source, races}: the fuel prior for `race` (RaceParams).
+
+    mode "circuit_history" (#102): the circuit history of the earlier races
+    (fuel_prior.circuit_history_prediction), else the physics prior. mode "anchored": the
+    lap-scaled physics slope times the ratio target / physics of the earlier races
+    (fuel_prior.anchored_prediction), this weekend's practice lap the scale; the a priori physics
+    prediction with no earlier race."""
     from . import fuel_prior
+    if mode not in FUEL_MODES:
+        raise ValueError(f"fuel mode must be one of {FUEL_MODES}, got {mode!r}")
     h = load_history() if history is None else history
     earlier = set(earlier_races(race.race_id, h["race_id"]))
     train = h[h["race_id"].isin(earlier) & h["target"].notna()] if "target" in h else h.iloc[0:0]
+    if mode == "anchored":
+        p = fuel_prior.anchored_prediction(race.total_laps, fuel_prior.practice_lap_s(practice), train)
+        races = sorted(train["race_id"]) if p["n_history"] else []
+        return {"mean": p["mean"], "sd": p["sd"], "source": p["source"], "races": races}
     if len(train) >= 2:
         circuit = _circuit(race.race_id)
         p = fuel_prior.circuit_history_prediction(train, circuit)
@@ -179,7 +197,9 @@ class AsOfHistoryCalibrator(ShrinkageCalibrator):
     (module docstring): the practice-to-race base delta (as_of_factor, its sd the base tau), the
     fuel prior (as_of_fuel, its sd the fuel tau) and the event factors sc_lap_factor and
     lap1_extra_s (drawn per sample with their sd). The wear tau and the hinge tau stay
-    SimConfig.shrinkage's, engineering priors. The diagnostics name each source and its races."""
+    SimConfig.shrinkage's, engineering priors. The diagnostics name each source and its races.
+    The fuel prior's mode (as_of_fuel) is SimConfig.fuel_anchor.prior, "circuit_history" (the
+    default, #102) or "anchored"; a param `fuel` overrides it."""
     name = "as_of_history"
 
     def calibrate(self, ctx):
@@ -190,7 +210,8 @@ class AsOfHistoryCalibrator(ShrinkageCalibrator):
         for k in list(factors):
             if split_factor(k)[0] == "base_delta_s":
                 factors[k] = (bd["mean"], bd["sd"])
-        fuel = as_of_fuel(ctx.race, practice_model=ctx.practice_model, practice=ctx.practice)
+        fuel = as_of_fuel(ctx.race, practice_model=ctx.practice_model, practice=ctx.practice,
+                          mode=self.params.get("fuel", ctx.config.fuel_anchor.prior))
         factors["fuel_s_per_lap"] = (fuel["mean"], fuel["sd"])
         sources["base_delta_s"], sources["fuel_s_per_lap"] = bd, fuel
         for name in ("sc_lap_factor", "lap1_extra_s"):
@@ -215,7 +236,7 @@ def race_row(data) -> tuple[dict, list[dict]]:
     row = {"race_id": rid, "circuit": _circuit(rid), "total_laps": int(data.race.total_laps),
            "base_delta_s": float(np.mean(list(bases.values()))) if bases else np.nan, **bases,
            "sc_lap_factor": t.get("sc_lap_factor", np.nan), "lap1_extra_s": t.get("lap1_extra_s", np.nan),
-           "target": target, "target_sd": target_sd}
+           "target": target, "target_sd": target_sd, "practice_lap_s": fuel_prior.practice_lap_s(data.practice)}
     wet = bool(data.frame["compound"].isin(["INTERMEDIATE", "WET"]).any())
     periods = [{"race_id": rid, "kind": k, "start_lap": a, "end_lap": b, "total_laps": int(data.race.total_laps),
                 "wet": wet} for k, a, b in calibration.observed_periods(data.frame)]
