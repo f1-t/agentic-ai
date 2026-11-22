@@ -1,0 +1,25 @@
+# The belief with traffic ON (the policies' switch; docs/eval.md "Traffic"): configs/sim/belief.yaml
+# (see its comments) plus the other cars projected forward from what is visible at the snapshot
+# only (src/sim/traffic.py, source "projected"; the projection reads data.visible_rows, the
+# belief window's clock). Passes are earned, as in the world's traffic; our own clock runs at
+# our pace so far; no dirty-air term (its as-of estimate is not identified). Pass it with
+# `score --belief-config configs/sim/belief_traffic.yaml`. Opt-in until the fidelity scorecard
+# (src/sim/fidelity.py) decides by the finishing-order measures.
+# tests/test_traffic_eval_params.py checks this is belief.yaml plus traffic only.
+pit_loss:
+  source: asof
+fit_window: to_snapshot
+traffic:
+  name: ghost
+  params:
+    source: projected
+    own_pace: true
+    pass_mode: earned
+events:
+  name: rate
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+    wear_lower_bound: 0.0
+lap_noise: residual

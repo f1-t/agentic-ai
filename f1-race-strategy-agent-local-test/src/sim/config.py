@@ -342,7 +342,7 @@ class SimConfig(_Cfg):
     compound_classes: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_COMPOUND_CLASSES))
     track: ComponentSpec = ComponentSpec(name="dry")   # track-state transform, see track.py
     # traffic model, see traffic.py: "none" (default) or "ghost", the recorded field replayed
-    # as ghost cars. World-model only; the agent's tools keep it off
+    # as ghost cars (source "recorded", world only) or projected from the laps so far ("projected", belief)
     traffic: ComponentSpec = ComponentSpec(name="none")
     # residual lap noise: "none" (default) or "residual", per sample an independent
     # N(0, residual_s^2) on every remaining green lap, residual_s from the degradation

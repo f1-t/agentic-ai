@@ -221,7 +221,9 @@ def evaluate_strategy(action):
         "assumptions": [*out.get("assumptions", []),
                         "no incident other than the drawn SC and VSC periods changes the race",
                         "the plan after the action is the optimizer's best continuation on the same model",
-                        "traffic is not modelled"],
+                        ("other cars are projected from what is known now (positions, gaps, pace, tyres); "
+                         "they do not react to us" if agent_tools.traffic_on(agent_tools.belief_config())
+                         else "traffic is not modelled")],
         "warning": "Compare this distribution with alternatives; do not treat the median as ground truth.",
     }
 
@@ -247,7 +249,7 @@ TOOL_SPECS = [
     },
     {
         "name": "get_model_report",
-        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the cross-race step for a compound nobody raced), flags such as extrapolation or wear_at_bound, and the model's calibration error.",
+        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the cross-race step for a compound nobody raced), flags such as extrapolation or wear_at_bound, and the model's calibration error. traffic: whether other cars are modelled; when they are (projected from what is known now), cars_within_pit_loss_behind_now (a stop now drops behind them), dirty_air_s and own_pace_s.",
         "input_schema": {
             "type": "object",
             "properties": {"ages": {"type": "object", "description": "Optional {compound: tyre age} to check for extrapolation.",
@@ -258,7 +260,7 @@ TOOL_SPECS = [
     },
     {
         "name": "compare_plans",
-        "description": "Score several candidates against each other under shared random draws. Each candidate is a remaining-race plan [[compound, laps], ...] whose first stint continues the current set, or an action {action:'pit', compound:'MEDIUM'} / {action:'stay_out', laps:3} completed by the optimizer. Returns per candidate summaries, p_best, pairwise p_beats and gaps.",
+        "description": "Score several candidates against each other under shared random draws. Each candidate is a remaining-race plan [[compound, laps], ...] whose first stint continues the current set, or an action {action:'pit', compound:'MEDIUM'} / {action:'stay_out', laps:3} completed by the optimizer. Returns per candidate summaries, p_best, pairwise p_beats and gaps. When traffic is modelled the times include it and traffic gives per candidate expected_rejoin_position and its band, cars_in_pit_window (cars that come by during the first stop), time_lost_s in traffic and final_position, from other cars projected from what is known now; otherwise traffic says it is not modelled.",
         "input_schema": {
             "type": "object",
             "properties": {"candidates": {"type": "array", "items": {"type": ["array", "object"]}}},
@@ -269,7 +271,7 @@ TOOL_SPECS = [
     },
     {
         "name": "evaluate_strategy",
-        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; within_sim_error is true when the gap is smaller than max(2 x its sd, the model's calibration error), and confidence_basis says which of the two decided.",
+        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; within_sim_error is true when the gap is smaller than max(2 x its sd, the model's calibration error), and confidence_basis says which of the two decided. When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
         "input_schema": {
             "type": "object",
             "properties": {
