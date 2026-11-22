@@ -492,6 +492,9 @@ NON_PHYSICS = (
     # estimates the proxy's tier-5 table into configs/sim/compound_steps.json (read through
     # SimConfig.compound_proxy.steps, so config_hash covers the numbers) and runs its validation
     "compound_steps",
+    # trains and evaluates the learned calibrator into committed artifacts, which the "trained"
+    # calibrator (calibrators.py) reads, pinned by its sha256 param, so config_hash covers them
+    "learned_calibrator",
 )
 
 

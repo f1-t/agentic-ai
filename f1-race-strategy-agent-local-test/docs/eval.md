@@ -1000,6 +1000,158 @@ fractions of a place) and where the field is close, after an SC, which is exactl
 SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
 `final_position_mean`, not instead of the time regret.
 
+## The learned calibrator
+
+The belief's prior for its `to_snapshot` fit comes from a calibrator (`src/sim/calibrators.py`).
+The default, `shrinkage`, is the practice fit plus config values with fixed taus; it learns
+nothing across races. The ridge calibrator (SPEC 0024, #60) learns each factor from features
+known at the calibration point k, across races. It is now trained on the real calibration
+races, compared with shrinkage, adopted per factor and committed. It is not the default (below).
+
+**What is trained, on what.** One ridge per factor on `build_dataset`'s rows: one row per
+(race, k) with the k snapshot laps of the local profile (every 5 laps, plus the laps around
+SC and VSC periods). The features are known at k (total laps, pit loss, mean residual and
+laps so far per compound against the practice prior, SC and VSC laps so far, the track
+temperature trend). The targets are the race's hindsight factors (`hindsight_targets`: the
+full-window fit's base delta, wear and fuel, and the observed event factors). The training
+races are the seven calibration races, given explicitly: 2021_04_spain, 2023_07_spain,
+2023_01_bahrain, 2019_10_united_kingdom, 2022_02_saudi_arabia, 2024_07_emilia_romagna,
+2025_23_qatar. That gives 85 rows. A held-out race (`data/eval_set.json`) is refused before
+anything about it is loaded, and the training code never reads one; a test checks this.
+
+**One command** runs the evaluation and the training, and writes the report:
+
+    python -m src.sim.learned_calibrator train      # --jobs N, --resume reuses current folds
+
+It runs these steps:
+
+1. Leave-one-race-out folds (`cross_race.fold_job`) for none, shrinkage, ridge (degradation
+   targets) and ridge_all (event factors too). Each arm is the belief simulator as
+   `configs/sim/belief.yaml` stands (`configs/sim/arms/belief_*.yaml`, `base_config`):
+   posterior draws, residual lap noise, the wear bound, and traffic off. G replays the race's
+   real SC and VSC periods. A fold's ridge is fitted on the other six races only, inner
+   alpha search included (the #60 leakage test still holds). Windows: `pre_race` and
+   `to_snapshot`.
+2. The per-factor table, then the adoption rule.
+3. The hybrid (`configs/sim/arms/belief_hybrid.yaml`, written by the command), run through
+   the same folds.
+4. The belief measures and the default rule.
+5. The trained artifacts and `configs/sim/belief_learned.yaml`.
+6. The report: `reports/calibration/learned/summary.md` and its csvs. The fold outputs stay
+   under `reports/calibration/learned/work/`, which is gitignored.
+
+**The adoption rule** was stated in the code before any result. It is applied per factor
+kind, pooled over compounds, because the engine takes one prior sd per kind. Ridge is
+adopted for a kind when its leave-one-race-out rmse is below shrinkage's and its coverage is
+no worse. Coverage is no worse when |coverage - nominal| is no larger at both 68 and 90
+percent. Both conditions must hold in both belief windows. Degradation kinds are read from
+ridge, event kinds from ridge_all. Every other kind stays on shrinkage.
+
+| factor | window | rmse shrinkage | rmse ridge | cov68 shr / ridge | cov90 shr / ridge | adopted |
+|---|---|---|---|---|---|---|
+| base_delta_s | pre_race | 1.702 | 1.921 | 0.33 / 0.76 | 0.40 / 0.83 | no |
+| base_delta_s | to_snapshot | 0.693 | 0.771 | 0.25 / 0.31 | 0.45 / 0.49 | |
+| wear_s_per_lap | pre_race | 0.0693 | 0.0858 | 0.42 / 0.64 | 0.63 / 0.64 | no |
+| wear_s_per_lap | to_snapshot | 0.0596 | 0.0691 | 0.41 / 0.54 | 0.61 / 0.67 | |
+| fuel_s_per_lap | pre_race | 0.0304 | 0.0195 | 0.13 / 0.58 | 0.29 / 0.71 | **yes** |
+| fuel_s_per_lap | to_snapshot | 0.0222 | 0.0211 | 0.24 / 0.35 | 0.41 / 0.55 | |
+| pit_loss_s | pre_race | 0.723 | 0.792 | 0.00 / 0.87 | 0.00 / 1.00 | no |
+| pit_loss_s | to_snapshot | 0.723 | 1.003 | 0.00 / 0.99 | 0.00 / 1.00 | |
+| lap1_extra_s | pre_race | 1.831 | 2.875 | 0.00 / 0.68 | 0.00 / 0.68 | no |
+| lap1_extra_s | to_snapshot | 1.831 | 2.826 | 0.00 / 0.56 | 0.00 / 0.68 | |
+| sc_lap_factor, vsc_lap_factor, sc_pit_loss_factor | both | = | = (fallback) | 0 / 0 | 0 / 0 | no |
+
+Only the fuel slope is adopted. Ridge's base and wear are less accurate than shrinkage's;
+its wider sds only buy coverage. The SC and VSC factors have fewer than 5 training races
+with a period, so ridge falls back to shrinkage in every fold. Shrinkage carries the event
+factors at sd 0 (the config or race value), so its event coverage is 0 by construction.
+`factors.csv` has none and the hybrid too, and `factors_by_compound.csv` splits by compound.
+
+**The belief measures** are leave-one-race-out over the seven races and race-weighted, with
+95% race-bootstrap CIs:
+
+- G: the real remaining plan replayed from each calibration point, with the pace-corrected
+  error at horizons 10-49.
+- Stop-gain: the predicted gain against the real gain at the teams' real pit stops.
+- G's interval coverage.
+
+`to_snapshot` is the belief window.
+
+| window | calibrator | G mae s [CI] | G bias s | G diff vs shrinkage [CI] | G cov68 / cov90 | stop-gain mae s | stop-gain bias s | stop-gain diff [CI] |
+|---|---|---|---|---|---|---|---|---|
+| to_snapshot | none | 26.12 [16.92, 35.13] | +15.39 | +0.71 [-4.25, 5.67] | 0.14 / 0.21 | 0.733 | -0.26 | -0.10 [-0.19, -0.01] |
+| to_snapshot | shrinkage | 25.40 [18.58, 31.50] | +13.06 | | 0.18 / 0.27 | 0.837 | -0.37 | |
+| to_snapshot | ridge | 31.47 [21.34, 41.30] | +12.17 | +6.07 [0.49, 12.28] | 0.22 / 0.34 | 1.009 | -0.34 | +0.17 [-0.01, 0.33] |
+| to_snapshot | ridge_all | 31.16 [21.06, 41.00] | +11.38 | +5.75 [0.08, 12.21] | 0.23 / 0.36 | 1.009 | -0.34 | +0.17 [-0.01, 0.33] |
+| to_snapshot | hybrid | 25.05 [18.29, 31.01] | +0.86 | -0.35 [-3.56, 2.93] | 0.22 / 0.34 | 0.842 | -0.13 | +0.005 [-0.04, 0.05] |
+| pre_race | none | 26.12 [16.92, 35.13] | +15.39 | -1.48 [-3.19, 0.10] | 0.14 / 0.21 | 0.733 | -0.26 | 0.00 |
+| pre_race | shrinkage | 27.59 [18.15, 36.83] | +18.72 | | 0.49 / 0.68 | 0.733 | -0.26 | |
+| pre_race | ridge | 45.00 [34.41, 60.46] | +38.37 | +17.40 [1.94, 33.85] | 0.83 / 0.96 | 1.19 | +0.08 | +0.45 [0.05, 1.15] |
+| pre_race | hybrid | 23.61 [19.16, 27.98] | +1.40 | -3.98 [-11.98, 4.67] | 0.65 / 0.89 | 0.70 | -0.14 | -0.03 [-0.08, 0.01] |
+
+Per race numbers are in `belief_by_race.csv`, and G by 10-lap horizon bucket in
+`g_by_horizon.csv`.
+
+**The default rule** was also stated before any result. The hybrid is tried first, then plain
+ridge. A candidate becomes the belief's default when, on the `to_snapshot` race-weighted point
+estimates, all three hold:
+
+- its G mae is below shrinkage's;
+- its stop-gain mae is no worse;
+- its G coverage is no worse (|coverage - nominal| at 68 and 90 percent).
+
+With 7 races, a CI that excludes 0 is not required.
+
+**Result: not adopted; shrinkage stays the default.** The hybrid changes only the fuel prior.
+It replays the real strategies slightly more accurately: G mae 25.05 against 25.40 s
+(paired -0.35 s, CI -3.56 to +2.93). It removes most of shrinkage's signed bias (+0.86
+against +13.06 s), and it covers better (0.22 / 0.34 against 0.18 / 0.27). It fails one
+condition, by 0.005 s: its stop-gain mae is 0.8417 s against 0.8368 s (paired CI -0.04 to
++0.05). Both differences are well inside noise.
+
+Plain ridge is worse on G (+6.07 s, CI 0.49 to 12.28) and on stop-gain. So learning the base
+and wear across seven races does not beat the practice-plus-race shrinkage fit.
+
+The learned calibrator ships as an option, `--belief-config configs/sim/belief_learned.yaml`,
+which the command writes. Every interval is too narrow under every calibrator: G's 90% coverage
+is at most 0.36 in the belief window. That is a separate problem from the calibrator's prior.
+
+**Trained artifacts, deployed without leakage.** The artifacts live in
+`models/calibrators/ridge_hybrid/`:
+
+- `loo/<race_id>.json`, one per calibration race, fitted on the other six races.
+  It is identical to that race's fold model.
+- `all.json`, fitted on all seven.
+- `manifest.json`: the command, the race list, the commit, `sim_code_version`, the params,
+  the per-factor sources, the adoption and the decision.
+
+The files are the JSON `RidgeCalibrator.save` writes. The calibrator `trained`
+(`calibrators.TrainedCalibrator`, params `artifacts` and `sha256`) loads by race id. A
+calibration race gets its leave-one-out model, used when it is evaluated as development
+data. Any other race gets `all.json`; that covers the held-out races, which never enter
+training. A race id that is not canonical is refused, because `all.json` under another name
+would leak. A model whose `train_races` holds the race it would calibrate is refused too.
+
+Nothing trains at evaluation time. `sha256` pins the artifacts, so the config hash names them.
+The agent's model report carries `prior_sources`, {factor: "ridge" or "shrinkage"}, for this
+calibrator.
+
+**Caveat: not strictly as-of.** A leave-one-out model learns from races both before and
+after the race it calibrates; for example, 2019 Britain is calibrated by a model trained on
+2021-2025. Nothing from the evaluated race itself is used, but this is not what a team
+could have known on that weekend.
+
+A strictly as-of variant would train race R's model on `race_ids.as_of(R, races)` only.
+With these seven races, 2019 Britain has no earlier race and 2021 Spain has one. Every
+factor needs `RIDGE_MIN_RACES` (5) training races, so both would fall back to shrinkage
+entirely. `--as-of` is a stub that says so; it needs more seasons of calibration races.
+
+**Pending: the tyre-life change.** A separate change, `fix/tyre-life-no-hindsight`, changes
+the wear model: a cliff, driver effects and hinge, a fuel-identification fix and a warm-up
+term. That changes the hindsight targets and what some factors mean. The numbers above are
+on the simulator before that change. When it lands, rerun the one command, which regenerates
+the arm, the artifacts, `belief_learned.yaml` and the report.
+
 ## Limitations
 
 - **The world is fitted on hindsight.** It reads every race lap (`full` window); only the
