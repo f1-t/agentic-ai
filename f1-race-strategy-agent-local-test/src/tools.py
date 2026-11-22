@@ -142,7 +142,7 @@ TOOL_SPECS = [
     },
     {
         "name": "estimate_pit_loss",
-        "description": "Estimate the pit-lane loss as a low/median/high range with its source, plus the safety-car and VSC pit-loss factors.",
+        "description": "Estimate the pit-lane loss from what is known now: a low/median/high range built from earlier races (at this circuit when there are any) and this race's green stops so far, with its basis. Also the share of it paid under a safety car or VSC, the cost of a stop right now (pit_loss_now_s) given the current track status and how many laps it has lasted, and the chance of a new safety car or VSC in the next 5 and 10 laps with a range. Later neutralisations are not known.",
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
         "fn": estimate_pit_loss,
     },

@@ -107,6 +107,12 @@ COVERAGE_ONLY = ("posterior",)
 # arm tables and in learned.csv (calibrators.selection_table), never chosen by the arm selection.
 LEARNED_ARMS = ("ridge", "ridge_all")
 LEARNED_ROLE = "learned (reported, not selected)"
+# the learned calibrator on real races (learned_calibrator.py): the belief simulator
+# (base_config configs/sim/belief.yaml) under none, shrinkage, ridge and ridge_all, and the
+# per-factor hybrid the adoption rule writes. Run only by learned_calibrator.py; never part of a
+# cross run's arms.
+CALIBRATOR_ARMS = ("belief_none", "belief_shrinkage", "belief_ridge", "belief_ridge_all", "belief_hybrid")
+CALIBRATOR_ROLE = "calibrator comparison (learned_calibrator.py)"
 # simplest first: the tie-break among arms that pass
 SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air",
               "driver_effects", "driver_effects_nonneg", "hinge", "collinear_hold_hinge", "collinear_hold_nonneg_hinge",
@@ -127,8 +133,9 @@ def parse_arm(name: str) -> tuple[str, bool, tuple | None]:
     """(committed arm, prior-sd fix on, tau multipliers or None) of an arm name."""
     parts = name.split("__")
     base, s2, tau = parts[0], False, None
-    if base not in ARMS and base not in LEARNED_ARMS:
-        raise KeyError(f"unknown arm {base!r}; arms: {list(ARMS)}, learned: {list(LEARNED_ARMS)}")
+    if base not in ARMS and base not in LEARNED_ARMS and base not in CALIBRATOR_ARMS:
+        raise KeyError(f"unknown arm {base!r}; arms: {list(ARMS)}, learned: {list(LEARNED_ARMS)}, "
+                       f"calibrator comparison: {list(CALIBRATOR_ARMS)}")
     for p in parts[1:]:
         if p == S2:
             s2 = True
@@ -159,6 +166,8 @@ def arm_overlay(name: str) -> dict:
     import yaml
     base, s2, tau = parse_arm(name)
     over = yaml.safe_load((ARMS_DIR / f"{base}.yaml").read_text()) or {}
+    if "base_config" in over:   # an arm on a committed config (belief.yaml), the arm's keys on top
+        over = _merge(yaml.safe_load((ROOT / over.pop("base_config")).read_text()) or {}, over)
     if s2:
         _merge(over, {"degradation": {"params": {"divide_data_by_s2": True}}})
     if tau is not None:
@@ -188,7 +197,8 @@ def arms_table(names=ARMS) -> pd.DataFrame:
                      "config_hash": calibration.config_hash(cfg), "degradation": cfg.degradation.name,
                      "calibrator": cfg.calibrator.name,
                      "role": "coverage only" if base in COVERAGE_ONLY else "baseline" if n == BASELINE
-                     else LEARNED_ROLE if base in LEARNED_ARMS else "candidate"})
+                     else LEARNED_ROLE if base in LEARNED_ARMS
+                     else CALIBRATOR_ROLE if base in CALIBRATOR_ARMS else "candidate"})
     return pd.DataFrame(rows)
 
 
@@ -429,7 +439,7 @@ def reference_stops(data: jobs.RaceData, cfg: SimConfig, max_stops: int, within=
     world = Simulator(data.frame, cfg.model_copy(update={"fit_window": "full", "n_samples": 1}), data.practice)
     rows = []
     for d in field_drivers(data.frame, data.race.total_laps, within):
-        snap = calibration.snapshot_at(data.frame, data.race, d, 0)
+        snap = calibration.with_race(calibration.snapshot_at(data.frame, data.race, d, 0), data.race)
         row = {"race_id": data.race_id, "driver": d, "start_compound": snap.compound}
         try:
             res = optimize_batch(snap, world, seed=0, n_samples=1, max_stops=max_stops, return_times=True)

@@ -91,7 +91,8 @@ def test_in_lap_at_k_pays_its_pit_loss_once(frame):
     """k = 10 is BBB's in lap: the real in lap, pit loss and all, is in elapsed_s and the
     remaining plan has only the lap 35 stop."""
     sim = factory(frame)("full")
-    snap = calibration.snapshot_at(frame, RACE, "BBB", 10)
+    # a replay prices stops at the race's value (a snapshot carries only the pre-race prior)
+    snap = calibration.with_race(calibration.snapshot_at(frame, RACE, "BBB", 10), RACE)
     res = sim.simulate(snap, calibration.remaining_plan(frame, "BBB", 10), rules=calibration.REPLAY_RULES)
     assert res.pit_laps == [35]
     assert res.pit_loss_total_s == pytest.approx(RACE.pit_loss_s)

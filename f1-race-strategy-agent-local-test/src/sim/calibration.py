@@ -474,6 +474,8 @@ PHYSICS_MODULES = (
     "fuel_prior",
     # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their R8 limit
     "proxy",
+    # the as-of pit loss and SC/VSC pit-loss factors a belief prices stops with
+    "pit_loss",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -497,6 +499,9 @@ NON_PHYSICS = (
     # change that places the support edge with it must move it to PHYSICS_MODULES (or carry its
     # numbers into SimConfig), since from then on it moves lap times.
     "tyre_history",
+    # trains and evaluates the learned calibrator into committed artifacts, which the "trained"
+    # calibrator (calibrators.py) reads, pinned by its sha256 param, so config_hash covers them
+    "learned_calibrator",
 )
 
 
@@ -564,6 +569,27 @@ def _track_status(ts):
     return "sc" if "4" in ts else "vsc" if ("6" in ts or "7" in ts) else "green"
 
 
+_PRE_RACE_PIT_LOSS: dict = {}
+
+
+def pre_race_pit_loss(race_id: str) -> float:
+    """The pit loss a snapshot carries: the pre-race prior of pit_loss.pit_loss_prior (earlier
+    races only, never this one), so no snapshot holds the race's whole-race value. The belief
+    and the tools refine it with this race's stops seen by the snapshot (pit_loss.estimate)."""
+    if race_id not in _PRE_RACE_PIT_LOSS:
+        from . import pit_loss
+        from .config import PitLossModel
+        _PRE_RACE_PIT_LOSS[race_id] = round(pit_loss.pit_loss_prior(race_id, PitLossModel())["mean_s"], 3)
+    return _PRE_RACE_PIT_LOSS[race_id]
+
+
+def with_race(snap: Snapshot, race: RaceParams) -> Snapshot:
+    """`snap` carrying `race`'s constants (its pit loss included) with the snapshot's race length:
+    for the hindsight replays (midrace, the rejoin window, reference stop counts), which price
+    stops at the race's whole-race pit loss as the world does."""
+    return snap.model_copy(update={"race": race.model_copy(update={"total_laps": snap.race.total_laps})})
+
+
 def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> Snapshot:
     """The driver's state after lap k, read off the lap frame.
 
@@ -593,7 +619,8 @@ def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> S
         recent = [float(x) for x in last if pd.notna(x)]
     hist = _scenario(g[g["lap"] <= k])
     return Snapshot(
-        race=race.model_copy(update={"total_laps": len(g)}), driver=driver, laps_completed=k,
+        race=race.model_copy(update={"total_laps": len(g), "pit_loss_s": pre_race_pit_loss(race.race_id)}),
+        driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=n, start_lap=first, start_age=a) for c, n, a, first in stints[:j]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=status, elapsed_s=elapsed,
@@ -770,7 +797,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
             for d, g in groups.items():
                 if k >= len(g) or (k > 0 and not (g["lap"] == k).any()):
                     continue
-                snap = snapshot_at(frame, race, d, k)
+                snap = with_race(snapshot_at(frame, race, d, k), race)   # the replay prices stops at race's
                 s = sim.fitted_for(snap)
                 interval = {}
                 if n_samples > 1:
@@ -1042,7 +1069,7 @@ def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver
     """The driver's real strategy over laps k + 1 to `upto` from snapshot_at(k), under the
     real SC and VSC laps. Returns (snapshot, SimResult, our clock after lap `upto`)."""
     g = frame[frame["driver"] == driver].sort_values("lap")
-    snap = snapshot_at(frame, race, driver, k)
+    snap = with_race(snapshot_at(frame, race, driver, k), race)
     snap = snap.model_copy(update={"race": snap.race.model_copy(update={"total_laps": upto})})
     stints, left = [], upto - k
     for s in remaining_plan(frame, driver, k).stints:
