@@ -83,6 +83,7 @@ def _env(monkeypatch):
         monkeypatch.delenv(v, raising=False)
 
 
+@pytest.mark.slow
 def test_jobs_1_and_3_give_the_same_rows_in_the_set_order_and_match_the_sequential_pass(built, tmp_path):
     _, ids = built
     one, three = fresh(built, tmp_path, "one"), fresh(built, tmp_path, "three")
@@ -126,6 +127,7 @@ def _per_scenario_policy(log_dir, prof, mod):
     return Policy(set_name=".", profile=prof, log_dir=log_dir, backend=mod.make())
 
 
+@pytest.mark.slow
 def test_a_failing_scenario_is_one_error_row_and_the_rest_complete(built, tmp_path, monkeypatch):
     _, ids = built
     monkeypatch.setenv("AGENT_PASS_TEST_FAIL", ids[2])
@@ -138,6 +140,7 @@ def test_a_failing_scenario_is_one_error_row_and_the_rest_complete(built, tmp_pa
     assert (rows.drop(err.index)["status"] != "error").all()
 
 
+@pytest.mark.slow
 def test_a_worker_crash_is_an_error_row_and_a_new_worker_goes_on(built, tmp_path, monkeypatch):
     _, ids = built
     monkeypatch.setenv("AGENT_PASS_TEST_CRASH", ids[1])
@@ -161,6 +164,7 @@ def test_a_transient_error_is_retried_and_counted(built, tmp_path, monkeypatch):
     assert json.loads((d / "agent_run.json").read_text())["passes"][-1]["retry_event_counts"] == {"503": 1}
 
 
+@pytest.mark.slow
 def test_an_auth_error_stops_the_pass_and_resume_finishes_it_without_rerunning(built, tmp_path, monkeypatch):
     _, ids = built
     d = fresh(built, tmp_path, "auth")
@@ -186,6 +190,7 @@ def test_an_auth_error_stops_the_pass_and_resume_finishes_it_without_rerunning(b
         rerun.stage_agent(args(d, jobs=2))
 
 
+@pytest.mark.slow
 def test_the_timing_sample_runs_first_apart_and_the_tables_pair_it(built, tmp_path):
     _, ids = built
     d = fresh(built, tmp_path, "timing")

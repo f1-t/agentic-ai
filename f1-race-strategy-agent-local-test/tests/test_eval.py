@@ -73,6 +73,7 @@ def test_eligible_drivers_drop_dnfs_and_gaps():
     assert eligible_drivers(race_frame(gap_driver="AAA"), RACE.total_laps) == ["BBB", "CCC"]
 
 
+@pytest.mark.legacy
 def test_sampled_laps_leave_a_stint_and_include_sc_neighbours(items):
     laps = {s.lap for s in items if s.driver == "AAA"}
     assert {0, 5, 10, 15, 19, 22} <= laps                 # every 5th, plus either side of the SC
@@ -278,6 +279,7 @@ def test_the_agent_tools_plan_on_the_scorers_belief(items, sim, tmp_path):
 
 
 # --- committed Spain cache -------------------------------------------------------
+@pytest.mark.legacy
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_committed_v1_set_loads_and_matches_its_digest():
     s = ScenarioSet.load(SCENARIOS_V1)
@@ -286,6 +288,7 @@ def test_committed_v1_set_loads_and_matches_its_digest():
     assert {x.race_id for x in s.items} == {"2021_04_spain"}
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_spain_baselines_score_end_to_end(tmp_path):
     from src.eval.score import race_simulators
@@ -304,6 +307,7 @@ def test_spain_baselines_score_end_to_end(tmp_path):
     assert (summarize(rows).query("race_id == 'ALL'")["scored"] > 0).any()
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_eval_chunk_job_runs_through_the_installed_runner(tmp_path):
     from src.eval.score import install_job_runner

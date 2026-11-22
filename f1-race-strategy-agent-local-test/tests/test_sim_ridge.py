@@ -1,5 +1,6 @@
 """RidgeCalibrator (SPEC 0024 step 2): unit checks on a known linear map, the leakage check
-through loro, the training log's mode, and the cross-race pipeline with a ridge arm. Synthetic
+through loro, the training log's mode, and the ridge arms' registration. Ridge is an option the
+calibration rejected (docs/eval.md): its cross-race pipeline runs are no longer tested. Synthetic
 races only, offline; WANDB_MODE is disabled for every test (conftest.py)."""
 import json
 from contextlib import contextmanager
@@ -7,7 +8,6 @@ from contextlib import contextmanager
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 
 from src.contracts import split_factor
 from src.sim import SimConfig, Simulator, calibration, calibrators, compute, cross_race
@@ -325,7 +325,7 @@ def test_a_learned_fit_logs_its_split_by_default(syn_dataset, monkeypatch):
     assert logged[1][1]["n_train_races"] == 5 and "fuel_s_per_lap/alpha" in logged[1][1] and "pit_loss_s/alpha" not in logged[1][1]
 
 
-# --- pipeline: cross run --synthetic 6 with the ridge arm, and --synthetic 4 as the fallback ---
+# --- the ridge arms: registered, learned, and checked by the cross-race runner ---------------------
 def test_ridge_arms_are_frozen_and_learned():
     assert cross_race.LEARNED_ARMS == ("ridge", "ridge_all") and not set(cross_race.LEARNED_ARMS) & set(cross_race.ARMS)
     assert cross_race.arm_config("ridge").calibrator.model_dump() == {"name": "ridge", "params": {}}
@@ -342,89 +342,3 @@ def test_ridge_arms_are_frozen_and_learned():
                        arms=["baseline", "wear_nonneg"])
     with pytest.raises(KeyError, match=r"unknown \['bogus'\], missing \['wear_nonneg'\]"):
         cross_race.run(["2099_01_synthetic"], load_profile("local"), "unused", arms=["baseline", "bogus"])
-
-
-# The arms the ridge assertions read: the baseline (shrinkage), none, and the bound arm the belief
-# selection starts from. The other committed arms and the lap-0 stop-count check are covered by
-# test_sim_cross_race's end-to-end run; here they would only add minutes.
-RIDGE_RUN_ARMS = ["baseline", "none", "wear_nonneg"]
-
-
-def cross_run(tmp_path_factory, n):
-    out = tmp_path_factory.mktemp(f"cross_ridge_{n}")
-    p = load_profile("local")
-    small = p.model_copy(update={"g": p.g.model_copy(update={"laps_every": 20, "n_boot": 20}),
-                                 "sim": p.sim.model_copy(update={"n_samples": 5}),
-                                 "parallel": p.parallel.model_copy(update={"n_jobs": 1})})
-    prof = out / "small.yaml"
-    prof.write_text(yaml.safe_dump(small.model_dump(mode="json")))
-    assert cross_race.main(["run", "--races", "--synthetic", str(n), "--learned", "ridge", "--tau-multipliers", "1",
-                            "--arms", *RIDGE_RUN_ARMS, "--no-stop-check",
-                            "--profile", str(prof), "--out", str(out)]) == 0
-    return out
-
-
-@pytest.fixture(scope="module")
-def ridge_run(tmp_path_factory):
-    return cross_run(tmp_path_factory, 6)
-
-
-@pytest.fixture(scope="module")
-def ridge_run_4(tmp_path_factory):
-    return cross_run(tmp_path_factory, 4)
-
-
-@pytest.mark.slow
-def test_cross_run_with_6_synthetic_races_and_a_ridge_arm_completes(ridge_run):
-    out = ridge_run
-    record = json.loads((out / "run.json").read_text())
-    races = [f"2099_{i:02d}_synthetic" for i in range(1, 7)]
-    assert record["races"] == races and record["eligible"] == races
-    assert record["arms"] == [*RIDGE_RUN_ARMS, "ridge"] and record["belief_choice"] in RIDGE_RUN_ARMS
-    # only the arms asked for, plus the prior-sd fix and the tau grid on the choice; no lap-0 references
-    ran = {p.name for p in (out / "h" / "arms").iterdir() if p.is_dir()}
-    assert ran == {*RIDGE_RUN_ARMS, "ridge", *([record["s2_arm"]] if record["s2_arm"] else []), *record["grid"]}
-    assert "stop_check off: no lap-0 reference_stops (pipeline test)" in record["notes"]
-    fold = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / "baseline" / f"{races[0]}.parquet"))
-    assert "reference_stops" not in fold and len(fold["g"])
-    for r in races:
-        assert (out / "h" / "arms" / "ridge" / f"{r}.parquet").is_file()
-    assert not (cross_race.CROSS_DIR / "h" / "arms" / "ridge").exists()
-    sel = pd.read_csv(out / "selection.csv")
-    for w in ("pre_race", "to_snapshot"):
-        part = sel[sel["window"] == w]
-        assert {"none", "baseline", "ridge"} <= set(part["arm"])
-        ridge = part[part["arm"] == "ridge"]
-        assert (ridge["role"] == cross_race.LEARNED_ROLE).all() and not ridge["passes"].any()
-    full = sel[(sel["window"] == "full") & (sel["arm"] == "ridge")]
-    assert (full["role"] == cross_race.NA_ROLE).all()
-    learned = pd.read_csv(out / "learned.csv")
-    for w in ("pre_race", "to_snapshot"):
-        t = learned[learned["window"] == w].set_index("calibrator")
-        assert list(t.index) == ["none", "shrinkage", "ridge"]
-        assert t.loc["shrinkage", "arm"] == "baseline" and t.loc["ridge", "kind"] == "learned"
-        assert (t["n_races"] == 6).all() and (t["provisional"] == (6 < cross_race.MIN_RACES)).all()
-    # 5 training races per fold: every degradation factor is a ridge in every fold, no event factor is fitted
-    fits = pd.read_csv(out / "learned_fits.csv")
-    assert len(fits) and (fits["ridge"] == 6).all() and (fits["fallback"] == 0).all()
-    assert {split_factor(f)[0] for f in fits["factor"]} <= set(calibrators.DEGRADATION_FACTORS)
-    md = (out / "summary.md").read_text()
-    assert "## Learned calibrators (SPEC 0024)" in md
-    assert ("nothing is adopted" in md) == (6 < cross_race.MIN_RACES)   # 6 races against MIN_RACES
-
-
-@pytest.mark.slow
-def test_with_3_training_races_every_ridge_factor_falls_back_to_shrinkage(ridge_run_4):
-    out = ridge_run_4
-    fits = pd.read_csv(out / "learned_fits.csv")
-    assert len(fits) and (fits["ridge"] == 0).all() and (fits["folds"] == 4).all()
-    assert set(fits["fallback_reasons"]) == {"3 training race(s), under 5"}
-    # so its G rows are shrinkage's
-    races = [f"2099_{i:02d}_synthetic" for i in range(1, 5)]
-    prof = load_profile(str(out / "small.yaml"))
-    ridge = cross_race.arm_outputs(out, "ridge", races, prof)["g"]
-    base = cross_race.arm_outputs(out, "baseline", races, prof)["g"]
-    keys = ["race_id", "window", "driver", "k"]
-    m = ridge.merge(base, on=keys, suffixes=("_r", "_b"))
-    m = m[m["window"].isin(["pre_race", "to_snapshot"])]
-    assert len(m) and np.allclose(m["err_offset_s_r"], m["err_offset_s_b"], equal_nan=True)

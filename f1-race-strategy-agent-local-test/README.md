@@ -101,8 +101,23 @@ real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
 - **Deterministic ground truth:** `data/ground_truth.json` is produced by
   `legacy_tools.optimal_strategy()` (a brute-force over the simulator) and is re-derivable.
 - Runtime: a few minutes (one cached `session.load` + the agent's ~5–8 tool calls).
-- **Test suite:** `python -m pytest -q` skips the tests marked `slow` (pytest.ini); run the full set
-  with `python -m pytest -q -m "slow or not slow"` before any merge that touches `src/sim` or `src/eval`.
+- **Test suite:** three tiers, see "Testing" below.
+
+## Testing
+
+The offline suite (`tests/`, no model, no network) runs in three tiers (`pytest.ini`):
+
+| Tier | Command | Guards | CI |
+|---|---|---|---|
+| fast (default) | `python -m pytest -q` | unit-level checks of current behaviour on synthetic races: the simulator, fits, policies, scoring, the agent loop (scripted backend), the future-blindness harness on its synthetic race plus one real snapshot, the provenance and held-out guards | yes |
+| slow | `python -m pytest -q -m "slow and not legacy"` | current behaviour on real races and end to end: the future-blindness sweep over the real races, the cross-race and real-run pipelines on 2021 Spain, the baselines runner, the fidelity scorecard on Spain | yes |
+| legacy | `python -m pytest -q -m legacy` | one check per legacy switch or superseded record that it still loads and runs (R8's stint limit, the old sampling rule, the v1 set, d3's expected-stale reference) | no |
+
+Fast plus slow is what CI runs (`.github/workflows/tests.yml`, one job per tier); run both before a
+merge that touches `src/sim` or `src/eval`. A branch fixing one thing runs its own files by name.
+New tests go in the fast tier, on synthetic data, unless what they assert is real-race behaviour;
+then they are `slow`, and they restrict any cross-race run to the arms and steps they read
+(`arms=`, `stop_check=False`). A test of a legacy switch is `legacy`, one per switch.
 
 ## Known limitations (baseline)
 

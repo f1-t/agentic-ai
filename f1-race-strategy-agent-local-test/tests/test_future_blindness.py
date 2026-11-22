@@ -61,8 +61,18 @@ def race(race_id):
 
 
 def differences(race_id, alteration, neutralise, points=None):
+    return list(_differences(race_id, alteration, tuple(neutralise), None if points is None else tuple(points)))
+
+
+# One check per (race, alteration, neutralised leaks, points), shared by every test that asks for
+# it: with no known leak left, test_future_blind[r-scramble], test_leak_stint_limit and each fixed
+# leak's test run the same check, and the check is deterministic. Each test keeps its own name
+# and assertion, so a leak that comes back still fails under every test that guards it.
+@functools.lru_cache(maxsize=None)
+def _differences(race_id, alteration, neutralise, points):
     inp, orig, recorded = race(race_id)
-    return fb.check(inp, orig, POINTS[race_id] if points is None else points, alteration, neutralise, recorded)
+    return tuple(fb.check(inp, orig, POINTS[race_id] if points is None else list(points), alteration,
+                          list(neutralise), recorded))
 
 
 def report(diffs) -> str:

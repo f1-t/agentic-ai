@@ -1,5 +1,5 @@
 """The compound proxy (src/sim/proxy.py): the source blend and its weights, anchoring, the
-ordering constraint, uncertainty, R8 for an unraced compound and the off switch, on synthetic
+ordering constraint, uncertainty and the off switch, on synthetic
 weekends; the validation's leave-one-race-out weights; then the 2022 Saudi Arabia case (SOFT run
 in practice, never raced) on the calibration race."""
 import numpy as np
@@ -248,34 +248,6 @@ def test_belief_tier_one_uses_only_laps_up_to_the_snapshot():
     a = Simulator(frame, config(fit_window="to_snapshot"), practice()).fitted_for(at_lap(20)).degradation
     b = Simulator(cut, config(fit_window="to_snapshot"), practice()).fitted_for(at_lap(20)).degradation
     assert a.coefs["HARD"] == pytest.approx(b.coefs["HARD"], abs=1e-12)
-
-
-# --- R8 ------------------------------------------------------------------------------------------
-def limit_frame():
-    """synthetic_frame without its age-100 rows, so the race's own limits are 20 laps."""
-    f = synthetic_frame(fuel=FUEL)
-    return f[f["tyre_age"] < 100]
-
-
-LEGACY = {"stint_limit_margin_laps": 3, "wear_cliff": {"enabled": False}}   # R8 retired: the legacy setting
-
-
-def test_r8_caps_an_unraced_compound_at_its_practice_age():
-    prac = practice()
-    sim = world(frame=limit_frame(), prac=prac, **LEGACY)
-    assert sim.stint_limits["HARD"] == prac.loc[prac["compound"] == "HARD", "tyre_age"].max() == 10
-    assert sim.stint_limit_sources == {"HARD": "practice"}
-    snap = Snapshot.at_start(RACE, "X", "SOFT")
-    ok = sim.validate(snap, Plan_of([["SOFT", 18], ["MEDIUM", 19], ["HARD", 13]]))
-    assert ok == []
-    errs = sim.validate(snap, Plan_of([["SOFT", 18], ["MEDIUM", 18], ["HARD", 14]]))
-    assert any("no HARD raced: the oldest HARD tyre run in practice, 10, + 3" in e for e in errs)
-
-
-def test_r8_without_practice_scales_the_nearest_raced_limit_by_the_life_ratio():
-    sim = world(frame=limit_frame(), **LEGACY)
-    assert sim.stint_limits["HARD"] == np.floor(20 / 0.8)
-    assert sim.stint_limit_sources == {"HARD": "life_ratio:MEDIUM"}
 
 
 def Plan_of(pairs):

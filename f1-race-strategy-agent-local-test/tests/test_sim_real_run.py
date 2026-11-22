@@ -113,6 +113,7 @@ def test_races_auto_on_the_cached_races_leaves_the_nine_held_out_races_out(tmp_p
     assert ran["run"].races == kept and ran["run"].held_out_skipped == held
 
 
+@pytest.mark.slow
 def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smoke):
     tmp, manifest, log, before = smoke
     assert manifest["complete"] and [e["stage"] for e in manifest["stages"]] == list(STAGES)
@@ -146,6 +147,7 @@ def test_smoke_real_run_on_the_spain_cache_finishes_with_a_complete_manifest(smo
     assert snapshot() == before   # nothing under reports/calibration or data/references changed
 
 
+@pytest.mark.slow
 def test_a_rerun_resumes_every_stage_that_ran(smoke):
     tmp, first, _, _ = smoke
     log = []
@@ -290,6 +292,7 @@ def _task_body(script: Path) -> str:
     return "\n".join(["set -euo pipefail", *keep, *lines[cut + 1:]]).replace("python -m ", f"{sys.executable} -m ")
 
 
+@pytest.mark.slow
 def test_sol_emits_the_arrays_from_the_templates_and_submits_nothing(tmp_path, monkeypatch):
     _no_sbatch(monkeypatch)
     profile = small_profile("sol", "slurm")
