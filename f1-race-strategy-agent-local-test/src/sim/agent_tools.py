@@ -39,6 +39,7 @@ to the flag.
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import math
 import os
@@ -117,6 +118,23 @@ def belief_config() -> SimConfig:
     if "config" not in _BELIEF:
         _BELIEF["config"] = SimConfig.from_file(os.environ.get(BELIEF_CONFIG_ENV) or BELIEF_CONFIG)
     return _BELIEF["config"]
+
+
+@contextlib.contextmanager
+def belief_config_as(config: SimConfig):
+    """The tools plan on `config` inside the block (eval.policies.AgentPolicy passes the scorer's
+    belief), so the agent's tools, the continuation the scorer expands its submission with and the
+    belief_optimizer policy run one belief config whatever --belief-config or AGENT_BELIEF_CONFIG
+    say. The previous config comes back after the block."""
+    had, prev = "config" in _BELIEF, _BELIEF.get("config")
+    _BELIEF["config"] = config
+    try:
+        yield config
+    finally:
+        if had:
+            _BELIEF["config"] = prev
+        else:
+            _BELIEF.pop("config", None)
 
 
 def _race_data(race_id: str, profile):

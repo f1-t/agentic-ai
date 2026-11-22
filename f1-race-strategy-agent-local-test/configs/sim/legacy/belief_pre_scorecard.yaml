@@ -1,0 +1,25 @@
+# LEGACY, for reproducing results produced before the scorecard-chosen defaults: configs/sim/belief.yaml
+# as it was before the adoption, without driver effects in the belief's fits (see its comments for
+# every other block). Its config_hash is d479652b0fe7. Pair it with
+# configs/sim/legacy/world_pre_scorecard.yaml. tests/test_eval_default_config.py checks it is
+# belief.yaml with driver effects off and nothing else.
+calibrator:
+  name: as_of_history
+fuel_anchor:
+  prior: anchored
+  practice: anchored
+pit_loss:
+  source: asof
+fit_window: to_snapshot
+traffic:
+  name: none
+events:
+  name: rate
+  params:
+    as_of: true
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+    wear_lower_bound: 0.0
+lap_noise: persistent
