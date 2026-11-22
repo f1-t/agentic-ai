@@ -2716,6 +2716,38 @@ this race, to snapshot) and `sc_queue_spacing` (history). Future blindness:
 belief's times under an SC in progress and a later one stay identical (the judge's change: the
 canary).
 
+Measured (18 calibration races, main 606b6ab with the queue branch, A/B sections without the
+hindsight variants, leave-one-stint-out or components; change against the judge with hybrid
+SC/VSC, which the default adopted after this run; race-cluster 95% intervals):
+
+| arm | close-pair order | Spearman | rel gap MAE s | abs MAE s | B2 rho | B2 regret s | pit-now agree |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| hybrid judge (reference) | 0.729 | 0.960 | 13.2 | 19.6 | 0.835 | 4.60 | 0.778 |
+| + queue (single) | 0.655 (-0.074) | 0.880 | 9.1 (-4.0) | 14.4 | 0.823 | 3.84 | 0.796 |
+| + queue in the belief too | 0.655 | 0.880 | 9.1 | 14.4 | 0.845 | 4.79 | 0.702 |
+| + traffic (earned passes), no queue | 0.699 | 0.955 | 13.1 | 19.5 | 0.827 | 4.89 | 0.774 |
+| + queue + traffic | 0.619 | 0.856 | 9.6 | 14.2 | 0.821 | 4.14 | 0.777 |
+| + queue + traffic, belief too | 0.619 | 0.856 | 9.6 | 14.2 | 0.835 | 5.40 | 0.682 |
+
+Against the judge without SC/VSC (the base then): queue (single) order -0.060 [-0.104, -0.010],
+gaps -5.3 s [-11.1, -0.6]; queue (field) order -0.027 [-0.061, 0.000], gaps -6.6 s [-12.6, -1.4].
+
+Decision: NOT adopted (off by default). The queue improves relative gaps by about 4 to 6 s but
+worsens close-pair order, and the earned-pass traffic does not recover it. Per race the order
+loss sits in two races, 2022 Bahrain (Spearman 0.75 to -0.05) and 2022 Brazil (0.97 to 0.36):
+cars close to a lap down when the safety car came out (90 s behind a 97 s lap) did not close up
+to the queue in the race (the real field at the end of the Bahrain SC spans 38 s), while the
+rule moves every car that finished on the lead lap into the train. Everywhere else gaps fall
+(2022 Canada 31.7 to 4.5 s, 2019 Britain 13.4 to 4.1 s) with order level. The pit-now loss
+when the belief runs the queue too is the two simulators' safety-car expectations, not the
+queue: the belief draws later safety cars at its as-of rates and keeps an SC in progress going
+for drawn laps, so a stop now (refunded by a later queue) or a stop under the SC (cheap in the
+queue) looks better to it than to the judge, whose SC in progress ends when it really did
+(2022 France at laps 20 to 40: the belief's pit-now plans 7 to 25 s ahead of staying, the
+judge's 0.4 to 9 s behind). Before it can be adopted the queue needs the near-lapped cars'
+rule (who joins the train, from the gap at deployment against the SC lap) and the two
+simulators' SC duration and rate models aligned.
+
 ### What the ablation says (f7be251, selection rule applied)
 
 Changes against the base (the default world and `belief.yaml`), pooled, race-cluster 95% intervals:
