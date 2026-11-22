@@ -1157,7 +1157,8 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
     its stints, first stop, the immediate action and the submission that keeps it (immediate_action),
     gap_to_best (mean, 90% interval over the paired draws, share of draws faster than the best),
     best_share (the share of draws in which it is the fastest of those shown), first_stop_range
-    (the first-stop laps over which a plan of the same shape stays within FLEX_S of it) and flags.
+    (the first-stop laps over which a plan of the same shape stays within FLEX_S of it), flags (the
+    plan's uncertainty_flags) and extrapolates (the fit's support warnings: a note, not a flag).
     `decision` is plan 1's immediate action with the best PIT-now plan read against the best STAY_OUT
     plan (gap_reading, the choice the submission makes); `flags` are uncertainty_flags. Nothing after the snapshot enters."""
     from ..baselines.domain import NoFeasiblePlan
@@ -1201,9 +1202,11 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
         entry["best_share"] = round(float(sh_share), 2)
         if len(stops) > 1:
             entry["first_stop_range"] = [stops[0], stops[-1]]
+        if flags:
+            entry["flags"] = flags
         warn = _report.support_warnings(fit.degradation, snapshot, plans[i])
-        if warn or flags:
-            entry["flags"] = [*flags, *(f"extrapolates: {w}" for w in warn)]
+        if warn:   # a stint older than any seen: a note on the plan, not an uncertainty flag
+            entry["extrapolates"] = warn
         out.append(entry)
     # the immediate action is plan 1's (the lowest mean time, as the optimizer ranks); share is the
     # share of draws in which the best plan of that action beats the best plan of the other one, which
@@ -1301,10 +1304,10 @@ def evaluate_plan(snapshot: Snapshot, plan=None, first_stop_lap=None, compound=N
     except decisions.InvalidDecision as exc:
         out["scored_plan"] = f"this submission has no legal plan: {exc}"
     general, per_plan = uncertainty_flags(snapshot, sim, [res.candidates[i]], profile=profile)
-    warn = res.support_warnings[i]
-    flags = [*general, *per_plan[0], *(f"extrapolates: {w}" for w in warn)]
-    if flags:
+    if (flags := [*general, *per_plan[0]]):
         out["flags"] = flags
+    if res.support_warnings[i]:
+        out["extrapolates"] = res.support_warnings[i]
     return _jsonable(out)
 
 
