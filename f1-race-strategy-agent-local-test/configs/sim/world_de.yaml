@@ -1,0 +1,7 @@
+# Named world overlay for the fidelity scorecard's ablation: the eval world's wear fit,
+# linear_fuel with driver offsets on the race rows (config.WORLD_DEGRADATION, the default).
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race

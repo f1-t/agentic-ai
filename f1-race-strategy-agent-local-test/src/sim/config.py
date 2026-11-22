@@ -429,12 +429,15 @@ class SimConfig(_Cfg):
             return cls.model_validate(json.load(f))
 
 
-# The eval world's wear fit (score.race_simulators' default world, docs/eval.md "The wear
-# cliff"): linear_fuel_hinge with driver effects on the race rows, the arm the cross-race
-# selection rule picks for the full window on the calibration races (driver_effects_hinge,
-# reports/calibration/cross_race). The SimConfig default stays linear_fuel, the comparator the
-# cross-race arms are overlays on.
-WORLD_DEGRADATION = {"name": "linear_fuel_hinge", "params": {"driver_effects": "race"}}
+# The eval world's wear fit (score.race_simulators' default world, docs/eval.md "The world's wear
+# fit"): linear_fuel with driver effects on the race rows. The fidelity scorecard (src/sim/
+# fidelity.py, six races) finds driver effects the one factor that improves its primary measure
+# (close-pair finishing order) and the hinge adds nothing (DE + hinge slightly worse than DE
+# alone); the cross-race G rule on the calibration races does not tell the two apart (DE against
+# DE + hinge: +0.26 [-0.08, 0.62] s), so the simpler one is the default. Both are named world
+# overlays for the scorecard's ablation: configs/sim/world_de.yaml and world_de_hinge.yaml. The
+# SimConfig default stays linear_fuel, the comparator the cross-race arms are overlays on.
+WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}}
 
 
 def world_default(config: "SimConfig") -> "SimConfig":

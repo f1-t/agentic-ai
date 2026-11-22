@@ -13,7 +13,7 @@
 # tests/test_traffic_eval_params.py checks this is the default world plus traffic only.
 fit_window: full
 degradation:
-  name: linear_fuel_hinge
+  name: linear_fuel
   params:
     driver_effects: race
 traffic:

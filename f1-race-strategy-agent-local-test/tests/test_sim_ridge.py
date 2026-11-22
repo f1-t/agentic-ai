@@ -403,13 +403,14 @@ def test_cross_run_with_6_synthetic_races_and_a_ridge_arm_completes(ridge_run):
         t = learned[learned["window"] == w].set_index("calibrator")
         assert list(t.index) == ["none", "shrinkage", "ridge"]
         assert t.loc["shrinkage", "arm"] == "baseline" and t.loc["ridge", "kind"] == "learned"
-        assert (t["n_races"] == 6).all() and t["provisional"].all()
+        assert (t["n_races"] == 6).all() and (t["provisional"] == (6 < cross_race.MIN_RACES)).all()
     # 5 training races per fold: every degradation factor is a ridge in every fold, no event factor is fitted
     fits = pd.read_csv(out / "learned_fits.csv")
     assert len(fits) and (fits["ridge"] == 6).all() and (fits["fallback"] == 0).all()
     assert {split_factor(f)[0] for f in fits["factor"]} <= set(calibrators.DEGRADATION_FACTORS)
     md = (out / "summary.md").read_text()
-    assert "## Learned calibrators (SPEC 0024)" in md and "nothing is adopted" in md
+    assert "## Learned calibrators (SPEC 0024)" in md
+    assert ("nothing is adopted" in md) == (6 < cross_race.MIN_RACES)   # 6 races against MIN_RACES
 
 
 @pytest.mark.slow
