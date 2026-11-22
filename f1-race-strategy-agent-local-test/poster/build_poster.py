@@ -144,7 +144,7 @@ def forest(width=1000):
     LO, HI = ticks[0], ticks[-1]
     L, R, VX = 380, 735, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top, sub, gap = 34, 23, 12
+    top, sub, gap = 34, 21, 9
     blk = sub * len(GROUP_ROWS) + gap
     yb = top + blk * len(comps) - gap / 2
     H = yb + 28
@@ -353,7 +353,7 @@ def config_line(t):
            if ready(f"{t}_{k}") and not val(f"{t}_{k}")]
     for k in ("sc", "edge", "bde", "traffic", "hinge", "learned"):
         used(f"{t}_{k}")
-    return f"on: {', '.join(on) or 'none'}; off: {', '.join(off) or 'none'}"
+    return ", ".join(on) or "none of the adopted factors"
 
 
 def leak_list():
@@ -371,20 +371,79 @@ def lead_lost():
     return "held" if d == f else "changed"
 
 
+def fresh_hist_clause():
+    """None of the fresh five had an earlier race at its circuit; the earlier four are not a clean comparison."""
+    if not ready("fresh_hist_n", "earlier_hist_n"):
+        return '<span class="pend">pending</span>'
+    none_ = val("fresh_hist_n") == 0
+    return (f"{'None' if none_ else V('fresh_hist_n')} of the {V('hfresh_word')} fresh races had an earlier race at "
+            f"{'its' if none_ else 'their'} circuit, so tyre life came from a generic prior; the earlier four are no "
+            f"clean comparison ({V('earlier_hist_n')} had circuit history, all were examined before), so the fresh "
+            f"five is the test that counts.")
+
+
+def per_race_chart(width=1000):
+    """Agent minus run_to_flag per held-out race, fresh five (left) and earlier four (right), 95% intervals;
+    a dagger marks a race whose tools had a same-circuit tyre-life prior."""
+    halves = (("hfresh", "fresh five"), ("hearlier", "earlier four"))
+    races = {g: list(val(f"{g}_names")) for g, _ in halves}
+    lo_hi = [v for g in races for r in races[g] for v in val(f"pr_{r}_agent_ci")]
+    ticks = nice_ticks(min(lo_hi + [0]), max(lo_hi + [0]), n=4)
+    LO, HI = ticks[0], ticks[-1]
+    top, rowh = 52, 21
+    n = max(len(v) for v in races.values())
+    yb = top + rowh * n
+    H = yb + 26
+    s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="Agent minus run to the flag per '
+         f'held-out race, with 95% intervals">',
+         f'<text x="0" y="17" font-size="19" font-weight="800" fill="{INK}">Per race: agent minus run to the flag (s), '
+         f'95% intervals</text>']
+    for h, (g, glab) in enumerate(halves):
+        x0 = h * width / 2
+        L, R, VX = x0 + 150, x0 + 400, x0 + 482
+        sx = lambda v, L=L, R=R: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
+        s.append(f'<text x="{x0}" y="42" font-size="17.5" font-weight="800" fill="{MUTED}">{glab}</text>')
+        for tk in ticks:
+            s.append(f'<line x1="{sx(tk):.1f}" y1="{top - 6}" x2="{sx(tk):.1f}" y2="{yb}" stroke="{GRID}"/>')
+            s.append(f'<text x="{sx(tk):.1f}" y="{yb + 20}" text-anchor="middle" font-size="16.5" fill="{MUTED}">'
+                     f'{fmt_tick(tk)}{" s" if tk == ticks[-1] else ""}</text>')
+        s.append(f'<line x1="{sx(0):.1f}" y1="{top - 8}" x2="{sx(0):.1f}" y2="{yb}" stroke="{INK}" stroke-width="2"/>')
+        color = "#56B4E9" if g == "hfresh" else "#9e9bb5"
+        for i, r in enumerate(races[g]):
+            y = top + rowh * i + rowh / 2
+            m, (lo, hi) = val(f"pr_{r}_agent"), val(f"pr_{r}_agent_ci")
+            dag = "†" if "1" in val(f"pr_{r}_tier") else ""
+            s.append(f'<text x="{x0}" y="{y + 6:.1f}" font-size="17.5" fill="{INK}">{ps.race_name(r)}{dag}</text>')
+            s.append(f'<rect x="{min(sx(0), sx(m)):.1f}" y="{y - 7:.1f}" width="{abs(sx(m) - sx(0)):.1f}" height="14" '
+                     f'fill="{color}"/>')
+            s.append(f'<line x1="{sx(lo):.1f}" y1="{y:.1f}" x2="{sx(hi):.1f}" y2="{y:.1f}" stroke="{INK}" '
+                     f'stroke-width="2"/>')
+            s.append(f'<text x="{VX}" y="{y + 6:.1f}" text-anchor="end" font-size="17.5" font-weight="700" '
+                     f'fill="{INK}">{T(f"pr_{r}_agent")}</text>')
+            used(f"pr_{r}_agent_ci")
+            used(f"pr_{r}_tier")
+    s.append(f'<text x="{width}" y="17" text-anchor="end" font-size="16.5" fill="{MUTED}">† circuit history in the '
+             f'tyre-life prior</text>')
+    s.append("</svg>")
+    return "".join(s)
+
+
 def banner_agent():
-    return (f"On the {V('hfresh_word')} races it had never seen, PITWALL made a legal, explained call on "
-            f"{V('h_ag_ok')} held-out decisions and was {vword('hfresh_belief_optimizer_verdict')} the optimizer in "
-            f"its tools ({V('hfresh_belief_optimizer_diff')} s), but {vword('hfresh_run_to_flag_verdict')} two fixed "
-            f"rules ({V('hfresh_run_to_flag_diff')} s {V('hfresh_run_to_flag_ci')}) and "
+    allok = ready("h_ag_ok", "h_ag_scored") and val("h_ag_ok") == val("h_ag_scored")
+    n = ("all " + V("h_ag_scored")) if allok else V("h_ag_ok")
+    return (f"PITWALL made a legal, explained call on {n} held-out decisions. On the {V('hfresh_word')} races it had "
+            f"never seen it was {vword('hfresh_belief_optimizer_verdict')} the optimizer in its tools "
+            f"({V('hfresh_belief_optimizer_diff')} s), but {vword('hfresh_run_to_flag_verdict')} two fixed rules "
+            f"({V('hfresh_run_to_flag_diff')} s {V('hfresh_run_to_flag_ci')}) and "
             f"{vword('hfresh_actual_strategy_verdict')} the teams ({V('hfresh_actual_strategy_diff')} s). Its "
             f"development lead over the rules ({V('d_run_to_flag_diff')} s) {lead_lost()}.")
 
 
 def stakeholder():
     beat = ready("hfresh_run_to_flag_verdict") and val("hfresh_run_to_flag_verdict") == "ahead"
-    return (f"<p>The test bench holds: it is future-blind by test, and its judge orders close finishers at its measured "
-            f"ceiling. On {V('hfresh_word')} unseen races the agent was {vword('hfresh_run_to_flag_verdict')} two fixed "
-            f"rules and {vword('hfresh_actual_strategy_verdict')} the teams: with this system and this model it "
+    return (f"<p>The test bench holds: future-blind by test, its judge at its measured ceiling for order. On "
+            f"{V('hfresh_word')} unseen races the agent was {vword('hfresh_run_to_flag_verdict')} two fixed rules and "
+            f"{vword('hfresh_actual_strategy_verdict')} the teams: with this system and this model it "
             f"{'beats' if beat else 'does not yet beat'} simple rules. The language model was "
             f"{vword('hfresh_belief_optimizer_verdict')} its own optimizer; the likeliest next gain is "
             f"tyre-life knowledge at new circuits, then a stronger model.</p>")
@@ -469,9 +528,9 @@ def html(args_line):
     judge handed every stop, safety-car lap and start as recorded.</p>
     {judge_chart()}
     <p class="note">Order is at the ceiling; gaps are not. Bars: 95% over races. Plan loss: judge time lost trusting the
-    predictive simulator&rsquo;s plan. *Earlier base.</p>
+    predictive plan. *Earlier base.</p>
     {factor_table()}
-    <p class="note">Held-out configuration: {config_line(t)}.</p>
+    <p class="note">Used in the held-out run: {config_line(t)}.</p>
   </article>
 
   <article class="panel p4">
@@ -486,6 +545,7 @@ def html(args_line):
       (development: agent {V("d_t_over20_agent")}, teams {V("d_t_over20_actual_strategy")}).</p></div>
       <div><div class="caption">By era</div>{era_table()}</div>
     </div>
+    {per_race_chart()}
     <p class="caveat2"><b>One race drives &ldquo;ahead of the teams&rdquo;:</b> at Monaco 2019 the judge scores the
     teams {V("race_2019_06_monaco_actual_strategy_mean")} s off (worst {V("race_2019_06_monaco_actual_strategy_max")}
     s); Monaco strategy is about track position, which the judge does not model. Without Monaco, all nine: agent − teams {V("hall_nomon_actual_strategy_diff")}
@@ -497,26 +557,24 @@ def html(args_line):
   <div class="stack">
   <article class="panel p5">
     <h2><b>5</b>Why the lead did not hold</h2>
-    <p class="small"><b>Measured.</b> Two fresh races carry the gap, regret agent vs run to the flag: Australia 2022
-    {V("race_2022_03_australia_agent_mean")} vs {V("race_2022_03_australia_run_to_flag_mean")} s, Miami 2022
-    {V("race_2022_05_miami_agent_mean")} vs {V("race_2022_05_miami_run_to_flag_mean")} s. The optimizer alone has the
-    same gap.</p>
+    <p class="small"><b>Measured:</b> Australia and Miami 2022 carry the gap (agent regret
+    {V("race_2022_03_australia_agent_mean")} and {V("race_2022_05_miami_agent_mean")} s, run to the flag
+    {V("race_2022_03_australia_run_to_flag_mean")} and {V("race_2022_05_miami_run_to_flag_mean")}); the optimizer
+    alone has the same gap.</p>
     <p class="small"><b>Leading explanation, not established:</b> there the predictive simulator plans two stops where
-    one long hard-tyre stint was best. No fresh race had an earlier race at its circuit, so tyre life came from a
-    generic prior; on development the lead is {V("dev_hist_with_diff")} s at {V("dev_hist_with_n")} races with circuit
-    history, {V("dev_hist_without_diff")} s at {V("dev_hist_without_n")} without.</p>
-    <p class="note">History alone is unlikely to explain all of it: the configuration was also chosen on development
-    races.</p>
+    one long hard-tyre stint was best. {fresh_hist_clause()} On development the lead is {V("dev_hist_with_diff")} s
+    at {V("dev_hist_with_n")} races with circuit history, {V("dev_hist_without_diff")} s at {V("dev_hist_without_n")}
+    without.</p>
+    <p class="note">History alone is unlikely to explain all of it: the configuration was chosen on development races.</p>
   </article>
 
   <article class="panel p6">
     <h2><b>6</b>Limitations, next</h2>
     <ul>
-      <li>One pass of one modest model, {model}.</li>
+      <li>One pass of one modest model, {model}; {V("hearlier_word")} held-out races were scored once before.</li>
       <li>No tyre-life history at new circuits; added history is 2021-22 only.</li>
       <li>Soft&ndash;medium gaps not fixed; no safety-car queue. {sc_limit}</li>
       <li>The model misreads tool output, invents arguments.</li>
-      <li>{V("hearlier_word").capitalize()} held-out races were scored once before.</li>
     </ul>
     <p class="small"><b>Next:</b> circuit tyre-life history, compound gaps, a stronger model, repeat passes.</p>
   </article>

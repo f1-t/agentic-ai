@@ -367,8 +367,8 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
             put(ks[2], v, v, src, how)
 
     # ---- per race, fresh five: agent and optimizer minus run_to_flag; tyre-life prior tier from the trajectories
-    for r in groups["hfresh"][2]:
-        ks = [f"pr_{r}_agent", f"pr_{r}_bo", f"pr_{r}_tier"]
+    for r in groups["hall"][2]:
+        ks = [f"pr_{r}_agent", f"pr_{r}_bo", f"pr_{r}_tier", f"pr_{r}_agent_ci", f"pr_{r}_n"]
         if not H.present or not H.has_agent:
             for k in ks:
                 pend(k, "held-out", f"per race {r}", "held-out run")
@@ -377,8 +377,12 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
         src = H.f("tables/combined.csv")
         for k, pol in ((ks[0], "agent"), (ks[1], "belief_optimizer")):
             p = paired(g, pol, "run_to_flag")
-            put(k, p["mean"], s(p["mean"], 1, sign=True), src,
-                f"{pol} minus run_to_flag at {r}: mean over {p['n']} scenarios both scored (computed here)")
+            how = (f"{pol} minus run_to_flag at {r}: mean over {p['n']} scenarios both scored, (race, driver) cluster "
+                   "bootstrap 95% interval (computed here; no per-race pipeline table)")
+            put(k, p["mean"], s(p["mean"], 1, sign=True), src, how)
+            if pol == "agent":
+                put(ks[3], (p["lo"], p["hi"]), ci(p["lo"], p["hi"], 1), src, how)
+                put(ks[4], p["n"], str(p["n"]), src, how)
         tiers = {}
         for fp in sorted((H.base / "trajectories").glob(f"{r}_*.jsonl")):
             for t in re.findall(r'"prior_source": "tyre_history_tier(\d)"', fp.read_text()):
@@ -387,12 +391,20 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
             f"tyre-life prior tiers in the tools' model reports (tyre_history_tierN counts {tiers}); 1 = same circuit, "
             "3 = the pool only, 4 = no usable earlier race")
     if H.present and H.has_agent:
+        hist = [r for r in groups["hearlier"][2] if "1" in N[f"pr_{r}_tier"].value]
+        put("earlier_hist_n", len(hist), {1: "one", 2: "two", 3: "three", 4: "four"}.get(len(hist), str(len(hist))),
+            H.f("trajectories"), "earlier-four races whose tools reported a same-circuit tyre-life prior (tier 1): "
+            + ", ".join(hist))
+        fresh_hist = [r for r in groups["hfresh"][2] if "1" in N[f"pr_{r}_tier"].value]
+        put("fresh_hist_n", len(fresh_hist), str(len(fresh_hist)), H.f("trajectories"),
+            "fresh-five races with a same-circuit tyre-life prior (tier 1): " + (", ".join(fresh_hist) or "none"))
         allt = {N[f"pr_{r}_tier"].text for r in groups["hfresh"][2]}
         put("fresh_tier", allt, " and ".join(sorted(allt)), H.f("trajectories"),
             "the tyre-life prior tiers seen at the fresh five, every report: " + ", ".join(
                 f"{r}: {N[f'pr_{r}_tier'].value}" for r in groups["hfresh"][2]))
     else:
-        pend("fresh_tier", "held-out", "tiers", "held-out run")
+        for k in ("fresh_tier", "earlier_hist_n", "fresh_hist_n"):
+            pend(k, "held-out", "tiers", "held-out run")
 
     # ---- reliability and cost (agent.csv, tables/agent_latency.csv)
     for S in (H, D):
