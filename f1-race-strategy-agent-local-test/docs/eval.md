@@ -70,6 +70,10 @@ bridged baselines, the rule baselines and the sampler's decision points up to t 
 identical across the three. Each legacy switch below is shown to fail the same check on its
 own. The R8 stint limit and the pit loss (items 1 and 2 of the leakage audit) are fixed on
 other branches; the harness runs the belief with R8 off and a fixed pit loss until they land.
+`tests/test_future_blindness.py` (the future-blindness harness: real races through
+`jobs.load_race`'s own code path, truncated or re-raced after the snapshot) keeps
+`test_leak_frame_filter`, `test_leak_race_length` and `test_leak_compound_list` as regression
+checks (`future_blindness.FIXED_LEAKS`) and observes snapshots from `snapshot_as_of`.
 
 What each fix does (the legacy switch reproduces the old behaviour, so old results stay
 reproducible):

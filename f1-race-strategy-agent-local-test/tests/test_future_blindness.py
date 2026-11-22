@@ -111,13 +111,14 @@ def test_alteration_keeps_the_past_and_changes_the_future(race_id, alteration):
 def test_aggregates_shift_every_whole_race_constant():
     _, orig, _ = race(SYNTHETIC)
     alt = fb.shift_aggregates(orig)
-    assert alt.race.pit_loss_s != orig.race.pit_loss_s and alt.race.compounds != orig.race.compounds
+    assert alt.race.pit_loss_s != orig.race.pit_loss_s   # compounds: the nominated three, not a race aggregate
     assert not alt.results["classified"].equals(orig.results["classified"])
     pd.testing.assert_frame_equal(alt.frame, orig.frame)
 
 
 def test_every_known_leak_has_its_own_test():
-    assert set(fb.KNOWN_LEAKS) == {name[len("test_leak_"):] for name in globals() if name.startswith("test_leak_")}
+    assert {*fb.KNOWN_LEAKS, *fb.FIXED_LEAKS} == {name[len("test_leak_"):] for name in globals()
+                                                  if name.startswith("test_leak_")}
 
 
 # --- the guard: no leak beyond the known ones ---------------------------------------------------
@@ -141,6 +142,8 @@ def test_future_blind_small_real_race():
 # --- the known leaks, one test each: expected failures until fixed ------------------------------
 def _leak_params(name, leaking):
     """Races for test_leak_<name>, xfail (strict) on those where the leak shows today."""
+    if name in fb.FIXED_LEAKS:   # fixed: a plain regression check
+        return [_race(r) for r in POINTS]
     lk = fb.KNOWN_LEAKS[name]
     reason = f"known leak {name}: {lk.what} ({lk.where})"
     return [_race(r, *([pytest.mark.xfail(strict=True, reason=reason)] if r in leaking else [])) for r in POINTS]
@@ -148,7 +151,8 @@ def _leak_params(name, leaking):
 
 def _leak(name, race_id):
     """The leak's alteration with every other known leak neutralised: no difference once it is fixed."""
-    diffs = differences(race_id, fb.KNOWN_LEAKS[name].alteration, [n for n in fb.KNOWN_LEAKS if n != name])
+    lk = fb.KNOWN_LEAKS.get(name) or fb.FIXED_LEAKS[name]
+    diffs = differences(race_id, lk.alteration, [n for n in fb.KNOWN_LEAKS if n != name])
     assert not diffs, report(diffs)
 
 

@@ -29,12 +29,12 @@ Alterations (each keeps every raw lap row with LapNumber <= L as it is):
               every car but the winner gains or loses a lap (lapped or unlapped) and one car
               retires. The classification is shuffled. Seeded per (race, L).
   aggregates  the race frame is untouched; the whole-race constants passed beside it are
-              shifted: RaceParams.pit_loss_s + 6.5 s, the compound list with HARD toggled, the
-              classification reversed.
+              shifted: RaceParams.pit_loss_s + 6.5 s and the
+              classification reversed (the compound list is the nominated three since its fix).
 
 Policy-visible surfaces (observe), per snapshot:
 
-  snapshot    the scenario's contracts.Snapshot (calibration.snapshot_at, the scenario
+  snapshot    the scenario's contracts.Snapshot (BUILDER: calibration.snapshot_as_of, the scenario
               builder), the agent's RaceSnapshot view (what run_agent shows the model) and
               agent_tools.contract_of(view)
   belief      the belief simulator's fit at the snapshot (score.race_simulators, belief.yaml):
@@ -114,6 +114,9 @@ REL_TOL, ABS_TOL = 1e-9, 1e-9
 ALTERATIONS = ("truncate", "scramble", "aggregates")
 SURFACES = ("snapshot", "belief", "rules", "tools", "decisions", "baselines")
 OBSERVED_BASELINES = ("fixed_one_stop", "fixed_two_stop", "greedy_crossover", "run_to_flag", "one_stop_total")
+# the scenario builder new sets use (src/eval/scenarios.py, rule as_of); calibration.snapshot_at
+# is the legacy one, which read the driver's own lap count (the race_length leak)
+BUILDER = calibration.snapshot_as_of
 
 
 # --- race input ---------------------------------------------------------------------------
@@ -368,9 +371,10 @@ def past_rows(laps: pd.DataFrame, lap: int) -> pd.DataFrame:
 
 
 def shift_aggregates(data: jobs.RaceData) -> jobs.RaceData:
-    """`data` with the whole-race constants passed beside the frame shifted (module docstring)."""
-    compounds = sorted(set(data.race.compounds) ^ {"HARD"})
-    race = data.race.model_copy(update={"pit_loss_s": data.race.pit_loss_s + 6.5, "compounds": compounds})
+    """`data` with the whole-race constants passed beside the frame shifted (module docstring).
+    RaceParams.compounds is no longer one of them: since the compound_list fix it is the
+    weekend's nominated dry compounds (calibrate.race_compounds), a regulation constant."""
+    race = data.race.model_copy(update={"pit_loss_s": data.race.pit_loss_s + 6.5})
     results = data.results.copy()
     results["classified"] = results["classified"].to_numpy()[::-1]
     return dataclasses.replace(data, race=race, results=results)
@@ -426,10 +430,13 @@ def _stint_limits_patch(orig):
 
 
 KNOWN_LEAKS: dict[str, Leak] = {}
+# leaks whose fix has landed: no longer neutralised anywhere; test_leak_<name> stays as the
+# regression check (it must pass with the other known leaks neutralised)
+FIXED_LEAKS: dict[str, Leak] = {}
 
 
-def register(leak: Leak):
-    KNOWN_LEAKS[leak.name] = leak
+def register(leak: Leak, fixed: bool = False):
+    (FIXED_LEAKS if fixed else KNOWN_LEAKS)[leak.name] = leak
     return leak
 
 
@@ -445,7 +452,7 @@ register(Leak(
     "pace fit over every lap of the race, so which laps before the snapshot count as clean depends on later laps",
     "src/sim/data.py:316 lap_frame -> robust_filter; read by the to_snapshot fit (src/sim/degradation.py:553) "
     "and ref_lap_s (src/sim/engine.py:277)", "scramble",
-    data=_restore_frame_columns(["clean", "pace_resid_s", "driver_offset_s"])))
+    data=_restore_frame_columns(["clean", "pace_resid_s", "driver_offset_s"])), fixed=True)   # data.as_of_columns
 register(Leak(
     "pit_loss", "RaceParams.pit_loss_s is the observed pit loss of a full-race replay",
     "src/sim/jobs.py:98 load_race -> src/sim/calibrate.py:137 _pit_loss (calibration.run observed_pit_loss_s) -> "
@@ -454,12 +461,13 @@ register(Leak(
     "race_length", "the snapshot's race length is the laps the driver drove in the whole race, so a driver "
     "who will be lapped (or will retire) is told fewer laps remain",
     "src/sim/calibration.py:591 snapshot_at: race.model_copy(update={'total_laps': len(g)})", "scramble",
-    snapshot=_restore_total_laps))
+    snapshot=_restore_total_laps), fixed=True)   # calibration.snapshot_as_of: the scheduled distance
 register(Leak(
     "compound_list", "RaceParams.compounds is every compound in the whole race frame",
     "src/sim/calibrate.py:123 _race_setup compounds=sorted(frame['compound'].unique()) -> src/snapshot.py:84 "
     "(view available_compounds), src/sim/agent_tools.py:255 legal_compounds, src/tools.py:101, "
-    "src/sim/model_report.py:98", "scramble", data=_restore_race("compounds")))
+    "src/sim/model_report.py:98", "scramble", data=_restore_race("compounds")),
+    fixed=True)   # calibrate.race_compounds: the nominated dry three
 
 
 # --- one altered race, with known leaks neutralised ---------------------------------------------
@@ -674,7 +682,7 @@ def serving(data: jobs.RaceData, extra=()):
 def observe(data: jobs.RaceData, driver: str, lap: int, *, snapshot_fix=None, patches=()) -> dict:
     """Every policy-visible surface (SURFACES) at (driver, lap) of `data`. `snapshot_fix`
     rewrites the built snapshot first (a known leak's neutraliser)."""
-    snap = calibration.snapshot_at(data.frame, data.race, driver, lap)
+    snap = BUILDER(data.frame, data.race, driver, lap)
     if snapshot_fix is not None:
         snap = snapshot_fix(snap)
     view = RaceSnapshot.from_contract(snap)
@@ -756,7 +764,7 @@ def check(inp: RaceInput, orig: jobs.RaceData, points, alteration: str, neutrali
         for driver in [d for d, k in points if k == lap]:
             if (driver, lap) not in recorded:
                 recorded[driver, lap] = observe(orig, driver, lap)
-            snap = calibration.snapshot_at(orig.frame, orig.race, driver, lap)
+            snap = BUILDER(orig.frame, orig.race, driver, lap)
             alt = observe(data, driver, lap, snapshot_fix=snapshot_fix(snap), patches=patches)
             out += compare(recorded[driver, lap], alt, f"{orig.race_id}:{driver}:{lap} [{alteration}]")
     return out
