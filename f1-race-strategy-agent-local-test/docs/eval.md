@@ -2569,6 +2569,28 @@ order worse (0.55 alone): a recorded SC lap closes the real gap to the car ahead
 simulated one, so the neutralised laps need the queue (whose order the earlier laps decide)
 rather than their lap times.
 
+### Pit-stop durations
+
+Switch `SimConfig.pit_stops` (`replay`, `team`, `team_prior_stops`), off by default. The judge
+charges every stop one whole-race pit loss (the median green stop), but real stops vary by
+seconds (pit-lane time, entry to exit: median absolute deviation about 0.5 s on the calibration
+races, sd 1.4 to 4.7 s with the slow ones, team medians spread 0.6 to 2.5 s) and a slow stop
+reorders close cars. The lap frame now carries the timing data's `pit_in_time_s` (in-lap row)
+and `pit_out_time_s` (out-lap row), and `pit_loss.stop_table` each stop's `lane_s` and `team`.
+
+- `replay: actual` (hindsight, ledger `pit_stops_replay`): a whole-race replay of a real
+  strategy in the fidelity tool charges each real stop the pit loss plus its lane time less
+  the race's median green lane time (`pit_loss.lane_deltas`). A stop's extra time is added
+  after the simulation, so a stop just before a safety car keeps it (the SC queue, when on,
+  would erase it).
+- `team: true`: every stop a simulation prices is the pit loss plus the car's team's typical
+  stop: the median lane-time difference of its green stops, shrunk toward 0 by n / (n + 3)
+  (`pit_loss.team_delta`). The judge reads every stop of the race (ledger `pit_stops_team`,
+  this race whole); a windowed fit (the belief) the stops completed when the car completed its
+  calibration lap (`pit_loss.snapshot_time`, the same cut as the as-of pit loss), so nothing
+  after the snapshot: `tests/test_sim_pit_stops.py` alters every other car's rows after the
+  cut and the belief's times stay identical (the judge's change: the canary).
+
 ### What the ablation says (f7be251, selection rule applied)
 
 Changes against the base (the default world and `belief.yaml`), pooled, race-cluster 95% intervals:
