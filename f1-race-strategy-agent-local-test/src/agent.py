@@ -124,6 +124,27 @@ def _usage(raw):
     return None if pair == (None, None) else pair
 
 
+def _finish_reason(raw):
+    """Why the model stopped, as the backend reported it (an OpenAI-style choice's
+    finish_reason, an Anthropic response's stop_reason), None when it did not."""
+    choices = raw.get("choices") if isinstance(raw, dict) else getattr(raw, "choices", None)
+    if choices:
+        first = choices[0]
+        return first.get("finish_reason") if isinstance(first, dict) else getattr(first, "finish_reason", None)
+    return raw.get("stop_reason") if isinstance(raw, dict) else getattr(raw, "stop_reason", None)
+
+
+TRUNCATED = {"length", "max_tokens"}   # finish reasons of a reply cut off at the output-token cap
+NO_CALL_TEXT_CHARS = 1500   # head of a turn's text logged when it had no tool call; the tail is kept too
+
+
+def _clip(text, limit=NO_CALL_TEXT_CHARS):
+    if len(text) <= limit:
+        return text
+    tail = limit // 4
+    return f"{text[:limit - tail]} [... {len(text) - limit} chars ...] {text[-tail:]}"
+
+
 def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=None,
               max_tool_calls=None, log_path=None, stats=None, submit_grace_steps=None,
               turn_status=None, repeat_mode=None):
@@ -132,7 +153,11 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot.
     tools.set_snapshot keeps a contract for the tools and shows the model its
     RaceSnapshot.from_contract view. Every attempted tool call, including
-    invalid calls, refused calls and submission attempts, is logged with its ``phase``.
+    invalid calls, refused calls and submission attempts, is logged with its ``phase``. A turn
+    with no tool call is logged too (``event`` "no_tool_call": the clipped text, the backend's
+    parse error, finish reason and output tokens) but is not in the returned trajectory; the
+    model is told what was wrong: a reply cut off at the output cap, or the parse error. A call
+    from a reply whose JSON the backend corrected carries the backend's ``parse_repair`` note.
     With ``turn_status`` (AGENT_TURN_STATUS=1/true/on, default off) each evidence turn's
     tool-results message ends with the turn and evidence-call counts, and the second-to-last
     turn says one evidence turn is left. When the ``max_steps`` evidence turns end without an
@@ -199,7 +224,22 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                 if n is not None:
                     stats[key] = (stats[key] or 0) + n
         if not turn.tool_calls:
-            content = "No tool call was detected. Respond with a valid tool call; submit if you have enough evidence."
+            # not a trajectory event (no call was attempted), but logged so the turn can be read back
+            text, error, finish = turn.text or "", getattr(turn, "parse_error", None), _finish_reason(turn.raw)
+            _append_log(log_path, {"episode_id": episode_id, "step": step, "phase": phase, "event": "no_tool_call",
+                                   "text": _clip(text), "text_chars": len(text), "parse_error": error,
+                                   "finish_reason": finish, "output_tokens": used[1] if used else None,
+                                   "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
+            # The model does not see its own unparsed reply, so say what was wrong with it: a bare
+            # "no tool call" got the same malformed reply back, turn after turn (dev6 run 3).
+            if finish in TRUNCATED:
+                content = ("Your last reply was cut off at the output limit before the JSON was complete, so no "
+                           "tool was run. Reply again with complete JSON and fewer tool calls in one turn.")
+            elif error:
+                content = (f"Your last reply was not valid JSON, so no tool was run ({error}). Reply again with "
+                           f"one corrected JSON object; check that every bracket and brace is closed exactly once.")
+            else:
+                content = "No tool call was detected. Respond with a valid tool call; submit if you have enough evidence."
             if (spent := grace_note(step)):
                 content += " " + spent
             messages.append({"role": "user", "content": content})
@@ -248,6 +288,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                      "error": out.get("error") if isinstance(out, dict) else None}
             if repeat_of is not None:
                 event["repeat_of"] = repeat_of
+            if getattr(turn, "parse_repair", None):   # the backend corrected the reply's JSON
+                event["parse_repair"] = turn.parse_repair
             trajectory.append(event)
             _append_log(log_path, {**event, "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
             if verbose:

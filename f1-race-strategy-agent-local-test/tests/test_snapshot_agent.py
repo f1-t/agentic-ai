@@ -525,3 +525,191 @@ def test_an_invalid_repeat_mode_raises(monkeypatch, env, arg):
         monkeypatch.setenv("AGENT_REPEAT_MODE", env)
     with pytest.raises(ValueError, match="run, cache"):
         run_agent(snap(), backend=NoTurns(), verbose=False, repeat_mode=arg)
+
+
+# --- turns with no usable tool call: logged, and the reminder says what was wrong ---------------
+NO_CALL = "No tool call was detected"
+# dev6 run 3, 2021_04_spain:OCO:00, turns 2 to 10: one "}" too many after compare_plans' candidates
+GARBLED = ('{"tool_calls": [{"name": "evaluate_strategy", "arguments": {"action": {"action": "pit", '
+           '"compound": "MEDIUM"}}}, {"name": "compare_plans", "arguments": {"candidates": [{"action": '
+           '"pit", "compound": "MEDIUM"}, {"action": "stay_out", "laps": 3}]}}}]}')
+FIXED = GARBLED[:-6] + "]}}]}"
+
+
+def openai_reply(content, finish_reason="stop", completion_tokens=101):
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content),
+                                                    finish_reason=finish_reason)],
+                           usage=SimpleNamespace(prompt_tokens=4000, completion_tokens=completion_tokens))
+
+
+def voyager(replies):
+    """The real VoyagerBackend (prompt, parser), its client replaced by scripted chat completions."""
+    from src.llm.voyager_backend import VoyagerBackend
+    backend = VoyagerBackend()
+    replies, backend.seen = iter(replies), []
+
+    def create(**kwargs):
+        backend.seen.append(kwargs["messages"])
+        return next(replies)
+    backend.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    return backend
+
+
+def test_the_garbled_reply_is_what_run_3_saw():
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(GARBLED)
+    assert len(json.loads(FIXED)["tool_calls"]) == 2
+
+
+@pytest.mark.parametrize("tail, fixed", [
+    ("}]}}}]}", "}]}}]}"),        # one brace too many (run 3's stall)
+    ("}]}]}", "}]}}]}"),          # one too few in the run
+    ("}]}}]", "}]}}]}"),          # the last one missing
+    ("}]}}]}}", "}]}}]}"),        # a stray one after the end
+    ("}]}}]}\n}", "}]}}]}"),      # whitespace in the run
+])
+def test_only_the_final_run_of_closers_is_rewritten(tail, fixed):
+    from src.llm.voyager_backend import _reclose_tail
+    head = FIXED[:-6]
+    assert head.endswith('"laps": 3')
+    assert _reclose_tail(head + tail) == (head + fixed, "".join(tail.split()), fixed)
+    assert _reclose_tail(FIXED) is None                                   # nothing to change
+
+
+@pytest.mark.parametrize("text", [
+    '{"a": [{"x": 1}}, {"y": 2}]}',                # a wrong closer before the end: two readings
+    '{"a": {"b": [1, 2}, "c": 3}}',
+    '{"tool_calls": [{"name": "x", "arguments": {"note": "unclosed}]}',   # ends inside a string
+])
+def test_a_closer_out_of_place_before_the_end_is_not_guessed(text):
+    from src.llm.voyager_backend import _reclose_tail
+    assert _reclose_tail(text) is None
+
+
+def test_brackets_inside_strings_are_not_counted():
+    from src.llm.voyager_backend import _reclose_tail
+    text = '{"tool_calls": [{"name": "x", "arguments": {"note": "a } and \\" ] here"}}]}}'
+    fixed, old, new = _reclose_tail(text)
+    assert json.loads(fixed)["tool_calls"][0]["arguments"]["note"] == 'a } and " ] here'
+    assert (old, new) == ("}}]}}", "}}]}")
+
+
+def test_a_turn_with_no_tool_call_is_logged_but_is_not_a_trajectory_event(monkeypatch, tmp_path):
+    stub_dispatch(monkeypatch)
+    path = tmp_path / "t.jsonl"
+    backend = RecordingBackend([ModelTurn(text="I think staying out is best.",
+                                          raw={"usage": {"prompt_tokens": 9, "completion_tokens": 7},
+                                               "choices": [{"finish_reason": "stop"}]}),
+                                evidence_turn(1), submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, log_path=path)
+    assert rec is not None and [t["step"] for t in traj] == [2, 3]   # the trajectory is the calls only
+    rows = [json.loads(x) for x in path.read_text().splitlines()]
+    empty = rows[0]
+    assert {k: empty[k] for k in ("step", "phase", "event", "text", "text_chars", "parse_error",
+                                  "finish_reason", "output_tokens")} == {
+        "step": 1, "phase": "evidence", "event": "no_tool_call", "text": "I think staying out is best.",
+        "text_chars": 28, "parse_error": None, "finish_reason": "stop", "output_tokens": 7}
+    assert "tool" not in empty and "call_index" not in empty
+    assert [r.get("tool") for r in rows[1:]] == ["get_race_snapshot", "submit_recommendation"]
+    # a deliberate non-answer gets the reminder it always got
+    assert backend.seen[1][-1] == {"role": "user", "content": NO_CALL + ". Respond with a valid tool call; "
+                                                                        "submit if you have enough evidence."}
+
+
+def test_a_long_reply_is_clipped_in_the_log_head_and_tail(monkeypatch, tmp_path):
+    stub_dispatch(monkeypatch)
+    path = tmp_path / "t.jsonl"
+    text = "a" * 3000 + "THE_END"
+    run_agent(snap(), backend=RecordingBackend([ModelTurn(text=text), submit_turn()]), verbose=False,
+              log_path=path)
+    row = json.loads(path.read_text().splitlines()[0])
+    assert row["text_chars"] == 3007 and len(row["text"]) < 1600
+    assert row["text"].startswith("aaa") and row["text"].endswith("THE_END") and "chars ...]" in row["text"]
+    assert row["finish_reason"] is None and row["output_tokens"] is None   # nothing reported
+
+
+EVIDENCE = ('{"tool_calls": [{"name": "get_model_report", "arguments": {}}, {"name": '
+            '"estimate_tyre_degradation", "arguments": {"compound": "SOFT"}}, '
+            '{"name": "estimate_pit_loss", "arguments": {}}]}')
+SUBMIT_JSON = json.dumps({"tool_calls": [{"name": "submit_recommendation", "arguments": SUBMIT}]})
+
+
+def test_run_3s_stalled_episode_now_runs_its_plan_evaluation(tmp_path):
+    # run 3, 2021_04_spain:OCO:00: evidence in turn 1, then GARBLED in each of turns 2 to 10 (no
+    # call ran) and a grace-turn PIT with no plan evaluated. The final run of closers is now read
+    # as the one that closes the JSON, so turn 2's calls run and it submits in turn 3.
+    backend = voyager([openai_reply(EVIDENCE), openai_reply(GARBLED), openai_reply(SUBMIT_JSON)])
+    path = tmp_path / "t.jsonl"
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, log_path=path)
+    assert rec is not None and rec["decision"] == "STAY_OUT"
+    assert [(t["step"], t["phase"], t["tool"]) for t in traj] == [
+        (1, "evidence", "get_model_report"), (1, "evidence", "estimate_tyre_degradation"),
+        (1, "evidence", "estimate_pit_loss"), (2, "evidence", "evaluate_strategy"),
+        (2, "evidence", "compare_plans"), (3, "evidence", "submit_recommendation")]
+    assert all(t["error"] is None for t in traj)
+    assert traj[4]["input"]["candidates"][-1] == {"action": "stay_out", "laps": 3}
+    assert [t.get("parse_repair") for t in traj[3:5]] == ["final closing brackets '}]}}}]}' read as '}]}}]}'"] * 2
+    assert "parse_repair" not in traj[0] and "parse_repair" not in traj[5]
+    rows = [json.loads(x) for x in path.read_text().splitlines()]
+    assert not any("event" in r for r in rows) and rows[3]["parse_repair"]
+    # the model's history holds the calls as they ran, re-serialised
+    assert json.loads(backend.seen[2][-2]["content"]) == json.loads(FIXED)
+
+
+# run 3-like, 2022_02_saudi_arabia:OCO:05 before the fix: two whole envelopes in one reply
+TWO_ENVELOPES = ('{"tool_calls": [{"name": "evaluate_strategy", "arguments": {"action": {"action": "pit", '
+                 '"compound": "MEDIUM"}}}]}\n\n{"tool_calls": [{"name": "compare_plans", "arguments": '
+                 '{"candidates": [{"action": "pit", "compound": "MEDIUM"}, {"action": "stay_out", "laps": 3}]}}]}')
+
+
+def test_an_unparsed_reply_is_logged_and_the_model_is_told_what_was_wrong(tmp_path):
+    backend = voyager([openai_reply(EVIDENCE), openai_reply(TWO_ENVELOPES), openai_reply(FIXED),
+                       openai_reply(SUBMIT_JSON)])
+    path = tmp_path / "t.jsonl"
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, log_path=path)
+    assert rec is not None and not any(t.get("parse_repair") for t in traj)
+    assert [(t["step"], t["tool"]) for t in traj][3:] == [(3, "evaluate_strategy"), (3, "compare_plans"),
+                                                          (4, "submit_recommendation")]
+    reminder = backend.seen[2][-1]
+    assert reminder["role"] == "user" and NO_CALL not in reminder["content"]
+    assert "not valid JSON" in reminder["content"] and "Extra data" in reminder["content"]
+    assert "one corrected JSON object" in reminder["content"]
+    assert "followed by '{\"tool_calls\": [{\"na'" in reminder["content"]   # where it went wrong
+    empty = [json.loads(x) for x in path.read_text().splitlines()][3]
+    assert empty["event"] == "no_tool_call" and empty["step"] == 2 and empty["finish_reason"] == "stop"
+    assert empty["output_tokens"] == 101 and empty["parse_error"].startswith("JSONDecodeError: Extra data")
+    assert empty["text"].startswith(TWO_ENVELOPES)   # the backend's text, its parse-error note after it
+
+
+def test_a_reply_cut_off_at_the_output_limit_is_told_so_and_not_completed(tmp_path):
+    # well nested so far: closing it would parse, but a cut-off reply is unfinished, not mis-closed
+    cut = '{"tool_calls": [{"name": "compare_plans", "arguments": {"candidates": [{"action": "pit"}'
+    backend = voyager([openai_reply(cut, "length", 1024), openai_reply(SUBMIT_JSON)])
+    path = tmp_path / "t.jsonl"
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, log_path=path)
+    assert rec is not None and [t["tool"] for t in traj] == ["submit_recommendation"]
+    reminder = backend.seen[1][-1]["content"]
+    assert "cut off at the output limit" in reminder and "fewer tool calls" in reminder
+    empty = json.loads(path.read_text().splitlines()[0])
+    assert (empty["finish_reason"], empty["output_tokens"]) == ("length", 1024) and empty["parse_error"]
+
+
+def test_the_parse_error_reminder_keeps_the_grace_note(monkeypatch):
+    stub_dispatch(monkeypatch)
+    backend = RecordingBackend([evidence_turn(1), ModelTurn(text="{", parse_error="JSONDecodeError: x"),
+                                submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_steps=2)
+    assert rec is not None and traj[-1]["phase"] == "grace"
+    last = backend.seen[-1][-1]["content"]
+    assert "not valid JSON" in last and "JSONDecodeError: x" in last and SPENT in last
+
+
+def test_a_cut_off_anthropic_turn_is_told_so(monkeypatch):
+    stub_dispatch(monkeypatch)
+    raw = SimpleNamespace(content=[], stop_reason="max_tokens", usage=SimpleNamespace(input_tokens=5, output_tokens=4000))
+    submit = ModelTurn(tool_calls=[tc("submit_recommendation", SUBMIT)],
+                       raw=SimpleNamespace(content=[{"type": "tool_use", "id": "id"}]))
+    backend = RecordingBackend([ModelTurn(raw=raw), submit], name="anthropic")
+    rec, _ = run_agent(snap(), backend=backend, verbose=False)
+    assert rec is not None
+    assert "cut off at the output limit" in backend.seen[1][-1]["content"]
