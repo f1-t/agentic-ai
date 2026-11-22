@@ -305,6 +305,32 @@ def _continuation(fit, n_samples, max_stops):
             return (pit if just_pitted else stay)(after)
         except NoFeasiblePlan:
             return to_flag
+
+    def stay_plan(snapshot: Snapshot, laps: int):
+        """A stay under SC or VSC (Simulator.expand_action): the whole plan from the decision
+        snapshot, the current set to the flag on the same terms as above."""
+        to_flag = Plan.of([[snapshot.compound, snapshot.remaining_laps]])
+        if snapshot.compound not in fit.modelled:
+            return to_flag
+        try:
+            return stay.stay_plan(snapshot, laps)
+        except NoFeasiblePlan:
+            return to_flag
+
+    def stop_plan(snapshot: Snapshot, lap: int, compound: str):
+        """A stop at the end of a later lap under SC or VSC (_stop_at): the whole plan from the
+        decision snapshot; with no feasible plan, the one stop run to the flag, whose legality
+        the simulator's rules then decide."""
+        w = lap - snapshot.laps_completed
+        one_stop = [[snapshot.compound, w], [compound, snapshot.remaining_laps - w]]
+        if snapshot.compound not in fit.modelled or compound not in fit.modelled:
+            return one_stop
+        try:
+            return stay.stop_plan(snapshot, lap, compound)
+        except NoFeasiblePlan:
+            return one_stop
+    continuation.stay_plan = stay_plan
+    continuation.stop_plan = stop_plan
     return continuation
 
 
@@ -414,11 +440,21 @@ def pit_window(snapshot: Snapshot, config=None) -> dict:
 def _stop_at(fit, snapshot: Snapshot, lap: int, compound: str, continuation):
     """(plan, errors) of a stop at the end of lap `lap` onto `compound`, the current set run until
     then and the continuation after the stop: expand_action's pit, preceded by a stay when the
-    stop is later than the end of the next lap."""
+    stop is later than the end of the next lap. Under SC or VSC a later stop is instead the best
+    full plan from this snapshot whose first stop is at the end of `lap` onto `compound`
+    (continuation.stop_plan), so the period in progress runs on as the belief draws it per sample
+    rather than being carried to the stop by an advanced snapshot; a stop now is unchanged."""
     pit = {"action": "pit", "compound": compound}
     wait = lap - snapshot.laps_completed - 1
     if wait <= 0:
         return fit.expand_action(snapshot, pit, continuation)
+    stop_plan = getattr(continuation, "stop_plan", None)
+    if snapshot.track_status != "green" and stop_plan is not None:
+        from pydantic import ValidationError
+        try:
+            return Plan.of(stop_plan(snapshot, lap, compound)), []
+        except ValidationError as exc:
+            return None, [e["msg"] for e in exc.errors()]
     inner = {}
 
     def after_stay(after):

@@ -563,6 +563,29 @@ turns it into the plan the world scores:
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
 
+The continuation of STAY_OUT n means: no stop in the next n laps, then the best plan available.
+Its plan is the belief's best full plan from the decision snapshot among those whose first stop
+is no earlier than the end of lap `laps_completed + n + 1` (a PIT at the reassess snapshot stops
+at the end of the next lap), with the same fit, seed (seed + `BELIEF_SEED_OFFSET`), samples,
+rules and future-stop limit as `belief_optimizer`. Under SC or VSC at the snapshot it is computed
+exactly so (`optimize_batch(snapshot, belief, min_first_laps=n + 1)`, through
+`as_continuation(...).stay_plan`): the period in progress runs on per sample as the belief's
+event model draws it (the as-of history duration given the laps elapsed), so it is neither
+certainly still on nor certainly over at the reassess lap, and nothing is advanced by hand.
+Before 2026-11-22 the snapshot was advanced n laps with `track_status` unchanged and the
+continuation planned from there, as if the period were certainly still on: it then stopped at
+once at the reduced SC/VSC pit loss (2022 Brazil BOT:05, STAY_OUT 10 under SC, was scored as a
+stop at the end of lap 17). Under green the snapshot is still advanced n laps and the continuation
+planned from there, bit for bit as before: with no period in progress there is no state to carry,
+and the two constructions differ only in whether events are drawn over the n stay laps. A PIT is
+unchanged. The agent's tools (`evaluate_action`, `compare_plans`, `submit_recommendation`'s check)
+expand a stay with the same function, so the plan the model is shown is the plan that is scored.
+The tools' comparison plans with a stop at the end of a later lap X onto C (`_stop_at`: the
+earliest-legal-stop alternative and `stop_lap_scan`) follow the same rule: under SC or VSC each is
+the belief's best full plan from the decision snapshot whose first stop is at the end of lap X onto
+C (`optimize_batch(min_first_laps = max_first_laps = X - laps_completed, next_compound=C)`,
+`as_continuation(...).stop_plan`); under green, and for a stop now, they are built as before.
+
 A submission that cannot become a legal plan (no compound, a compound the belief does not
 model, n below 1, no legal continuation) is an invalid row.
 
