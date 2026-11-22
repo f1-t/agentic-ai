@@ -1827,8 +1827,51 @@ per stage, under `--out-dir` (default `reports/eval/rerun/<set>`). The sets are 
 | `scenarios` | the set with the leak-free sampler (`--rule as_of`, the default, or `stratified`), builder `calibration.snapshot_as_of`; never over an existing `scenarios.json` |
 | `references` | every scenario's reference on the world config, race-parallel (`--jobs`, spawned workers, BLAS at one thread each) and resumable (`parts/references/<race>.pkl`); the cache under `references/` |
 | `baselines` | every non-LLM policy (below) on the belief config, race-parallel and resumable (`parts/baselines/<race>.csv`), the references required; `baselines.csv` |
-| `agent` | one sequential pass of the live agent (`LLM_BACKEND`), its tools on the belief config (`AGENT_BELIEF_CONFIG`), trajectories to `trajectories/`; refuses to overwrite `agent.csv` or a non-empty `trajectories/` |
-| `tables` | `tables/`: the combined rows, per-race and pooled summary, agent-minus-X paired tables with (race, driver) cluster intervals for every comparator (belief_optimizer stands in when there are no agent rows, named in the file), the chart CSV, the tail table (share over 10, 20, 30 s, median, p90, worst), status counts by reason, by era for a set with eras, position metrics when traffic is on; and `provenance.json` |
+| `agent` | the live agent (`LLM_BACKEND`) on every scenario (or `--only`'s), its tools on the belief config (`AGENT_BELIEF_CONFIG`), `--jobs` episodes at a time (below); `agent.csv`, one trajectory per scenario in `trajectories/`, `agent_run.json`; with `--timing-sample K` first `timing_sample.csv` |
+| `tables` | `tables/`: the combined rows, per-race and pooled summary, agent-minus-X paired tables with (race, driver) cluster intervals for every comparator (belief_optimizer stands in when there are no agent rows, named in the file), the chart CSV, the tail table (share over 10, 20, 30 s, median, p90, worst), status counts by reason, by era for a set with eras, position metrics when traffic is on, the agent latency tables when there is a timing sample; and `provenance.json` |
+| `smoke` | a live check after a merge: a handful of development scenarios through every stage, then a lint (below) |
+
+**The agent stage in parallel** (`src/eval/agent_pass.py`). Scenarios are independent (one
+conversation each, on its own snapshot), so `--jobs N` runs N spawned worker processes that take
+scenario ids from one queue in the set's order. Each builds its own simulators (one race at a time,
+a race loaded once per worker while its scenarios last), its own backend and policy, BLAS at one
+thread, and appends one record per finished scenario to its own `parts/agent/rows_w<k>.jsonl`; the
+parent merges the rows in the set's order, so `agent.csv` has the same rows, order and columns for
+any N apart from `latency_s` (the default, 1, runs the same code in one process; the only new column
+is `api_retries`). Trajectory names are checked to be distinct. `--resume` skips every scenario with
+a record and a trajectory (`--rerun-errors` also reruns error rows); a started or finished pass is
+never overwritten without `--force`. A failing scenario (an API error the loop reports, an exception
+while scoring, a worker that dies) is an `error` row with the message, and the others go on. A 429,
+5xx, timeout or dropped connection is retried on the same turn (3 tries, 5 then 20 s apart, the
+OpenAI client's own retries off and a 180 s request timeout), counted in `api_retries`; a 401/403
+stops the pass, its scenario without a row so that `--resume` runs it. A progress line every
+`--progress-every` scenarios (done/total, errors, retries, elapsed, ETA).
+
+**Decision time.** Per-episode `latency_s` in `agent.csv` is measured with N episodes running at
+once (and other users of the endpoint), so it is not the decision time. `--timing-sample K` first
+runs K scenarios (seeded, stratified across races and early/mid/late laps) one at a time into
+`timing_sample.csv` and `timing_sample/trajectories/`; those rows are for timing only and the pass
+runs the K again with the rest. The reported decision time (mean, median, p90, with tokens and tool
+calls) is the timing sample's; `tables/agent_latency*.csv` pair it with the concurrent pass on the
+same K (mean difference with a 95% t interval, ratio, and whether the decision was the same: two
+runs of one scenario, a small run-to-run check). `agent_run.json` (copied into `provenance.json`)
+records K, N, each pass's start, end, wall time, model and loop switches, and which figure is the
+headline.
+
+**Smoke run.** `python -m src.eval.rerun smoke [--n 8] [--jobs 4]` (key and `LLM_BACKEND` as for the
+agent stage) samples set `smoke` (eight development races; a held-out race is refused, `--final`
+is refused) with the leak-free builder, keeps a fixed seeded handful (a lap-0 snapshot, one under
+a safety car, one with at most 8 laps left, one mid-race, the rest spread over races), and runs
+references, baselines, the agent and the tables for just those under
+`reports/eval/rerun/smoke/<UTC time>/` (git-ignored). Then `src/eval/smoke.py` lints them: an
+episode that did not submit; a tool result with Python exception text, NaN or inf, a null where a
+number is promised or a promised field missing (pit-loss estimate and sd, track status, the
+tyre-life estimate with its sd, the gap reading); a string shown to the model naming the real
+season, event, circuit or a driver code (the harness's `identity_hits`); a rule reply that does
+not say what is legal instead; an error row, an invalid agent row, a negative regret; provenance
+without the model id, commit, configs or loop switches. It prints a ten-line summary and one
+`FINDING` line each (also `smoke.txt`), and exits 1 on any finding. About 1.5 to 3 minutes at
+`--jobs 4`.
 
 `--world-config default` is the scorecard-chosen judge (`score.default_world_config` of
 `config.world_default`: driver effects, the history-only tyre-life edge, hybrid SC/VSC) and

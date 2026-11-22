@@ -43,3 +43,20 @@ test9:
   seed: 0
   development: false
   eras: true
+smoke:
+  description: >-
+    the smoke run (python -m src.eval.rerun smoke): development races with safety cars, lap-0 and late points,
+    sampled by the leak-free builder; the command keeps a fixed seeded handful of them (src/eval/smoke.py)
+  races:
+    - 2021_04_spain
+    - 2021_09_austrian
+    - 2022_01_bahrain
+    - 2022_09_canada
+    - 2022_12_france
+    - 2022_21_brazil
+    - 2023_07_spain
+    - 2024_07_emilia_romagna
+  per_race: 25
+  seed: 0
+  development: true
+  eras: false
