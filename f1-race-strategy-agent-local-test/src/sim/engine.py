@@ -413,8 +413,10 @@ class Simulator:
         summary csv (or frame) calibration_error_s is read from; None gives NaN.
         """
         fit = self.fitted_for(snapshot)
-        return _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
-                             hazard=fit.hazard, min_samples=self.config.min_samples)
+        rep = _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
+                            hazard=fit.hazard, min_samples=self.config.min_samples)
+        sources = fit.calibration.output.diagnostics.get("sources") if fit.calibration is not None else None
+        return rep.model_copy(update={"prior_sources": dict(sources)}) if sources else rep
 
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:

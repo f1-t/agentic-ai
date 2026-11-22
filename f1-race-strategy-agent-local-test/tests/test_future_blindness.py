@@ -17,6 +17,7 @@ The synthetic race and one real snapshot run in the default suite; the real-race
 `slow`. A fix branch runs just its own checks by name, e.g.
     pytest tests/test_future_blindness.py -m "slow or not slow" -k "stint_limit or future_blind"
 """
+import dataclasses
 import functools
 
 import numpy as np
@@ -27,13 +28,22 @@ import future_blindness as fb
 from src.sim import SimConfig, Simulator, jobs
 
 SYNTHETIC = "2099_01_synthetic"
-# (driver, lap) snapshots per race: early, mid, late, and under a neutralisation where the race has one
+# (driver, lap) snapshots per race: the start (lap 0), early, mid, late, under a neutralisation
+# where the race has one, and a backmarker lapped by the end at a late lap (last entry)
 POINTS = {
-    SYNTHETIC: [("EEE", 5), ("AAA", 32)],                                              # SC laps 31-33
-    "2021_04_spain": [("HAM", 5), ("NOR", 8), ("HAM", 30), ("NOR", 30), ("VER", 55)],  # SC laps 7-10
-    "2022_02_saudi_arabia": [("VER", 5), ("LEC", 17), ("ALB", 25), ("VER", 38), ("LEC", 44)],  # SC 15-20, VSC 36-41
-    "2024_07_emilia_romagna": [("LEC", 5), ("NOR", 30), ("ALO", 50), ("VER", 55)],     # no SC or VSC
+    SYNTHETIC: [("EEE", 20), ("GGG", 40)],                                             # GGG 49 laps; more below
+    "2021_04_spain": [("PER", 0), ("HAM", 5), ("NOR", 8), ("HAM", 30), ("NOR", 30), ("VER", 55),
+                      ("MAZ", 55)],                                                    # SC laps 7-10; MAZ 64 of 66
+    "2022_02_saudi_arabia": [("OCO", 0), ("VER", 5), ("LEC", 17), ("ALB", 25), ("VER", 38), ("LEC", 44),
+                             ("STR", 44)],                                             # SC 15-20, VSC 36-41; STR 49 of 50
+    "2024_07_emilia_romagna": [("PER", 0), ("LEC", 5), ("NOR", 30), ("ALO", 50), ("VER", 55),
+                               ("SAR", 55)],                                           # no SC or VSC; SAR 62 of 63
 }
+# the scenario sampler is compared up to this point's moment
+SELECTION_POINT = {SYNTHETIC: ("AAA", 32), "2021_04_spain": ("HAM", 30), "2022_02_saudi_arabia": ("LEC", 17),
+                   "2024_07_emilia_romagna": ("NOR", 30)}
+# the synthetic start and SC snapshots (SC laps 31-33), kept out of the default suite's budget
+SYNTHETIC_SLOW = [("CCC", 0), ("AAA", 32)]
 REAL = [r for r in POINTS if r != SYNTHETIC]
 # the default suite's one real-race case: a single snapshot under the SC, scrambled
 SMALL_REAL = ("2022_02_saudi_arabia", [("LEC", 17)])
@@ -84,19 +94,24 @@ def test_diff_reports_the_first_differing_path_and_both_values():
 @pytest.mark.parametrize("alteration", sorted(fb.FRAME_ALTERATIONS))
 @pytest.mark.parametrize("race_id", [_race(r) for r in POINTS])
 def test_alteration_keeps_the_past_and_changes_the_future(race_id, alteration):
-    """Rows up to the snapshot lap are the recorded ones, in order; the laps after it are not;
-    the world (the full-window fit that scores plans) sees the change."""
+    """Rows that ended by the snapshot moment are the recorded ones, in order; nothing after it
+    is (and no lap in progress ends by it); the world (the full-window fit that scores plans)
+    sees the change."""
     inp, orig, _ = race(race_id)
     world = Simulator(orig.frame, SimConfig())
     pit_losses = set()
-    for lap in sorted({k for _, k in POINTS[race_id]}):
-        alt = fb.FRAME_ALTERATIONS[alteration](inp, lap)
-        pd.testing.assert_frame_equal(fb.past_rows(alt.laps, lap), fb.past_rows(inp.laps, lap))
-        later = alt.laps[alt.laps["LapNumber"] > lap]
+    for driver, lap in POINTS[race_id]:
+        alt = fb.FRAME_ALTERATIONS[alteration](inp, driver, lap)
+        t = fb.moment(inp.laps, driver, lap)
+        assert fb.moment(alt.laps, driver, lap) == t
+        pd.testing.assert_frame_equal(fb.past_rows(alt.laps, driver, lap), fb.past_rows(inp.laps, driver, lap))
+        past = fb.is_past(alt.laps, driver, lap)
+        later = alt.laps[~past]
+        assert not (later["Time"] <= t).any()   # a row in the future ends after the moment
         if alteration == "truncate":
-            assert later["LapNumber"].max() == lap + 1 and later["LapTime"].isna().all()
+            assert later["LapTime"].isna().all() and later["Driver"].is_unique
             continue
-        was = inp.laps[inp.laps["LapNumber"] > lap]
+        was = inp.laps[~fb.is_past(inp.laps, driver, lap)]
         for col in ("LapTime", "TrackStatus", "Compound", "TyreLife", "PitInTime"):
             assert not later[col].reset_index(drop=True).equals(was[col].reset_index(drop=True)), col
         assert not later.groupby("Driver")["LapNumber"].max().equals(was.groupby("Driver")["LapNumber"].max())
@@ -106,6 +121,18 @@ def test_alteration_keeps_the_past_and_changes_the_future(race_id, alteration):
         assert moved.degradation.coefs != world.degradation.coefs
     # a late snapshot can leave the observed pit loss (a median over every stop) where it was
     assert alteration == "truncate" or pit_losses - {orig.race.pit_loss_s}
+
+
+@pytest.mark.parametrize("race_id", [_race(r) for r in POINTS])
+def test_the_past_ends_at_the_snapshot_moment_not_at_a_lap_number(race_id):
+    """By lap number and by time the past differs: at a mid-race point some car's lap L ends
+    after the moment (it is future) or some car's lap L + 1 ends before it (it is past)."""
+    inp, _, _ = race(race_id)
+    driver, lap = SELECTION_POINT[race_id]
+    past = fb.is_past(inp.laps, driver, lap)
+    by_lap = inp.laps["LapNumber"] <= lap
+    assert (past != by_lap).any()
+    assert past[inp.laps["Driver"] == driver].equals(by_lap[inp.laps["Driver"] == driver])
 
 
 def test_aggregates_shift_every_whole_race_constant():
@@ -130,6 +157,13 @@ def test_future_blind(race_id, alteration):
     the known leaks (fb.KNOWN_LEAKS) are restored to their recorded values. A failure is a new
     leak: the message names each snapshot and surface, the first differing field and both values."""
     diffs = differences(race_id, alteration, list(fb.KNOWN_LEAKS))
+    assert not diffs, report(diffs)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("alteration", fb.ALTERATIONS)
+def test_future_blind_synthetic_start_and_sc(alteration):
+    diffs = differences(SYNTHETIC, alteration, list(fb.KNOWN_LEAKS), SYNTHETIC_SLOW)
     assert not diffs, report(diffs)
 
 
@@ -183,3 +217,119 @@ def test_leak_stint_limit(race_id):
 @pytest.mark.parametrize("race_id", _leak_params("frame_filter", POINTS))
 def test_leak_frame_filter(race_id):
     _leak("frame_filter", race_id)
+
+
+@pytest.mark.parametrize("race_id", _leak_params("lap_window", POINTS))
+def test_leak_lap_window(race_id):
+    _leak("lap_window", race_id)
+
+
+@pytest.mark.parametrize("race_id", _leak_params("gap_behind", POINTS))
+def test_leak_gap_behind(race_id):
+    _leak("gap_behind", race_id)
+
+
+# --- checks the alterations cannot make ---------------------------------------------------------
+SNAPSHOT_NEXT_ROW = ("calibration.snapshot_at needs rows from after the snapshot moment: it locates the current "
+                     "stint with race_stints over the whole frame and needs a stint covering lap k + 1 "
+                     "(src/sim/calibration.py:577 _current_stint, raising 'no stint covers lap k + 1'), reads the "
+                     "gaps off the lap k + 1 row (:585 _gaps) and the car behind off lap k + 1 rows (:602 _nearby)")
+
+
+@pytest.mark.parametrize("race_id", [_race(r, pytest.mark.xfail(strict=True, reason=SNAPSHOT_NEXT_ROW))
+                                     for r in POINTS])
+def test_snapshot_builds_from_the_past_alone(race_id):
+    """The snapshot built from a race cut at the snapshot moment (every row that ends after it
+    gone, the lap in progress too) is the recorded snapshot, the known leaks neutralised. Lap 0
+    is left out: its state (the starting tyres) lives in the lap-1 row."""
+    inp, orig, _ = race(race_id)
+    failures = []
+    for driver, lap in [p for p in POINTS[race_id] if p[1] > 0]:
+        want = fb.plain(fb.calibration.snapshot_at(orig.frame, orig.race, driver, lap))
+        try:
+            data, fix, _ = fb.altered(inp, orig, "cut", driver, lap, list(fb.KNOWN_LEAKS))
+            snap = fb.calibration.snapshot_at(data.frame, data.race, driver, lap)
+            fixer = fix(fb.calibration.snapshot_at(orig.frame, orig.race, driver, lap))
+            got = fb.plain(fixer(snap) if fixer else snap)
+        except Exception as exc:   # noqa: BLE001  a failure to build is the finding
+            failures.append(f"{driver}:{lap}: {type(exc).__name__}: {exc}")
+            continue
+        d = fb.diff(want, got)
+        if d:
+            failures.append(f"{driver}:{lap}: {len(d)} field(s) differ; first {d[0]}")
+    assert not failures, "\n".join(failures)
+
+
+SELECTION = ("the scenario sampler picks with the whole race: eligible drivers are those who finish within "
+             "two laps (src/eval/scenarios.py:127 eligible_drivers), decision laps include the laps beside every "
+             "SC and VSC period of the race (src/sim/calibration.py:643 default_laps_k) and stop min_stint_laps "
+             "before the driver's last lap (src/eval/scenarios.py:137 decision_laps)")
+
+
+@pytest.mark.parametrize("race_id", [_race(r, pytest.mark.xfail(strict=True, reason=SELECTION)) for r in POINTS])
+def test_scenario_selection_up_to_the_moment(race_id):
+    """The scenarios the sampler picks with a decision lap <= L are the same in the recorded
+    and the scrambled race."""
+    from src.eval.scenarios import sample_race
+    inp, orig, _ = race(race_id)
+    driver, lap = SELECTION_POINT[race_id]
+    data = fb.build(fb.scramble(inp, driver, lap), altered=True)
+
+    def picked(d):
+        return sorted((s.driver, s.lap) for s in sample_race(d.frame, d.race)[0] if s.lap <= lap)
+    want, got = picked(orig), picked(data)
+    assert want == got, f"recorded only: {sorted(set(want) - set(got))}; altered only: {sorted(set(got) - set(want))}"
+
+
+IDENTITY = ("no switch hides the real race: the agent's view carries season, event and driver code, and the "
+            "race id reaches the tool outputs (src/snapshot.py:71 from_contract; src/sim/agent_tools.py race_state)")
+
+
+@pytest.mark.parametrize("race_id", [_race(r, pytest.mark.xfail(strict=True, reason=IDENTITY)) for r in REAL])
+def test_no_real_identity_reaches_the_agent(race_id):
+    """The view shown to the agent and every tool output and error string (the recorded
+    observation at the race's first point) name no season, event, circuit or real driver code."""
+    inp, orig, recorded = race(race_id)
+    driver, lap = POINTS[race_id][0]
+    if (driver, lap) not in recorded:
+        recorded[driver, lap] = fb.observe(orig, driver, lap)
+    obs = recorded[driver, lap]
+    hits = fb.identity_hits({"snapshot": obs["snapshot"]["view"], "tools": obs["tools"]}, race_id, orig.frame)
+    assert not hits, "\n".join(f"{p}: {t!r}" for p, t in hits[:20])
+
+
+# --- cross-race artifacts: provenance -------------------------------------------------------------
+@pytest.mark.parametrize("name", [
+    pytest.param(n, marks=[] if fb.provenance(n) is not None else
+                 [pytest.mark.xfail(strict=True, reason=f"{n} records no races it was fitted on ({a.where})")])
+    for n, a in fb.POLICY_SIDE_ARTIFACTS.items()])
+def test_policy_side_artifact_records_its_races(name):
+    assert fb.provenance(name) is not None
+
+
+PROVENANCE = ("tables read on the policy side are not filtered by date: compound_steps.json is fitted on races "
+              "including the snapshot's own and later seasons, and the constants and summaries record no races")
+
+
+@pytest.mark.parametrize("race_id", [pytest.param(r, marks=pytest.mark.xfail(strict=True, reason=PROVENANCE))
+                                     for r in REAL])
+def test_policy_side_artifacts_fitted_only_on_earlier_races(race_id):
+    """Every table or constant the policy side reads records its races, all before this race."""
+    later = fb.artifacts_not_before(race_id)
+    assert not later, "\n".join(f"{n}: {why}" for n, why in later.items())
+
+
+PRIORS = ("a race dated before every cross-race table still prices from them: the cross-race step and life "
+          "ratio (configs/sim/compound_steps.json via src/sim/proxy.py) and calibration_error_s "
+          "(reports/calibration/midrace_summary.csv via src/sim/model_report.py:29)")
+
+
+@pytest.mark.xfail(strict=True, reason=PRIORS)
+def test_race_before_every_table_uses_documented_priors():
+    """A synthetic race dated 1990 runs (no failure) and nothing it shows the agent comes from a
+    table fitted on later races."""
+    inp = dataclasses.replace(fb.synthetic_input(SYNTHETIC), race_id="1990_01_synthetic")
+    data = fb.build(inp)
+    obs = fb.observe(data, "AAA", 32)
+    hits = fb.later_table_hits(obs)
+    assert not hits, "\n".join(f"{p}: {v!r}" for p, v in hits[:20])

@@ -16,18 +16,26 @@ before anything is derived from them. test_harness_builds_what_load_race_builds 
 `build` on the recorded laps is jobs.load_race. Practice and qualifying come before the race
 and are passed through untouched.
 
-Alterations (each keeps every raw lap row with LapNumber <= L as it is):
+The past is defined by time. The snapshot moment T is when the snapshot driver crossed the
+line to complete lap L (its lap-L row's Time; for L = 0, its lap-1 LapStartTime, the start).
+A row is past when its lap ENDED at or before T (Time, else LapStartTime + LapTime; a row
+with neither falls back to its lap number against L), per driver the prefix of such rows. So
+a faster car's lap L + 1 that ended before T is past, and a slower car's lap L that ended
+after T is future. The first future row of each car is its lap in progress at T: its
+start-of-lap fields (LapStartTime, Stint, Compound, TyreLife, PitOutTime) are known at T, the
+rest is not. Alterations keep every past row as it is, bit for bit and in order:
 
-  truncate    the race stops at the end of lap L: laps > L + 1 are dropped and the lap L + 1
-              rows keep only what is known when lap L ends (the line crossing, LapStartTime;
-              the set fitted at a stop on lap L: Stint, Compound, TyreLife, PitOutTime).
-              Classified positions are unknown.
-  scramble    the laps after L are re-raced: every car's current stint ends on a different
+  truncate    the race stops at T: each car's lap in progress keeps only its start-of-lap
+              fields, every later row is dropped, classified positions are unknown.
+  scramble    everything after T is re-raced: every car's current stint ends on a different
               lap (longer or shorter), later stints take other compounds (HARD where the race
               ran none), sets start new or used, lap times follow another tyre model,
               pit-lane times change, the SC and VSC move, positions follow the new clock,
               every car but the winner gains or loses a lap (lapped or unlapped) and one car
               retires. The classification is shuffled. Seeded per (race, L).
+
+test_snapshot_builds_from_the_past_alone checks the stricter cut, every row after T gone
+(no lap in progress either), on which the snapshot builder must still work.
   aggregates  the race frame is untouched; the whole-race constants passed beside it are
               shifted: RaceParams.pit_loss_s + 6.5 s, the compound list with HARD toggled, the
               classification reversed.
@@ -160,10 +168,10 @@ def raw_from_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def synthetic_input(race_id="2099_01_synthetic", seed=0) -> RaceInput:
-    """A six-car, 50-lap synthetic race from the test suite's builders
+    """A seven-car, 50-lap synthetic race from the test suite's builders
     (test_sim_position.race_frame on test_sim.TRUE, test_sim.synthetic_practice): one- and
-    two-stop cars on SOFT and MEDIUM, lap noise, an SC on laps 31-33, positions from the
-    clock. No car runs HARD, so the compound proxy prices it from practice and the
+    two-stop cars on SOFT and MEDIUM, a backmarker (GGG) lapped by the end, lap noise, an SC
+    on laps 31-33, positions from the clock. No car runs HARD, so the compound proxy prices it from practice and the
     cross-race step."""
     from test_sim import synthetic_practice
     from test_sim_position import race_frame
@@ -172,7 +180,9 @@ def synthetic_input(race_id="2099_01_synthetic", seed=0) -> RaceInput:
                     ("CCC", "T2", [("SOFT", 25), ("MEDIUM", 25)], 0.4),
                     ("DDD", "T2", [("MEDIUM", 30), ("SOFT", 20)], 0.1),
                     ("EEE", "T3", [("MEDIUM", 20), ("SOFT", 12), ("SOFT", 18)], 0.3),
-                    ("FFF", "T3", [("SOFT", 12), ("MEDIUM", 20), ("SOFT", 18)], 0.5))
+                    ("FFF", "T3", [("SOFT", 12), ("MEDIUM", 20), ("SOFT", 18)], 0.5),
+                    ("GGG", "T4", [("MEDIUM", 25), ("SOFT", 25)], 2.0))
+    df = df[~((df["driver"] == "GGG") & (df["lap"] == 50))]   # a backmarker, lapped by the end
     rng = np.random.default_rng(seed)
     df["lap_time_s"] = df["lap_time_s"] + rng.normal(0.0, 0.3, len(df))
     sc = df["lap"].between(31, 33)
@@ -222,7 +232,14 @@ def build(inp: RaceInput, profile=PROFILE, *, altered=False) -> jobs.RaceData:
         if altered:
             warnings.simplefilter("ignore", RuntimeWarning)
         session, frame, cfg, race = calibrate._race_setup(args)
-        pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
+        try:
+            pit_loss, _ = calibrate._pit_loss(args, frame, cfg, race)
+        except ValueError:
+            # a race truncated at the start has no lap to replay: the pit loss is not
+            # observable, so the race carries the pipeline's first-pass value
+            if not altered:
+                raise
+            pit_loss = calibrate.DEFAULT_PIT_LOSS_S
     race = race.model_copy(update={"pit_loss_s": pit_loss, "race_id": inp.race_id})
     return jobs.RaceData(inp.race_id, frame, race, inp.practice, session_results(session), cfg, inp.qualifying)
 
@@ -260,25 +277,76 @@ def _concat(frames) -> pd.DataFrame:
     return out
 
 
-def truncate(inp: RaceInput, lap: int, seed=None) -> RaceInput:
-    raw = inp.laps
-    n = raw["LapNumber"]
-    nxt = raw[n == lap + 1].copy()
+def moment(laps: pd.DataFrame, driver: str, lap: int) -> pd.Timedelta:
+    """The snapshot moment T: when `driver` crossed the line completing lap `lap` (its lap-L
+    row's Time), or for lap 0 its lap-1 LapStartTime, the start."""
+    g = laps[laps["Driver"] == driver]
+    if lap == 0:
+        t = g.loc[g["LapNumber"] == 1, "LapStartTime"]
+        t = t if len(t) and pd.notna(t.iloc[0]) else laps.loc[laps["LapNumber"] == 1, "LapStartTime"].dropna()
+        return t.min()
+    row = g[g["LapNumber"] == lap].iloc[0]
+    return row["Time"] if pd.notna(row["Time"]) else row["LapStartTime"] + row["LapTime"]
+
+
+def is_past(laps: pd.DataFrame, driver: str, lap: int) -> pd.Series:
+    """Rows whose lap ended at or before the snapshot moment (module docstring): per car the
+    prefix, in lap order, of rows that ended by T. A row with no end time falls back to its lap
+    number against `lap`."""
+    t = moment(laps, driver, lap)
+    end = laps["Time"].fillna(laps["LapStartTime"] + laps["LapTime"])
+    # no end time: a lap with a start is in progress (not ended); with neither, the lap number decides
+    unknown = (laps["LapNumber"] <= lap).where(laps["LapStartTime"].isna(), False)
+    ended = (end <= t).where(end.notna(), unknown).astype(bool)
+    order = laps.sort_values(["Driver", "LapNumber"], kind="mergesort")
+    prefix = (~ended.loc[order.index]).groupby(order["Driver"]).cumsum() == 0
+    return prefix.reindex(laps.index)
+
+
+def _current(laps: pd.DataFrame, past: pd.Series) -> pd.Series:
+    """Each car's first future row: its lap in progress at the snapshot moment."""
+    future = laps[~past].sort_values(["Driver", "LapNumber"], kind="mergesort")
+    first = future.groupby("Driver").head(1).index
+    return pd.Series(laps.index.isin(first), index=laps.index)
+
+
+def _start_of_lap(rows: pd.DataFrame) -> pd.DataFrame:
+    """Rows reduced to what is known when the lap starts (module docstring)."""
+    rows = rows.copy()
     for c in ("LapTime", "Time", "PitInTime"):
-        nxt[c] = pd.Series(pd.NaT, index=nxt.index, dtype="timedelta64[ns]")
-    nxt["Position"] = np.nan
-    nxt["TrackStatus"] = ""
-    laps = _concat([raw[n <= lap], nxt]).sort_index().reset_index(drop=True)
+        rows[c] = pd.Series(pd.NaT, index=rows.index, dtype="timedelta64[ns]")
+    rows["Position"] = np.nan
+    rows["TrackStatus"] = ""
+    return rows
+
+
+def truncate(inp: RaceInput, driver: str, lap: int, seed=None) -> RaceInput:
+    raw = inp.laps
+    past = is_past(raw, driver, lap)
+    now = _current(raw, past)
+    laps = _concat([raw[past], _start_of_lap(raw[now])]).sort_index().reset_index(drop=True)
     results = inp.results.copy()
     results["ClassifiedPosition"] = None
     return dataclasses.replace(inp, laps=laps, results=results)
 
 
-def scramble(inp: RaceInput, lap: int, seed=0) -> RaceInput:
-    """The laps after `lap` re-raced (module docstring). Rows with LapNumber <= lap are kept as
-    they are; each lap + 1 row keeps the state at the start of that lap."""
+def cut(inp: RaceInput, driver: str, lap: int, seed=None) -> RaceInput:
+    """The strict cut: only rows that ended by the snapshot moment, no lap in progress."""
+    raw = inp.laps
+    laps = _concat([raw[is_past(raw, driver, lap)]]).reset_index(drop=True)
+    results = inp.results.copy()
+    results["ClassifiedPosition"] = None
+    return dataclasses.replace(inp, laps=laps, results=results)
+
+
+def scramble(inp: RaceInput, driver: str, lap: int, seed=0) -> RaceInput:
+    """Everything after the snapshot moment re-raced (module docstring). Past rows are kept as
+    they are; each car's lap in progress keeps its start-of-lap state."""
     rng = np.random.default_rng([seed, lap, sum(map(ord, inp.race_id))])
     raw = inp.laps.copy()
+    past = is_past(raw, driver, lap)
+    now = _current(raw, past)
+    moment_t = moment(raw, driver, lap)
     total = inp.total_laps
     counts = raw.groupby("Driver")["LapNumber"].max()
     finish = raw[raw["LapNumber"] == raw.groupby("Driver")["LapNumber"].transform("max")]
@@ -291,35 +359,38 @@ def scramble(inp: RaceInput, lap: int, seed=0) -> RaceInput:
     pit_in_s, pit_out_s = rng.uniform(8.0, 25.0), rng.uniform(8.0, 20.0)
     sc_start = int(rng.integers(lap + 2, max(lap + 3, total - 4)))
     vsc_start = int(rng.integers(lap + 2, max(lap + 3, total - 3)))
-    status = {x: "1" for x in range(lap + 1, total + 2)}
+    status = {x: "1" for x in range(0, total + 2)}
     status.update({x: "6" for x in range(vsc_start, vsc_start + 2)})
     status.update({x: "4" for x in range(sc_start, sc_start + 3)})
-    unraced = [c for c in DRY if c not in set(raw.loc[raw["LapNumber"] <= lap, "Compound"].dropna())]
-    alive = [d for d in sorted(counts.index) if counts[d] > lap + 3 and d != winner]
+    unraced = [c for c in DRY if c not in set(raw.loc[past, "Compound"].dropna())]
+    starts = raw[now].set_index("Driver")["LapNumber"].astype(int)
+    alive = [d for d in sorted(starts.index) if counts[d] > starts[d] + 3 and d != winner]
     retiree = alive[int(rng.integers(len(alive)))] if alive else None
-    parts = [raw[raw["LapNumber"] <= lap]]
+    parts = [raw[past]]
     for d, g in raw.groupby("Driver", sort=True):
         g = g.sort_values("LapNumber")
-        first = g[g["LapNumber"] == lap + 1]
+        first = g[now.loc[g.index]]
         if first.empty:
             continue
+        s = int(first["LapNumber"].iloc[0])   # this car's lap in progress at the moment
         n = int(counts[d])
         if d != winner:   # lapped or unlapped in the future
             n = n - 1 if n >= total else n + 1
         if d == retiree:
-            n = int(rng.integers(lap + 2, n))
-        n = max(n, lap + 2)
+            n = int(rng.integers(s + 1, max(s + 2, n)))
+        n = max(n, s + 1)
         start = first.iloc[0]
         stint, comp, age = start["Stint"], start["Compound"], start["TyreLife"]
         if pd.isna(age):
             age = 1.0
-        current_left = int(rng.integers(1, max(2, n - lap)))   # laps of the current stint from lap + 1
+        current_left = int(rng.integers(1, max(2, n - s + 1)))   # laps of the current stint from lap s
         clock = start["LapStartTime"]
         if pd.isna(clock):
-            clock = g.loc[g["LapNumber"] == lap, "Time"].iloc[0] if (g["LapNumber"] == lap).any() else _td(0.0)
+            before = g.loc[past.loc[g.index], "Time"].dropna()
+            clock = before.iloc[-1] if len(before) else _td(0.0)
         rows, left_in_stint = [], current_left
-        for x in range(lap + 1, n + 1):
-            out_lap = x > lap + 1 and left_in_stint == 0
+        for x in range(s, n + 1):
+            out_lap = x > s and left_in_stint == 0
             if out_lap:   # a stop at the end of the previous lap: a new stint
                 stint = (stint if not pd.isna(stint) else 1.0) + 1.0
                 comp = (unraced + list(DRY))[int(rng.integers(len(unraced) + len(DRY)))] if unraced else \
@@ -335,7 +406,10 @@ def scramble(inp: RaceInput, lap: int, seed=0) -> RaceInput:
                 t *= 1.3
             t += (pit_in_s if in_lap else 0.0) + (pit_out_s if out_lap else 0.0)
             lap_start, lap_end = clock, clock + _td(t)
-            if x == lap + 1:   # the state at the start of lap + 1 is known at the decision
+            if x == s and lap_end <= moment_t:   # a lap in progress at the moment ends after it
+                lap_end = moment_t + _td(rng.uniform(0.05, 2.0))
+                t = (lap_end - clock).total_seconds()
+            if x == s:   # the state at the start of the lap in progress is known at the moment
                 row = start.copy()
                 row["LapTime"], row["Time"], row["TrackStatus"] = _td(t), lap_end, st
                 row["PitInTime"] = lap_end if in_lap else pd.NaT
@@ -349,9 +423,10 @@ def scramble(inp: RaceInput, lap: int, seed=0) -> RaceInput:
             clock, age, left_in_stint = lap_end, age + 1.0, left_in_stint - 1
         parts.append(pd.DataFrame(rows))
     laps = _concat(parts).reset_index(drop=True)
-    later = laps["LapNumber"] > lap
-    laps.loc[later, "Position"] = (laps[later].groupby("LapNumber")["Time"].rank(method="first")
-                                   .to_numpy(dtype=float))
+    later = np.ones(len(laps), dtype=bool)
+    later[:int(past.sum())] = False   # parts[0] is the past
+    ranks = laps.groupby("LapNumber")["Time"].rank(method="first")
+    laps.loc[later, "Position"] = ranks[later].to_numpy(dtype=float)
     # the recorded row order (drivers as first seen, then laps), so the rows up to `lap` reach
     # every fit in the same order and sum bit for bit as they do in the recorded race
     rank = {d: i for i, d in enumerate(pd.unique(raw["Driver"]))}
@@ -362,9 +437,9 @@ def scramble(inp: RaceInput, lap: int, seed=0) -> RaceInput:
     return dataclasses.replace(inp, laps=laps, results=results)
 
 
-def past_rows(laps: pd.DataFrame, lap: int) -> pd.DataFrame:
-    """The raw rows with LapNumber <= lap, in order, index reset: what an alteration keeps."""
-    return laps[laps["LapNumber"] <= lap].reset_index(drop=True)
+def past_rows(laps: pd.DataFrame, driver: str, lap: int) -> pd.DataFrame:
+    """The past rows (is_past), in order, index reset: what an alteration keeps."""
+    return laps[is_past(laps, driver, lap)].reset_index(drop=True)
 
 
 def shift_aggregates(data: jobs.RaceData) -> jobs.RaceData:
@@ -405,6 +480,34 @@ def _restore_frame_columns(cols):
             frame.loc[mine["index"].to_numpy(), c] = got[c].to_numpy()
         return dataclasses.replace(alt, frame=frame)
     return restore
+
+
+FILTER_COLUMNS = ["clean", "pace_resid_s", "driver_offset_s"]
+
+
+def _restore_lap_window(orig, alt, lap):
+    """Every recorded row with lap <= L back in the frame (rows of other cars that end after
+    the moment included), in recorded order, the filter columns (frame_filter) as the altered
+    build has them where it has the row."""
+    key = ["driver", "lap"]
+    rec = orig.frame[orig.frame["lap"] <= lap].copy()
+    a = alt.frame
+    mine = a[a["lap"] <= lap].set_index(key)[FILTER_COLUMNS]
+    idx = pd.MultiIndex.from_frame(rec[key])
+    present = idx.isin(mine.index)
+    got = mine.reindex(idx)
+    for c in FILTER_COLUMNS:
+        rec[c] = np.where(present, got[c].to_numpy(dtype=object), rec[c].to_numpy(dtype=object))
+        rec[c] = rec[c].astype(orig.frame[c].dtype)
+    frame = pd.concat([rec, a[a["lap"] > lap]], ignore_index=True)
+    return dataclasses.replace(alt, frame=frame)
+
+
+def _restore_gap_behind(orig_snap, alt_snap):
+    """The recorded car-behind fields: gap_behind_s and the nearby entry behind (gap_s >= 0)."""
+    nearby = [c for c in alt_snap.field.nearby if c.gap_s < 0] + [c for c in orig_snap.field.nearby if c.gap_s >= 0]
+    return alt_snap.model_copy(update={"gap_behind_s": orig_snap.gap_behind_s,
+                                       "field": alt_snap.field.model_copy(update={"nearby": nearby})})
 
 
 def _restore_race(field_name):
@@ -457,6 +560,16 @@ register(Leak(
     "src/sim/calibration.py:591 snapshot_at: race.model_copy(update={'total_laps': len(g)})", "scramble",
     snapshot=_restore_total_laps))
 register(Leak(
+    "lap_window", "the belief's to_snapshot window (and the calibrator's laps so far) takes race laps by lap "
+    "number, lap <= L, so a slower car's lap L that ends after the snapshot moment is in the fit",
+    "src/sim/engine.py:374 _fit_window race[race['lap'] <= k0]; src/sim/engine.py:340 _calibrate", "scramble",
+    data=_restore_lap_window))
+register(Leak(
+    "gap_behind", "the snapshot's gap to the car behind (and that car in field.nearby) is the car behind's line "
+    "crossing, which happens after the snapshot moment",
+    "src/sim/calibration.py:585 snapshot_at _gaps(g, k + 1) gap_behind_s; :611 _nearby car behind", "scramble",
+    snapshot=_restore_gap_behind))
+register(Leak(
     "compound_list", "RaceParams.compounds is every compound in the whole race frame",
     "src/sim/calibrate.py:123 _race_setup compounds=sorted(frame['compound'].unique()) -> src/snapshot.py:84 "
     "(view available_compounds), src/sim/agent_tools.py:255 legal_compounds, src/tools.py:101, "
@@ -464,14 +577,15 @@ register(Leak(
 
 
 # --- one altered race, with known leaks neutralised ---------------------------------------------
-def altered(inp: RaceInput, orig: jobs.RaceData, alteration: str, lap: int, neutralise=()):
-    """(RaceData, snapshot_fix(original snapshot) -> fn, patches) for `alteration` at `lap`,
-    with the KNOWN_LEAKS named in `neutralise` restored to the recorded race's values."""
+def altered(inp: RaceInput, orig: jobs.RaceData, alteration: str, driver: str, lap: int, neutralise=()):
+    """(RaceData, snapshot_fix(original snapshot) -> fn, patches) for `alteration` at the
+    moment `driver` completes `lap`, with the KNOWN_LEAKS named in `neutralise` restored to the
+    recorded race's values, in KNOWN_LEAKS order."""
     if alteration == "aggregates":
         data = shift_aggregates(orig)
     else:
-        data = build(FRAME_ALTERATIONS[alteration](inp, lap), altered=True)
-    leaks = [KNOWN_LEAKS[n] for n in neutralise]
+        data = build({**FRAME_ALTERATIONS, "cut": cut}[alteration](inp, driver, lap), altered=True)
+    leaks = [lk for n, lk in KNOWN_LEAKS.items() if n in set(neutralise)]
     for lk in leaks:
         if lk.data is not None:
             data = lk.data(orig, data, lap)
@@ -747,17 +861,144 @@ def compare(orig: dict, alt: dict, point: str) -> list[Difference]:
     return out
 
 
+# --- checks the perturbations cannot make ---------------------------------------------------------
+def _strings(x, path=""):
+    """(path, text) of every string leaf and dict key in a plain value."""
+    if isinstance(x, dict):
+        for k, v in x.items():
+            yield f"{path}/{k}", str(k)
+            yield from _strings(v, f"{path}/{k}")
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            yield from _strings(v, f"{path}[{i}]")
+    elif isinstance(x, str):
+        yield path, x
+
+
+def identity_tokens(race_id: str, frame: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """(names matched case-insensitively as substrings, driver codes matched as whole words):
+    the season, the race id's event slug and its words, the cached schedule's event name,
+    country and location, and the race's driver codes."""
+    from src.sim.data import season_schedule
+    season, rnd, gp = parse_race_id(race_id)
+    names = {str(season), gp.replace("_", " "), *[w for w in gp.split("_") if len(w) >= 4]}
+    sched = season_schedule(season)
+    if sched is not None:
+        row = sched[sched["RoundNumber"] == rnd]
+        if len(row):
+            names |= {str(row.iloc[0][c]) for c in ("EventName", "Country", "Location")}
+    return sorted(n for n in names if n), sorted(frame["driver"].dropna().unique())
+
+
+def identity_hits(value, race_id: str, frame: pd.DataFrame) -> list[tuple[str, str]]:
+    """(path, token) of every string in `value` that names the real race or a real driver."""
+    import re
+    names, codes = identity_tokens(race_id, frame)
+    code_re = re.compile(r"\b(" + "|".join(map(re.escape, codes)) + r")\b") if codes else None
+    out = []
+    for path, text in _strings(value):
+        low = text.lower()
+        out += [(path, n) for n in names if n.lower() in low]
+        if code_re is not None:
+            out += [(path, m) for m in code_re.findall(text)]
+    return out
+
+
+@dataclass
+class Artifact:
+    """A table or constant read on the policy side, fitted or chosen with other races."""
+    where: str
+    races: object = None   # fn() -> list of race ids it records, None when it records none
+
+
+def _compound_steps_races():
+    import json
+    from src.sim.config import COMPOUND_STEPS_FILE
+    with open(COMPOUND_STEPS_FILE) as f:
+        races = json.load(f).get("races")
+    return list(races) if races else None
+
+
+PROVENANCE_FILE = "configs/sim/provenance.json"   # {name: {"races": [...]}}: where a fix records the rest
+
+
+POLICY_SIDE_ARTIFACTS = {
+    "compound_steps": Artifact("configs/sim/compound_steps.json: the proxy's cross-race steps and life ratios "
+                               "(src/sim/proxy.py)", _compound_steps_races),
+    "calibration_summary": Artifact("reports/calibration/midrace_summary.csv: calibration_error_s in the model "
+                                    "report and evaluate_strategy (src/sim/model_report.py:29)"),
+    "event_rates": Artifact("belief.yaml events 'rate' with config.EventModel defaults (p_sc 0.015, d_sc 3), "
+                            "from 2021 Spain (src/sim/config.py:50)"),
+    "pre_race_base_delta": Artifact("SimConfig.pre_race_base_delta_s 1.0, Spain's full-fit base less practice "
+                                    "(src/sim/config.py:194)"),
+    "fuel_prior": Artifact("SimConfig.pre_race_fuel_slope_s_per_lap -0.045 (src/sim/config.py:189)"),
+    "shrinkage": Artifact("SimConfig.shrinkage taus, the shrinkage calibrator's sds (src/sim/config.py:198)"),
+}
+
+
+def provenance(name: str):
+    """The races `name` records it was fitted on: its own record, else PROVENANCE_FILE's entry;
+    None when neither exists."""
+    import json
+    import os
+    art = POLICY_SIDE_ARTIFACTS[name]
+    races = art.races() if art.races is not None else None
+    if races is None:
+        path = os.path.join(os.path.dirname(__file__), "..", PROVENANCE_FILE)
+        if os.path.isfile(path):
+            races = (json.load(open(path)).get(name) or {}).get("races")
+    return races
+
+
+def _before(race_id, other) -> bool:
+    try:
+        return parse_race_id(other)[:2] < parse_race_id(race_id)[:2]
+    except ValueError:
+        return False
+
+
+def artifacts_not_before(race_id: str) -> dict:
+    """{artifact: why} for every policy-side artifact that records no races, or records one
+    not strictly before `race_id`."""
+    out = {}
+    for name in POLICY_SIDE_ARTIFACTS:
+        races = provenance(name)
+        if races is None:
+            out[name] = "records no races"
+        elif any(not _before(race_id, r) for r in races):
+            out[name] = f"fitted on {sorted(r for r in races if not _before(race_id, r))}"
+    return out
+
+
+def later_table_hits(obs: dict) -> list[tuple[str, object]]:
+    """(path, value) of what an observation took from a cross-race table: a source naming the
+    cross-race step or a life ratio, and a calibration_error_s with a value."""
+    out = [(p, t) for p, t in _strings(obs) if "cross_race_step" in t or "life_ratio" in t]
+
+    def walk(x, path=""):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k == "calibration_error_s" and isinstance(v, float):
+                    out.append((f"{path}/{k}", v))
+                walk(v, f"{path}/{k}")
+        elif isinstance(x, list):
+            for i, v in enumerate(x):
+                walk(v, f"{path}[{i}]")
+    walk(obs)
+    return out
+
+
 def check(inp: RaceInput, orig: jobs.RaceData, points, alteration: str, neutralise=(), recorded=None) -> list[Difference]:
-    """Differences, recorded race against altered, at every (driver, lap) of `points`.
+    """Differences, recorded race against altered, at every (driver, lap) of `points`: the
+    past ends at each point's own moment, so each point gets its own altered race.
     `recorded` caches the recorded race's observations by point."""
     recorded = {} if recorded is None else recorded
     out = []
-    for lap in sorted({p[1] for p in points}):
-        data, snapshot_fix, patches = altered(inp, orig, alteration, lap, neutralise)
-        for driver in [d for d, k in points if k == lap]:
-            if (driver, lap) not in recorded:
-                recorded[driver, lap] = observe(orig, driver, lap)
-            snap = calibration.snapshot_at(orig.frame, orig.race, driver, lap)
-            alt = observe(data, driver, lap, snapshot_fix=snapshot_fix(snap), patches=patches)
-            out += compare(recorded[driver, lap], alt, f"{orig.race_id}:{driver}:{lap} [{alteration}]")
+    for driver, lap in points:
+        data, snapshot_fix, patches = altered(inp, orig, alteration, driver, lap, neutralise)
+        if (driver, lap) not in recorded:
+            recorded[driver, lap] = observe(orig, driver, lap)
+        snap = calibration.snapshot_at(orig.frame, orig.race, driver, lap)
+        alt = observe(data, driver, lap, snapshot_fix=snapshot_fix(snap), patches=patches)
+        out += compare(recorded[driver, lap], alt, f"{orig.race_id}:{driver}:{lap} [{alteration}]")
     return out
