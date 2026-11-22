@@ -149,11 +149,12 @@ def batch_digest(make):
             for k in (0, 15, 30):
                 snap = at_lap(k) if k else Snapshot.at_start(RACE, "X", "SOFT")
                 fit = sim.fitted_for(snap)
-                # cov and fuel_wear_corr (SPEC 0017) came after main's digest; nothing else moved
+                # cov and fuel_wear_corr (SPEC 0017) and prior_sources (the learned calibrator) came after
+                # main's digest; nothing else moved
                 h.update(stable_text({k: v for k, v in fit.degradation.fit_report.items() if k != "cov"}).encode())
                 h.update(stable_bytes([fit.ref_lap_s]))
                 h.update(stable_text(sim.model_report(snap, calibration_summary=None).model_dump(
-                    mode="json", exclude={"fuel_wear_corr"})).encode())
+                    mode="json", exclude={"fuel_wear_corr", "prior_sources"})).encode())
                 b = sim.simulate_batch(snap, [[["SOFT", 50 - k]]] if k >= 30 else plans, seed=3, n_samples=20)
                 for a in (b.times, b.pit_loss, b.dnf, b.big_loss):
                     h.update(stable_bytes(a))

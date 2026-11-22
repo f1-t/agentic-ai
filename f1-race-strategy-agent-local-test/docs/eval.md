@@ -28,7 +28,7 @@ Each race has two simulators over the same lap frame and practice
 | role | default config | fit | used by |
 | --- | --- | --- | --- |
 | belief | `configs/sim/belief.yaml` | `to_snapshot`: race laps up to the snapshot, shrunk toward the practice prior; traffic off; SC and VSC periods from the rate model (EventModel defaults, provisional, Spain-derived); samples carry posterior parameter draws and residual lap noise, drawn from seed + `agent_tools.BELIEF_SEED_OFFSET` so the belief never plans on the world's samples (docs/rules.md R6) | every policy: the baselines plan on it through the bridge (`from_contract(snapshot, belief)`, `pace_for_crossover(belief, snapshot)`), and agent decisions are expanded on it |
-| world | the profile's SimConfig | `full`: every race lap (hindsight); traffic off | the reference `optimize_batch` and every scoring call |
+| world | the profile's SimConfig (no SC/VSC by default; `configs/sim/world_hybrid.yaml` adds them, "Safety cars and VSC in the scoring world") | `full`: every race lap (hindsight); traffic off; the whole-race pit loss ("Pit loss and track status") | the reference `optimize_batch` and every scoring call |
 
 A policy is called as `policy(scenario, belief, max_stops)` and never sees the world. The
 regret definition is unchanged: the policy's plan and the world optimizer's plan, both
@@ -42,6 +42,271 @@ to every plan's support warnings (docs/traffic.md, limit 5).
 Rows carry `belief_config_hash`, `world_config_hash` and `belief_window`. The config hash
 leaves `fit_window` out, so the two hashes are equal under the defaults and
 `belief_window` says which window the policies planned on.
+
+## Information contract
+
+A policy decides at a snapshot: race R, driver D, after lap L. Let t be the session time at
+which D completed lap L. **Everything a policy can read must be a deterministic function only
+of**
+
+- (a) the raw timing records of race R with timestamps at or before t;
+- (b) this weekend's sessions before the race start;
+- (c) published regulations and the tyre allocation;
+- (d) artifacts built only from races whose start precedes R's start, each with a committed
+  manifest of its source races.
+
+"What a policy can read" is the snapshot and the agent's view, every tool output and error
+string, the belief simulator's fit, draws, constants and rules, the continuation behind an
+agent decision, and every baseline's input. The world simulator and the hindsight reference
+are the scorer: they keep the whole race.
+
+`tests/test_eval_information_contract.py` checks it. It builds one synthetic race three ways,
+each as `lap_frame` would (the whole-race derived columns recomputed on the rows given): as
+run, truncated at t, and with everything after t altered (lap times, compounds including rain
+to come, tyre ages, stops, track status, positions and clock, a retirement, the snapshot
+driver lapped, a longer race). The snapshot, the anonymised view, the belief's fit, every
+agent tool's output and error strings, `belief_optimum`, `to_plan` (the continuation), the
+bridged baselines, the rule baselines and the sampler's decision points up to t must be
+identical across the three. Each legacy switch below is shown to fail the same check on its
+own. The R8 stint limit (item 1 of the leakage audit) is another branch's; this file runs the
+belief with R8 off and a fixed RaceParams pit loss (the pit loss is "Pit loss and track
+status" below). `tests/test_future_blindness.py` (the future-blindness harness: real races
+through `jobs.load_race`'s own code path, the past cut at the snapshot moment, the rest
+truncated or re-raced) keeps `frame_filter`, `lap_window`, `gap_behind`, `race_length` and
+`compound_list` as regression checks (`future_blindness.FIXED_LEAKS`), observes snapshots from
+`snapshot_as_of`, and checks that a snapshot builds from the past alone, that scenario
+selection up to the moment is unchanged and that no real identity reaches the agent.
+
+What each fix does (the legacy switch reproduces the old behaviour, so old results stay
+reproducible):
+
+| item | was | now | legacy switch |
+| --- | --- | --- | --- |
+| 3 clean flag and the other derived columns | the frame's `clean`, `pace_resid_s`, `driver_offset_s` and gap columns, from a robust filter fitted on every lap of the race, chose the belief's fit rows, `ref_lap_s` (the SC lap) and the lap-noise sd | `data.as_of_columns` recomputes them on the rows the window can see (`Simulator.window_rows`); the world keeps the whole-race ones | `SimConfig.policy_view.clean: race` |
+| 6 window cut by lap number | `lap <= L` for the fit and the calibrator's `laps_so_far`: another car's lap L that ended up to minutes later was in | `end_s <= t` (`Simulator.cut_time`: D's lap-L end; a car a lap ahead's lap L + 1 that ended earlier is in) | `SimConfig.policy_view.window_cut: lap` |
+| 4 race length | `snapshot_at` set `total_laps` to D's own lap count: a lapped or retiring car showed it | `calibration.snapshot_as_of` keeps the scheduled distance (`session.total_laps`) | the builder `snapshot_at` |
+| 5 compounds | `RaceParams.compounds`: every compound raced in the whole race (2021 Spain showed MEDIUM, SOFT; a wet race would show INTERMEDIATE) | the nominated dry three, HARD, MEDIUM and SOFT (`calibrate.race_compounds`), plus any compound a car had run by t (a wet start) | `calibrate --compounds raced`, `calibrate.DEFAULT_COMPOUND_SOURCE = "raced"` |
+| 6 snapshot reads | positions, gaps and the car behind came from the lap L + 1 rows | `snapshot_as_of` reads rows completed by t: the car ahead and its gap at the end of lap L, the car behind at the previous crossing (the last one it had made by t), each car's position at its last lap by t, the stint history from D's laps up to L; on an in-lap the car shows on the set it came in on (no record by t holds the set going on) | `snapshot_at` |
+| 7 race identity | the view showed season, event slug and real driver codes | the model sees `"event": "anonymised race"`, no season, its own car as "Car A" and the nearby cars as "Car B", "Car C", ...; `tools.present` applies the same mapping, plus any other code of the field to "another car" and any year to `<year>`, to every tool output and error string. Lap count and pit loss stay (the tools give them). The mapping stays in the harness: `tools.identity()`, `run_agent`'s `stats["identity"]` and the agent row's `meta["identity"]`; scoring and the trajectory file names keep the real ids, the trajectory events hold what the model saw | `AGENT_SHOW_IDENTITY=1` (ablation only, default off) |
+| S scenario selection | finishers at most two laps down only, and the lap before each SC or VSC period | `scenarios --rule as_of` (the default for new sets): every driver still running at the decision lap (laps 1..L recorded), at a fixed grid (every 5th lap to the scheduled distance less 10; `neutralised=True` adds the laps D's own record shows a neutralisation in progress or just ended, off by default because a car behind decides after the others at the same lap number), capped to leave one minimum stint of the scheduled distance | `scenarios --rule legacy` |
+
+`SimConfig.policy_view` is left out of `config_hash` while it holds its default, so a config
+that does not set it keeps its hash; the behaviour change under the default shows in
+`sim_code_version`. Sets sampled before these fixes (v1, pilot1, d2, d3, d4, dev6) have no
+`sampling["rule"]`: they were sampled under the legacy rule with `snapshot_at`, and their
+snapshots embed the driver's own lap count and the raced compounds. They load and score as
+before; a new set records `"rule": "as_of"` and the builder `snapshot_as_of`.
+
+**Scoring a car that was lapped or later retired.** Every plan covers the scheduled
+distance, the reference's included, and the world scores all of it with its whole-race fit
+(the world has no per-car pace and draws no retirement). Policy and reference then cover the
+same laps under the same draws, so regret stays a like-for-like difference. Truncating to the
+laps the car really ran would need the scorer to cut every plan, the reference's too, at a
+number no policy may know, and a retired car has no such number at all. The
+`actual_strategy` comparator runs its last recorded set on to the flag when the car covered
+fewer laps.
+## Pit loss and track status
+
+**The information contract for pit loss.** At (race R, driver D, lap L) a policy may know the
+pit loss of earlier races and the stops made in R whose out-lap ended by the time D ended lap L.
+It may not know the race's whole-race value, which is measured from stops that have not
+happened yet.
+
+| who | pit loss | where it comes from |
+| --- | --- | --- |
+| world (scorer, reference) | the whole-race value: the median green stop of R (in- plus out-lap time less the full-window fit's lap times), the prior when R has fewer than 3 green stops | `score.world_pit_loss` from the loaded race (`sim.pit_loss.whole_race`), passed as `Simulator.race_pit_loss_s`; never read from a snapshot |
+| belief, agent tools, baselines, belief optimizer | the as-of estimate at L, with an sd drawn per sample (engine `PIT_LOSS_STREAM`) | `SimConfig.pit_loss.source: asof` (`configs/sim/belief.yaml`), `sim.pit_loss.estimate` on the belief's fit at L |
+| snapshot contract (`calibration.snapshot_at`) | the pre-race prior only | `calibration.pre_race_pit_loss`; frozen sets built before this carry the old whole-race value, so `score.policy_scenario` replaces it with the belief's as-of value before any policy sees the scenario |
+
+The as-of estimate: a prior, then this race's green stops (in- and out-lap both green) seen by
+the snapshot, each stop's loss against the belief's own fit, stops outside 0.5-1.5 times the
+prior left out, summarised by their median with a per-stop sd max(MAD, 2.5 s); the interval
+adds 1.5 s in quadrature for the gap between a per-stop and a whole-race number. The prior is
+a fallback chain, as of R's date and never R itself:
+
+1. `same_circuit_asof`: earlier seasons at the same circuit (sd 1.5 s);
+2. `cross_circuit_asof`: at least two earlier races at any circuit (sd their spread, at least 2 s);
+3. `constant`: 22 s, sd 5 s (no earlier race at all, or a synthetic race id).
+
+The pool is `configs/sim/pit_loss_prior.json` (the six calibration races, built by `python -m
+src.sim.pit_loss build-prior`) plus every race in the FastF1 cache at run time (`real_run.cached_races`),
+whose entry is built from its whole race on first use and kept per process (a circuit with no history
+loads every earlier cached race once, about a minute): more cached seasons widen the pool with no
+code change. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
+itself held out, and then only if earlier. A circuit used once (no earlier season cached) gets tier
+2, or 3, and the estimate exists from lap 0 either way: a policy never fails for want of history and
+never falls back to the whole-race value. The SC and VSC factors (the share of a green stop paid
+when the in-lap is under SC or VSC) start from 0.5 and 0.6 (sd 0.2, worth 5 stops) and are updated
+with this race's SC / VSC stops seen by then, each measured against the field's median lap on
+those laps. `estimate_pit_loss` reports the as-of range and its basis (prior, prior tier, stops
+seen), the factor for the current status and `pit_loss_now_s`, how many laps the current SC or VSC
+has lasted, and the chance of a new SC or VSC in the next 5 and 10 laps (below).
+
+**The world's value changed** from the replay mean (`calibrate._pit_loss`, still the G replays')
+to the median green stop, which a few slow stops or a mostly neutralised race cannot drag:
+
+| race | replay mean (old world) | median green stop (world) | green stops |
+| --- | --- | --- | --- |
+| 2019_10_united_kingdom | 24.61 | 21.21 | 20 |
+| 2021_04_spain | 23.85 | 22.57 | 34 |
+| 2022_02_saudi_arabia | 15.05 | 24.39 | 5 |
+| 2023_01_bahrain | 26.59 | 25.14 | 44 |
+| 2023_07_spain | 24.94 | 23.77 | 42 |
+| 2024_07_emilia_romagna | 28.46 | 28.67 | 27 |
+
+**As-of error** against the world's value, mean signed error (s) by snapshot lap, one snapshot per
+5 laps (the driver at the median position), `python -m src.sim.pit_loss report`
+(reports/calibration/pit_loss/asof_error.csv):
+
+| race | prior tier (prior s) | laps 0-9 | 10-19 | 20-29 | 30-39 | 40+ | MAE | 90% interval covers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2019_10_united_kingdom | constant (22.00) | +0.79 | -0.10 | -1.09 | -0.74 | -0.71 | 0.84 | 1.00 |
+| 2021_04_spain | cross_circuit_asof (22.36) | -0.21 | -0.21 | +0.51 | -0.16 | +0.02 | 0.26 | 1.00 |
+| 2022_02_saudi_arabia | same_circuit_asof (23.00) | -1.38 | -1.54 | -0.96 | -1.38 | -1.38 | 1.33 | 1.00 |
+| 2023_01_bahrain | same_circuit_asof (24.13) | -1.01 | -0.71 | -0.04 | +0.01 | -0.35 | 0.47 | 1.00 |
+| 2023_07_spain | same_circuit_asof (22.90) | -0.87 | -0.23 | -0.07 | +0.01 | +0.07 | 0.22 | 1.00 |
+| 2024_07_emilia_romagna | cross_circuit_asof (23.24) | -5.43 | -1.68 | -1.60 | -1.25 | -0.92 | 1.97 | 0.83 |
+
+Over all 63 snapshots the MAE is 0.82 s (0.60 s from lap 20), and the 90% interval covers the
+world's value at 97% of them. The pool here is the committed table plus the cache as of main
+3cf9649 (the 2021-22 weekends of #92 included; wet races are left out of the pool: 2022 Imola, run
+partly on intermediates, has a 38 s median green stop, and 2021 Imola does not load). The error is
+the prior's until the first green stops (Imola 2024's cross-circuit prior is 5 s short of a long pit
+lane), then about a second or less. Saudi Arabia keeps a -1.4 s bias: by lap 45 only 4 green stops
+are in.
+
+**Test.** `tests/test_sim_pit_loss.py`: altering every stop after the snapshot (moved, added,
+slowed, an SC added) leaves the belief's pit loss, `estimate_pit_loss`, `simulate_plan`,
+`evaluate_action` and the belief optimizer's plan unchanged at 2021 Spain HAM lap 30; slowing
+the stops already made moves the estimate; the fallback chain's tiers and widths; a circuit with
+no history. The future-blindness harness's `test_leak_pit_loss` (tests/test_future_blindness.py)
+passes: `pit_loss` moved from `KNOWN_LEAKS` to `FIXED_LEAKS`.
+
+### Safety cars and VSC in the scoring world
+
+Before, the world drew no SC or VSC: a snapshot taken under a safety car was scored as if the
+race went green at once, and a stop there cost a full green pit loss, so "pit now, it is cheap"
+could never be right in the scorer, while the belief priced it at half.
+
+**Default: off.** The default world still draws no SC or VSC (`score.WORLD_EVENTS_DEFAULT` False);
+the world below is opt-in with `--world-config configs/sim/world_hybrid.yaml`. Whether it becomes the
+default is decided at integration by the fidelity scorecard (PR #93, `python -m src.sim.fidelity`):
+the replay accuracy below supports recorded neutralised laps, but drawing the later periods is a
+scoring-design choice that no accuracy measure here validates.
+
+**What the opt-in world models** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
+
+- the SC or VSC in progress at the snapshot ends where it really ended: the driver's own recorded
+  laps of that kind from the next lap on (the scorer may know them; the policy knows only that it
+  is in progress and for how long);
+- on those laps the lap time is the field's median recorded lap on that lap (non-pit laps of that
+  status), not `sc_lap_factor` x the median green lap; a stop whose in-lap is under SC pays
+  `sc_pit_loss_factor` (0.5) of the green pit loss, under VSC `vsc_pit_loss_factor` (0.6);
+- every later period is drawn by the rate model from the lap after, on the events substream, so
+  every policy's plan and the reference see the same draws for a seed (common random numbers),
+  and `regret_se_s` carries the Monte Carlo error. The full record is not used past the period
+  in progress: a reference that waits for a safety car no policy could know about would score
+  luck, not strategy. A green snapshot draws exactly as `rate` does.
+
+Events `recorded` (every recorded SC/VSC lap, for replays) and `rate` stay available.
+`configs/sim/world.yaml` names the same events with ghost traffic.
+
+**Accuracy decides the lap times and the factors**, on the six calibration races only
+(`python -m src.sim.neutral_report --races ...`, reports/calibration/neutralised): every
+finisher's real strategy replayed on the world (full fit, the race's replay-mean pit loss) from
+every G snapshot, with neutralisations off (the old world), on with the lap factors (`on_factor`),
+on with the recorded lap times (`on_recorded`), and on with the recorded lap times and SC/VSC
+pit-loss factors pooled from the other races' stops (`on_recorded_fitted`, out of sample).
+G is the offset-adjusted remaining-time error (`err_offset_s`), MAE / signed bias in seconds;
+"SC stops" is the in- plus out-lap time plus the stop's cost against the real one, over every
+finisher's stop with its in-lap under SC/VSC; "neutral laps" is the lap-time error on non-pit
+SC/VSC laps. 2023 Spain and 2024 Imola have no SC or VSC and do not change.
+
+| race | arm | G MAE / bias | SC/VSC stops MAE / bias (n) | neutral laps MAE / bias (n) |
+| --- | --- | --- | --- | --- |
+| 2019_10_united_kingdom | off | 64.22 / -62.49 | 50.88 / -50.88 (9) | 34.13 / -34.13 (50) |
+| | on_factor | 16.84 / -10.92 | 7.94 / +1.84 | 10.03 / -1.56 |
+| | **on_recorded** | **16.52 / -9.65** | **7.42 / +2.23** | **6.96 / -0.59** |
+| | on_recorded_fitted | 16.66 / -8.57 | 10.20 / +7.72 | 6.96 / -0.59 |
+| 2021_04_spain | off | 19.97 / -14.77 | 49.98 / -49.98 (3) | 29.19 / -29.19 (51) |
+| | on_factor | 13.79 / -7.74 | 9.39 / -3.16 | 14.81 / -0.11 |
+| | **on_recorded** | **13.71 / -7.62** | 28.64 / +5.34 | **4.31 / -0.08** |
+| | on_recorded_fitted | 13.73 / -7.57 | 30.00 / +9.41 | 4.31 / -0.08 |
+| 2022_02_saudi_arabia | off | 163.76 / -163.62 | 73.28 / -73.28 (7 SC), 34.47 (1 VSC) | 53.19 / -53.19 (54 SC), 24.03 (44 VSC) |
+| | on_factor | 41.06 / -32.85 | 13.85 / -13.85, 12.38 | 20.55 / -19.39, 8.53 |
+| | **on_recorded** | **18.99 / -17.58** | 15.30 / -15.30, 21.29 | **4.49 / -0.24, 3.81** |
+| | on_recorded_fitted | 19.55 / -18.19 | 16.37 / -16.37, 29.16 | 4.49 / -0.24, 3.81 |
+| 2023_01_bahrain | off | 24.31 / -21.98 | 18.99 / -18.99 (6 VSC) | 18.31 / -18.31 (18 VSC) |
+| | on_factor | 20.09 / +13.67 | 28.66 / +28.66 | 11.12 / +10.85 |
+| | **on_recorded** | **15.33 / +3.63** | **14.00 / +14.00** | **5.57 / +2.75** |
+| | on_recorded_fitted | 17.91 / +6.25 | 24.64 / +24.64 | 5.57 / +2.75 |
+
+G by horizon (MAE, s) where it moves, off against on_recorded: 2019 UK 30-39 laps to go 132.8 ->
+27.1, 40-49 136.5 -> 24.6; 2021 Spain 50-59 31.0 -> 18.8, 60+ 112.5 -> 25.0; 2022 Saudi 10-19 59.3
+-> 13.6, 30-39 272.5 -> 23.4, 40-49 348.0 -> 34.0; 2023 Bahrain 20-29 32.2 -> 15.0, 40-49 25.3 -> 29.6
+(the one bucket that gets worse: the VSC is over-priced there, bias +16.8). Full tables:
+reports/calibration/neutralised/g_by_horizon.csv.
+
+What was kept and what was left off:
+
+- **Kept: the neutralised laps in the world, with the field's recorded lap times.** Off is far
+  worse wherever a race had an SC or VSC; recorded lap times beat the lap factors on G at every race
+  and cut the neutral-lap error from 10-21 s to 4-7 s.
+- **Kept: the a priori pit-loss factors 0.5 (SC) and 0.6 (VSC).** Pooled from the other races'
+  stops they lost out of sample at every race (UK 10.20 against 7.42, Spain 30.00 against 28.64,
+  Bahrain VSC 24.64 against 14.00). The stops are few and mixed: Spain 2021's three SC stops
+  straddle the deployment lap (factors -0.6 to 2.0), Saudi's nine were nearly all on the
+  deployment lap. Measured per race (configs/sim/pit_loss_prior.json): UK about 0.41 (9 stops),
+  Spain 0.28 (3), Saudi 1.4 (9, deployment lap), Bahrain VSC 0.07 (6, against the slow VSC lap).
+  The world fits no factor per race.
+- **Left off: SC bunching** (`traffic.sc_bunching`). It failed its own decision rule
+  (docs/traffic.md: placement at lap 12 mae 3.05 against 3.00 off, gate and pairs worse), and it
+  needs ghost traffic, which the default world does not run.
+- **Kept, by design rather than by accuracy: later periods drawn, not recorded.** Replay accuracy
+  is highest with every recorded lap (the table), but scoring a decision against neutralisations
+  nobody could foresee would reward luck. The rates are the belief's (`EventModel` defaults); the
+  scorer may know more, but no as-of or per-circuit rate table is on the eval path yet (below).
+- **The world's pit loss** is the median green stop (above). With it the G replays' MAE over the
+  six races is 14.55 s against 14.65 s with the replay mean, mixed per race (UK 17.09 against 16.52,
+  Spain 2021 14.27 against 13.71, Saudi 17.41 against 18.99, Bahrain 15.11 against 15.33), and the
+  SC-stop error falls at UK (6.86) and Saudi (10.63)
+  (reports/calibration/neutralised/world_pit_loss_median). The G replays keep the replay mean.
+
+**What the belief knows.** At lap L: the track status up to L (`snapshot.sc_laps`, `vsc_laps`,
+`track_status`), so "under a safety car now" and how long it has lasted; later neutralisations
+only as rates. Under SC or VSC the rate model starts inside the current period with a geometric
+remaining length (memoryless: how long it has lasted does not shorten it). The reduced pit loss
+now is the as-of SC/VSC factor times the as-of green pit loss.
+
+**Event rates: what the evaluated configuration uses.** `configs/sim/belief.yaml` draws with the
+`EventModel` defaults (p_sc 0.015 per green lap and 3-lap periods from the one SC of 2021 Spain;
+the VSC rate 0.02 and 2-lap periods are placeholders). No scenario carries per-race rates
+(`sc_rate_per_lap` is null in every committed set), so PR #45's forward-chaining event-rate folds
+(`event_rates.EventRatesCalibrator`) are not on the eval path, and no held-out race feeds the
+rates. They are not as-of, though: for 2021 Spain they are that race's own SC (one period), and for
+the races before May 2021 (2019 UK; held-out 2019 Monaco and 2020 Sakhir) they come from a later
+race. Not fixed here: an as-of table needs the neutralised periods of earlier races, which the
+cache holds for too few seasons; the tools say "provisional" in `rates_source`.
+
+**What the agent sees.** `estimate_pit_loss` under the 2019 UK safety car (HUL, lap 20, as-of
+belief):
+
+```json
+{"pit_loss_s": {"low": 17.27, "median": 19.99, "high": 22.72}, "source": "asof", "sd_s": 1.66,
+ "pit_loss_now_s": {"low": 8.63, "median": 10.0, "high": 11.36}, "pit_loss_now_factor": 0.5,
+ "sc_pit_loss_factor": 0.5, "vsc_pit_loss_factor": 0.6, "factor_source": "asof",
+ "track_status": "sc", "neutralised_for_laps": 1,
+ "outlook": {"next_5_laps": {"sc": {"low": 0.037, "median": 0.073, "high": 0.141},
+                             "vsc": {"low": 0.049, "median": 0.096, "high": 0.185}},
+             "next_10_laps": {"sc": {"low": 0.073, "median": 0.14, "high": 0.263}, "vsc": {...}},
+             "mean_period_laps": {"sc": 3.0, "vsc": 2.0},
+             "rates_source": "provisional: SC from 2021 Spain, VSC placeholder", "band": "rate / 2 to rate x 2"},
+ "basis": {"prior_s": 22.0, "prior_source": "constant", "green_stops_seen": 12, "sc_stops_seen": 0,
+           "vsc_stops_seen": 0, "sc_factor_sd": 0.089, "vsc_factor_sd": 0.089}}
+```
+
+(numbers rounded here). The outlook's band is a convention, the rate halved and doubled, since the
+provisional rates come with no posterior. No whole-race fact appears in any tool output.
 
 ## Decisions
 
@@ -337,6 +602,122 @@ the anchor's plus a step measured elsewhere (practice, qualifying, other races),
 errors above, and its stint limit is a practice age. Read `proxied_compounds` and
 `opt_proxied_compounds` beside any result on a race with a proxied compound.
 
+## Historical tyre-life prior
+
+`src/sim/tyre_history.py` estimates where a compound's tyre life runs out at a race (the
+simulator's support edge) from **earlier races only**, instead of from the race being evaluated.
+Nothing in the simulator calls it yet (it is `NON_PHYSICS`); the `fix/tyre-life-no-hindsight`
+change will place the edge with it in both the belief (this prior, extended by tyre ages seen up
+to the snapshot) and the world (this prior, extended by tyre ages the race's laps show), and must
+then move the module to `PHYSICS_MODULES` or carry its numbers into `SimConfig`.
+
+```python
+from src.sim.tyre_history import tyre_life_prior
+p = tyre_life_prior("2023_07_spain", "SOFT")     # role: HARD / MEDIUM / SOFT
+p.edge_laps, p.sd_laps, p.n_effective, p.tier, p.sources, p.compound, p.interval(0.9)
+```
+
+**Inputs, all committed, none loaded from a race at run time.**
+`data/derived/tyre_nominations.csv` (Pirelli's nomination per weekend, public pre-race
+information, two sources per row; `data/derived/README.md`), `data/derived/compound_scale.csv`
+(every season's C-numbers on one hardness index), `data/derived/tyre_history.csv` (the per-race
+observations, built by `python -m src.sim.tyre_history build` from every cached race not held
+out; `tyre_history_manifest.json` lists them with their dates) and
+`configs/tyre_history.yaml` (every constant below).
+
+**As of, and held out.** Only races strictly before the target count: earlier by (season, round)
+(`race_ids.as_of`) and, where both dates are known, by date. A race in `data/eval_set.json` (or
+the config's `held_out_extra`) is never built into the history and never feeds the prior; the
+`allow_held_out` flag (default off) lets in only a held-out race that is itself earlier.
+
+**Compound scale.** The meaning of a C-number moved: 2019-2021 C1..C5 (one set of compounds),
+2022 C1..C5 (new 18-inch compounds, same names), 2023 C0..C5 (the old C1 renamed C0, a new C1
+"much closer to the C2"), 2024 C1..C5 (C0 dropped, compounds unchanged), 2025 C1..C6 (a C6 softer
+than the C5). The common index counts steps of the 2019-2022 scale, larger is softer: Cn -> n,
+except the 2023-2025 C1 -> 1.5, the 2023 C0 -> 1 and the 2025 C6 -> 6. Sources in
+`data/derived/README.md`.
+
+**The observation** (`observed_tyre_life`), per race and compound: the stints are split by how
+they ended. A pit stop on a green in-lap and a stint run to the chequered flag are *usable*: the
+tyre lasted at least that long, and the team chose when to stop. A stop under SC / VSC / red flag
+(opportunistic), a red-flag tyre change and a retirement say nothing about tyre life and are left
+out. The edge is the **0.9 quantile of the usable stints' end ages** (at least 3 stints), in laps
+and as a share of the race distance: a high quantile, because teams stop before the tyre is
+finished, but not the maximum, so one car's gamble does not set it. A pace check is reported next
+to it (per stint with 10+ green laps, the excess of its last 3 laps over a straight line through
+its first 60%: `pace_late_excess_s`, `pace_falloff_share`) and never used. 2025 Qatar's
+observation is kept but excluded (a mandated 25-lap maximum stint); a race with more than 10% of
+its laps on intermediates or wets is down-weighted.
+
+**The prior.** Every usable earlier observation is moved onto the target and averaged with a
+weight:
+- *moved*: as a share of race distance (times the target's scheduled laps); for another
+  compound, times `life_ratio ** steps` (`steps` = target index - observed index, one step softer
+  lasting `life_ratio` as long; the ratio is the geometric mean over the earlier races' compound
+  pairs, else 0.75); for another circuit, the circuit's severity is added to the steps as Pirelli
+  judged it before both races: the mean index of the nominated trio (a circuit given a trio one
+  step softer is one step gentler). For the same role at two circuits this cancels the C-number
+  difference, which is what the validation below supports.
+- *weighted* (constants, not fitted): same circuit and same compound 1.0; same circuit, other
+  compound 0.3; other circuits, same compound 0.1; other circuits, other compound 0.03; times
+  0.5 per further index step, 0.85 per season back, 0.4 from the other regulation era (2018-2021
+  vs 2022+), 0.3 from a wet race.
+- *sd*: the weighted spread of the moved observations (Kish `n_effective`) in quadrature with a
+  floor of 0.05 / 0.08 / 0.10 / 0.20 of the race distance for tiers 1 / 2 / 3 / 4.
+
+**Fallback chain** (`tier`, always returned): 1 an earlier race at the same circuit with the same
+compound; 2 the same circuit, other compounds only; 3 other circuits only (same or neighbouring
+compound); 4 no usable earlier race at all, a constant share of race distance per role (HARD 0.65,
+MEDIUM 0.50, SOFT 0.35). The earliest cached season is tier 4. A missing nomination (the
+target's or an earlier race's) compares compounds by role and never counts as the same compound.
+
+**Validation** (`python -m src.sim.tyre_history validate`, `reports/calibration/tyre_history/`).
+As of, hence leave-one-race-out, on the 63 usable (race, role) observations of the 27 cached races
+with a dry observation that are not held out (29 races built: 2021 Belgium and 2024 Brazil have
+no dry observation; 2025 Qatar is excluded; the five held-out 2021-22 draws, now in `data/eval_set.json`,
+are never loaded). Error = prior edge - observed edge, in laps; coverage of the stated 68% / 90%
+intervals; *beyond* = share of the race's usable stints on that role ending later than prior
+edge + 3 laps (*floor*: the same against the race's own observed edge, what a perfect prior would
+give):
+
+| group | n | mean error | MAE | cover 68 | cover 90 | stints | beyond | floor |
+|---|---|---|---|---|---|---|---|---|
+| all | 63 | -0.4 | 7.0 | 0.70 | 0.84 | 1004 | 0.149 | 0.029 |
+| tier 1 | 22 | -0.8 | 8.4 | 0.59 | 0.77 | 436 | 0.099 | 0.030 |
+| tier 2 | 5 | +10.4 | 10.4 | 0.40 | 0.60 | 60 | 0.017 | 0.017 |
+| tier 3 | 33 | -1.6 | 5.9 | 0.79 | 0.91 | 471 | 0.217 | 0.028 |
+| tier 4 | 3 | -2.6 | 2.9 | 1.00 | 1.00 | 37 | 0.108 | 0.054 |
+| era 2018-2021 | 21 | -1.5 | 6.0 | 0.76 | 0.86 | 301 | 0.196 | 0.027 |
+| era 2022+ | 42 | +0.1 | 7.5 | 0.67 | 0.83 | 703 | 0.129 | 0.030 |
+
+The weighting, each part switched off in turn (all 63 observations):
+
+| variant | MAE | mean error | cover 90 | beyond |
+|---|---|---|---|---|
+| full (as shipped) | 7.0 | -0.4 | 0.84 | 0.149 |
+| no circuit severity scaling | 8.8 | -2.3 | 0.89 | 0.203 |
+| no C-number (compounds compared by role) | 6.9 | -0.8 | 0.86 | 0.155 |
+| no same-circuit weighting | 7.0 | -0.7 | 0.89 | 0.160 |
+| neither C-number nor circuit | 7.2 | -0.9 | 0.87 | 0.166 |
+
+Reading it: the severity scaling is the one part that clearly pays (8.8 -> 7.0 laps); matching
+the bare C-number across circuits without it is the worst variant, because Pirelli nominates
+harder rubber for harsher circuits, so a C3 at Imola and a C3 at Silverstone are not run alike.
+With it, the C-number and the same-circuit weightings are each worth about nothing on this set
+(6.9 and 7.0 against 7.0; together 0.2 laps). Tier 1 is no better than tier 3 (8.4 vs 5.9): the
+same circuit a year earlier is often a different race (2024 Monaco after a lap-1 red flag ran its
+medium 76 laps against a prior of 37; 2022 Imola, damp, ran the medium 46 against 31; 2022
+Austria's hard 29 against 46), and a tier-1 prior leans on one or two such races with a tight
+floor, so its 90% coverage (0.77) is the lowest. 15% of real stints run past edge + 3 laps against
+a 3% floor: the prior is short on the long-running side, mostly at tier 3 (22%) and in 2021 (20%).
+
+Before the 2021-22 weekends of `data-more-races` (#92) were added the same validation had 20
+observations from 9 races: MAE 8.2 (tier 1: 3.0 on 4 cases; tier 2: 12.1 on 2; tier 3: 10.9 on
+11; tier 4: 2.9 on 3), 90% coverage 0.90, 11.4% of stints past edge + 3; there the C-number
+weighting looked worth 1.4 laps and the same-circuit weighting nothing, on 6 same-circuit cases.
+With 27 same-circuit cases the C-number gain is gone; the weights stay as stated (they are not
+tuned to this table).
+
 ## The agent policy
 
 `--policies agent` is `eval.policies.AgentPolicy`, the snapshot loop of `src/agent.py`, on
@@ -409,6 +790,40 @@ on carry the registry's value, 3 by default (docs/rules.md R2).
 Next versions: v2 once Sarah's snapshot builder and the new races land (pass it as
 `builder=` to `build_set`; it has the same signature as `snapshot_at`).
 
+Every set listed here was sampled under the legacy rule, which reads the future (above,
+"Information contract"). New sets default to `--rule as_of` and the builder
+`calibration.snapshot_as_of`; `--rule legacy` reproduces the old sampling. One sampler serves both
+new rules: `as_of` takes `scenarios.as_of_pool` every 5th lap, `stratified` (below) the same pool
+every 2nd lap, and both build each snapshot with `snapshot_as_of`.
+
+### Decision-critical sets
+
+`python -m src.eval scenarios --rule stratified ...` (`scenarios.sample_stratified`) samples a
+set where the decisions are. On dev6, 120 of 150 scenarios are ties between the main policies and
+the differences sit in the other 30, and pit-now is optimal at 7% of the uniform set's snapshots
+(the design study raised it to 24% with this rule). No committed set changes; none is built here,
+and the rule is never to be run on held-out races.
+
+- **Pool**: every 2nd lap L from 0 to the scheduled race length less the minimum stint, for the
+  drivers running at L (laps 1..L all present). It reads no lap after L and no final lap count
+  (the legacy rule's finisher filter and lap cap read the race's end). It is `scenarios.as_of_pool`, the
+  as_of rule's pool at a finer step.
+- **Strata**, the first that applies, in order:
+  `pit_opt` (the world's reference pits at the end of the next lap), `close` (not pit_opt; the best
+  pit-now and best stay-out plans within 3 s, and the worst searched plan at least 10 s behind),
+  `neutral` (the driver's lap L under SC or VSC, or one of the 2 laps before it), `window` (some car
+  pitted on laps L-2..L), `rest`. `neutral`, `window` and the pool read only the race's laps up to
+  L. **`pit_opt` and `close` read the scorer's reference**, which is future information: that is
+  acceptable only because scenario selection is invisible to every policy. The stratum and the
+  weight are recorded on each item (`Scenario.stratum`, `Scenario.weight`) and in the scored rows,
+  and `score.policy_scenario` drops both before any policy, tool or snapshot sees the scenario
+  (tests/test_sim_neutralised_world.py). Nothing depends on a policy's result.
+- **Quotas** per race (`DEFAULT_QUOTAS`): pit_opt 7, close 6, neutral 4, window 4, rest 4; a
+  shortfall goes to rest; seeded per race and stratum. **Weights**: stratum pool size / sampled,
+  so a pooled mean reweights to the uniform pool (the weights sum to the pool size); report per
+  stratum and the weighted pooled mean. The set records the rule in `sampling`; the references it
+  stratified on are the world's at build time (its config hash is the scored rows' `world_config_hash`).
+
 ### Development and report sets
 
 `data/eval_set.json` is the registered eval split, written by `register_eval_set` (Sarah's
@@ -433,22 +848,28 @@ prints one line naming which kind of set it scored.
 
 The cache holds 2021 Spain plus a 2018-25 sample (dataset 3): the 2023 and 2024 races already
 there and eight drawn with `random.seed(2026)` from the 173 races of 2018-25, 14 race weekends
-in all. Of these, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
+in all. (24 weekends of 2021-22 were added later, 38 in all; see "More cached weekends" below.
+Five of them joined this split on 2026-11-21; see "The fresh 2021-22 draw" below.) Of the 14, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
 red flag) are not eligible.
 
-`data/eval_set.json` holds out four races: **2019 Monaco, 2020 Sakhir, 2025 Austria and 2024
-Austria**. Nothing loads them until the final run: no exploratory commands, no fits, no test
-that asserts on their content. The eligibility record for 2024 Austria below is the one
-exception.
+`data/eval_set.json` holds out nine races. The first four are the d4 split: **2019 Monaco,
+2020 Sakhir, 2025 Austria and 2024 Austria**. Five 2021-22 races were registered on
+2026-11-21: **2021 France, 2021 Mexico, 2022 Miami, 2022 Australia and 2022 Belgium** ("The
+fresh 2021-22 draw" below). Nothing loads them until the final run: no exploratory commands,
+no fits, and no test that asserts on their content. Their eligibility records are the one
+exception (2024 Austria below, the five in "More cached weekends").
 
 | race id | role |
 |---|---|
-| 2019_06_monaco, 2020_16_sakhir, 2025_11_austria, 2024_11_austria | held out (`data/eval_set.json`) |
+| 2019_06_monaco, 2020_16_sakhir, 2025_11_austria, 2024_11_austria | held out (`data/eval_set.json`, the d4 split) |
+| 2021_07_france, 2021_18_mexico, 2022_05_miami, 2022_03_australia, 2022_14_belgium | held out (`data/eval_set.json`, the fresh 2021-22 draw) |
 | 2021_04_spain | development and calibration: the simulator was tuned on it |
 | 2023_07_spain | calibration (held out under the previous split, see below) |
 | 2023_01_bahrain, 2019_10_united_kingdom, 2022_02_saudi_arabia, 2024_07_emilia_romagna | calibration |
 | 2025_23_qatar | calibration only, never sampled into an eval scenario set |
 | 2024_08_monaco, 2024_12_united_kingdom, 2024_21_brazil | not eligible |
+| the 13 other eligible 2021-22 races ("More cached weekends") | calibration and history |
+| 2021_02_emilia_romagna, 2021_21_saudi_arabia, 2022_04_emilia_romagna, 2021_12_belgium, 2022_07_monaco, 2022_17_singapore | not eligible (practice and history only) |
 
 How the four were chosen:
 
@@ -483,6 +904,32 @@ Disclosure: what each held-out race has been exposed to.
 - **2024 Austria:** nothing at all. Eligibility facts only.
 - **All four:** the agent has never been run on any of them.
 
+The fresh 2021-22 draw (registered 2026-11-21). The final test set is the four races above plus
+a season-stratified draw from the 2021-22 weekends the more-races cache added. Results can then
+be shown across regulation eras: 2021 is the previous car generation, 2022 the first
+ground-effect season, and 2024-25 later ground-effect seasons. The pools are the eligible
+group-B races (the seeded pool, not the circuit-history group A), in season and round order.
+The draw uses one seed, with 3 races per season, or 2 when a season has fewer than 5 eligible
+races. 2021 has 3, so it gives 2:
+
+```python
+pool_2021 = ["2021_07_france", "2021_18_mexico", "2021_22_united_arab_emirates"]
+pool_2022 = ["2022_03_australia", "2022_05_miami", "2022_08_azerbaijan", "2022_09_canada", "2022_12_france",
+             "2022_14_belgium", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+random.seed(2027)
+random.sample(pool_2021, 2)   # ['2021_07_france', '2021_18_mexico']
+random.sample(pool_2022, 3)   # ['2022_05_miami', '2022_03_australia', '2022_14_belgium']
+```
+
+All five are conventional weekends. Exposure: nothing beyond the eligibility facts in "More
+cached weekends". They were cached and checked offline: the race id resolves, the sessions
+load, and `calibration.eligibility` ran on the race session. There was no fit, calibration,
+cross-race pass, scenario, reference, baseline or agent run, and neither the tyre-history
+table nor the pit-loss prior holds them. From 2026-11-21 every held-out guard, `--races
+auto` and the tyre-history build leave them out, and `build_set` accepts them for a report set.
+The file's sha256 is
+now `4f96f7f3c37a...`, where it was `98edff4380e1...`.
+
 Scenario sets under the split:
 
 - **d2** (`data/scenarios/d2.json`, 25 scenarios of 2023 Spain) and **d3**
@@ -497,7 +944,10 @@ Scenario sets under the split:
   `development: false`. Its scenario file is built only after sprint-weekend support lands
   (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
   it until the final run. d4's Monaco scenarios may coincide with d3's, since both sample 25
-  per race at seed 0; the final run will state whether they do.
+  per race at seed 0; the final run will state whether they do. `data/scenarios/d4.json`
+  records the four-race split's `eval_set_digest` (`98edff4380e1...`), not the nine-race file's.
+  Like d2 and d3, it is a record of the split it was sampled under, and it still loads. It is
+  not regenerated.
 - **dev6** (`data/scenarios/dev6.json`, 150 scenarios, digest `8823b7b73c87`) is a
   **development set on calibration races, not a held-out result**: 25 scenarios each of the six
   non-sprint calibration races 2021_04_spain, 2023_07_spain, 2023_01_bahrain,
@@ -534,8 +984,9 @@ loading: 2024 Austria is held out, and 2024 Sao Paulo is not eligible.
   practice session, and the Sprint alone would tie a driver's pace to where they ran in the
   train. This choice was fixed before any sprint race was evaluated.
 - 2021-2022 sprint weekends read FP1, FP2 and the Sprint by the same rule. The session
-  selection is unit-tested, but no such weekend is cached, so the loaders have not been run on
-  one.
+  selection is unit-tested. Three 2022 sprint weekends are cached now (2022 Emilia Romagna,
+  Austria and Brazil, "More cached weekends" below), but the practice prior and the pace
+  offsets have not been run on any of them yet.
 
 **2025 Qatar is used for calibration only and is never sampled into an eval set.** The
 weekend had a mandated maximum of 25 laps per tyre set. Race control messages do not state
@@ -546,6 +997,119 @@ again on lap 32, 25 laps later, to finish the 57 laps on a second 25-lap set. Ru
 no rule for a stint cap, so a recommendation scored there could break a rule the race had.
 `build_set` refuses it (`scenarios.CALIBRATION_ONLY`) in every mode, `--development`
 included.
+
+### More cached weekends (2021-22)
+
+24 race weekends of 2021-22 were added to `cache/`. They give the simulator calibration races
+beyond the 7 it had, and more than the 8 that `MIN_HISTORY_RACES` needs. They add earlier
+history at circuits already in use, for as-of tyre-life and pit-loss priors. They also give a
+pool of races that no run has loaded, from which a fresh held-out draw can be made. Each
+weekend was built with `python scripts/build_cache.py --season <y> --gp "<event name>"
+--sessions <sessions> --prune` (Sarah's builder: no telemetry, raw livetiming responses
+pruned from the sqlite, then VACUUM). The sessions are every session in the event schedule:
+FP1, FP2, FP3, Qualifying and Race on a conventional weekend, and FP1, Qualifying, FP2, Sprint
+and Race on a 2022 sprint weekend. Afterwards each weekend was checked offline: the race id
+resolves from the cached schedule (`data.schedule_race_id`), and every session loads under
+`fastf1.Cache.offline_mode(True)` (`data.load_session`). Size: 41.0 MB of session pickles
+(0.6-2.2 MB per weekend), and the sqlite grew from 524 KB to 1.25 MB with the Ergast results
+and the schedules. No file is over 5 MB. No simulator code changed, so `SIM_CODE_VERSION` and
+the references are as they were.
+
+**Which seasons load.** Without an F1TV login, `livetiming.formula1.com` now answers 401 for
+every season. FastF1 3.9 then falls back to its own mirror, `livetiming-mirror.fastf1.dev`,
+which serves 2021 and 2022 but answers 404 for 2018-2020 (checked on 2018 Bahrain, 2019
+Bahrain and Abu Dhabi, and 2020 Spain and Emilia Romagna). 2023 on needs the login. No login
+was used, so only 2021-22 could be added. The 2019 and 2020 races already in the cache were
+fetched before the login requirement.
+
+**Group A: history at circuits already in use.** The list asked for Monaco 2018; Bahrain 2018,
+2019, 2021 and 2022; Austria 2018, 2019, 2021, 2022 and 2023; Barcelona 2018, 2019, 2020 and
+2022; Silverstone 2018 and 2020; Jeddah 2021; Imola 2020, 2021 and 2022; and Lusail 2021 and
+2023. Of these, the nine 2021-22 weekends are cached. The other eleven (2018-2020 and 2023)
+could not be fetched. 2021 Emilia Romagna has no FP1 on the mirror, so FP2, FP3, Qualifying
+and Race are cached.
+
+**Group B: a seeded pool.** The pool is every round of 2021-22 (the seasons that load) that
+was neither cached nor in group A, in season and round order: 33 races. k = 15 fills the
+budget of about 24 new weekends.
+
+```python
+pool = ["2021_03_portugal", "2021_05_monaco", "2021_06_azerbaijan", "2021_07_france", "2021_08_styrian",
+        "2021_10_united_kingdom", "2021_11_hungary", "2021_12_belgium", "2021_13_netherlands", "2021_14_italian",
+        "2021_15_russia", "2021_16_turkey", "2021_17_united_states", "2021_18_mexico", "2021_19_brazil",
+        "2021_22_united_arab_emirates", "2022_03_australia", "2022_05_miami", "2022_07_monaco",
+        "2022_08_azerbaijan", "2022_09_canada", "2022_10_united_kingdom", "2022_12_france", "2022_13_hungary",
+        "2022_14_belgium", "2022_15_netherlands", "2022_16_italian", "2022_17_singapore", "2022_18_japan",
+        "2022_19_united_states", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+random.seed(2026); random.sample(pool, 15)
+# ['2021_12_belgium', '2022_09_canada', '2022_03_australia', '2022_20_mexico', '2022_21_brazil',
+#  '2022_17_singapore', '2021_07_france', '2022_22_united_arab_emirates', '2022_08_azerbaijan',
+#  '2022_14_belgium', '2022_05_miami', '2021_18_mexico', '2022_07_monaco', '2022_12_france',
+#  '2021_22_united_arab_emirates']
+```
+
+**Eligibility facts.** These come from `calibration.eligibility` on each race's lap frame and
+race control messages, with no simulator fit. The total laps are the session's. A "None" or
+"UNKNOWN" compound is a lap with no compound label, which the eligibility rule counts as a
+slick. The new races were not looked at beyond these facts: no fit, calibration, cross-race
+pass, scenario, reference, baseline or agent run.
+
+| race id | group | format | laps | eligible drivers | dry compounds | eligible, or why not | MB |
+|---|---|---|---|---|---|---|---|
+| 2021_01_bahrain | A | conventional | 56 | 16 | H M S | eligible | 1.76 |
+| 2021_02_emilia_romagna | A | conventional, no FP1 | 63 | 17 | M S | no: wet (INTERMEDIATE, WET), red flag | 1.59 |
+| 2021_09_austrian | A | conventional | 71 | 19 | H M S | eligible | 1.92 |
+| 2021_20_qatar | A | conventional | 57 | 18 | H M S | eligible | 1.71 |
+| 2021_21_saudi_arabia | A | conventional | 50 | 15 | H M S | no: red flag | 1.50 |
+| 2022_01_bahrain | A | conventional | 57 | 18 | H M S | eligible | 1.87 |
+| 2022_04_emilia_romagna | A | sprint | 63 | 18 | H M S | no: wet (INTERMEDIATE) | 1.97 |
+| 2022_06_spain | A | conventional | 66 | 18 | H M S | eligible | 1.72 |
+| 2022_11_austria | A | sprint | 71 | 17 | H M (and None) | eligible | 2.13 |
+| 2021_07_france | B | conventional | 53 | 20 | H M S | eligible | 1.74 |
+| 2021_12_belgium | B | conventional | 39 | 0 | UNKNOWN | no: red flag (lap 1), 0 eligible drivers, 1 dry compound | 0.62 |
+| 2021_18_mexico | B | conventional | 71 | 17 | H M S | eligible | 1.78 |
+| 2021_22_united_arab_emirates | B | conventional | 58 | 14 | H M S | eligible | 1.68 |
+| 2022_03_australia | B | conventional | 58 | 17 | H M S | eligible | 1.61 |
+| 2022_05_miami | B | conventional | 57 | 16 | H M S | eligible | 1.74 |
+| 2022_07_monaco | B | conventional | 77 | 0 | H M S (and None) | no: wet (INTERMEDIATE, WET), red flag (lap 1), 0 eligible drivers | 1.88 |
+| 2022_08_azerbaijan | B | conventional | 51 | 15 | H M S | eligible | 1.56 |
+| 2022_09_canada | B | conventional | 70 | 17 | H M | eligible | 1.75 |
+| 2022_12_france | B | conventional | 53 | 15 | H M | eligible | 1.63 |
+| 2022_14_belgium | B | conventional | 44 | 18 | H M S | eligible | 1.42 |
+| 2022_17_singapore | B | conventional | 61 | 12 | M S | no: wet (INTERMEDIATE) | 1.60 |
+| 2022_20_mexico | B | conventional | 71 | 18 | H M S | eligible | 1.88 |
+| 2022_21_brazil | B | sprint | 71 | 17 | H M S | eligible | 2.16 |
+| 2022_22_united_arab_emirates | B | conventional | 58 | 17 | H M S | eligible | 1.76 |
+
+Of the 24 races, 18 are eligible: 6 in group A and 12 in group B. The ineligible ones still
+give practice and partial history.
+
+**Fresh held-out draw (proposed here, registered in `data/eval_set.json` on 2026-11-21; see
+"The registered split").** The final test set combines a fresh sample of these races with the
+held-out races already registered. Results can then be shown across regulation eras: 2021 is
+the previous car generation, 2022 the first ground-effect season, and 2024-25 later
+ground-effect seasons. The draw is stratified by season, from the eligible group-B
+races only (group A stays calibration and history), in season and round order within each
+season, with one seed. A season with fewer than 5 eligible group-B races gives 2 instead of
+3. 2021 has 3, so it gives 2:
+
+```python
+pool_2021 = ["2021_07_france", "2021_18_mexico", "2021_22_united_arab_emirates"]
+pool_2022 = ["2022_03_australia", "2022_05_miami", "2022_08_azerbaijan", "2022_09_canada", "2022_12_france",
+             "2022_14_belgium", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+random.seed(2027)
+random.sample(pool_2021, 2)   # ['2021_07_france', '2021_18_mexico']
+random.sample(pool_2022, 3)   # ['2022_05_miami', '2022_03_australia', '2022_14_belgium']
+```
+
+All five drawn races are conventional weekends. The only eligible sprint weekend in the pools
+was 2022 Brazil, and it was not drawn.
+
+The other 13 new eligible races are calibration data. From group A: 2021_01_bahrain,
+2021_09_austrian, 2021_20_qatar, 2022_01_bahrain, 2022_06_spain and 2022_11_austria. From
+group B: 2021_22_united_arab_emirates, 2022_08_azerbaijan, 2022_09_canada, 2022_12_france,
+2022_20_mexico, 2022_21_brazil and 2022_22_united_arab_emirates. Now that the five are in
+`data/eval_set.json`, `--races auto` leaves them out.
 
 ## Metrics
 
@@ -935,6 +1499,158 @@ fractions of a place) and where the field is close, after an SC, which is exactl
 SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
 `final_position_mean`, not instead of the time regret.
 
+## The learned calibrator
+
+The belief's prior for its `to_snapshot` fit comes from a calibrator (`src/sim/calibrators.py`).
+The default, `shrinkage`, is the practice fit plus config values with fixed taus; it learns
+nothing across races. The ridge calibrator (SPEC 0024, #60) learns each factor from features
+known at the calibration point k, across races. It is now trained on the real calibration
+races, compared with shrinkage, adopted per factor and committed. It is not the default (below).
+
+**What is trained, on what.** One ridge per factor on `build_dataset`'s rows: one row per
+(race, k) with the k snapshot laps of the local profile (every 5 laps, plus the laps around
+SC and VSC periods). The features are known at k (total laps, pit loss, mean residual and
+laps so far per compound against the practice prior, SC and VSC laps so far, the track
+temperature trend). The targets are the race's hindsight factors (`hindsight_targets`: the
+full-window fit's base delta, wear and fuel, and the observed event factors). The training
+races are the seven calibration races, given explicitly: 2021_04_spain, 2023_07_spain,
+2023_01_bahrain, 2019_10_united_kingdom, 2022_02_saudi_arabia, 2024_07_emilia_romagna,
+2025_23_qatar. That gives 85 rows. A held-out race (`data/eval_set.json`) is refused before
+anything about it is loaded, and the training code never reads one; a test checks this.
+
+**One command** runs the evaluation and the training, and writes the report:
+
+    python -m src.sim.learned_calibrator train      # --jobs N, --resume reuses current folds
+
+It runs these steps:
+
+1. Leave-one-race-out folds (`cross_race.fold_job`) for none, shrinkage, ridge (degradation
+   targets) and ridge_all (event factors too). Each arm is the belief simulator as
+   `configs/sim/belief.yaml` stands (`configs/sim/arms/belief_*.yaml`, `base_config`):
+   posterior draws, residual lap noise, the wear bound, and traffic off. G replays the race's
+   real SC and VSC periods. A fold's ridge is fitted on the other six races only, inner
+   alpha search included (the #60 leakage test still holds). Windows: `pre_race` and
+   `to_snapshot`.
+2. The per-factor table, then the adoption rule.
+3. The hybrid (`configs/sim/arms/belief_hybrid.yaml`, written by the command), run through
+   the same folds.
+4. The belief measures and the default rule.
+5. The trained artifacts and `configs/sim/belief_learned.yaml`.
+6. The report: `reports/calibration/learned/summary.md` and its csvs. The fold outputs stay
+   under `reports/calibration/learned/work/`, which is gitignored.
+
+**The adoption rule** was stated in the code before any result. It is applied per factor
+kind, pooled over compounds, because the engine takes one prior sd per kind. Ridge is
+adopted for a kind when its leave-one-race-out rmse is below shrinkage's and its coverage is
+no worse. Coverage is no worse when |coverage - nominal| is no larger at both 68 and 90
+percent. Both conditions must hold in both belief windows. Degradation kinds are read from
+ridge, event kinds from ridge_all. Every other kind stays on shrinkage.
+
+| factor | window | rmse shrinkage | rmse ridge | cov68 shr / ridge | cov90 shr / ridge | adopted |
+|---|---|---|---|---|---|---|
+| base_delta_s | pre_race | 1.702 | 1.921 | 0.33 / 0.76 | 0.40 / 0.83 | no |
+| base_delta_s | to_snapshot | 0.693 | 0.771 | 0.25 / 0.31 | 0.45 / 0.49 | |
+| wear_s_per_lap | pre_race | 0.0693 | 0.0858 | 0.42 / 0.64 | 0.63 / 0.64 | no |
+| wear_s_per_lap | to_snapshot | 0.0596 | 0.0691 | 0.41 / 0.54 | 0.61 / 0.67 | |
+| fuel_s_per_lap | pre_race | 0.0304 | 0.0195 | 0.13 / 0.58 | 0.29 / 0.71 | **yes** |
+| fuel_s_per_lap | to_snapshot | 0.0222 | 0.0211 | 0.24 / 0.35 | 0.41 / 0.55 | |
+| pit_loss_s | pre_race | 0.723 | 0.792 | 0.00 / 0.87 | 0.00 / 1.00 | no |
+| pit_loss_s | to_snapshot | 0.723 | 1.003 | 0.00 / 0.99 | 0.00 / 1.00 | |
+| lap1_extra_s | pre_race | 1.831 | 2.875 | 0.00 / 0.68 | 0.00 / 0.68 | no |
+| lap1_extra_s | to_snapshot | 1.831 | 2.826 | 0.00 / 0.56 | 0.00 / 0.68 | |
+| sc_lap_factor, vsc_lap_factor, sc_pit_loss_factor | both | = | = (fallback) | 0 / 0 | 0 / 0 | no |
+
+Only the fuel slope is adopted. Ridge's base and wear are less accurate than shrinkage's;
+its wider sds only buy coverage. The SC and VSC factors have fewer than 5 training races
+with a period, so ridge falls back to shrinkage in every fold. Shrinkage carries the event
+factors at sd 0 (the config or race value), so its event coverage is 0 by construction.
+`factors.csv` has none and the hybrid too, and `factors_by_compound.csv` splits by compound.
+
+**The belief measures** are leave-one-race-out over the seven races and race-weighted, with
+95% race-bootstrap CIs:
+
+- G: the real remaining plan replayed from each calibration point, with the pace-corrected
+  error at horizons 10-49.
+- Stop-gain: the predicted gain against the real gain at the teams' real pit stops.
+- G's interval coverage.
+
+`to_snapshot` is the belief window.
+
+| window | calibrator | G mae s [CI] | G bias s | G diff vs shrinkage [CI] | G cov68 / cov90 | stop-gain mae s | stop-gain bias s | stop-gain diff [CI] |
+|---|---|---|---|---|---|---|---|---|
+| to_snapshot | none | 26.12 [16.92, 35.13] | +15.39 | +0.71 [-4.25, 5.67] | 0.14 / 0.21 | 0.733 | -0.26 | -0.10 [-0.19, -0.01] |
+| to_snapshot | shrinkage | 25.40 [18.58, 31.50] | +13.06 | | 0.18 / 0.27 | 0.837 | -0.37 | |
+| to_snapshot | ridge | 31.47 [21.34, 41.30] | +12.17 | +6.07 [0.49, 12.28] | 0.22 / 0.34 | 1.009 | -0.34 | +0.17 [-0.01, 0.33] |
+| to_snapshot | ridge_all | 31.16 [21.06, 41.00] | +11.38 | +5.75 [0.08, 12.21] | 0.23 / 0.36 | 1.009 | -0.34 | +0.17 [-0.01, 0.33] |
+| to_snapshot | hybrid | 25.05 [18.29, 31.01] | +0.86 | -0.35 [-3.56, 2.93] | 0.22 / 0.34 | 0.842 | -0.13 | +0.005 [-0.04, 0.05] |
+| pre_race | none | 26.12 [16.92, 35.13] | +15.39 | -1.48 [-3.19, 0.10] | 0.14 / 0.21 | 0.733 | -0.26 | 0.00 |
+| pre_race | shrinkage | 27.59 [18.15, 36.83] | +18.72 | | 0.49 / 0.68 | 0.733 | -0.26 | |
+| pre_race | ridge | 45.00 [34.41, 60.46] | +38.37 | +17.40 [1.94, 33.85] | 0.83 / 0.96 | 1.19 | +0.08 | +0.45 [0.05, 1.15] |
+| pre_race | hybrid | 23.61 [19.16, 27.98] | +1.40 | -3.98 [-11.98, 4.67] | 0.65 / 0.89 | 0.70 | -0.14 | -0.03 [-0.08, 0.01] |
+
+Per race numbers are in `belief_by_race.csv`, and G by 10-lap horizon bucket in
+`g_by_horizon.csv`.
+
+**The default rule** was also stated before any result. The hybrid is tried first, then plain
+ridge. A candidate becomes the belief's default when, on the `to_snapshot` race-weighted point
+estimates, all three hold:
+
+- its G mae is below shrinkage's;
+- its stop-gain mae is no worse;
+- its G coverage is no worse (|coverage - nominal| at 68 and 90 percent).
+
+With 7 races, a CI that excludes 0 is not required.
+
+**Result: not adopted; shrinkage stays the default.** The hybrid changes only the fuel prior.
+It replays the real strategies slightly more accurately: G mae 25.05 against 25.40 s
+(paired -0.35 s, CI -3.56 to +2.93). It removes most of shrinkage's signed bias (+0.86
+against +13.06 s), and it covers better (0.22 / 0.34 against 0.18 / 0.27). It fails one
+condition, by 0.005 s: its stop-gain mae is 0.8417 s against 0.8368 s (paired CI -0.04 to
++0.05). Both differences are well inside noise.
+
+Plain ridge is worse on G (+6.07 s, CI 0.49 to 12.28) and on stop-gain. So learning the base
+and wear across seven races does not beat the practice-plus-race shrinkage fit.
+
+The learned calibrator ships as an option, `--belief-config configs/sim/belief_learned.yaml`,
+which the command writes. Every interval is too narrow under every calibrator: G's 90% coverage
+is at most 0.36 in the belief window. That is a separate problem from the calibrator's prior.
+
+**Trained artifacts, deployed without leakage.** The artifacts live in
+`models/calibrators/ridge_hybrid/`:
+
+- `loo/<race_id>.json`, one per calibration race, fitted on the other six races.
+  It is identical to that race's fold model.
+- `all.json`, fitted on all seven.
+- `manifest.json`: the command, the race list, the commit, `sim_code_version`, the params,
+  the per-factor sources, the adoption and the decision.
+
+The files are the JSON `RidgeCalibrator.save` writes. The calibrator `trained`
+(`calibrators.TrainedCalibrator`, params `artifacts` and `sha256`) loads by race id. A
+calibration race gets its leave-one-out model, used when it is evaluated as development
+data. Any other race gets `all.json`; that covers the held-out races, which never enter
+training. A race id that is not canonical is refused, because `all.json` under another name
+would leak. A model whose `train_races` holds the race it would calibrate is refused too.
+
+Nothing trains at evaluation time. `sha256` pins the artifacts, so the config hash names them.
+The agent's model report carries `prior_sources`, {factor: "ridge" or "shrinkage"}, for this
+calibrator.
+
+**Caveat: not strictly as-of.** A leave-one-out model learns from races both before and
+after the race it calibrates; for example, 2019 Britain is calibrated by a model trained on
+2021-2025. Nothing from the evaluated race itself is used, but this is not what a team
+could have known on that weekend.
+
+A strictly as-of variant would train race R's model on `race_ids.as_of(R, races)` only.
+With these seven races, 2019 Britain has no earlier race and 2021 Spain has one. Every
+factor needs `RIDGE_MIN_RACES` (5) training races, so both would fall back to shrinkage
+entirely. `--as-of` is a stub that says so; it needs more seasons of calibration races.
+
+**Pending: the tyre-life change.** A separate change, `fix/tyre-life-no-hindsight`, changes
+the wear model: a cliff, driver effects and hinge, a fuel-identification fix and a warm-up
+term. That changes the hindsight targets and what some factors mean. The numbers above are
+on the simulator before that change. When it lands, rerun the one command, which regenerates
+the arm, the artifacts, `belief_learned.yaml` and the report.
+
 ## Limitations
 
 - **The world is fitted on hindsight.** It reads every race lap (`full` window); only the
@@ -944,7 +1660,8 @@ SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
   frame, laps after the snapshot included, and the belief applies the same limits as the
   world. So the baselines' limit-aware adjustment, the belief's continuation search and the
   agent's rule errors all know a race-wide constant that nobody at the snapshot could know.
-  It is the same class of hindsight as the observed pit loss; an as-of source (earlier
+  It is the class of hindsight the pit loss had before its as-of estimate ("Pit loss and track
+  status"); an as-of source (earlier
   seasons, Pirelli guidance) can replace it later (docs/rules.md R8).
 - **A proxied compound's price has no race laps behind it** ("Proxied compounds"): its pace
   and wear are a step from a raced compound measured in practice, qualifying or other races,
@@ -957,9 +1674,10 @@ SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
   `stint_limit_margin_laps` so both can be shown; the committed tables are rank 1.
 - **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
   actual_strategy unavailable on 65 scenarios.
-- **The belief's SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml);
-  the default world draws no events. Position regret has the traffic limits of
-  docs/traffic.md.
+- **The SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml). The
+  default world draws no events; the opt-in hybrid world (configs/sim/world_hybrid.yaml) draws later
+  periods with the same rates ("Safety cars and VSC in the scoring world"). Position regret has the
+  traffic limits of docs/traffic.md.
 - **d3 is rebuilt at the final evaluation**; its committed reference and baselines predate R8
   ("Reference cache").
 

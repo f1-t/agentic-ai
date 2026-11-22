@@ -13,6 +13,7 @@ from . import calibrators as _cal
 from . import model_report as _report
 from . import proxy as _proxy
 from .config import SimConfig, class_names, compound_class
+from .data import as_of_columns, visible_rows
 from .degradation import DEGRADATION
 from .events import EVENTS, Scenario
 from .hazard import HAZARD
@@ -149,6 +150,8 @@ LAP_NOISE_STREAM = 3
 # its first (DEGRADATION_STREAM's row) is rejected, so an accepted first proposal is the
 # unbounded run's draw
 DEGRADATION_RETRY_STREAM = 4
+# the per-sample draw of an as-of pit loss (SimConfig.pit_loss.source "asof"); unused otherwise
+PIT_LOSS_STREAM = 5
 # never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
 # [seed, k, 1] key
 STREAM_KEY = 2 ** 32 - 1
@@ -189,8 +192,14 @@ class Simulator:
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
                  practice: pd.DataFrame | None = None, pace=None, *, weather: pd.DataFrame | None = None,
-                 race_features: dict | None = None, calibrator=None, qualifying: pd.DataFrame | None = None):
+                 race_features: dict | None = None, calibrator=None, qualifying: pd.DataFrame | None = None,
+                 pit_loss_s: float | None = None):
         self.config = config or SimConfig()
+        # the world's hindsight pit loss (eval.score.race_simulators): when set it replaces the
+        # snapshot's on every simulation; a belief never gets it (docs/eval.md "Pit loss")
+        self.race_pit_loss_s = pit_loss_s
+        self._pit_loss_cache = {}   # pit_loss.estimate per (driver, lap, window), shared with copies
+        self._pit_stops = {}        # pit_loss.stop_table of `laps`, built on first use
         self.laps, self.practice, self.pace = laps, practice, pace
         self.qualifying, self._quali_gaps = qualifying, None
         # R8, from the full race frame; shared by fitted_for copies
@@ -206,8 +215,11 @@ class Simulator:
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
         self._fits = {}
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
+        self._windows = {}   # window_rows, shared with the windowed copies
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
+        if hasattr(self.events, "bind"):   # "recorded" / "hybrid": the race's own neutralised laps
+            self.events.bind(laps)
         tr = self.config.track
         self.track = TRACK.get(tr.name)(**tr.params)
         tf = self.config.traffic
@@ -305,6 +317,9 @@ class Simulator:
         k0 = (_cal.calibration_point(snapshot, cfg.calibration_every, self.weather, cfg.recalibrate_temp_delta_c)
               if cfg.fit_window == "to_snapshot" else None)
         key = (cfg.fit_window, k0, snapshot.driver if cfg.exclude_snapshot_driver else None)
+        t = self.cut_time(snapshot.driver, k0 or 0)
+        if t is not None:   # cut by session time: one fit per cut, the time the driver completed k0
+            key = (*key, t)
         if key not in self._fits:
             if len(self._fits) >= FIT_CACHE_SIZE:
                 del self._fits[next(iter(self._fits))]
@@ -327,17 +342,56 @@ class Simulator:
             self._physics[drop] = self._model(practice, base_delta=0.0) if practice is not None else None
         return self._physics[drop]
 
+    def cut_time(self, driver, k0: int) -> float | None:
+        """The session time a windowed fit at calibration point k0 is cut at under
+        policy_view.window_cut "time": the end_s of `driver`'s lap k0, else (no such row, a
+        made-up snapshot) the earliest end_s of any car's lap k0, which shows no more. None when
+        the cut is by lap: window_cut "lap", k0 0 (no race lap is visible), or a frame without
+        driver and end_s columns (a hand-built one)."""
+        if (self.config.policy_view.window_cut != "time" or k0 <= 0
+                or "end_s" not in self.laps or "driver" not in self.laps):
+            return None
+        at = self.laps[self.laps["lap"] == k0]
+        end = pd.to_numeric(at["end_s"], errors="coerce")
+        own = end[(at["driver"] == driver).to_numpy()].dropna()
+        if len(own):
+            return float(own.iloc[0])
+        return float(end.min()) if end.notna().any() else None
+
+    def window_rows(self, snapshot: Snapshot, k0: int, drop=None) -> pd.DataFrame:
+        """The race rows a windowed fit at calibration point k0 may read (SimConfig.policy_view):
+        cut by session time at cut_time (else by lap number, lap <= k0), with the derived
+        columns recomputed on those rows (data.as_of_columns) under clean "as_of"; then the
+        excluded driver `drop` taken out. Cached per (k0, cut time, drop)."""
+        t = self.cut_time(snapshot.driver, k0)
+        key = (k0, t, drop)
+        if key not in self._windows:
+            race = self.laps
+            race = race[race["lap"] <= k0] if t is None else visible_rows(race, t)
+            if self.config.policy_view.clean == "as_of" and len(race):
+                race = as_of_columns(race)
+            if len(self._windows) >= FIT_CACHE_SIZE:
+                del self._windows[next(iter(self._windows))]
+            self._windows[key] = self._keep(drop)(race)
+        return self._windows[key]
+
     def _calibrate(self, snapshot: Snapshot, k0: int, drop):
-        """The calibrator's output at k0, cached per (calibrator, k0, exclusion, driver)."""
+        """The calibrator's output at k0, cached per (calibrator, k0, exclusion, cut time)."""
         cfg, every = self.config, self.config.calibration_every
-        key = (self.calibrator.name, k0, drop)
+        t = self.cut_time(snapshot.driver, k0)
+        key = (self.calibrator.name, k0, drop, t)
         if key in self._outputs:
             return self._outputs[key]
         pre = self._calibrate(snapshot, 0, drop) if k0 > 0 else None
-        earlier = [k for (n, k, d) in self._outputs if n == key[0] and d == drop and k < k0]
-        previous = self._outputs[(key[0], max(earlier), drop)] if earlier else pre
-        race = self._keep(drop)(self.laps)
-        race = race[race["lap"] <= k0]
+        # an earlier point that saw no more than this one (by time when the window is cut by time)
+        earlier = [(k, s) for (n, k, d, s) in self._outputs
+                   if n == key[0] and d == drop and k < k0 and (t is None or s is None or s <= t)]
+        if earlier:
+            k_prev, t_prev = max(earlier, key=lambda e: (e[0], -1.0 if e[1] is None else e[1]))
+            previous = self._outputs[(key[0], k_prev, drop, t_prev)]
+        else:
+            previous = pre
+        race = self.window_rows(snapshot, k0, drop)
         practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
         raw = self.physics_prior(drop)
         ctx = _cal.CalibrationContext(
@@ -359,7 +413,8 @@ class Simulator:
 
         full: every race lap. pre_race: the calibrator's lap-0 prior, held (for "none" and
         "shrinkage" the practice fit plus the config base delta). to_snapshot: every car's
-        race laps up to the calibration point k0 (they are public), shrunk toward the prior
+        race laps visible at the calibration point k0 (window_rows: completed by the time the
+        snapshot driver completed lap k0, their clean flags their own), shrunk toward the prior
         with the calibrator's sds as taus; practice enters only through the prior, and
         ref_lap_s is the median of both. When the sds are all 0 ("none") the prior is held
         and the instance is the pre_race one. Exclusion drops the snapshot driver from
@@ -368,10 +423,9 @@ class Simulator:
         cfg = self.config
         drop = snapshot.driver if cfg.exclude_snapshot_driver else None
         keep = self._keep(drop)
-        race = keep(self.laps)
         if cfg.fit_window == "full":
-            return self._fit(race)
-        race = race[race["lap"] <= (k0 if cfg.fit_window == "to_snapshot" else 0)]
+            return self._fit(keep(self.laps))
+        race = self.window_rows(snapshot, k0 if cfg.fit_window == "to_snapshot" else 0, drop)
         practice = keep(self.practice.assign(lap=np.nan)) if self._has_practice else None
         if practice is None and race.empty:
             raise ValueError("fit window needs practice laps")
@@ -405,8 +459,10 @@ class Simulator:
         summary csv (or frame) calibration_error_s is read from; None gives NaN.
         """
         fit = self.fitted_for(snapshot)
-        return _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
-                             hazard=fit.hazard, min_samples=self.config.min_samples)
+        rep = _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
+                            hazard=fit.hazard, min_samples=self.config.min_samples)
+        sources = fit.calibration.output.diagnostics.get("sources") if fit.calibration is not None else None
+        return rep.model_copy(update={"prior_sources": dict(sources)}) if sources else rep
 
     def simulate(self, snapshot: Snapshot, plan, *, seed=0, n_samples=None,
                  scenario: Scenario | None = None, rules=None, return_laps=False) -> SimResult:
@@ -496,10 +552,15 @@ class Simulator:
 
         fx, hx = self.config.effects, self.config.hazard_effects
         cal = self.calibration.output if self.calibration is not None else None
+        pl = self.pit_loss_inputs(snapshot)
         factors = _cal.EventDraws(cal, {
-            "pit_loss_s": snapshot.race.pit_loss_s, "sc_lap_factor": fx.sc_lap_factor,
-            "vsc_lap_factor": fx.vsc_lap_factor, "sc_pit_loss_factor": fx.sc_pit_loss_factor,
+            "pit_loss_s": pl["pit_loss_s"], "sc_lap_factor": fx.sc_lap_factor,
+            "vsc_lap_factor": fx.vsc_lap_factor, "sc_pit_loss_factor": pl["sc_factor"],
             "lap1_extra_s": fx.lap1_extra_s})
+        # an as-of pit loss carries its sd: one draw per sample from its own stream, unless the
+        # calibrator already draws pit_loss_s
+        z_pit = (batch_normals(seed, PIT_LOSS_STREAM, n, 1, pl["sd_s"])[:, 0]
+                 if pl["sd_s"] > 0 and "pit_loss_s" not in factors.names else None)
         corr = (_cal.CorrectionLookup(cal.correction, names, codes, laps)
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
@@ -528,6 +589,8 @@ class Simulator:
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
+            if z_pit is not None:
+                v = {**v, "pit_loss_s": max(0.0, v["pit_loss_s"] + z_pit[k])}
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
             if z_par is not None:
                 model = self.degradation.draw_z(z_par[k] if z_retry is None else np.concatenate([z_par[k], z_retry[k]]))
@@ -560,13 +623,16 @@ class Simulator:
             green *= self.track.factor(track, class_codes, lapnums)
             lap_s = np.where(sc, v["sc_lap_factor"] * self.ref_lap_s,
                              np.where(vsc, v["vsc_lap_factor"] * green, green))
+            if scen.lap_time_s:   # recorded neutralised lap times ("recorded" / "hybrid" events), where given
+                rec = np.array([scen.lap_time_s.get(int(x), np.nan) for x in laps])
+                lap_s = np.where((sc | vsc) & ~np.isnan(rec), rec, lap_s)
             if offset:   # green laps only; skipped at 0 so a run without pace is bit for bit unchanged
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
             if eps is not None:   # one vector per sample on the green laps, shared by every plan
                 lap_s += np.where(sc | vsc, 0.0, eps[k])
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
-            scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
+            scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, pl["vsc_factor"], 1.0))
             if self.hazard.draws:
                 if eff is ages:
                     if green_p is None:
@@ -608,6 +674,34 @@ class Simulator:
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
 
+    def pit_loss_inputs(self, snapshot: Snapshot) -> dict:
+        """{pit_loss_s, sd_s, sc_factor, vsc_factor, source, ...} this simulation prices a stop
+        with. The world's hindsight value when the Simulator was given one (pit_loss_s=...,
+        source "race"); under config.pit_loss.source "asof" pit_loss.estimate at the snapshot
+        on this instance's fit (source "asof", with its sd, the SC/VSC factors and their
+        provenance); else snapshot.race.pit_loss_s and the effects' factors (source "snapshot")."""
+        fx, cfg = self.config.effects, self.config.pit_loss
+        if self.race_pit_loss_s is not None:
+            return {"pit_loss_s": float(self.race_pit_loss_s), "sd_s": 0.0, "sc_factor": fx.sc_pit_loss_factor,
+                    "vsc_factor": fx.vsc_pit_loss_factor, "source": "race"}
+        if cfg.source != "asof":
+            return {"pit_loss_s": float(snapshot.race.pit_loss_s), "sd_s": 0.0, "sc_factor": fx.sc_pit_loss_factor,
+                    "vsc_factor": fx.vsc_pit_loss_factor, "source": "snapshot"}
+        from . import pit_loss as _pl
+        # the information cut is the fit's: on a windowed instance its lap k0, so a continuation's
+        # advanced snapshot (laps_completed + n) never reads the stops of the laps it skips ahead
+        lap = (self.window[1] or 0) if self.window is not None else snapshot.laps_completed
+        key = (snapshot.race.race_id, snapshot.driver, lap, self.window)
+        if key not in self._pit_loss_cache:
+            if len(self._pit_loss_cache) >= FIT_CACHE_SIZE:
+                del self._pit_loss_cache[next(iter(self._pit_loss_cache))]
+            if "stops" not in self._pit_stops:
+                self._pit_stops["stops"] = _pl.stop_table(self.laps)
+            est = _pl.estimate(self.laps, snapshot.race.race_id, snapshot.driver, lap, self.degradation, cfg,
+                               self._pit_stops["stops"])
+            self._pit_loss_cache[key] = {**est, "source": "asof"}
+        return self._pit_loss_cache[key]
+
     def _lap_noise_sd(self) -> float:
         """SimConfig.lap_noise: 0 for "none", else the fit's residual_s (0 when the fit
         report has none, or it is NaN)."""
@@ -624,7 +718,7 @@ class Simulator:
         under the recorded events: under a drawn SC the field ran green, so positions and
         traffic are approximate there."""
         if scenario is None:
-            if self.config.events.name == "none":
+            if self.config.events.name in ("none", "recorded"):   # "recorded" is the record itself
                 return False
             if self.config.events.name != "fixed":
                 return True

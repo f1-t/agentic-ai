@@ -170,7 +170,7 @@ def test_a_turn_that_spends_the_budget_keeps_its_results():
     body, instruction = msg["content"][len("Tool results:\n"):].split("\n\n")
     results = json.loads(body)
     assert len(results) == 2
-    assert results[0]["result"]["driver"] == "TST"
+    assert results[0]["result"]["driver"] == "Car A"   # the model sees pseudonyms (AGENT_SHOW_IDENTITY off)
     assert "budget exhausted" in results[1]["result"]["error"]
     assert "MUST call submit_recommendation" in instruction
 
@@ -187,7 +187,7 @@ def test_a_turn_that_spends_the_budget_keeps_its_results_anthropic():
     content = backend.seen[-1][-1]["content"]
     assert [b["type"] for b in content] == ["tool_result", "tool_result", "text"]
     assert [b["tool_use_id"] for b in content[:2]] == ["a1", "a2"]   # every tool_use is answered
-    assert json.loads(content[0]["content"])["driver"] == "TST"
+    assert json.loads(content[0]["content"])["driver"] == "Car A"
     assert "budget exhausted" in json.loads(content[1]["content"])["error"]
     assert "MUST call submit_recommendation" in content[2]["text"]
 

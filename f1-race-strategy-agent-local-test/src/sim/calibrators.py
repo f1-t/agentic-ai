@@ -33,7 +33,11 @@ Registry:
   "ridge"      the first learned candidate (SPEC 0024, RidgeCalibrator): per degradation factor
                (targets="all": event factors too) ridge on the dataset features, alpha by inner
                leave-one-race-out, predictive sd floored at shrinkage's tau; shrinkage's output
-               for a factor it cannot fit. Not a default.
+               for a factor it cannot fit. `factors` (a list of factor kinds) fits only those, every
+               other kind shrinkage's: the per-factor hybrid of learned_calibrator.py.
+  "trained"    a ridge committed as trained artifacts (learned_calibrator.py train), loaded by race
+               id: the leave-one-out model for a training race, the all-races model for any other.
+               Never trains at evaluation time.
   "gbm", "mlp" learned candidates, registered stubs until the multi-race dataset exists:
                fit raises NotImplementedError.
   "fuel_config", "fuel_circuit_history", "fuel_circuit_features", "fuel_practice_longrun"
@@ -52,9 +56,11 @@ leave-one-season-out on SPEC G's pre_race and to_snapshot columns, with per fact
 68 percent interval coverage. loro(dataset, name, fold) runs one fold (jobs.py h_fold).
 """
 import copy
+import hashlib
 import json
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -64,7 +70,7 @@ from ..contracts import (COMPOUND_FACTORS, RACE_FACTORS, CalibrationOutput, Corr
 from .config import HINGE_TAU_S_PER_LAP, ComponentSpec, SimConfig
 from .degradation import new_draw_stats
 from .events import Scenario
-from .race_ids import canonical_race_id, race_season
+from .race_ids import canonical_race_id, parse_race_id, race_season
 from .registry import Registry
 
 CALIBRATORS = Registry("calibrator")
@@ -333,13 +339,19 @@ class RidgeCalibrator(Calibrator):
     name = "ridge"
     learned = True
 
-    def __init__(self, alphas=RIDGE_ALPHAS, min_races=RIDGE_MIN_RACES, targets="degradation", **params):
+    def __init__(self, alphas=RIDGE_ALPHAS, min_races=RIDGE_MIN_RACES, targets="degradation", factors=None, **params):
         super().__init__(**params)
         if targets not in RIDGE_TARGETS:
             raise ValueError(f"ridge targets {targets!r}: one of {RIDGE_TARGETS}")
+        known = (*DEGRADATION_FACTORS, *EVENT_BOUNDS)
+        if factors is not None and (bad := [f for f in factors if f not in known]):
+            raise ValueError(f"ridge factors {bad}: factor kinds from {list(known)}")
         self.alphas = tuple(float(a) for a in alphas)
         self.min_races = int(min_races)
         self.targets = targets
+        # the per-factor hybrid (learned_calibrator.py): only these factor kinds are fitted, every
+        # other one is shrinkage's (fallback "not adopted"); None fits every kind `targets` names
+        self.factors = None if factors is None else tuple(sorted(factors))
         self.features: list[str] = []
         self.categories: dict[str, list[str]] = {}
         self.columns: list[str] = []
@@ -380,6 +392,8 @@ class RidgeCalibrator(Calibrator):
         for col in train.target_columns:
             factor = col.split(":", 1)[1]
             if not self._targeted(factor):
+                if self.factors is not None and self._targeted(factor, adopted_only=False):
+                    self.fallback[factor] = "not adopted"
                 continue
             ok = rows[col].notna().to_numpy()
             races = rows["race_id"].to_numpy()[ok]
@@ -392,8 +406,11 @@ class RidgeCalibrator(Calibrator):
         self.fitted = True
         return self
 
-    def _targeted(self, factor: str) -> bool:
-        return self.targets == "all" or split_factor(factor)[0] in DEGRADATION_FACTORS
+    def _targeted(self, factor: str, adopted_only=True) -> bool:
+        kind = split_factor(factor)[0]
+        if adopted_only and self.factors is not None and kind not in self.factors:
+            return False
+        return self.targets == "all" or kind in DEGRADATION_FACTORS
 
     def predict(self, frame: pd.DataFrame) -> dict[str, tuple[np.ndarray, np.ndarray]]:
         """{factor: (mean, predictive sd)} per row of `frame` (feature columns), no floor."""
@@ -428,14 +445,16 @@ class RidgeCalibrator(Calibrator):
             if keys:
                 sd = max(factors[k][1] for k in keys)
                 factors.update({k: (factors[k][0], sd) for k in keys})
+        sources = {f: "ridge" if f in used else "shrinkage" for f in sorted(factors)}
         return CalibrationOutput(factors=factors, valid_until_lap=ctx.valid_until_lap, source=self.name,
                                  diagnostics={"prior": "ridge", "ridge": used, "fallback": fallback,
-                                              "taus": ref.diagnostics.get("taus", {})})
+                                              "sources": sources, "taus": ref.diagnostics.get("taus", {})})
 
     # --- report, save, load -----------------------------------------------------------
     def report(self) -> dict:
         out = super().report()
         out.update({"alphas": list(self.alphas), "min_races": self.min_races, "targets": self.targets,
+                    "factor_kinds": None if self.factors is None else list(self.factors),
                     "features": list(self.features), "categories": {c: list(v) for c, v in self.categories.items()},
                     "train_races": list(self.train_races), "fallback": dict(self.fallback), "coef": {}, "factors": {}})
         for f, m in self.models.items():
@@ -500,8 +519,84 @@ class RidgeCalibrator(Calibrator):
         scaler, coefficients, posterior matrix, alpha, sigma^2)."""
         with open(path, "w") as f:
             json.dump({"name": self.name, "params": {"alphas": list(self.alphas), "min_races": self.min_races,
-                                                     "targets": self.targets, **self.params},
+                                                     "targets": self.targets,
+                                                     **({} if self.factors is None else {"factors": list(self.factors)}),
+                                                     **self.params},
                        "state": self.state()}, f, indent=1)
+
+
+ARTIFACT_ROOT = Path(__file__).resolve().parents[2]   # artifact paths are relative to the project directory
+
+
+def artifact_sha256(directory) -> str:
+    """sha256 (12 hex) over a trained artifact directory: manifest.json, all.json and loo/*.json
+    by relative path, so any retrain changes it."""
+    d = Path(directory)
+    h = hashlib.sha256()
+    for p in sorted([d / "manifest.json", d / "all.json", *(d / "loo").glob("*.json")]):
+        h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes() + b"\0")
+    return h.hexdigest()[:12]
+
+
+@CALIBRATORS.register("trained")
+class TrainedCalibrator(Calibrator):
+    """A learned calibrator committed as JSON (learned_calibrator.py train), loaded by race id;
+    it never trains. `artifacts`: the directory (relative to the project) holding manifest.json,
+    all.json (fitted on every training race) and loo/<race_id>.json (fitted on every training race
+    but that one). A race in the manifest's training races gets its leave-one-out model, any other
+    race (a held-out one) the all-races model, so the model applied to a race was never fitted on
+    it. `sha256`, when given, must match artifact_sha256 of the directory: the config (and so its
+    hash) names the exact artifacts it was evaluated with. The output is the loaded calibrator's,
+    with source "trained" and the artifact file in the diagnostics."""
+    name = "trained"
+
+    def __init__(self, artifacts: str, sha256: str | None = None, **params):
+        super().__init__(artifacts=artifacts, sha256=sha256, **params)
+        self.directory = (ARTIFACT_ROOT / artifacts) if not Path(artifacts).is_absolute() else Path(artifacts)
+        self._manifest = None
+        self._loaded: dict[str, Calibrator] = {}
+
+    def manifest(self) -> dict:
+        if self._manifest is None:
+            if not (self.directory / "manifest.json").is_file():
+                raise FileNotFoundError(f"calibrator 'trained': no manifest.json under {self.directory}")
+            want = self.params.get("sha256")
+            if want is not None and (got := artifact_sha256(self.directory)) != want:
+                raise ValueError(f"calibrator 'trained': artifacts {self.directory} have sha256 {got}, the config "
+                                 f"names {want}; retrained artifacts need the config updated")
+            self._manifest = json.loads((self.directory / "manifest.json").read_text())
+        return self._manifest
+
+    def artifact_for(self, race_id: str) -> Path:
+        """loo/<race_id>.json for a training race, else all.json. A race id that is not canonical
+        (or an alias) is refused: all.json for a training race under another name would leak."""
+        rid = canonical_race_id(race_id)
+        parse_race_id(rid)
+        if rid in set(self.manifest()["races"]):
+            return self.directory / "loo" / f"{rid}.json"
+        return self.directory / "all.json"
+
+    def model_for(self, race_id: str) -> Calibrator:
+        path = self.artifact_for(race_id)
+        if path not in self._loaded:
+            cal = Calibrator.load(path)
+            if canonical_race_id(race_id) in set(getattr(cal, "train_races", [])):
+                raise RuntimeError(f"calibrator 'trained': {path} was fitted on {race_id}, the race it would calibrate")
+            self._loaded[path] = cal
+        return self._loaded[path]
+
+    def calibrate(self, ctx):
+        path = self.artifact_for(ctx.race.race_id)
+        out = self.model_for(ctx.race.race_id).calibrate(ctx)
+        rel = path.relative_to(self.directory).as_posix()
+        return out.model_copy(update={"source": self.name,
+                                      "diagnostics": {**out.diagnostics, "artifact": rel,
+                                                      "trained_as": self.manifest().get("calibrator")}})
+
+    def report(self) -> dict:
+        m = self.manifest()
+        return {**super().report(), "races": m["races"], "calibrator": m.get("calibrator"),
+                "sources": m.get("sources")}
 
 
 @CALIBRATORS.register("gbm")

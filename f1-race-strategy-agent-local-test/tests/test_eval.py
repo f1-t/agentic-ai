@@ -62,7 +62,8 @@ def sim(frame):
 
 @pytest.fixture(scope="module")
 def items(frame):
-    return sample_race(frame, RACE)[0]
+    # the legacy rule these sampling tests pin (the as_of default: test_eval_information_contract.py)
+    return sample_race(frame, RACE, rule="legacy")[0]
 
 
 # --- scenario sampling ---------------------------------------------------------

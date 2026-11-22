@@ -21,7 +21,7 @@ import pandas as pd
 
 from ..contracts import FieldState, NearbyCar, Plan, RaceParams, Snapshot, StintRecord
 from .config import SimConfig
-from .data import race_stints
+from .data import race_stints, visible_rows
 from . import traffic
 from .engine import Simulator
 from .events import Scenario
@@ -474,6 +474,8 @@ PHYSICS_MODULES = (
     "fuel_prior",
     # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their R8 limit
     "proxy",
+    # the as-of pit loss and SC/VSC pit-loss factors a belief prices stops with
+    "pit_loss",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -495,6 +497,16 @@ NON_PHYSICS = (
     # the fidelity scorecard: replays and ranks plans under given configs and reports; it never
     # changes a lap time
     "fidelity",
+    # the historical tyre-life prior (tyre_life_prior) and the command that builds its committed
+    # history table; nothing in the simulator calls it yet, so it moves no simulated time. The
+    # change that places the support edge with it must move it to PHYSICS_MODULES (or carry its
+    # numbers into SimConfig), since from then on it moves lap times.
+    "tyre_history",
+    # trains and evaluates the learned calibrator into committed artifacts, which the "trained"
+    # calibrator (calibrators.py) reads, pinned by its sha256 param, so config_hash covers them
+    "learned_calibrator",
+    # the neutralisations off/on accuracy report behind the world's events; runs the simulator only
+    "neutral_report",
 )
 
 
@@ -520,9 +532,16 @@ def _code_version(src=None) -> str:
 SIM_CODE_VERSION = _code_version()   # report column sim_code_version, computed at import
 
 
+# SimConfig fields added after hashes were published: left out of config_hash while they hold
+# their default, so a config that does not set one keeps its hash (as scenarios._ADDED_FIELDS
+# does for the set digest). A behaviour change behind a new default shows in SIM_CODE_VERSION.
+HASH_OMIT_AT_DEFAULT = ("policy_view",)
+
+
 def config_hash(config: SimConfig) -> str:
     """Physics config hash: the first 12 hex digits of sha256 over the SimConfig as JSON with
-    sorted keys, `fit_window` left out because each report row names its window.
+    sorted keys, `fit_window` left out because each report row names its window, and each
+    HASH_OMIT_AT_DEFAULT field left out while it holds its default.
 
     Identical configs give the same value on any machine or commit; a change to any config
     field (degradation, effects, shrinkage, long_run, ...) changes it. Code changes that keep
@@ -531,6 +550,9 @@ def config_hash(config: SimConfig) -> str:
     import hashlib
     import json
     data = config.model_dump(mode="json", exclude={"fit_window"})
+    for name in HASH_OMIT_AT_DEFAULT:   # added after configs were hashed: a default keeps the old value
+        if data.get(name) == SimConfig.model_fields[name].get_default(call_default_factory=True).model_dump(mode="json"):
+            del data[name]
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()
 RECENT_LAPS = 5          # snapshot_at: own lap times kept in recent_lap_times_s
@@ -562,6 +584,27 @@ def _track_status(ts):
     return "sc" if "4" in ts else "vsc" if ("6" in ts or "7" in ts) else "green"
 
 
+_PRE_RACE_PIT_LOSS: dict = {}
+
+
+def pre_race_pit_loss(race_id: str) -> float:
+    """The pit loss a snapshot carries: the pre-race prior of pit_loss.pit_loss_prior (earlier
+    races only, never this one), so no snapshot holds the race's whole-race value. The belief
+    and the tools refine it with this race's stops seen by the snapshot (pit_loss.estimate)."""
+    if race_id not in _PRE_RACE_PIT_LOSS:
+        from . import pit_loss
+        from .config import PitLossModel
+        _PRE_RACE_PIT_LOSS[race_id] = round(pit_loss.pit_loss_prior(race_id, PitLossModel())["mean_s"], 3)
+    return _PRE_RACE_PIT_LOSS[race_id]
+
+
+def with_race(snap: Snapshot, race: RaceParams) -> Snapshot:
+    """`snap` carrying `race`'s constants (its pit loss included) with the snapshot's race length:
+    for the hindsight replays (midrace, the rejoin window, reference stop counts), which price
+    stops at the race's whole-race pit loss as the world does."""
+    return snap.model_copy(update={"race": race.model_copy(update={"total_laps": snap.race.total_laps})})
+
+
 def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> Snapshot:
     """The driver's state after lap k, read off the lap frame.
 
@@ -591,12 +634,99 @@ def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> S
         recent = [float(x) for x in last if pd.notna(x)]
     hist = _scenario(g[g["lap"] <= k])
     return Snapshot(
-        race=race.model_copy(update={"total_laps": len(g)}), driver=driver, laps_completed=k,
+        race=race.model_copy(update={"total_laps": len(g), "pit_loss_s": pre_race_pit_loss(race.race_id)}),
+        driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=n, start_lap=first, start_age=a) for c, n, a, first in stints[:j]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=status, elapsed_s=elapsed,
         position=position, sets_available=None, standing_start=k == 0, field=FieldState(nearby=nearby),
         recent_lap_times_s=recent, **gaps)
+
+
+def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> Snapshot:
+    """The driver's state after lap k from the timing records at or before t, the session time
+    the driver completed lap k (docs/eval.md "Information contract"). A SnapshotBuilder; the
+    scenario sets' default since the leak fixes (snapshot_at is the legacy builder).
+
+    It differs from snapshot_at in what it may read:
+      race.total_laps  the scheduled distance, race.total_laps as given (snapshot_at: the laps
+                       this driver ran, which tells a policy the car will be lapped or retire)
+      race.pit_loss_s  pre_race_pit_loss, as snapshot_at since the pit-loss fix
+      race.compounds   race.compounds (the nominated dry three, calibrate.race_compounds) plus
+                       any other compound a car had run on a lap completed by t (a wet start)
+      gaps             gap_ahead_s and car_ahead at the end of lap k against the cars that had
+                       crossed the line before us; gap_behind_s and the car behind at the
+                       previous line crossing (end of lap k - 1), the last one the car behind
+                       had made by t, and only while it still had not crossed at the end of
+                       lap k. Each nearby car's position is its last lap completed by t.
+      stints           from the driver's laps up to k only.
+    k = 0 reads the lap-1 row for the starting compound and tyre age only (the grid is public).
+    On an in-lap the snapshot shows the car on the set it came in on (snapshot_at showed the set
+    going on, from the lap k + 1 row, which no record by t holds). Raises ValueError
+    (sample_race skips the point) when the driver has no lap-k row with an end time."""
+    g_all = frame[frame["driver"] == driver].sort_values("lap")
+    if k == 0:
+        first = g_all[g_all["lap"] == 1]
+        if not len(first):
+            raise ValueError(f"{driver} has no lap 1")
+        row = first.iloc[0]
+        age = int(row["tyre_age"]) - 1 if pd.notna(row["tyre_age"]) else 0
+        return Snapshot(
+            race=race.model_copy(update={"pit_loss_s": pre_race_pit_loss(race.race_id)}), driver=driver,
+            laps_completed=0, compound=row["compound"], tyre_age=max(0, age),
+            stints=[], sc_laps=[], vsc_laps=[], track_status="green", elapsed_s=0.0, position=None,
+            sets_available=None, standing_start=True, field=FieldState(nearby=[]), recent_lap_times_s=[])
+    at = g_all[g_all["lap"] == k]
+    if not len(at) or not np.isfinite(float(at["end_s"].iloc[0])):
+        raise ValueError(f"{driver} has no lap {k} with an end time: not running at the decision lap")
+    row = at.iloc[0]
+    t = float(row["end_s"])
+    seen = visible_rows(frame, t)
+    g = seen[seen["driver"] == driver].sort_values("lap")
+    stints = race_stints(g, driver)   # on an in-lap the set going on is not recorded yet
+    comp, n, start_age, first_lap = stints[-1]
+    done = k + 1 - first_lap
+    compounds = sorted(set(race.compounds) | set(seen["compound"].dropna().astype(str)) | {str(comp)})
+    gaps, nearby = _gaps_as_of(seen, driver, k, t)
+    last = g[g["lap"] > k - RECENT_LAPS]["lap_time_s"]
+    hist = _scenario(g)
+    return Snapshot(
+        race=race.model_copy(update={"compounds": compounds, "pit_loss_s": pre_race_pit_loss(race.race_id)}),
+        driver=driver, laps_completed=k,
+        compound=comp, tyre_age=_set_age(g, k, start_age, done),
+        stints=[StintRecord(compound=c, laps=m, start_lap=f, start_age=a) for c, m, a, f in stints[:-1]],
+        sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=_track_status(str(row["track_status"])),
+        elapsed_s=float(row["end_s"] - g["start_s"].iloc[0]),
+        position=int(row["position"]) if pd.notna(row["position"]) else None, sets_available=None,
+        standing_start=False, field=FieldState(nearby=nearby),
+        recent_lap_times_s=[float(x) for x in last if pd.notna(x)], **gaps)
+
+
+def _gaps_as_of(seen, driver, k, t):
+    """(gaps, nearby) of snapshot_as_of from the rows completed by t (`seen`)."""
+    def last_position(d):
+        rows = seen[seen["driver"] == d]
+        p = rows.sort_values("lap")["position"].dropna()
+        return int(p.iloc[-1]) if len(p) else None
+    gaps, nearby = {}, []
+    at_k = seen[(seen["lap"] == k) & (seen["driver"] != driver)]
+    ahead = at_k[at_k["end_s"] < t]
+    if len(ahead):
+        car = ahead.loc[ahead["end_s"].idxmax()]
+        gaps.update(gap_ahead_s=float(t - car["end_s"]), car_ahead=str(car["driver"]))
+        nearby.append(NearbyCar(driver=str(car["driver"]), position=last_position(car["driver"]),
+                                gap_s=-gaps["gap_ahead_s"]))
+    own = seen[(seen["driver"] == driver) & (seen["lap"] == k - 1)]
+    if k > 1 and len(own) and np.isfinite(float(own["end_s"].iloc[0])):
+        t_prev = float(own["end_s"].iloc[0])
+        prev = seen[(seen["lap"] == k - 1) & (seen["driver"] != driver)]
+        behind = prev[(prev["end_s"] > t_prev) & ~prev["driver"].isin(at_k["driver"])]
+        if len(behind):
+            car = behind.loc[behind["end_s"].idxmin()]
+            gaps["gap_behind_s"] = float(car["end_s"] - t_prev)
+            nearby.append(NearbyCar(driver=str(car["driver"]), position=last_position(car["driver"]),
+                                    gap_s=gaps["gap_behind_s"]))
+    return gaps, nearby
 
 
 def _nearby(frame, driver, k, gaps):
@@ -768,7 +898,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
             for d, g in groups.items():
                 if k >= len(g) or (k > 0 and not (g["lap"] == k).any()):
                     continue
-                snap = snapshot_at(frame, race, d, k)
+                snap = with_race(snapshot_at(frame, race, d, k), race)   # the replay prices stops at race's
                 s = sim.fitted_for(snap)
                 interval = {}
                 if n_samples > 1:
@@ -1040,7 +1170,7 @@ def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver
     """The driver's real strategy over laps k + 1 to `upto` from snapshot_at(k), under the
     real SC and VSC laps. Returns (snapshot, SimResult, our clock after lap `upto`)."""
     g = frame[frame["driver"] == driver].sort_values("lap")
-    snap = snapshot_at(frame, race, driver, k)
+    snap = with_race(snapshot_at(frame, race, driver, k), race)
     snap = snap.model_copy(update={"race": snap.race.model_copy(update={"total_laps": upto})})
     stints, left = [], upto - k
     for s in remaining_plan(frame, driver, k).stints:

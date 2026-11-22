@@ -138,9 +138,20 @@ def _crossover_within_limit(scenario, state, belief, max_stops, plan, limit):
     return policies.greedy_crossover(state, bounded, max_stops)
 
 
+def _actual_to_distance(actual_stints, total_laps):
+    """The driver's recorded stints as domain.Stints, the last one run on to `total_laps` when
+    the car covered fewer laps (lapped, or retired): a snapshot carries the scheduled distance
+    (calibration.snapshot_as_of), and the comparator keeps the last set to the flag."""
+    stints = [domain.Stint(c, n) for c, n in actual_stints]
+    short = total_laps - sum(s.laps for s in stints)
+    if stints and short > 0:
+        stints[-1] = domain.Stint(stints[-1].compound, stints[-1].laps + short)
+    return stints
+
+
 BASELINE_POLICIES = {
     "actual_strategy": _bridged(lambda sc, st, sim, m: policies.actual_strategy(
-        st, [domain.Stint(c, n) for c, n in sc.actual_stints])),
+        st, _actual_to_distance(sc.actual_stints, st.total_laps))),
     "fixed_one_stop": _bridged(lambda sc, st, sim, m: policies.fixed_one_stop(st), _one_stop_within_limit),
     "fixed_two_stop": _bridged(lambda sc, st, sim, m: policies.fixed_two_stop(st)),
     "greedy_crossover": _bridged(lambda sc, st, belief, m: policies.greedy_crossover(
@@ -279,7 +290,8 @@ class AgentPolicy:
                         output_tokens=stats.get("output_tokens"),
                         submitted_in_grace=submitted_in_grace(rec, trajectory),
                         evidence_calls=stats.get("evidence_calls"), repeat_calls=stats.get("repeat_calls"),
-                        meta={"submitted": rec is not None, "steps": stats.get("steps"), "trajectory": str(path)})
+                        meta={"submitted": rec is not None, "steps": stats.get("steps"), "trajectory": str(path),
+                              "identity": stats.get("identity")})
 
 
 agent_policy = AgentPolicy()

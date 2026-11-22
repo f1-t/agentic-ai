@@ -15,6 +15,9 @@ EVENTS = Registry("event model")
 class Scenario(BaseModel):
     sc_laps: list[int] = Field(default_factory=list)   # absolute lap numbers
     vsc_laps: list[int] = Field(default_factory=list)
+    # recorded lap time of a neutralised lap (events "recorded" with lap_times "recorded"): the
+    # engine uses it instead of the sc/vsc lap factor on that lap; empty for every other model
+    lap_time_s: dict[int, float] = Field(default_factory=dict)
 
 
 @EVENTS.register("none")
@@ -35,6 +38,52 @@ class FixedEvents:
 
     def draw(self, snapshot: Snapshot, rng) -> Scenario:
         return self.scenario
+
+
+@EVENTS.register("recorded")
+class RecordedEvents:
+    """The race's own neutralised laps, for the world (the scorer may know them; docs/eval.md
+    "Pit loss and track status"). Each driver gets the SC and VSC laps of their own recorded
+    track status (4 = SC, 6/7 = VSC, as calibration._scenario reads it for the replays), every
+    sample alike; a driver the frame does not have gets the race's majority periods
+    (calibration.observed_periods). With lap_times "recorded" each such lap also carries the
+    field's median recorded lap time on it (non-pit laps of that status), which the engine uses
+    instead of sc_lap_factor x ref_lap_s or vsc_lap_factor x green; "factor" keeps the factors.
+    Simulator binds the race frame (bind) before the first draw."""
+
+    def __init__(self, lap_times: str = "recorded", **_):
+        if lap_times not in ("recorded", "factor"):
+            raise ValueError(f"recorded events: lap_times must be 'recorded' or 'factor', got {lap_times!r}")
+        self.lap_times = lap_times
+        self.by_driver, self.race_laps, self.medians = {}, Scenario(), {"sc": {}, "vsc": {}}
+
+    def bind(self, laps):
+        import pandas as pd
+        if laps is None or "track_status" not in laps or laps.empty:
+            return self
+        status = laps["track_status"].astype(str)
+        sc, vsc = status.str.contains("4"), status.str.contains("[67]") & ~status.str.contains("4")
+        for d, g in laps.assign(sc=sc, vsc=vsc).groupby("driver"):
+            self.by_driver[str(d)] = (sorted(int(x) for x in g.loc[g["sc"], "lap"]),
+                                      sorted(int(x) for x in g.loc[g["vsc"], "lap"]))
+        share = laps[["lap"]].assign(sc=sc, vsc=vsc).groupby("lap")[["sc", "vsc"]].mean()
+        self.race_laps = Scenario(sc_laps=[int(x) for x in share.index[share["sc"] > 0.5]],
+                                  vsc_laps=[int(x) for x in share.index[(share["vsc"] > 0.5) & ~(share["sc"] > 0.5)]])
+        if self.lap_times == "recorded":
+            plain = ~laps["pit_in"].astype(bool) & ~laps["pit_out"].astype(bool) & laps["lap_time_s"].notna()
+            for kind, mask in (("sc", sc), ("vsc", vsc)):
+                med = laps[plain & mask].groupby("lap")["lap_time_s"].median()
+                self.medians[kind] = {int(k): float(v) for k, v in med.items() if pd.notna(v)}
+        return self
+
+    def draw(self, snapshot: Snapshot, rng) -> Scenario:
+        hit = self.by_driver.get(snapshot.driver)
+        sc, vsc = hit if hit is not None else (self.race_laps.sc_laps, self.race_laps.vsc_laps)
+        first = snapshot.laps_completed + 1
+        sc, vsc = [x for x in sc if x >= first], [x for x in vsc if x >= first]
+        times = {**{x: self.medians["sc"][x] for x in sc if x in self.medians["sc"]},
+                 **{x: self.medians["vsc"][x] for x in vsc if x in self.medians["vsc"]}}
+        return Scenario(sc_laps=sc, vsc_laps=vsc, lap_time_s=times)
 
 
 @EVENTS.register("rate")
@@ -114,3 +163,46 @@ class RateEvents:
                 if left == 0:
                     active = None
         return Scenario(sc_laps=out["sc"], vsc_laps=out["vsc"])
+
+
+@EVENTS.register("hybrid")
+class HybridEvents(RecordedEvents):
+    """The scoring world's events (docs/eval.md "Pit loss and track status"): the SC or VSC in
+    progress at the snapshot ends where it really ended (the driver's recorded laps of that kind
+    from the next lap on, with the field's recorded lap times under lap_times "recorded"), and
+    every later period is drawn by the rate model (params: config.EventModel, with the race's
+    rates when RaceParams carries them) from the lap after it, on the events substream, so every
+    plan and the reference see the same draws for a seed. A green snapshot draws exactly as
+    "rate" does. The record is not used past the period in progress: a reference that waits for
+    a safety car no policy could know about would score luck. Simulator binds the race frame."""
+
+    def __init__(self, lap_times: str = "recorded", **params):
+        super().__init__(lap_times=lap_times)
+        self.rate = RateEvents(**params)
+
+    def in_progress(self, snapshot: Snapshot) -> list[int]:
+        """The recorded laps from laps_completed + 1 that continue the snapshot's SC or VSC."""
+        kind = snapshot.track_status
+        if kind not in ("sc", "vsc"):
+            return []
+        hit = self.by_driver.get(snapshot.driver)
+        laps = set((hit if hit is not None else (self.race_laps.sc_laps, self.race_laps.vsc_laps))[kind == "vsc"])
+        out, lap = [], snapshot.laps_completed + 1
+        while lap in laps and lap <= snapshot.race.total_laps:
+            out.append(lap)
+            lap += 1
+        return out
+
+    def draw(self, snapshot: Snapshot, rng) -> Scenario:
+        kind = snapshot.track_status
+        if kind not in ("sc", "vsc"):
+            return self.rate.draw(snapshot, rng)
+        now = self.in_progress(snapshot)
+        end = snapshot.laps_completed + len(now)
+        later = Scenario()
+        if end < snapshot.race.total_laps:
+            after = snapshot.model_copy(update={"laps_completed": end, "track_status": "green"})
+            later = self.rate.draw(after, rng)
+        times = {x: self.medians[kind][x] for x in now if x in self.medians[kind]}
+        return Scenario(sc_laps=(now if kind == "sc" else []) + later.sc_laps,
+                        vsc_laps=(now if kind == "vsc" else []) + later.vsc_laps, lap_time_s=times)

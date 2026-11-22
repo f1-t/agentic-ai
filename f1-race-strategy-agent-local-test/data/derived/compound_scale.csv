@@ -1,0 +1,31 @@
+# Pirelli dry compound scales -> one common hardness index (larger is softer), in steps of the 2019-2022 C1..C5 scale.
+# An ordinal approximation: Pirelli revises compounds between seasons, so equal indices across scales mean "nearest equivalent", not identical rubber.
+# Sources and reasoning: data/derived/README.md "Compound scale".
+scale,compound,common_index,seasons,note
+C1-C5_2019,C1,1,2019-2021,2019 range (C1 hardest); 2020 reused the 2019 tyres; 2021 kept the compounds on a new construction
+C1-C5_2019,C2,2,2019-2021,
+C1-C5_2019,C3,3,2019-2021,
+C1-C5_2019,C4,4,2019-2021,
+C1-C5_2019,C5,5,2019-2021,
+C1-C5_2022,C1,1,2022,18-inch tyres: new compounds under the same five names
+C1-C5_2022,C2,2,2022,
+C1-C5_2022,C3,3,2022,
+C1-C5_2022,C4,4,2022,
+C1-C5_2022,C5,5,2022,
+C0-C5_2023,C0,1,2023,the 2022 C1 renamed C0
+C0-C5_2023,C1,1.5,2023,new compound between the old C1 (now C0) and C2; Pirelli: much closer to the C2
+C0-C5_2023,C2,2,2023,
+C0-C5_2023,C3,3,2023,
+C0-C5_2023,C4,4,2023,
+C0-C5_2023,C5,5,2023,
+C1-C5_2024,C1,1.5,2024,C0 dropped; the 2023 compounds C1..C5 kept unchanged
+C1-C5_2024,C2,2,2024,
+C1-C5_2024,C3,3,2024,
+C1-C5_2024,C4,4,2024,
+C1-C5_2024,C5,5,2024,
+C1-C6_2025,C1,1.5,2025,successor of the 2024 C1 (revised for grip; not the old C0)
+C1-C6_2025,C2,2,2025,
+C1-C6_2025,C3,3,2025,
+C1-C6_2025,C4,4,2025,
+C1-C6_2025,C5,5,2025,
+C1-C6_2025,C6,6,2025,new softest compound; one step softer than the C5

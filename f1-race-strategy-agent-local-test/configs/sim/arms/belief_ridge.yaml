@@ -1,0 +1,6 @@
+# Learned-calibrator comparison arm "belief_ridge" (src/sim/learned_calibrator.py): the belief
+# simulator (base_config configs/sim/belief.yaml) with the ridge calibrator (degradation targets),
+# trained per fold on the other calibration races.
+base_config: configs/sim/belief.yaml
+calibrator:
+  name: ridge

@@ -13,6 +13,12 @@
 # once the team decides; circuit rates (RaceParams) follow SPEC 0011b and override these
 # per race. Belief-side draws use seed + agent_tools.BELIEF_SEED_OFFSET, so the belief never
 # plans on the event samples the world scores on.
+# Pit loss as of the snapshot (src/sim/pit_loss.py, docs/eval.md "Pit loss and track status"):
+# a prior from earlier races at the circuit, else across circuits, updated with this race's
+# green stops seen by then, drawn per sample with its sd; the SC and VSC factors likewise. The
+# belief never sees the whole-race pit loss the world scores with.
+pit_loss:
+  source: asof
 fit_window: to_snapshot
 traffic:
   name: none

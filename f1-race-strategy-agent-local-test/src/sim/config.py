@@ -139,6 +139,24 @@ def _blend_section(key, path=COMPOUND_STEPS_FILE) -> dict:
     return {k: float(v) for k, v in sec.items()}
 
 
+class PolicyView(_Cfg):
+    """What a windowed fit (to_snapshot, and the calibrator's laps_so_far) may read of the race
+    frame at a snapshot (driver D after lap L; docs/eval.md "Information contract"). The full
+    window (the world) reads every row whatever this says.
+
+    window_cut   "time": the rows completed at or before the session time D completed lap L
+                 (end_s <= t); another car's lap L that ended later is not visible, a car a lap
+                 ahead's lap L + 1 that ended earlier is. "lap": every row with lap <= L, as
+                 before (legacy).
+    clean        "as_of": clean, pace_resid_s, driver_offset_s and the gap columns recomputed
+                 on the visible rows alone (data.as_of_columns). "race": the lap frame's own,
+                 whose robust filter saw every lap of the race (legacy).
+    The defaults are leak-free; {"window_cut": "lap", "clean": "race"} reproduces the belief as
+    it was before."""
+    window_cut: Literal["time", "lap"] = "time"
+    clean: Literal["as_of", "race"] = "as_of"
+
+
 class CompoundProxy(_Cfg):
     """Pricing of dry compounds the race laps do not model (proxy.py, docs/eval.md "Proxied
     compounds"). With `enabled` False the simulator is exactly what it was before proxying.
@@ -160,6 +178,53 @@ class CompoundProxy(_Cfg):
     sd_floor: dict = Field(default_factory=lambda: _blend_section("sd_floor"))
 
 
+PIT_LOSS_PRIOR_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "sim", "pit_loss_prior.json")
+
+
+def _load_pit_loss_prior(path=PIT_LOSS_PRIOR_FILE) -> dict:
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+class PitLossModel(_Cfg):
+    """Where a simulation's pit loss comes from (pit_loss.py, docs/eval.md "Pit loss and track
+    status"). "snapshot" (the default, as before): snapshot.race.pit_loss_s and the effects'
+    SC/VSC factors. "asof": pit_loss.estimate at the snapshot, from `prior` (configs/sim/
+    pit_loss_prior.json, so config_hash covers it) and this race's stops seen by then, with
+    its sd drawn per sample; the SC and VSC factors likewise. The world never takes "asof": it
+    is given the race's whole-race value (Simulator(pit_loss_s=...)). The numbers below are
+    set a priori, not tuned on any evaluation result."""
+
+    source: Literal["snapshot", "asof"] = "snapshot"
+    prior: dict = Field(default_factory=_load_pit_loss_prior)
+    # the fallback chain's last tier, no earlier race at all: calibrate.DEFAULT_PIT_LOSS_S and an
+    # sd wide enough to cover every whole-race value in the table (15 to 28.5 s)
+    default_s: float = 22.0
+    default_sd_s: float = 5.0
+    # also pool every race in the FastF1 cache at run time (pit_loss.prior_pool), not the table only
+    cache_lookup: bool = True
+    # the world's whole-race value (eval.score.race_simulators): "median" pit_loss.whole_race, the
+    # median green stop against the full fit; "replay_mean" the race's calibrate._pit_loss value
+    world: Literal["median", "replay_mean"] = "median"
+    min_green_stops: int = 3           # whole_race: below this many green stops, the prior
+    same_circuit_sd_s: float = 1.5     # pit lane length and speed limit carry over
+    min_cross_sd_s: float = 2.0
+    stop_sd_floor_s: float = 2.5       # per-stop sd floor (stationary time spread)
+    model_sd_s: float = 1.5            # per-stop estimand vs the whole-race definition
+    plausible: tuple[float, float] = (0.5, 1.5)   # stops outside these multiples of the prior are dropped
+    # SC / VSC factor prior: "config" the a priori default_*_factor (EventEffects' values, the
+    # world's), "pooled" the table's stops (lost out of sample, reports/calibration/neutralised)
+    factor_prior: Literal["config", "pooled"] = "config"
+    default_sc_factor: float = 0.5
+    default_vsc_factor: float = 0.6
+    factor_sd: float = 0.2
+    min_factor_stops: int = 5          # earlier races' stops needed for an as-of factor prior
+    factor_prior_stops: float = 5.0    # the factor prior is worth this many stops
+    factor_sd_floor: float = 0.15
+
+
 class SimConfig(_Cfg):
     degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
@@ -179,6 +244,9 @@ class SimConfig(_Cfg):
     #   pre_race     practice long runs only
     fit_window: Literal["full", "to_snapshot", "pre_race"] = "full"
     exclude_snapshot_driver: bool = False   # leave the snapshot driver's laps out of the fit
+    # what a windowed fit may read of the race frame at the snapshot (PolicyView); left out of
+    # config_hash while at its default
+    policy_view: PolicyView = Field(default_factory=PolicyView)
     # fit on free-air rows only: every degradation fit (all windows), the hazard fit and
     # ref_lap_s use the clean rows with data.lap_frame's free_air True; practice rows pass
     # (Simulator._fit). ref_lap_s becomes the free-air median, while sc_lap_factor (1.36) was
@@ -235,6 +303,8 @@ class SimConfig(_Cfg):
     # unraced dry compounds priced by proxy (proxy.py); compound_proxy.enabled False restores the
     # simulator as it was before proxying, bit for bit
     compound_proxy: CompoundProxy = Field(default_factory=CompoundProxy)
+    # pit loss as of the snapshot (PitLossModel); the default reads the snapshot's, as before
+    pit_loss: PitLossModel = Field(default_factory=PitLossModel)
 
     @classmethod
     def from_file(cls, path):
