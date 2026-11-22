@@ -216,6 +216,8 @@ class Simulator:
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
+        if hasattr(self.events, "bind"):   # "recorded" / "hybrid": the race's own neutralised laps
+            self.events.bind(laps)
         tr = self.config.track
         self.track = TRACK.get(tr.name)(**tr.params)
         tf = self.config.traffic
@@ -577,6 +579,9 @@ class Simulator:
             green *= self.track.factor(track, class_codes, lapnums)
             lap_s = np.where(sc, v["sc_lap_factor"] * self.ref_lap_s,
                              np.where(vsc, v["vsc_lap_factor"] * green, green))
+            if scen.lap_time_s:   # recorded neutralised lap times ("recorded" / "hybrid" events), where given
+                rec = np.array([scen.lap_time_s.get(int(x), np.nan) for x in laps])
+                lap_s = np.where((sc | vsc) & ~np.isnan(rec), rec, lap_s)
             if offset:   # green laps only; skipped at 0 so a run without pace is bit for bit unchanged
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
             if eps is not None:   # one vector per sample on the green laps, shared by every plan
@@ -669,7 +674,7 @@ class Simulator:
         under the recorded events: under a drawn SC the field ran green, so positions and
         traffic are approximate there."""
         if scenario is None:
-            if self.config.events.name == "none":
+            if self.config.events.name in ("none", "recorded"):   # "recorded" is the record itself
                 return False
             if self.config.events.name != "fixed":
                 return True

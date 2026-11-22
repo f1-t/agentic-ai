@@ -239,8 +239,12 @@ def _stale_sidecar(directory, **change):
 
 
 def test_a_stale_reference_is_rebuilt_with_its_own_inputs_once(tmp_path):
+    from src.eval.score import default_world_config
+    from src.sim.config import SimConfig
     refs = tmp_path / "references"
-    meta = _stale_sidecar(refs / "v1")
+    # a reference stale by code version under today's default world (the committed sidecars carry
+    # the world hash of their build, which a config change moves)
+    meta = _stale_sidecar(refs / "v1", world_config_hash=real_run.calibration.config_hash(default_world_config(SimConfig())))
     _stale_sidecar(refs / "v1", world_config_hash="ffffffffffff")
     built = []
 
@@ -256,7 +260,7 @@ def test_a_stale_reference_is_rebuilt_with_its_own_inputs_once(tmp_path):
     assert e["status"] == RAN and e["reason"] == "2 stale, 1 not rebuilt"
     assert built == [("v1", {"seed": 0, "n_samples": 50, "max_stops": 2, "hindsight": False})]
     results = {r["status"]: r for r in e["detail"]["stale"]}
-    assert results["rebuilt"]["world_config"] == "default (SimConfig())"
+    assert results["rebuilt"]["world_config"] == "default (score.default_world_config)"
     assert "no world config with hash ffffffffffff" in results["not rebuilt"]["reason"]
     assert real_run.rebuild_reference(meta, run.profile, refs)["status"] == "already rebuilt"
     other = {**meta, "scenario_set": "v0"}
