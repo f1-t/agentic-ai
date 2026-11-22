@@ -7,7 +7,8 @@ known at the snapshot. Policies plan on it; the world simulator that scores them
 the reference is not passed in. The four baselines are Quan's reference policies
 (src/baselines) run through the optimizer bridge on the belief's fit; under the R8 stint
 limit this wrapper makes fixed_one_stop and greedy_crossover limit-aware (_bridged), with
-src/baselines unchanged. `recorded_policy`
+src/baselines unchanged. `belief_optimizer` and the rule baselines `run_to_flag` and
+`one_stop_total` are named policies outside the baselines group. `recorded_policy`
 replays plans saved from earlier agent runs, and `agent_policy` (an AgentPolicy) asks the
 live agent loop (src/agent.py) through whatever LLM_BACKEND is configured, at any lap of any
 race: it sees the scenario's snapshot through RaceSnapshot.from_contract, and its
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from itertools import product
 from pathlib import Path
 
 from ..baselines import domain, policies
@@ -154,6 +156,66 @@ def belief_optimizer(scenario, belief, max_stops):
     return Decision(None, belief_optimum=True)
 
 
+COMPOUND_PREFERENCE = ("SOFT", "MEDIUM", "HARD")   # run_to_flag's forced stops, softest first
+
+
+def _preferred(compounds):
+    """`compounds` in run_to_flag's order: SOFT, MEDIUM, HARD, then any other alphabetically."""
+    rank = {c: i for i, c in enumerate(COMPOUND_PREFERENCE)}
+    return sorted(compounds, key=lambda c: (rank.get(c, len(rank)), c))
+
+
+def _latest_stops(remaining: int, stops: int):
+    """Stint lengths of every `stops`-stop split of `remaining` laps, each stint at least one
+    lap, latest pit laps first (the first stop compared first, then the second, ...)."""
+    if stops == 0:
+        yield (remaining,)
+        return
+    for first in range(remaining - stops, 0, -1):
+        for rest in _latest_stops(remaining - first, stops - 1):
+            yield (first, *rest)
+
+
+def run_to_flag(scenario, belief, max_stops):
+    """No further stop when the rules allow it; otherwise the fewest stops (at most
+    `max_stops`) that make the plan legal, each as late as the rules allow, the new stints on
+    the softest compound that keeps it legal (docs/eval.md "Rule baselines"). Legal means
+    every rule passes on the belief (belief.validate, R1-R4, R8, known compounds). With no
+    legal plan the current set runs to the flag and the world rejects it (an invalid row).
+    Reads the snapshot, the belief's modelled compounds and the rules, no pace. Not in
+    "baselines"; select it by name."""
+    snap = scenario.snapshot
+    sources = belief.config.inventory_sources
+    state = from_contract(snap, belief)
+    flag = to_contract(domain.Plan((domain.Stint(state.current_compound, state.remaining_laps),)), snap,
+                       sources=sources)
+    if not belief.validate(snap, flag):
+        return Decision(flag, meta={"forced_stops": 0})
+    compounds = _preferred(state.available_compounds)
+    for stops in range(1, max_stops + 1):
+        for lengths in _latest_stops(state.remaining_laps, stops):
+            for later in product(compounds, repeat=stops):
+                plan = domain.Plan(tuple(domain.Stint(c, n) for c, n in
+                                         zip((state.current_compound, *later), lengths)))
+                contract = to_contract(plan, snap, sources=sources)
+                if not belief.validate(snap, contract):
+                    return Decision(contract, meta={"forced_stops": stops})
+    return Decision(flag, meta={"forced_stops": None})
+
+
+def one_stop_total(scenario, belief, max_stops):
+    """One stop in the whole race. A driver who has not stopped yet (no completed stint in
+    the snapshot) gets fixed_one_stop's decision through the same wrapper, its limit-aware
+    adjustment included; a driver who has stopped gets run_to_flag. Not in "baselines";
+    select it by name."""
+    if not scenario.snapshot.stints:
+        return BASELINE_POLICIES["fixed_one_stop"](scenario, belief, max_stops)
+    return run_to_flag(scenario, belief, max_stops)
+
+
+RULE_POLICIES = {"run_to_flag": run_to_flag, "one_stop_total": one_stop_total}
+
+
 def recorded_policy(path):
     """(name, policy) replaying a json file of saved decisions:
 
@@ -225,7 +287,8 @@ agent_policy = AgentPolicy()
 
 def resolve(names, recorded=(), *, set_name: str | None = None, profile=None) -> dict:
     """Policies by name. "baselines" expands to the four reference policies, "belief_optimizer" is the optimizer on
-    the belief (apart from the group), "agent" is the
+    the belief and "run_to_flag" and "one_stop_total" are the rule baselines (all three apart
+    from the group), "agent" is the
     live agent (an AgentPolicy logging under `set_name`, with `profile`'s agent budget),
     and each recorded file adds the policy it names."""
     out = {}
@@ -236,11 +299,13 @@ def resolve(names, recorded=(), *, set_name: str | None = None, profile=None) ->
             out["agent"] = AgentPolicy(set_name=set_name or "adhoc", profile=profile)
         elif name == "belief_optimizer":
             out[name] = belief_optimizer
+        elif name in RULE_POLICIES:
+            out[name] = RULE_POLICIES[name]
         elif name in BASELINE_POLICIES:
             out[name] = BASELINE_POLICIES[name]
         else:
             raise KeyError(f"unknown policy {name!r}; choose from baselines, agent, belief_optimizer, "
-                           f"{', '.join(BASELINES)}")
+                           f"{', '.join(RULE_POLICIES)}, {', '.join(BASELINES)}")
     for path in recorded:
         name, policy = recorded_policy(path)
         out[name] = policy
