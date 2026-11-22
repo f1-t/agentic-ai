@@ -5,14 +5,16 @@ Tables derived from public sources or from the committed race cache, read at run
 
 ## tyre_nominations.csv
 
-One row per race weekend in the offline cache on main and on the `data-more-races` branch
-(column `cached_on`): the Pirelli dry compound nominated for each role (`hard`, `medium`,
+One row per race weekend in the offline cache (column `cached_on`: on main from the start, or
+added by `data-more-races`, #92): the Pirelli dry compound nominated for each role (`hard`, `medium`,
 `soft`, as the C-number Pirelli published), the season's compound `scale` (compound_scale.csv),
 the `scheduled_laps` of the race, the circuit key (`event_rates.CIRCUITS`), and two sources.
 
 This is regulation information Pirelli publishes before each race weekend; it says nothing about
 what happened in any race. Held-out races (data/eval_set.json) have a row, since the nomination
-is public pre-race information, but their race data never feeds the history.
+is public pre-race information, but their race data never feeds the history. The same holds for
+the five 2021-22 draws listed in `held_out_extra` (configs/tyre_history.yaml): 2021_07_france,
+2021_18_mexico, 2022_03_australia, 2022_05_miami, 2022_14_belgium.
 
 Sources, fetched 2026-11-21 with a generic web client, no personal details:
 - `source_url`: Pirelli's pre-race preview or compound announcement (press.pirelli.com,
@@ -23,7 +25,9 @@ Sources, fetched 2026-11-21 with a generic web client, no personal details:
 - `scheduled_laps`: the race's Wikipedia infobox / race text; races run short (aborted starts)
   are noted, the scheduled distance is kept.
 
-All 23 rows are confirmed by two fetched pages; none is blank. Rows that would need a guess are
+All 38 rows are confirmed by two fetched pages; none is blank. The 15 rows of #92's second
+group were fetched on 2026-11-21 as well, each from Pirelli's race-week preview plus Wikipedia
+or formula1.com (laps from Wikipedia); 2022 Australia's trio is non-consecutive (C2, C3, C5). Rows that would need a guess are
 to be left blank with a note: `tyre_life_prior` then compares compounds by role.
 Judgment calls: 2021 Austrian GP uses the race-week preview (C3/C4/C5), not Pirelli's February
 pre-season table (C2/C3/C4), which was changed; 2021 Spanish GP has no Pirelli page (404), so
