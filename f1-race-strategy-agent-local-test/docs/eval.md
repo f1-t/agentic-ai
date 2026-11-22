@@ -2521,6 +2521,57 @@ order worse (0.55 alone): a recorded SC lap closes the real gap to the car ahead
 simulated one, so the neutralised laps need the queue (whose order the earlier laps decide)
 rather than their lap times.
 
+Two things the floor's levels take as given. Level 4 hands the replay the recorded lap 1, which
+holds every place won or lost at the start: start-lap position changes are outside the model.
+And every level prices each stint from its recorded starting tyre age: replays (`race_stints`,
+the stint's first TyreLife less one) and snapshots (`snapshot_at` / `snapshot_as_of`, the
+current set's TyreLife) already carry used sets (36% of first stints start on a used set, mean
+age 1 lap, qualifying sets about 3), so the starting tyre state needed no change; a
+hypothetical future stint in a plan starts on a new set (start age 0) unless the plan says
+otherwise.
+
+### The safety-car queue
+
+`src/sim/sc_queue.py`, switch `SimConfig.sc_queue` (`enabled`, `mode`, `spacing_s`), off by
+default. Under a safety car the field closes up behind it: whatever the gaps were when it came
+out, at the end of its last lap the cars run nose to tail (on the calibration races the median
+consecutive gap at the line at the end of an SC period is 0.49 s and the whole field is within
+7 s, lapped cars included because they are waved past; under a VSC the gaps are held, 4.8 s
+median before and after). A replay that keeps each car's own time through the period keeps the
+gaps the race erased, which is where most of the judge's relative gap error comes from (the
+noise floor above). What the queue changes is GAPS and ORDER, so it acts on the cars' race times,
+not on any car's lap times. At each SC period S..E (S >= 2; a lap counts when most of the
+field's rows carry status 4):
+
+- order: each car's race time at the end of lap S - 1 plus the pit loss of its stops in S..E (a
+  stop under the safety car costs places in the queue, not open-air seconds);
+- the first car's time at the end of lap E is its order time plus the period's length (the judge:
+  the recorded leader's time over S..E; a drawn period or a windowed fit: the car's own simulated
+  neutralised laps);
+- every other car lands `spacing_s` (0.5 s, the measured median above, set once) behind the car
+  ahead in that order, or closer if it already was; a car that finished laps down (the recorded
+  classification, judge only) stays out of the queue; racing resumes from there.
+
+Two modes. `single` (the engine, what the judge and the belief use when scoring one car's
+plans): `sc_queue.FieldQueue` places the simulated car among the OTHER cars' race. The judge
+reads their recorded times at S - 1 and their stops under the period, the recorded period length,
+and, when the engine carries no pace term (the eval's judge), the car's whole-race pace for its
+key, since queue order is a fact about the car's real speed. The belief reads only the rows
+visible at the snapshot (`Simulator.window_rows`): for a period in progress the others' times
+at S - 1, and for a later one the field at the snapshot projected with its gaps to the car held,
+plus the car's as-of pace. A plan that pits under a recorded or drawn safety car is then charged
+the places it drops in the compressed field (spacing_s each), not the reduced open-air pit loss
+alone; a plan that pitted just before one gets its lost time back up to the queue. `field` (the
+fidelity tool's whole-race replays only): every replayed car is queued together (`sc_queue.apply`),
+the version the whole-field replay (`src/sim/field_replay.py`) would use. In the fidelity tool a
+single-mode replay runs with the car's pace in the engine (`with_pace`, a first pass's offset),
+because the queue erases the pace gaps built up before each safety car and the pace term can no
+longer be added over every lap afterwards. Ledger: `sc_queue` (judge: this race, whole; belief:
+this race, to snapshot) and `sc_queue_spacing` (history). Future blindness:
+`tests/test_sc_queue_future_blindness.py` alters every other car's rows after the cut and the
+belief's times under an SC in progress and a later one stay identical (the judge's change: the
+canary).
+
 ### What the ablation says (f7be251, selection rule applied)
 
 Changes against the base (the default world and `belief.yaml`), pooled, race-cluster 95% intervals:

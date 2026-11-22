@@ -292,6 +292,21 @@ PRIOR_SD_FRACTION = {"circuit_history": 0.10, "history_fraction": 0.15, "life_ra
                      "config_fraction": 0.20}
 
 
+class ScQueue(_Cfg):
+    """The safety-car queue (sim/sc_queue.py, docs/eval.md "The safety-car queue"): at the end of
+    each SC period the field's gaps close to `spacing_s` behind the leader in the order of the
+    cars' time when it came out plus their stops under it. Off (the default): as before.
+    spacing_s 0.5: the median real consecutive gap at the end of the calibration races' SC periods."""
+
+    enabled: bool = False
+    # "single": the engine places each simulated car in the queue among the other cars' race (the
+    # judge: their recorded times; a windowed fit: the rows visible at the snapshot, projected
+    # beyond them with gaps held), sc_queue.FieldQueue; "field": the fidelity tool's whole-field
+    # replays queue every replayed car together (sc_queue.apply) and the engine does nothing
+    mode: Literal["single", "field"] = "single"
+    spacing_s: float = Field(default=0.5, ge=0)
+
+
 class WearCliff(_Cfg):
     """Tyre life as physics (sim/cliff.py): past a compound's support edge E a lap costs
     min(kappa (age - E)^2, cap_s_per_lap) more. Both simulators start from the same historical
@@ -429,6 +444,8 @@ class SimConfig(_Cfg):
     min_race_rows_to_fit: int | None = Field(default=None, ge=1)
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
+    # the safety-car queue in whole-field replays (ScQueue); left out of config_hash at its default
+    sc_queue: ScQueue = Field(default_factory=ScQueue)
 
     @classmethod
     def from_file(cls, path):
