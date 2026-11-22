@@ -413,8 +413,8 @@ def neutralisation_outlook(snapshot: Snapshot, config: SimConfig | None = None) 
     left = snapshot.remaining_laps
 
     def chance(p, n):
-        return {"low": 1 - (1 - p / RATE_BAND) ** n, "median": 1 - (1 - p) ** n,
-                "high": 1 - (1 - min(1.0, p * RATE_BAND)) ** n}
+        return {"low": round(1 - (1 - p / RATE_BAND) ** n, 3), "median": round(1 - (1 - p) ** n, 3),
+                "high": round(1 - (1 - min(1.0, p * RATE_BAND)) ** n, 3)}
     out = {f"next_{h}_laps": {"sc": chance(r["p_sc"], min(h, left)), "vsc": chance(r["p_vsc"], min(h, left))}
            for h in NEUTRAL_HORIZONS}
     return {**out, "mean_period_laps": {"sc": r["d_sc"], "vsc": r["d_vsc"]}, "rates_source": r["source"],
@@ -468,7 +468,7 @@ def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
         out["basis"] = {"prior_s": pl["prior_s"], "prior_source": pl["prior_source"],
                         "green_stops_seen": pl["n_green_stops"], "sc_stops_seen": pl["n_sc_stops"],
                         "vsc_stops_seen": pl["n_vsc_stops"],
-                        "sc_factor_sd": pl["sc_factor_sd"], "vsc_factor_sd": pl["vsc_factor_sd"]}
+                        "sc_factor_sd": round(pl["sc_factor_sd"], 3), "vsc_factor_sd": round(pl["vsc_factor_sd"], 3)}
     return _jsonable(out)
 
 

@@ -503,6 +503,8 @@ NON_PHYSICS = (
     # trains and evaluates the learned calibrator into committed artifacts, which the "trained"
     # calibrator (calibrators.py) reads, pinned by its sha256 param, so config_hash covers them
     "learned_calibrator",
+    # the neutralisations off/on accuracy report behind the world's events; runs the simulator only
+    "neutral_report",
 )
 
 

@@ -53,6 +53,10 @@ def main(argv=None):
     p.add_argument("--drivers", nargs="+", help="limit to these driver codes")
     p.add_argument("--max-laps-down", type=int, default=2)
     p.add_argument("--max-per-race", type=int, help="seeded subsample of each race's decision points")
+    p.add_argument("--rule", choices=("default", "stratified"), default="default",
+                   help="stratified: the decision-critical set (scenarios.sample_stratified): a pool of every 2nd "
+                        "lap, strata pit_opt / close (from the world reference) and neutral / window / rest (from "
+                        "the laps so far), quotas per race and inclusion weights; never on held-out races")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--eval-set", help="the registered eval split (default data/eval_set.json): when it "
                                       "exists, races outside it are refused and the set is a report set")
@@ -117,9 +121,10 @@ def main(argv=None):
 
     if args.command == "scenarios":
         from ..sim.compute import load_profile
+        rule = {} if args.rule == "default" else {"rule": args.rule}   # default sets record no rule, as before
         out = build_set(args.races, args.version, profile=load_profile(args.profile), drivers=args.drivers,
                         max_laps_down=args.max_laps_down, max_per_race=args.max_per_race, seed=args.seed,
-                        eval_set=args.eval_set, development=args.development)
+                        eval_set=args.eval_set, development=args.development, **rule)
         path = out.save(args.out)
         kind = "development set" if out.development else "report set"
         print(f"{out.version} ({kind}): {len(out.items)} scenarios, {len(out.skipped)} skipped, "

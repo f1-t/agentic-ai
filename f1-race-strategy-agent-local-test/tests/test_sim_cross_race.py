@@ -543,8 +543,10 @@ def test_races_auto_skips_held_out_races_and_the_report_names_them(eval_set, tmp
     assert "predates" in cross_race.held_out_md(None)
 
 
-# --- the registered split's four held-out races (docs/eval.md "The registered split") ----------
-REGISTERED = ["2019_06_monaco", "2020_16_sakhir", "2024_11_austria", "2025_11_austria"]
+# --- the registered split's nine held-out races (docs/eval.md "The registered split") ----------
+# the four of the d4 split and the five of the 2021-22 draw, sorted
+REGISTERED = ["2019_06_monaco", "2020_16_sakhir", "2021_07_france", "2021_18_mexico", "2022_03_australia",
+              "2022_05_miami", "2022_14_belgium", "2024_11_austria", "2025_11_austria"]
 
 
 @pytest.mark.parametrize("race", REGISTERED)
@@ -564,9 +566,10 @@ def test_the_committed_split_refuses_each_held_out_race_in_cross_run_and_real_ru
         real_run.RealRun([race], small_profile(), tmp_path / "rr")
 
 
-def test_races_auto_leaves_all_four_held_out_races_out_of_both_commands(tmp_path, monkeypatch):
+def test_races_auto_leaves_all_nine_held_out_races_out_of_both_commands(tmp_path, monkeypatch):
     from src.sim import real_run
-    cached = ["2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir", "2021_04_spain",
+    cached = ["2019_06_monaco", "2019_10_united_kingdom", "2020_16_sakhir", "2021_04_spain", "2021_07_france",
+              "2021_18_mexico", "2022_03_australia", "2022_05_miami", "2022_14_belgium",
               "2024_11_austria", "2025_11_austria", "2025_23_qatar"]
     monkeypatch.setattr(real_run, "cached_races", lambda: (cached, []))
     seen = {}

@@ -108,7 +108,8 @@ def test_held_out_races_never_feed_the_prior_by_default():
 
 def test_eval_set_races_are_held_out():
     held = th.held_out(cfg())
-    assert {"2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria"} <= held
+    assert {"2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria", "2021_07_france",
+            "2021_18_mexico", "2022_05_miami", "2022_03_australia", "2022_14_belgium"} <= held
 
 
 def test_committed_history_has_no_held_out_race():
