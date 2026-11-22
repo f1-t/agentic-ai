@@ -403,13 +403,14 @@ Before, the world drew no SC or VSC: a snapshot taken under a safety car was sco
 race went green at once, and a stop there cost a full green pit loss, so "pit now, it is cheap"
 could never be right in the scorer, while the belief priced it at half.
 
-**Default: off.** The default world still draws no SC or VSC (`score.WORLD_EVENTS_DEFAULT` False);
-the world below is opt-in with `--world-config configs/sim/world_hybrid.yaml`. Whether it becomes the
-default is decided at integration by the fidelity scorecard (PR #93, `python -m src.sim.fidelity`):
-the replay accuracy below supports recorded neutralised laps, but drawing the later periods is a
-scoring-design choice that no accuracy measure here validates.
+**Default: on** (`score.WORLD_EVENTS_DEFAULT` True), chosen by the fidelity scorecard ("The
+current configuration" under "Simulator fidelity"): close-pair order +0.016 [0.000, +0.038] and
+relative gaps −2.4 s on 18 races, the one factor that improved order and gaps together.
+`configs/sim/world_hybrid.yaml` is the default world as a file. The world without SC/VSC:
+`score.default_world_config(c, on=False)`, the ablation factor `world_events_off`, or the whole
+earlier world `--world-config configs/sim/legacy/world_pre_scorecard.yaml`.
 
-**What the opt-in world models** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
+**What the default world models** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
 
 - the SC or VSC in progress at the snapshot ends where it really ended: the driver's own recorded
   laps of that kind from the next lap on (the scorer may know them; the policy knows only that it
@@ -672,9 +673,11 @@ agree as far as they can, and each extends it outward only where it has lap data
   (`engine.CLIFF_STREAM`, so every other draw is unchanged). Practice ages are run lengths, not
   tyre life (2023 Spain HARD: 7 in practice, 50 in the race), so they are only a lower bound.
 - *Judge (world, `full`)*, `wear_cliff.world_edge`, three sources with the same cost form:
-  (a) `history_only`, the prior's point edge, nothing from this race; (b) `history` (the default
-  until the fidelity scorecard chooses between a and b by judge-versus-reality accuracy out of
-  sample), the prior extended by the ages this race has lap data for, max(prior, oldest age run),
+  (a) `history_only`, the prior's point edge, nothing from this race (the eval world's edge,
+  `config.WORLD_EDGE`, chosen by the fidelity scorecard: close pairs +0.025 [0.000, +0.060] against
+  b on 18 races, and no hindsight); (b) `history` (the `SimConfig` default and the eval world's
+  edge before the scorecard; ablation factor `cliff_edge_history`), the prior extended by the ages
+  this race has lap data for, max(prior, oldest age run),
   the judge's one whole-race input here; (c) `race`, the oldest age run in this race (for an
   unraced compound the proxy's practice-age rule), the earlier design. The world's
   `fit_report["support_edge"]` (and `Simulator.cliff_ledger`) records per compound the edge, its
@@ -1827,8 +1830,16 @@ per stage, under `--out-dir` (default `reports/eval/rerun/<set>`). The sets are 
 | `agent` | one sequential pass of the live agent (`LLM_BACKEND`), its tools on the belief config (`AGENT_BELIEF_CONFIG`), trajectories to `trajectories/`; refuses to overwrite `agent.csv` or a non-empty `trajectories/` |
 | `tables` | `tables/`: the combined rows, per-race and pooled summary, agent-minus-X paired tables with (race, driver) cluster intervals for every comparator (belief_optimizer stands in when there are no agent rows, named in the file), the chart CSV, the tail table (share over 10, 20, 30 s, median, p90, worst), status counts by reason, by era for a set with eras, position metrics when traffic is on; and `provenance.json` |
 
+`--world-config default` is the scorecard-chosen judge (`score.default_world_config` of
+`config.world_default`: driver effects, the history-only tyre-life edge, hybrid SC/VSC) and
+`--belief-config default` is `configs/sim/belief.yaml`; the agent's tools run on the scorer's belief
+whatever the environment says (`AgentPolicy`, `agent_tools.belief_config_as`), so the tools, the
+continuation the scorer expands and `belief_optimizer` plan on one config.
 `provenance.json` records the commit (and tag, and whether the tree was dirty), the world and
-belief configs with their file sha256 and config_hash, SIM_CODE_VERSION, the set's digest,
+belief configs with their file sha256, config_hash and each scorecard-decided choice by name
+(`rerun.config_choices`: wear fit, driver effects, hinge, wear bound, sd_scale, cliff and its edge,
+R8, events, traffic, lap noise, plan_on; for the belief also the calibrator, fuel anchoring and pit
+loss), SIM_CODE_VERSION, the set's digest,
 builder and sampling rule, the profile, the model and loop settings from the environment, the
 stamps the rows carry, the future-blindness harness on this commit (the fixed and the still
 known leaks of `tests/future_blindness.py`; with `--harness` the default part's counts), the as-of
@@ -2499,13 +2510,16 @@ Defaults: the calibration races (`fidelity.CALIBRATION_RACES`: the first six, 20
 2021-22 weekends; never `auto`), the eval's default world as the judge
 (`score.default_world_config` of the race's config, with the race's whole-race pit loss,
 `score.world_pit_loss`, as `score.race_simulators` builds it), `configs/sim/belief.yaml` as the
-predictive simulator. The ablation's default factors (configs/sim/fidelity/ablation.yaml): traffic
-in the judge (`configs/sim/world.yaml`), in the belief (`configs/sim/belief_traffic.yaml`) and
-both; hybrid SC/VSC in the judge; the judge's wear fit (driver effects and hinge, the default;
-driver effects only; hinge only; neither); the judge's cliff edge (history only, history
-extended by this race's ages, the default, or this race); the cliff off; legacy R8; driver
-effects and hinge in the belief; the wear bound; the proxy; the belief's pit loss; the trained
-calibrator. `--field-replay` adds `src/sim/field_replay.py`'s whole-field replay (cars run
+predictive simulator. The ablation's default factors (configs/sim/fidelity/ablation.yaml), on the
+current configuration as the base: traffic in the judge (`configs/sim/world.yaml`), in the belief
+(`configs/sim/belief_traffic.yaml`) and both; the judge without SC/VSC (`world_events_off`); the
+judge's wear fit (driver effects, the default; `world_linear`, neither; `world_hinge`, driver
+effects and the hinge); the judge's cliff edge (history only, the default; `cliff_edge_history`,
+history extended by this race's ages; `cliff_edge_race`, this race); the cliff off; legacy R8;
+the belief without driver effects (`belief_no_driver_effects`) and with the hinge; the wear
+bound; the proxy; the belief's pit loss; the trained calibrator. An overlay that names another
+events model replaces the events block (`fidelity.merge`), so a hybrid world's `lap_times` does not
+reach the rate model. `--field-replay` adds `src/sim/field_replay.py`'s whole-field replay (cars run
 together) with its own summary. A judge with `recorded` or `hybrid` SC/VSC replays whole races as
 `recorded` (every period with its recorded lap times; from lap 0 a hybrid world's periods are
 all recorded ones) and scores the plan panel as configured. The B snapshots are the policy's
@@ -2604,6 +2618,55 @@ Changes against the base (the default world and `belief.yaml`), pooled, race-clu
   - The learned (trained) calibrator: regret +0.76 s [+0.18, +1.57], though coverage improves.
   - The hinge in the judge: driver effects alone or neither do better on close pairs.
 - **Undecided: traffic.** In the per-car replay the other cars are their recorded trajectories, so traffic cannot change order there; it costs regret +0.4 s. It is judged on the whole-field replay (`src/sim/field_replay.py`) instead.
+
+### The current configuration (adopted from the scorecard)
+
+The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/eval/rerun.py`
+`default`, the agent's tools, the scorecard's base):
+
+- **Judge (world):** linear_fuel with driver effects, no hinge (`config.WORLD_DEGRADATION`); the
+  wear cliff with the tyre-life edge from history only (`config.WORLD_EDGE` `history_only`); hybrid
+  SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
+  policy's plan and the reference see the same periods for a seed; no traffic; R8 retired. As a
+  file: `configs/sim/world_hybrid.yaml`. config_hash `abc455a9bbb6` (before: `d230d3a56b0b`).
+- **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
+  anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
+  ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
+  `sd_scale`. config_hash `f7b872d14c0c` (before: `d479652b0fe7`). `belief_traffic.yaml` and
+  `belief_learned.yaml` are it plus one block.
+- **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
+  `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
+  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`. The whole earlier pair:
+  `configs/sim/legacy/world_pre_scorecard.yaml` and `belief_pre_scorecard.yaml`.
+
+SIM_CODE_VERSION `096753d89c0f` (before `ba80a54af80b`): `config.py` is a physics module. Every
+reference built on the earlier world is stale (its key holds the world's config_hash and
+SIM_CODE_VERSION); scenario sets under the as_of rule do not depend on the world.
+
+Confirmation on c67c9a7 (`reports/calibration/fidelity/adopt-c67c9a7/`, the 19 calibration races
+named; 2022_11_austria fails in every configuration, the base included, on a set with no recorded
+compound at OCO's lap 45, so 18 races count). Headline: close pairs out of sample 0.751, Spearman
+0.957, relative gap 13.6 s, plan-rank agreement 0.867, judge-regret of the belief's favourite
+4.2 s, pit-now agreement 0.806, belief replay close pairs 0.665, plan-gap coverage 68 / 90 %
+0.743 / 0.865, plan 90 % coverage 0.975. Noise floor: level 4 (stints, stops, neutralised laps
+and lap 1 as recorded) 0.745 close pairs and 3.2 s; the judge already sits at that order.
+
+Each adopted choice switched back off (change against the new base, race-cluster 95% intervals):
+
+| toggle | close pairs | Spearman | rel gap s | rank rho | regret s | pit-now | belief replay close pairs |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| world_events_off (hybrid off) | −0.025 [−0.050, −0.007] | −0.009 | +2.41 [+0.44, +4.51] | −0.001 | +0.40 [+0.12, +0.70] | +0.002 | 0 |
+| cliff_edge_history (edge extended by this race) | −0.022 [−0.068, +0.006] | +0.003 | −0.40 [−1.02, +0.07] | −0.003 | −0.44 [−1.05, +0.05] | −0.029 [−0.051, −0.007] | 0 |
+| belief_no_driver_effects | 0 | 0 | 0 | −0.030 [−0.051, −0.008] | +1.05 [+0.31, +1.82] | −0.021 | −0.031 [−0.050, −0.016] |
+| world_linear (judge: neither) | −0.014 [−0.036, +0.002] | −0.002 | −0.21 | −0.030 [−0.074, +0.005] | +0.81 [−0.53, +1.94] | +0.011 | 0 |
+| world_hinge (judge: + hinge) | −0.033 [−0.065, −0.009] | −0.005 | −0.00 | −0.002 | +0.17 [+0.01, +0.33] | −0.006 | 0 |
+| traffic_both (still rejected) | −0.041 [−0.084, +0.003] | −0.004 | −0.22 | −0.008 [−0.014, −0.003] | +0.07 | +0.006 | −0.002 |
+
+Reading under the selection rule: hybrid SC/VSC, belief driver effects and no hinge each earn their
+place with intervals clear of zero. Driver effects in the judge lead on order and ranking with
+intervals that touch zero. The history-only edge leads on close pairs and pit-now agreement, while
+the earlier edge is slightly better on relative gaps and regret; every one of those differences
+except pit-now is inside its interval, so it stays adopted (no hindsight). Traffic stays off.
 
 ## Tests
 

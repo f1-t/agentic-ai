@@ -1,0 +1,89 @@
+{
+  "label": "main",
+  "races": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna"
+  ],
+  "failed": [
+    {
+      "label": "main",
+      "race_id": "2022_11_austria",
+      "error": "ValueError: OCO's set at lap 45 has no recorded compound"
+    }
+  ],
+  "code_version": "096753d89c0f-3cd6a5d8c2cf",
+  "world": "race default (jobs.load_race)",
+  "world_overlay": {},
+  "belief_overlay": {},
+  "world_race": {},
+  "world_config_hash": "ccb12649ff32",
+  "belief_config_hash": "30ede0981519",
+  "options": {
+    "b_drivers": 6,
+    "b_every": 5,
+    "samples": 20,
+    "n_one": 4,
+    "n_two": 3,
+    "lodo": true,
+    "loso": true,
+    "grid_references": true,
+    "hindsight_variants": true,
+    "components": true,
+    "field_replay": false,
+    "seed": 0,
+    "max_stops": 2
+  },
+  "headline": {
+    "A_close_pair_acc": 0.7506849315068493,
+    "A_spearman": 0.9571552687651759,
+    "A_rel_gap_mae_s": 13.559224874091042,
+    "B2_rank_rho": 0.8673850085689274,
+    "B2_regret_s": 4.222563958673411,
+    "B2_pit_now_agree": 0.8059033989266547,
+    "P_close_pair_acc": 0.6652054794520548,
+    "P_spearman": 0.8816901010054814,
+    "A_abs_mae_s": 19.305044760001877,
+    "A_abs_bias_s": -3.8071367396440285,
+    "A_stop_gain_bias_s": -0.19055330796525624,
+    "B1_mae_s": 50.44042350702057,
+    "B1_bias_s": 45.70270537346821,
+    "B1_green_mae_s": 16.973641331580342,
+    "B2_rank_rho_green": 0.882834450364557,
+    "B3_cov_90": 0.9753785606296945,
+    "B3_factor_cov_90": 0.459611389465966,
+    "B4_mae_offset_s": 33.05114845267521
+  },
+  "future_blindness": {
+    "status": "pass",
+    "new_leak_differences": 0,
+    "differences_with_known_leaks": 0,
+    "known_leaks": [],
+    "fixed_leaks": [
+      "compound_list",
+      "frame_filter",
+      "gap_behind",
+      "lap_window",
+      "pit_loss",
+      "race_length",
+      "stint_limit"
+    ],
+    "detail": ""
+  },
+  "run_seconds": 307.69368624687195
+}

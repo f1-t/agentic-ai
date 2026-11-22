@@ -1,9 +1,18 @@
-# The world with safety cars and VSC (docs/eval.md "Safety cars and VSC in the scoring world"):
-# the default SimConfig, full fit window, traffic off, and eval.score.WORLD_EVENTS: the SC/VSC in
-# progress at the snapshot as recorded (with the field's recorded lap times), later ones drawn at
-# the rate model's rates. Opt-in (`score --world-config configs/sim/world_hybrid.yaml`) until the
-# integration's fidelity scorecard decides the default.
+# The eval's default world as a file (docs/eval.md "Safety cars and VSC in the scoring world"): the
+# full fit window, traffic off, config.WORLD_DEGRADATION's wear fit (linear_fuel with driver
+# effects), the wear cliff's edge config.WORLD_EDGE ("history_only": the historical prior, nothing
+# from this race) and eval.score.WORLD_EVENTS: the SC/VSC in progress at the snapshot as recorded
+# (with the field's recorded lap times), later ones drawn at the rate model's rates, the same draws
+# for every plan and the reference. Opt-in until the fidelity scorecard chose it; now the default,
+# so `score` without --world-config runs this world. tests/test_eval_default_config.py checks it
+# equals score.default_world_config(config.world_default(SimConfig())).
 fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
 events:
   name: hybrid
   params:

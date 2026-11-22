@@ -1,9 +1,10 @@
 # The world with traffic ON (the scorer's switch; docs/eval.md "Traffic"): pass it with
 # `score --world-config configs/sim/world.yaml`. The eval's default world (score.race_simulators:
-# the full fit window, config.WORLD_DEGRADATION's wear fit, the wear cliff on) with ghost-car
-# traffic: every other car's recorded laps as ghosts, which the scorer may read (it is never a
-# policy). Without --world-config the world is that default with traffic OFF. Opt-in until the
-# fidelity scorecard (src/sim/fidelity.py) decides by the finishing-order measures.
+# the full fit window, config.WORLD_DEGRADATION's wear fit, the wear cliff on with edge
+# config.WORLD_EDGE, SC/VSC score.WORLD_EVENTS) with ghost-car traffic: every other car's recorded
+# laps as ghosts, which the scorer may read (it is never a policy). Without --world-config the
+# world is that default with traffic OFF. Kept OFF by the fidelity scorecard: no order gain in the
+# whole-field replay on 19 races, worse relative gaps early (docs/eval.md "What the ablation says").
 #   align_neutral   the ghosts keep their gaps on a lap the world runs green but the record
 #                   ran under SC/VSC, and the reverse
 #   own_pace        our clock among the ghosts runs at the driver's own whole-race pace
@@ -16,6 +17,12 @@ degradation:
   name: linear_fuel
   params:
     driver_effects: race
+wear_cliff:
+  world_edge: history_only
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
 traffic:
   name: ghost
   params:
