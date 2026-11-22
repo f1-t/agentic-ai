@@ -2818,7 +2818,81 @@ queue) looks better to it than to the judge, whose SC in progress ends when it r
 (2022 France at laps 20 to 40: the belief's pit-now plans 7 to 25 s ahead of staying, the
 judge's 0.4 to 9 s behind). Before it can be adopted the queue needs the near-lapped cars'
 rule (who joins the train, from the gap at deployment against the SC lap) and the two
-simulators' SC duration and rate models aligned.
+simulators' SC duration and rate models aligned (the next section).
+
+Future work, the near-lapped rule: today every car that finished on the lead lap joins the train
+at the period's end. A car within a lap of the leader but physically ahead of the safety car on
+the road (behind by more than the SC lap less its distance to the line) is not picked up by the
+train: it circulates to the back of the queue, or is held a lap down until the "lapped cars may
+overtake" message, so at the end of the period it sits about one SC lap behind the leader, not
+0.5 s per place (2022 Bahrain: the real field at the end of its SC spans 38 s). The rule to
+fit: from each car's gap at deployment and the period's first SC lap time, whether it joins the
+queue at E or one lap later, measured against the recorded end-of-period gaps of the
+history table's races.
+
+### Safety-car duration and rates: the belief against the judge
+
+Switches `events.params.duration` ("geometric", the default, or "history") and, for the judge's
+later periods, `pooled` (events.RateEvents; race_history.period_lengths, pooled_event_rates).
+
+Measured first (19 calibration races, the periods of the races' own track status):
+
+| | predicted | real |
+| --- | --- | --- |
+| SC still to run after 1, 2, 3, 4, 5, 6 laps (belief, memoryless geometric, as-of mean 3.3 to 4.7) | 3.9, 3.9, 3.9, 4.0, 4.0, 4.0 laps | 3.7, 2.7, 1.7, 1.7, 1.0, 0.2 laps |
+| SC rest: bias / 90% coverage (belief, geometric) | +1.84 laps / 0.79 | |
+| VSC rest: bias / 90% coverage (belief, geometric) | +1.66 laps / 0.55 | |
+| SC rest, history model as of the race (L given L >= laps so far) | bias -0.35 laps / coverage 0.92 | |
+| VSC rest, history model as of the race | bias +0.19 laps / coverage 1.00 | |
+| later SCs over the 19 races (belief as-of rates / judge's EventModel defaults / pooled history) | 16.2 / 16.2 / 13.0 | 11 |
+| later VSCs (same) | 16.2 / 21.6 / 14.5 | 15 |
+
+The belief's rates are within about 1.3 Poisson sd of the record (not changed); its period
+lengths were biased: a memoryless geometric keeps every safety car in progress going for about
+four more laps whatever its age, so the belief priced a stop under it as cheap for longer than the
+race allowed. The judge's later periods used EventModel's provisional 2021-Spain defaults (VSC
+rate 44% high). "history" draws a period's length from the dry races' recorded lengths (as of
+the race for the belief: race_history.earlier_races, the provenance registry's `event_rates`
+artifact; pooled over the table for the judge), shrunk toward an a priori geometric with
+EVENT_PRIOR's mean worth two periods (the documented prior for a race with no earlier one); a
+period in progress for e laps continues by L - e laps with L drawn given L >= e (0: it ends at
+the snapshot). Common random numbers are kept: the draws use the scenario's event substream.
+
+Scorecard (19 races, main a94177d with this branch, A/B sections without the hindsight
+variants, leave-one-stint-out or components; change against the adopted base):
+
+| arm | judge order / gaps | B2 rho | B2 regret s | pit-now | B1 MAE s | B3 cov 90 |
+| --- | --- | --- | --- | --- | --- | --- |
+| base | 0.753 / 13.17 s | 0.866 | 4.122 | 0.810 | 50.1 | 0.976 |
+| belief duration history | unchanged | +0.001 [-0.000, +0.002] | +0.007 [-0.081, +0.094] | +0.003 [-0.012, +0.019] | 41.8 | 0.991 |
+| judge later periods pooled | unchanged | +0.001 [-0.002, +0.003] | -0.015 [-0.060, +0.023] | +0.004 [-0.002, +0.010] | 50.6 | 0.975 |
+| both (aligned) | unchanged | +0.002 [-0.000, +0.004] | -0.011 [-0.107, +0.085] | +0.006 [-0.008, +0.020] | 42.9 | 0.991 |
+
+Split by the track at the snapshot (panel snapshots where both a pit-now and a stay plan are
+legal; "value" = best pit-now plan less best other plan, belief less judge):
+
+| snapshots | n | value gap base -> aligned s | pit-now agree | regret s | rho |
+| --- | --- | --- | --- | --- | --- |
+| green | 1083 | +0.01 -> -0.47 | 0.815 -> 0.821 | 3.78 -> 3.80 | 0.868 -> 0.870 |
+| SC or VSC in progress | 89 | -6.04 -> -3.61 | 0.742 -> 0.753 | 9.25 -> 9.26 | 0.839 -> 0.840 |
+| of which SC | 47 | -6.13 -> -5.71 | 0.872 -> 0.745 | 13.88 -> 13.51 | 0.800 -> 0.802 |
+| of which VSC | 42 | -5.95 -> -1.27 | 0.595 -> 0.762 | 4.07 -> 4.51 | 0.884 -> 0.883 |
+
+Reading: aligned, every overall measure improves or holds and the judge's order and gaps do not
+move (whole-race replays use the recorded periods). Under a VSC the belief's overvaluation of a
+stop falls from 6 s to 1.3 s and pit-now agreement rises from 0.60 to 0.76. Under an SC the
+value gap shrinks only a little (6.1 to 5.7 s) and pit-now agreement falls by six of 47
+snapshots: four are 2019 Britain, the earliest race, which has no earlier history and runs on the
+a priori prior (an SC may end on any lap, so a stop now looks less certain to be cheap), two are
+2022 Brazil, where the value is within 2 s of zero either way. What is left under an SC is the
+judge knowing the real end of the period in progress (it often ends at the next lap, so a stop
+now is a green stop): no as-of model can know that, and the remaining gap is that hindsight.
+Adopted 2026-11-22 as the default on both sides (the current configuration below; the earlier
+pair is `configs/sim/legacy/world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`, the
+ablation toggle `sc_alignment_off`). Limitation, stated and not chased: under an SC in progress
+pit-now agreement is lower than with the geometric (six of 47 snapshots), mostly a race with no
+earlier history (2019 Britain, on the a priori prior) and values within 2 s of zero; the value
+gap that remains under an SC is the judge's knowledge of when the real period ends.
 
 ### What the ablation says (f7be251, selection rule applied)
 
@@ -2845,17 +2919,30 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
 - **Judge (world):** linear_fuel with driver effects, no hinge (`config.WORLD_DEGRADATION`); the
   wear cliff with the tyre-life edge from history only (`config.WORLD_EDGE` `history_only`); hybrid
   SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
-  policy's plan and the reference see the same periods for a seed; no traffic; R8 retired. As a
-  file: `configs/sim/world_hybrid.yaml`. config_hash `abc455a9bbb6` (before: `d230d3a56b0b`).
+  policy's plan and the reference see the same periods for a seed, the later periods at rates and
+  lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
+  2026-11-22); no traffic; R8 retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash
+  `5069228b35e7` (before the SC alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
   ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
-  `sd_scale`. config_hash `f7b872d14c0c` (before: `d479652b0fe7`). `belief_traffic.yaml` and
-  `belief_learned.yaml` are it plus one block.
+  `sd_scale`, SC/VSC lengths from the as-of history of period lengths, a period in progress
+  continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22).
+  config_hash `351f4124ff22` (before the SC alignment `f7b872d14c0c`, before the scorecard
+  `d479652b0fe7`). `belief_traffic.yaml` and `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
   `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
-  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`. The whole earlier pair:
-  `configs/sim/legacy/world_pre_scorecard.yaml` and `belief_pre_scorecard.yaml`.
+  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue (`sc_queue`), the
+  pit-stop durations (`pit_stops`). The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
+  and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`.
+
+Confirmation after the SC alignment on 997d69d (`reports/calibration/fidelity/sc-align-997d69d/`,
+all 19 calibration races, none failed; SIM_CODE_VERSION `938d268003fa`): close pairs out of sample
+0.753, Spearman 0.958, relative gap 13.17 s, absolute 18.9 s, plan-rank agreement 0.868,
+judge-regret of the belief's favourite 4.11 s, pit-now agreement 0.816, belief replay close pairs
+0.664, B1 MAE 42.9 s, plan 90 % coverage 0.991. Noise floor (`ceiling_pooled.csv` there): judge
+0.753 / 13.2 s, + per-stint pace 0.696 / 11.9 s, + pit laps 0.739 / 11.4 s, + SC/VSC laps
+0.614 / 5.2 s, + lap 1 (the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9].
 
 SIM_CODE_VERSION `096753d89c0f` (before `ba80a54af80b`): `config.py` is a physics module. Every
 reference built on the earlier world is stale (its key holds the world's config_hash and

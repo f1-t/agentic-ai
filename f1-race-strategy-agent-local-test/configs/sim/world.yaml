@@ -23,6 +23,8 @@ events:
   name: hybrid
   params:
     lap_times: recorded
+    duration: history   # later periods: rates and lengths pooled over the history table (adopted 2026-11-22)
+    pooled: true
 traffic:
   name: ghost
   params:
