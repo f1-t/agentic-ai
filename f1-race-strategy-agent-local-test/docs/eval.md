@@ -916,6 +916,74 @@ noise, so the switch is kept for the rerun to decide.
 
 Per-race fuel and wear before and after are in the PR description.
 
+### Honest uncertainty
+
+The belief's stated intervals were too narrow. Its fitted factors' 90% intervals covered the judge's
+value 55-62% of the time. The residuals it drew as independent lap noise are persistent (lag-1
+autocorrelation 0.78-0.94, driver-stint offsets with sd 0.4-1.0 s/lap). Three switches address it,
+and the plan_on switch reports the alternative to planning on the draws.
+
+| switch | what it does | default |
+|---|---|---|
+| `lap_noise: persistent` | each sample draws one offset per plan stint, held over the stint, with sd the as-of driver-stint residual sd, plus the lap-to-lap part iid. Both sds come from the to_snapshot fit's `residual_components` (`degradation._residual_components`: method of moments on the rows the fit saw, so as of the snapshot). The engine draws from its own stream, `LAP_OFFSET_STREAM`, so the other draws are unchanged. | **on** (belief.yaml); `residual` is the belief before |
+| `degradation.params.sd_scale` | every sd and the posterior covariance of a kind (base, wear, fuel, hinge) times a factor, S cov S, so the correlations (fuel-wear included) are kept. The point estimate is unchanged. | off |
+| `plan_on: point` | `optimize_batch` ranks candidates on the fit's point estimate (`Simulator.point_estimate`: no parameter draw, no lap noise; events and pit-loss draws kept) instead of the mean over draws | off (`draws`) |
+
+The pit-loss sd (as-of `pit_loss`, `PIT_LOSS_STREAM`) and the tyre-life edge's sd (`cliff.sample_ages`,
+`CLIFF_STREAM`) were already drawn per sample, so nothing changed for them.
+
+**The width, chosen by coverage.** The factor is the smallest on a grid (1, 1.25, ..., 6) whose 68%
+and 90% coverage of the judge's value, pooled over the other races, is within 10 points of nominal.
+It is chosen per kind and leave-one-race-out over the 18 calibration races, on the anchored belief.
+
+| kind | before 68 / 90 | LORO factor | held-out 68 / 90 |
+|---|---|---|---|
+| base | 0.40 / 0.62 | 1.75 | 0.64 / 0.82 |
+| fuel | 0.39 / 0.60 | 1.5-1.75 | 0.62 / 0.84 |
+| wear | 0.42 / 0.57 | 1.75-2.0 | 0.62 / 0.82 |
+
+The all-race choice is 1.75 for every kind. The tools carry `interval_meaning`, one phrase for what
+their 90% ranges mean: "widened so about 9 in 10 such ranges held the full-race value on past races"
+when the fit is widened, else "from this race's laps alone; on past races such ranges held the
+full-race value far less often".
+
+**Measured** with the fidelity scorecard on the 18 calibration races, against the default judge. All
+columns are on the fuel-anchored belief. The first block uses 20 draws and 6 drivers. The second
+block uses 60 draws and 1 driver, which reduces the Monte Carlo noise in the replay.
+
+| measure | anchored | + persistent | + sd_scale 1.75 | + both | point estimate |
+|---|---|---|---|---|---|
+| plan ranking, Spearman | 0.849 | 0.839 | 0.849 | 0.840 | 0.830 |
+| judge-regret of the favourite, s | 5.29 | 5.23 | 4.89 | 4.72 | 6.76 |
+| pit-now agreement | 0.762 | 0.789 | 0.741 | 0.775 | 0.753 |
+| replay close-pair order | 0.640 | 0.635 | 0.635 | 0.629 | 0.653 |
+| replay relative gap error, s | 21.72 | 21.66 | 21.91 | 21.90 | 21.93 |
+| remaining time 68 / 90 coverage | 0.49 / 0.64 | 0.56 / 0.75 | 0.49 / 0.69 | 0.55 / 0.77 | 0.52 / 0.62 |
+| plan-vs-plan gap 68 / 90 coverage | 0.51 / 0.69 | 0.78 / 0.90 | 0.57 / 0.75 | 0.80 / 0.92 | 0.34 / 0.53 |
+| replay of real strategies vs reality, 68 / 90 coverage | 0.32 / 0.48 | 0.45 / 0.65 | 0.39 / 0.55 | 0.49 / 0.69 | 0.17 / 0.30 |
+| factor 90% coverage, fuel / wear / base | 0.60 / 0.57 / 0.62 | same | 0.85 / 0.80 / 0.82 | 0.85 / 0.80 / 0.82 | same |
+| 60 draws: replay close-pair order | 0.639 | 0.636 | 0.630 | 0.631 | |
+| 60 draws: replay relative gap error, s | 21.80 | 21.78 | 21.93 | 21.91 | |
+| 60 draws: plan-vs-plan gap 68 / 90 coverage | 0.47 / 0.68 | 0.76 / 0.92 | 0.52 / 0.74 | 0.78 / 0.93 | |
+
+**Decisions.**
+
+- **Persistent lap noise is adopted.** It brings plan-versus-plan gap coverage to nominal, raises the
+  coverage of remaining time and of the real replay, improves the replay's relative gaps and the
+  pit-now agreement, and improves regret.
+  - The cost is close-pair order: 2320 of 3650 pair-snapshots against 2332 with 60 draws (2318 against
+    2336 with 20), about 0.4 points.
+  - Spearman falls by 0.001 with 60 draws and by 0.010 with 20.
+  - The judgment call: the gains in coverage, gaps and regret outweigh a loss this small.
+- **The parameter widening stays a switch.** It fixes the factor coverage, but it consistently worsens
+  both order measures (close-pair -0.009 / -0.010, relative gap +0.13 / +0.19 s). The likely cause
+  is the wear bound: wider draws are truncated at 0 more often, and the truncated draws' mean is
+  pulled up unevenly across compounds.
+  - The tools therefore keep the unwidened factor intervals and say so ("far less often").
+- **Planning on the point estimate stays off.** Its replay order is the best of all (0.653, no draw
+  noise and no truncation bias), but the planner's ranking agreement and regret are the worst (0.830,
+  6.76 s). The draws help ranking here, unlike in the design study (D3, with oracle tyre-life edges).
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound

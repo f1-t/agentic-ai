@@ -397,7 +397,17 @@ class SimConfig(_Cfg):
     # N(0, residual_s^2) on every remaining green lap, residual_s from the degradation
     # fit_report, one vector per sample shared by every plan (engine LAP_NOISE_STREAM).
     # The degradation parameter draw is the model's `draw` param (degradation.py).
-    lap_noise: Literal["none", "residual"] = "none"
+    # "persistent" (docs/eval.md "Honest uncertainty"): the residuals are not independent
+    # (lag-1 autocorrelation 0.78-0.94), so each sample draws one offset per plan stint, held
+    # over the stint, plus the lap-to-lap part iid, both sds from the fit's residual_components
+    # (engine._lap_noise_offsets, LAP_OFFSET_STREAM).
+    lap_noise: Literal["none", "residual", "persistent"] = "none"
+    # what optimize_batch (the belief optimizer, the rule baselines' search and the tools'
+    # continuations) ranks candidates on: "draws" (the default, as before) the mean over the
+    # posterior parameter draws and lap noise; "point" the point estimate (no parameter draw, no
+    # lap noise; events and pit-loss draws kept), Simulator.point_estimate. The tools' reported
+    # intervals still come from the draws. Left out of config_hash at its default.
+    plan_on: Literal["draws", "point"] = "draws"
     # R8 stint limit, RETIRED (docs/rules.md R8): a stint could end at most this many laps past
     # the oldest tyre age any car ran on its compound in the whole race, a hindsight rule handed
     # to every policy. None (the default) is off. The legacy setting that reproduces the results
