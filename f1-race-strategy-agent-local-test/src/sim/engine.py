@@ -13,6 +13,7 @@ from . import calibrators as _cal
 from . import cliff as _cliff
 from . import model_report as _report
 from . import proxy as _proxy
+from . import sc_queue as _queue
 from .config import SimConfig, class_names, compound_class
 from .data import as_of_columns, visible_rows
 from .degradation import DEGRADATION
@@ -691,6 +692,7 @@ class Simulator:
             for i in idx:
                 out.support_warnings[i] = out.support_warnings[i] + tw
         offset = self._pace_offset(snapshot.driver)
+        fq = self.field_queue(snapshot)   # None unless config.sc_queue is on in mode "single"
 
         # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
         # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
@@ -849,6 +851,11 @@ class Simulator:
                 lap_s[rows, np.minimum(lap[rows] + 1, n_laps - 1)] += hx.dnf_penalty_s
                 out.dnf[idx, k], out.big_loss[idx, k] = dnf, big
                 out.dnf_lap[idx, k] = np.where(dnf, laps[lap], np.nan)
+            if fq is not None and sc.any():   # the safety-car queue (sim/sc_queue.py), mode "single"
+                pit_q = v["pit_loss_s"] * stops * scale
+                for S, E in _queue.runs(laps[sc]):
+                    lap_s[:, E - int(laps[0])] += fq.shift(S, E, lap_s, pit_q, int(laps[0]), snapshot.elapsed_s or 0.0,
+                                                           v["pit_loss_s"], v["sc_pit_loss_factor"])
             if tstate is not None:
                 # the full pit loss is booked at the end of the in-lap, so the out-lap starts
                 # from the rejoin position; it stays out of lap_s, as below
@@ -885,6 +892,36 @@ class Simulator:
         for r, i in enumerate(idx):
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
+
+    def field_queue(self, snapshot: Snapshot):
+        """sc_queue.FieldQueue of this snapshot under config.sc_queue (mode "single"), else None.
+        The full window (the judge) reads the whole race and the recorded periods' lengths; a
+        windowed fit only its window's rows (window_rows at its calibration point, the snapshot's
+        own lap k on a pre_race fit reading nothing after lap 0), projected beyond them. Cached."""
+        q = self.config.sc_queue
+        if not q.enabled or q.mode != "single" or self.laps is None or "end_s" not in self.laps:
+            return None
+        key = ("sc_queue", self.window, snapshot.driver, snapshot.laps_completed, self.pace is None)
+        if key not in self._pit_loss_cache:
+            lapped, own_lapped = (), False
+            if self.config.fit_window == "full":
+                rows, horizon, recorded = self.laps, int(self.laps["lap"].max()), True
+                # the recorded classification: cars that finished laps down stayed out of the queue
+                last = rows.groupby("driver")["lap"].max()
+                lapped = set(last.index[last < last.max()])
+                own_lapped = snapshot.race.total_laps < last.max()
+            else:
+                k0 = (self.window[1] or 0) if self.window is not None and self.config.fit_window == "to_snapshot" else 0
+                rows = self.window_rows(snapshot, k0) if k0 > 0 else self.laps.iloc[0:0]
+                horizon, recorded = k0, False
+            if len(self._pit_loss_cache) >= FIT_CACHE_SIZE:
+                del self._pit_loss_cache[next(iter(self._pit_loss_cache))]
+            # the car's own pace places it in the queue when no pace term is in its lap times
+            pace = (_queue.own_pace(self.degradation, rows[rows["driver"] == snapshot.driver])
+                    if self.pace is None and len(rows) else 0.0)
+            self._pit_loss_cache[key] = (_queue.FieldQueue(rows, snapshot.driver, horizon, q.spacing_s, self.ref_lap_s,
+                                                           recorded, pace, lapped, own_lapped) if len(rows) else None)
+        return self._pit_loss_cache[key]
 
     def pit_loss_inputs(self, snapshot: Snapshot) -> dict:
         """{pit_loss_s, sd_s, sc_factor, vsc_factor, source, ...} this simulation prices a stop
