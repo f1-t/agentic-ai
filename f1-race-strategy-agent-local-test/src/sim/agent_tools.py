@@ -685,9 +685,32 @@ def traffic_report(snapshot: Snapshot, sim) -> dict:
     pit = float(snapshot.race.pit_loss_s or 0.0)
     start = state.table.G_prev[:, 0] if len(state.table.laps) else np.empty(0)
     behind = int(((start > state.anchor) & (start <= state.anchor + pit)).sum())
-    return {"modelled": True, "available": True, "basis": TRAFFIC_BASIS,
-            "cars_within_pit_loss_behind_now": behind, "dirty_air_s": round(float(state.dirty_air_s), 2),
-            "own_pace_s": round(float(state.own_offset_s), 2)}
+    out = {"modelled": True, "available": True, "basis": TRAFFIC_BASIS,
+           "cars_within_pit_loss_behind_now": behind, "dirty_air_s": round(float(state.dirty_air_s), 2),
+           "own_pace_s": round(float(state.own_offset_s), 2)}
+    if getattr(state, "difficulty", None) is not None:   # traffic difficulty "asof" (overtaking.py)
+        out["passing"] = passing_words(state.difficulty)
+    return out
+
+
+# the passing difficulty in generic words (no circuit, season or event): the per-lap chance that a
+# car within a second of the one ahead passes it, from overtaking.difficulty_prior
+PASSING_BANDS = ((0.05, "very hard: a faster car usually stays stuck behind for many laps"),
+                 (0.12, "hard: a car needs a large pace advantage to pass"),
+                 (0.20, "average"),
+                 (1.01, "easy: a faster car usually gets by within a lap or two"))
+PASSING_SOURCES = {1: "earlier races at this track", 2: "earlier races at other tracks only",
+                   3: "a general prior (no earlier race)"}
+
+
+def passing_words(d) -> dict:
+    """{difficulty, pass_chance_per_lap_close, pace_advantage_to_pass_s, from}: overtaking.Difficulty
+    in words a tool may show."""
+    words = next(w for cut, w in PASSING_BANDS if d.rate < cut)
+    return {"difficulty": words,
+            "pass_chance_per_lap_close": [round(float(d.rate_lo), 3), round(float(d.rate), 3), round(float(d.rate_hi), 3)],
+            "pace_advantage_to_pass_s": round(float(d.theta_s), 2),
+            "from": PASSING_SOURCES.get(int(d.tier), PASSING_SOURCES[3])}
 
 
 NEUTRAL_HORIZONS = (5, 10)   # laps ahead for the chance of a new SC / VSC (pit_loss)

@@ -27,6 +27,25 @@ factors:
     note: traffic in the judge and the belief
     world_file: configs/sim/world.yaml
     belief_file: configs/sim/belief_traffic.yaml
+  # circuit-specific passing (sim/overtaking.py, docs/eval.md "Overtaking difficulty"): the hazard
+  # pass rule with the circuit's threshold, in place of the one rule for every circuit
+  world_difficulty:
+    note: the judge's traffic with the circuit's passing difficulty (configs/sim/world_difficulty.yaml; the circuit's races, this one included)
+    world_file: configs/sim/world_difficulty.yaml
+    requires: [src.sim.overtaking]
+  world_difficulty_race:
+    note: the judge's traffic with this race's own passing rate (shrunk toward the pooled one)
+    world: {traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true, difficulty: race}}}
+    requires: [src.sim.overtaking]
+  belief_difficulty:
+    note: the belief's projected traffic with the as-of passing difficulty (configs/sim/belief_difficulty.yaml; earlier races only)
+    belief_file: configs/sim/belief_difficulty.yaml
+    requires: [src.sim.overtaking]
+  difficulty_both:
+    note: the judge's circuit difficulty and the belief's as-of difficulty
+    world_file: configs/sim/world_difficulty.yaml
+    belief_file: configs/sim/belief_difficulty.yaml
+    requires: [src.sim.overtaking]
   world_events_off:
     note: the judge without SC/VSC (the world before the adoption drew none; the base's hybrid events, configs/sim/world_hybrid.yaml, replay whole races as `recorded` and run the plan panel as `hybrid`)
     world: {events: {name: none}}

@@ -481,6 +481,8 @@ PHYSICS_MODULES = (
     "pit_loss",
     # the wear cliff: where each simulator places a compound's tyre life (world and belief)
     "cliff",
+    # the passing-difficulty table the ghost traffic's hazard pass rule reads (traffic difficulty)
+    "overtaking",
     # the historical tyre-life prior both simulators place the support edge with (cliff.history_prior,
     # SimConfig.wear_cliff.prior_source "tyre_history"); its committed tables (data/derived/tyre_*.csv,
     # configs/tyre_history.yaml) are read at run time and are not in config_hash

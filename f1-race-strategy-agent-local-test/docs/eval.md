@@ -228,6 +228,251 @@ would score 23.81 but only by conjuring time. If the belief's bias is fixed else
 should be measured again. Neither side is on by default: the fidelity scorecard measured it by
 the finishing-order measures and kept traffic off ("The current configuration").
 
+### Overtaking difficulty
+
+The traffic model above uses one passing rule for every circuit. `src/sim/overtaking.py` counts
+passes per circuit from the timing data and gives the ghost traffic a circuit-specific
+threshold. It is a switch, `traffic.params.difficulty`, **off by default** (`none`), with the
+earlier behaviour bit for bit when off.
+
+**The count** (`observe_race`, `python -m src.sim.overtaking build`, written to
+`data/derived/overtaking.csv`, `overtaking_pairs.csv` and the manifest; 28 cached races, never a
+held-out one; 2021 Belgium is left out with 1 racing lap):
+
+- A *close lap* is a car that starts lap L within 1.0 s of the car directly ahead on the same lap
+  count (`data.gap_columns`). Both cars need a lap-L time, neither may be on an in-lap or out-lap,
+  and lap L and the car ahead's lap L-1 must be green.
+- A *pass* is a close lap on which the follower crosses the line first.
+- Pit stops, lap 1, SC/VSC laps and the lap after them, retirements and lapping never count.
+- The *rate* is passes per close lap. Normalising by how often cars are in range keeps a
+  processional race at a wide track from reading as hard to pass. `passes_per_lap` (every order
+  change on the same lap count) is reported beside it.
+- A free-air pace fit per race (driver-stint intercept, compound age slope, a common lap slope,
+  laps at least 2 s behind the car ahead) gives the follower's *pace advantage* on each close
+  lap. A logistic P(pass) = sigmoid(slope (advantage - theta)) over the pooled close laps has
+  slope 1.14 per s. The pass probability is 3% with no advantage, about 25% at 0.5-1.0 s,
+  49% at 1.0-1.5 s and 78% at 2-3 s.
+- `theta` is the advantage at which half the close laps end in a pass.
+- The per-circuit value is the rate, in log-odds, shrunk toward the pooled rate with weight
+  n / (n + 150 close laps). It becomes a threshold through the pooled logistic:
+  theta = theta_pool + (z_pool - z) / slope.
+- *Dirty air* is the pace-fit residual of laps under 1.5 s behind less that of free-air laps.
+- *Sectors*: the boundary (S1, S2, line) at which the follower first runs ahead, from the
+  cumulative sector session times.
+
+| race | circuit | close laps | passes | rate | passes/lap | S1/S2/S3 | dirty air s | theta (own) s | judge rate / theta | as-of rate / theta |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2019_10_united_kingdom | silverstone | 183 | 13 | 0.071 | 0.47 | 1/5/7 | 0.52 | 2.23 | 0.095 / 2.14 | (no earlier race) |
+| 2021_01_bahrain | sakhir | 84 | 32 | 0.381 | 0.83 | 32/0/0 | 0.28 | 0.80 | 0.209 / 1.33 | 0.071 / 1.60 |
+| 2021_02_emilia_romagna | imola | 103 | 19 | 0.184 | 0.56 | 16/1/2 | 0.52 | 2.07 | 0.119 / 1.92 | 0.169 / 1.60 |
+| 2021_04_spain | catalunya | 188 | 34 | 0.181 | 0.67 | 30/2/2 | 0.66 | 1.71 | 0.222 / 1.27 | 0.173 / 1.60 |
+| 2021_09_austrian | red_bull_ring | 254 | 25 | 0.098 | 0.37 | 2/23/0 | 0.43 | 1.85 | 0.131 / 1.82 | 0.176 / 1.40 |
+| 2021_20_qatar | lusail | 158 | 35 | 0.222 | 0.76 | 34/0/1 | 0.50 | 1.80 | 0.101 / 2.08 | 0.151 / 1.33 |
+| 2021_21_saudi_arabia | jeddah | 112 | 20 | 0.179 | 1.14 | 15/0/5 | 0.76 | 1.14 | 0.158 / 1.63 | 0.163 / 1.45 |
+| 2021_22_united_arab_emirates | yas_marina | 98 | 10 | 0.102 | 0.28 | 0/9/1 | 0.54 | 1.95 | 0.170 / 1.55 | 0.165 / 1.45 |
+| 2022_01_bahrain | sakhir | 151 | 40 | 0.265 | 1.15 | 30/8/2 | 0.30 | 1.26 | 0.209 / 1.33 | 0.225 / 1.17 |
+| 2022_02_saudi_arabia | jeddah | 152 | 26 | 0.171 | 0.83 | 19/0/7 | 0.72 | 1.09 | 0.158 / 1.63 | 0.176 / 1.38 |
+| 2022_04_emilia_romagna | imola | 192 | 12 | 0.062 | 0.23 | 10/0/2 | 0.52 | 2.48 | 0.119 / 1.92 | 0.178 / 1.34 |
+| 2022_06_spain | catalunya | 102 | 38 | 0.373 | 0.67 | 33/5/0 | 0.07 | 0.58 | 0.222 / 1.27 | 0.172 / 1.31 |
+| 2022_07_monaco | monaco | 191 | 3 | 0.016 | 0.10 | 0/1/2 | 1.02 | - | 0.019 / 3.60 | 0.171 / 1.31 |
+| 2022_08_azerbaijan | baku | 99 | 19 | 0.192 | 0.73 | 16/0/3 | 0.54 | 1.62 | 0.154 / 1.66 | 0.156 / 1.61 |
+| 2022_09_canada | villeneuve | 303 | 26 | 0.086 | 0.57 | 7/2/17 | 0.52 | 1.58 | 0.100 / 2.09 | 0.158 / 1.60 |
+| 2022_11_austria | red_bull_ring | 290 | 46 | 0.159 | 0.81 | 12/31/3 | 0.15 | 1.20 | 0.131 / 1.82 | 0.116 / 1.79 |
+| 2022_12_france | paul_ricard | 198 | 17 | 0.086 | 0.53 | 5/8/4 | 0.34 | 2.39 | 0.105 / 2.04 | 0.150 / 1.53 |
+| 2022_17_singapore | marina_bay | 97 | 7 | 0.072 | 0.24 | 3/1/3 | 0.61 | 2.00 | 0.107 / 2.03 | 0.145 / 1.54 |
+| 2022_20_mexico | rodriguez | 147 | 19 | 0.129 | 0.31 | 17/2/0 | 0.42 | 1.86 | 0.132 / 1.82 | 0.143 / 1.56 |
+| 2022_21_brazil | interlagos | 149 | 42 | 0.282 | 0.96 | 37/3/2 | 0.15 | 1.07 | 0.148 / 1.70 | 0.142 / 1.54 |
+| 2022_22_united_arab_emirates | yas_marina | 169 | 42 | 0.249 | 0.96 | 0/38/4 | 0.26 | 1.39 | 0.170 / 1.55 | 0.130 / 1.60 |
+| 2023_01_bahrain | sakhir | 122 | 17 | 0.139 | 0.35 | 15/2/0 | 0.05 | 1.11 | 0.209 / 1.33 | 0.238 / 1.10 |
+| 2023_07_spain | catalunya | 175 | 48 | 0.274 | 0.77 | 47/1/0 | 0.15 | 0.76 | 0.222 / 1.27 | 0.212 / 1.18 |
+| 2024_07_emilia_romagna | imola | 204 | 26 | 0.127 | 0.47 | 24/1/1 | 0.39 | 1.97 | 0.119 / 1.92 | 0.122 / 1.65 |
+| 2024_08_monaco | monaco | 378 | 3 | 0.008 | 0.05 | 1/1/1 | 0.51 | 5.12 | 0.019 / 3.60 | 0.049 / 2.38 |
+| 2024_12_united_kingdom | silverstone | 193 | 18 | 0.093 | 0.53 | 6/2/10 | 0.21 | 2.10 | 0.095 / 2.14 | 0.100 / 2.17 |
+| 2024_21_brazil | interlagos | 187 | 10 | 0.053 | 0.38 | 6/3/1 | 0.18 | 1.90 | 0.148 / 1.70 | 0.203 / 1.42 |
+| 2025_23_qatar | lusail | 273 | 4 | 0.015 | 0.12 | 3/1/0 | 0.53 | - | 0.101 / 2.08 | 0.178 / 1.55 |
+
+Where passing happens: mostly in S1, the run from the line to the first braking zone. The
+exceptions repeat at the same circuit: Austria (S2, 23/25 and 31/46), Abu Dhabi (S2, 9/10 and
+38/42), Canada (S3) and Silverstone (S2/S3). The ghost model works at the line, so the sector
+split is descriptive. It cannot improve the line-based rate (the rate is the sum of the
+sectors), and it is not used.
+
+**Validation** (`python -m src.sim.overtaking validate`). The question is whether a circuit's
+value predicts a race's own passing better than a pooled constant. It is tested over the races
+with an earlier (as-of) or another (leave-one-race-out) race at the same circuit:
+
+| target | scope | races | circuit value | pooled constant |
+|---|---|---|---|---|
+| theta (the race's own fit), mean abs error s | as-of | 12 | 0.59 | 0.71 |
+| theta, mean abs error s | leave-one-race-out | 21 | 0.62 | 0.67 |
+| rate, mean abs log-odds error | as-of | 13 | 0.80 | 0.88 |
+| rate, mean abs log-odds error | leave-one-race-out | 23 | 0.79 | 0.86 |
+| rate, binomial log-loss per close lap | as-of | 13 | 0.4215 | 0.4262 |
+
+The circuit factor predicts better, but modestly: the same circuit varies a lot from year to
+year (Spain 0.18 to 0.37; Interlagos 0.28, then 0.05 in the wet 2024 race). The biggest miss is
+Monaco 2024: the as-of value calls it hard (theta 2.4 s), but its own fit is 5.1 s. The as-of
+90% band of the rate covers only 0.62 of the races, so it is too narrow. A public per-race
+overtake count was not found in the time available, so there is no second-source check.
+
+**The switch** (`traffic.GhostParams.difficulty`):
+
+- `none`: the earlier rule, the default.
+- `circuit`: the circuit's table races, this one included. Judge only, because it reads the
+  race (hindsight, ledgered).
+- `race`: this race's own count shrunk toward the pooled one. Judge only.
+- `asof`: races strictly before this one (`difficulty_prior`; provenance
+  `overtaking_difficulty`; the a priori `PRIOR_*` with no earlier race). The belief's.
+
+`circuit` and `race` are refused for the projected source. When the switch is on, a caught car
+(not an out-lap ghost) adds the hazard -ln(1 - p) on each lap behind the car ahead, with
+p = sigmoid(slope (advantage - theta)), where advantage is the ghost's lap less ours. The
+hazard is kept while the car stays within 1.5 s and reset otherwise. Theta is raised by
+pass_delta_s - pass_delta_drs_s when DRS is off. The pass completes when the summed hazard
+reaches ln 2, the median time to pass. Until then the car is held at the follow gap.
+
+A pass is positional, with no swap, so no time is conjured. The passed ghost is no longer
+the car ahead until it is more than 2 s ahead, or until we stop or a neutralisation resets
+every fight. `difficulty_dirty_air` takes `dirty_air_s` from the table.
+
+Configs:
+- `configs/sim/world_difficulty.yaml`: `world.yaml` plus `difficulty: circuit`.
+- `configs/sim/belief_difficulty.yaml`: `belief_traffic.yaml` plus `difficulty: asof`.
+
+The agent's `get_model_report` traffic block adds `passing` when the switch is on: the
+difficulty in generic words ("very hard: a faster car usually stays stuck behind for many laps",
+"hard", "average", "easy"), the per-lap pass chance when close (90% band), the pace advantage
+needed, and where it comes from ("earlier races at this track" etc.). It names no circuit.
+
+**DRS trains** (`difficulty_train`). A follower passes on 4.9% of its close laps when the car
+ahead is itself within 1 s of its own car ahead (2,074 laps). It passes on 19.1% when that car
+is free (2,878 laps). At the pooled slope the train threshold is 1.8 s higher (`_train_fit`; the
+as-of version reads earlier races only). With the switch on, a ghost in a train has theta raised by
+shift x (1 - share), and a free ghost has it lowered by shift x share.
+
+**Measured (2026-11-22, calibration races only, nothing adopted).** Base: the adopted default
+world (`world_hybrid.yaml`, traffic off). Race-cluster 95% bootstrap over the 19 calibration
+races.
+
+Whole-field replay (`src/sim/field_replay.py`, leave-one-driver-out fit, as-of pace, k = 0, 10,
+20, 30, 40 pooled), change against the base:
+
+| judge | close-pair order | Spearman | position mae | relative gap s |
+|---|---|---|---|---|
+| base level | 0.667 | 0.886 | 1.42 | 19.8 |
+| traffic (`world.yaml`, one rule) | +0.007 [-0.004, +0.019] | -0.002 | -0.016 | +0.78 [+0.12, +1.31] |
+| difficulty `circuit` | -0.001 [-0.013, +0.014] | -0.002 | +0.007 | +0.78 [+0.13, +1.40] |
+| difficulty `race` | +0.002 [-0.007, +0.013] | -0.003 | +0.014 | +0.71 [+0.07, +1.31] |
+| difficulty `asof` | -0.001 [-0.014, +0.015] | -0.003 | -0.003 | +0.82 [+0.14, +1.48] |
+| `circuit` + table dirty air | +0.004 [-0.007, +0.017] | +0.001 | -0.023 | +0.80 [+0.11, +1.46] |
+| `circuit` + trains | +0.001 [-0.011, +0.016] | -0.002 | -0.009 | +0.62 [-0.06, +1.24] |
+| `asof` + trains | -0.002 [-0.012, +0.011] | -0.001 | -0.008 | +0.54 [-0.12, +1.16] |
+
+By circuit type (judge rate < 0.12 hard: Silverstone, Qatar, Imola, Canada, France; >= 0.18 easy:
+Bahrain, Spain; street: Jeddah, Baku, Canada), close-pair change:
+- `circuit`: hard -0.006, average +0.000, easy +0.002, street +0.011.
+- `circuit` + trains: hard -0.013, average +0.004, easy +0.009, street -0.011.
+- One rule: hard -0.011, average +0.015 [+0.002, +0.037], easy +0.014, street -0.004.
+
+Every interval includes 0 except where marked. No variant helps where passing is hard.
+
+Expert consistency on the dev20 scenarios (469, actual_strategy scored on 428), against each
+judge's own reference (`python -m src.eval.rerun references|baselines --set dev20`):
+
+| judge | mean regret s | p90 | worst | over 20 s | stint the reference ends 5+ laps earlier | change in mean, hard / street |
+|---|---|---|---|---|---|---|
+| default (committed dev20) | 7.02 | 19.5 | 69.2 | 0.096 | 0.086 | |
+| traffic (`world.yaml`) | 7.35 (+0.33 [+0.10, +0.62]) | 20.5 | 68.9 | 0.112 | 0.070 | +0.06 / +0.31 |
+| difficulty `circuit` | 7.36 (+0.34 [+0.09, +0.65]) | 20.6 | 69.0 | 0.110 | 0.075 | +0.25 / +0.23 |
+| difficulty `circuit` + trains | 7.37 (+0.35 [+0.10, +0.64]) | 20.4 | 68.9 | 0.110 | 0.091 | +0.41 / +0.22 |
+| no traffic, `world_edge: history` | 6.23 (-0.79 [-1.74, +0.02]) | 19.2 | 69.2 | 0.079 | 0.086 | -0.77 / -1.79 [-2.91, -1.19] |
+
+At hard circuits the default judge's mean is 7.66 s; Imola 2024 is worst at 17.8 s, with 36%
+over 20 s. With difficulty on, the share of real stints ended 5+ laps early there falls by
+-0.034 [-0.101, +0.018] (Imola 2024: 0.24 to 0.08), but the mean regret does not fall.
+
+Traffic in the judge prices the real strategy's own time in traffic as well as the
+alternatives', so the real plans' regret rises slightly everywhere. The judge's position
+regret for actual_strategy is 0.61 places under both traffic judges.
+
+**Monaco 2024, a diagnostic case** (not in dev20; 25 as-of scenarios sampled into a scratch set
+with the `rerun scenarios` builder, digest `dfb8af57c90c`; never committed as a set). It is
+the one cached non-held-out race where passing is near impossible and the field ran a managed
+pace on HARD for up to 78 laps. Expert consistency of actual_strategy against each judge's
+reference (25 scored):
+
+| judge | mean regret s | median | p90 | worst | over 20 s | reference stops / real stops |
+|---|---|---|---|---|---|---|
+| default (`history_only` edge, no traffic) | 83.6 | 90.2 | 133.8 | 147.6 | 0.88 | 1.16 / 0.32 |
+| traffic, one rule | 81.8 | 86.1 | 134.8 | 145.6 | 0.88 | 1.04 / 0.32 |
+| difficulty `circuit` | 74.5 | 77.1 | 127.3 | 138.7 | 0.84 | 1.00 / 0.32 |
+| difficulty `race` | 75.0 | 77.2 | 128.1 | 138.6 | 0.84 | 1.00 / 0.32 |
+| difficulty `asof` | 81.4 | 85.6 | 134.4 | 143.5 | 0.88 | 1.04 / 0.32 |
+| `circuit` + trains | 74.3 | 75.3 | 129.5 | 135.4 | 0.80 | 1.00 / 0.32 |
+| wear cliff `world_edge: history` | 30.4 | 24.8 | 56.7 | 59.6 | 0.72 | 1.04 / 0.32 |
+| wear cliff `world_edge: race` | 30.4 | 24.8 | 56.7 | 59.6 | 0.72 | 1.04 / 0.32 |
+| wear cliff off | 30.4 | 24.8 | 56.7 | 59.5 | 0.72 | 1.04 / 0.32 |
+| wear cliff off + difficulty `circuit` | 23.2 | 21.3 | 49.8 | 78.7 | 0.52 | 1.00 / 0.32 |
+
+Track position explains a small part: difficulty takes about 9 s off an 84 s regret. Most of the
+gap comes from the tyre-life edge. The history-only prior puts the HARD edge far below the 60-78
+laps the field really ran, so the judge charges a real 18-lap HARD run to the flag about 90 s
+against a stop. The difficulty rule also cannot hold cars at Monaco, because the recorded field
+ran several seconds a lap below the model's free-air pace. A car on fresh tyres is then more than
+the 3.6 s threshold faster than the ghosts, so it gets by.
+
+**The judge's tyre-life edge** (`wear_cliff.world_edge`, an existing switch; judge only, belief
+unchanged). `history` extends the historical edge by the tyre ages this race has laps for
+(hindsight, ledgered). On dev20, against `history_only`:
+- Expert consistency: mean regret -0.79 [-1.74, +0.02] s (7.02 to 6.23), over 20 s 0.096 to
+  0.079, the reference adding a stop the team did not make 0.121 to 0.061. Street circuits
+  -1.79 [-2.91, -1.19]; hard -0.77 [-3.17, +1.22]; Imola 2024 17.8 to 12.5 s.
+- Whole-field close-pair order: -0.014 [-0.032, -0.002]; relative gap -0.37 [-0.82, +0.02] s.
+  `race` gives the same whole-field numbers.
+- References with a stint ending beyond the oldest age raced on that compound: 0.198 to 0.299
+  (by more than 5 laps: 0.070 to 0.107). A raised edge lets plans run up to it.
+- The 25-30-lap SOFT stints at Imola 2024 (SOFT raced 8 laps) appear under both edges, in 72% of
+  that race's references either way. They come from the prior being long there, not from the
+  extension, so the two findings do not conflict.
+
+Per-car fidelity ablation (`python -m src.sim.fidelity ablate --no-hindsight-variants`, base the
+adopted configuration, 19 races, change against the base). `E_real_regret_s` is the new
+expert-consistency row: the judge's time for the real plan less its best panel plan, base 5.88 s.
+
+| factor | close pairs | Spearman | rel gap s | B2 rank rho | B2 regret s | pit-now | E_real_regret_s |
+|---|---|---|---|---|---|---|---|
+| base level | 0.753 | 0.958 | 13.17 | 0.868 | 4.11 | 0.816 | 5.88 |
+| world_traffic | -0.046 [-0.090, +0.003] | -0.010 | -0.41 | -0.009 [-0.015, -0.003] | +0.15 | -0.004 | -0.25 [-0.50, -0.02] |
+| world_difficulty | -0.052 [-0.105, -0.007] | -0.008 | +0.27 | -0.011 [-0.019, -0.004] | +0.26 [+0.09, +0.43] | -0.003 | -0.24 [-0.47, -0.03] |
+| world_difficulty_race | -0.035 [-0.078, +0.006] | -0.014 | +0.11 | -0.012 | +0.26 [+0.06, +0.45] | +0.000 | -0.25 [-0.48, -0.03] |
+| belief_traffic | 0 | 0 | 0 | -0.001 | -0.05 | +0.007 | 0 |
+| belief_difficulty | 0 | 0 | 0 | -0.005 [-0.008, -0.002] | -0.11 [-0.26, +0.02] | +0.009 | 0 |
+| difficulty_both | -0.052 [-0.105, -0.007] | -0.008 | +0.27 | -0.011 | +0.11 | +0.009 | -0.24 |
+| cliff_edge_history (no traffic) | -0.022 [-0.067, +0.006] | +0.003 | -0.38 | -0.003 | -0.40 [-0.95, +0.07] | -0.029 [-0.052, -0.007] | -0.96 [-2.46, +0.07] |
+| cliff_edge_race (no traffic) | -0.022 [-0.067, +0.006] | +0.003 | -0.38 | -0.004 | -0.09 | -0.017 | -1.49 [-3.04, -0.14] |
+
+E by circuit type, difficulty (circuit): hard -0.14, street -0.02, easy -0.31. Cliff edge
+history: hard +0.47, street -0.79, easy -1.11.
+
+**Verdict (selection rule fixed in advance).** No traffic or difficulty variant is an
+adopt-candidate:
+- The per-car close-pair order falls: -0.046 with one rule, -0.052 [-0.105, -0.007] with the
+  circuit difficulty, outside zero.
+- The whole-field order does not move.
+- Plan-ranking agreement with the belief worsens (B2 rank -0.011, regret +0.26 s).
+- Expert consistency moves only in the per-car panel (-0.24 s) and rises slightly against the
+  real reference (+0.34 s).
+- Every switch stays off.
+
+The DRS-train effect and the table are real findings about passing. They do not make the
+judge's order match reality better on these races, where the order error is dominated by pace
+error rather than by who is stuck behind whom.
+
+Compute: a dev20 reference build (469 scenarios) costs 0.81 worker-seconds per scenario for the
+no-traffic judge, against 4.7-5.4 with any traffic judge on this machine. That is about 180 s
+against 1,050-1,220 s per 225 scenarios. The hybrid events make samples differ, so traffic is
+recomputed per sample.
+
 ## Information contract
 
 A policy decides at a snapshot: race R, driver D, after lap L. Let t be the session time at
