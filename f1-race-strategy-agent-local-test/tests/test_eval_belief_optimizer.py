@@ -42,6 +42,7 @@ def test_synthetic_legal_deterministic_nonnegative_regret(items):
     assert all(r["reason"] for r in runs[0] if r["status"] == "invalid")
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_spain_belief_optimizer_legal_deterministic_nonnegative():
     from src.sim import jobs

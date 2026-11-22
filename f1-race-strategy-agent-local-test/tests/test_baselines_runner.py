@@ -7,6 +7,7 @@ from src.baselines.runner import format_table, load_snapshot, run_pipeline
 from src.baselines.runner import main as runner_main
 
 
+@pytest.mark.slow
 def test_load_snapshot_at_start():
     contract_snap, actual_stints, view = load_snapshot(
         race_id="2021_04_spain", driver="HAM", lap=0
@@ -18,6 +19,7 @@ def test_load_snapshot_at_start():
     assert view.lap == 0
 
 
+@pytest.mark.slow
 def test_load_snapshot_midrace():
     contract_snap, actual_stints, view = load_snapshot(
         race_id="2021_04_spain", driver="HAM", lap=27
@@ -33,6 +35,7 @@ def test_load_snapshot_midrace():
 # the R8 wrapper's moves on 2021 Spain, pinned without the compound proxy: with it on, fixed_one_stop
 # takes the proxied HARD, whose practice cap (18 + 3) no one-stop from these snapshots fits
 @pytest.mark.compound_proxy_off
+@pytest.mark.slow
 def test_run_pipeline_offline_lap0():
     res = run_pipeline(
         race_id="2021_04_spain",
@@ -62,6 +65,7 @@ def test_run_pipeline_offline_lap0():
 
 
 @pytest.mark.compound_proxy_off
+@pytest.mark.slow
 def test_run_pipeline_offline_midrace():
     res = run_pipeline(
         race_id="2021_04_spain",
@@ -84,6 +88,7 @@ def test_run_pipeline_offline_midrace():
     assert rows["fixed_one_stop"]["regret_s"] > 0
 
 
+@pytest.mark.slow
 def test_run_pipeline_agent_row_carries_submitted_in_grace(monkeypatch):
     from src.baselines import runner
 
@@ -125,6 +130,7 @@ def test_format_table_renders():
     assert "optimizer (ref)" in table
 
 
+@pytest.mark.slow
 def test_main_cli_offline_json(capsys):
     runner_main(["--no-agent", "--json", "--driver", "HAM", "--lap", "0"])
     captured = capsys.readouterr()
@@ -133,6 +139,7 @@ def test_main_cli_offline_json(capsys):
     assert len(data["results"]) == 4
 
 
+@pytest.mark.slow
 def test_main_cli_from_snapshot_file(tmp_path, capsys):
     snap_file = tmp_path / "snap.json"
     snap_data = {
@@ -158,6 +165,7 @@ def test_main_cli_from_snapshot_file(tmp_path, capsys):
     assert len(data["results"]) == 4
 
 
+@pytest.mark.slow
 def test_baselines_main_pipeline_delegation(capsys, monkeypatch):
     monkeypatch.setattr(
         "sys.argv",

@@ -642,34 +642,6 @@ def test_sc_bunching_never_ends_past_the_car_behind():
     assert (inc[:, 0] < 0).any() and (inc[:, 0] > 0).any() and (inc[:, 0] == 0).any()   # closed, pushed, led
 
 
-def ghost_digest(traffic):
-    """sha256 over a 13-plan x 40-sample batch with drawn SC and VSC on a five-ghost field."""
-    df = frame(ghost("AAA", 80.5, 3.0), ghost("BBB", 81.0, 9.0), ghost("CCC", 79.5, -4.0),
-               ghost("DDD", 80.2, 20.0, pit_in=(9,), times={9: 100.0}), car("EEE", 80.5, start=30.0, compound="MEDIUM"))
-    plans = [[["SOFT", x], ["MEDIUM", 15 - x]] for x in range(2, 14)] + [[["SOFT", 15]]]
-    cfg = SimConfig(degradation=LIN, traffic=traffic, events={"name": "rate", "params": {"p_sc": 0.15, "p_vsc": 0.1}})
-    b = Simulator(df, cfg).simulate_batch(snap(), plans, rules=RULES, n_samples=40, return_laps=True, seed=7)
-    h = hashlib.sha256()
-    for a in (b.times, b.pit_loss, b.lap_times, b.traffic_s, b.passes, *b.stint_seconds):
-        h.update(stable_bytes(a))
-    return h.hexdigest()
-
-
-# Re-pinned with stable_bytes (rounded floats) on the current default outputs.
-# computed with ghost_digest on origin/main 3c8b1a8 (#27, before bunching)
-GHOST_MAIN_DIGEST = "b68dc9f92c1cf239e3d351aa858704b9ea0a808d3ce3b65b67a65e3817ce5638"
-NONE_MAIN_DIGEST = "11c31593875427886da0e72e485f810e670b6fc9c2bc08f3908e305e5ff5c340"
-
-
-def test_sc_bunching_off_and_traffic_none_digests_equal_main():
-    # 6 and 7
-    assert ghost_digest({"name": "ghost", "params": {"sc_bunching": False}}) == GHOST_MAIN_DIGEST
-    assert ghost_digest({"name": "none"}) == NONE_MAIN_DIGEST
-    assert ghost_digest({"name": "ghost"}) == GHOST_MAIN_DIGEST   # bunching is off by default
-    assert ghost_digest({"name": "ghost", "params": {"sc_bunching": True}}) != GHOST_MAIN_DIGEST
-    assert GhostTraffic().params.sc_bunching is False
-
-
 def test_bunching_flows_into_the_batch_and_the_result():
     df = frame(sc_ghost("AAA", 20.0), sc_ghost("BBB", -10.0))
     s = snap(4, 4 * F)

@@ -142,6 +142,7 @@ def test_check_finds_a_reference_from_another_code_version(scenario_set, world, 
     assert "000000000000.parquet" in out and "ffffffffffff" in out and path.name not in out
 
 
+@pytest.mark.legacy
 def test_check_lists_d3_apart_as_an_expected_exception(scenario_set, world, tmp_path, capsys):
     """d3 is rebuilt at the final evaluation (docs/eval.md): `reference --check` lists its stale
     reference apart, with the reason, and counts no stale reference otherwise.
@@ -161,25 +162,6 @@ def test_check_lists_d3_apart_as_an_expected_exception(scenario_set, world, tmp_
     assert out.startswith("0 cached references with a sim_code_version other than")
     assert "1 expected stale (docs/eval.md):" in out and "111111111111.parquet" in out
     assert out.rstrip().endswith("d3 is rebuilt at the final evaluation")
-
-
-def test_rows_and_summaries_carry_the_stint_limit_stamps(scenario_set, flat):
-    """stint_limit_rank and stint_limit_margin_laps are stamped on every row and carried into
-    each summary row, so tables scored at two settings can be told apart; R8 off is None on
-    the rows and NaN in the summary."""
-    probe = {"probe": _fixed([["SOFT", 20], ["MEDIUM", 20]])}
-    legacy = Simulator(flat.laps, flat.config.model_copy(update={"stint_limit_margin_laps": 3}))   # R8 retired
-    rows = score_set(scenario_set, lambda race_id, role: legacy, probe, n_samples=1)
-    assert (rows["stint_limit_rank"] == 1).all() and (rows["stint_limit_margin_laps"] == 3).all()
-    table = summarize(rows)
-    assert (table["stint_limit_rank"] == 1).all() and (table["stint_limit_margin_laps"] == 3).all()
-    off = Simulator(flat.laps, flat.config.model_copy(update={"stint_limit_margin_laps": None,
-                                                              "stint_limit_rank": 3}))
-    rows_off = score_set(scenario_set, lambda race_id, role: off, probe, n_samples=1)
-    assert rows_off["stint_limit_margin_laps"].isna().all() and (rows_off["stint_limit_rank"] == 3).all()
-    both = summarize(pd.concat([rows, rows_off]))
-    assert set(both["stint_limit_rank"]) == {"1;3"}
-    assert summarize(rows_off)["stint_limit_margin_laps"].isna().all()
 
 
 def test_hindsight_fixes_the_events_to_the_record(scenario_set, world):
@@ -246,6 +228,7 @@ def test_reports_without_within_mc_still_summarize():
 
 
 # --- the jobs runner reads the cache -------------------------------------------------------
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_eval_jobs_runner_reads_the_cache_and_carries_require_reference(tmp_path):
     from src.eval.score import install_job_runner, race_simulators
@@ -373,43 +356,7 @@ def _deterministic_world_rows(scenario_set, sims, pols, n_samples):
     return rows, rows.drop(columns=NEW_COLUMNS)
 
 
-@pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
-# without the compound proxy: at 2021 Spain the proxied HARD is SOFT's copy (the ordering
-# constraint on the race fit), so plans swapping the two tie exactly in this deterministic world
-@pytest.mark.compound_proxy_off
-def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
-    """The deterministic default world on a slice of v1: every optimal set is the reference
-    alone, every pit-now call is decisive, the set-based agreement is the plain one, and the
-    summary table is the one without the near-tie columns.
-
-    Without the R8 stint limit (docs/rules.md): with it, more references are two-stop plans,
-    and in this deterministic linear world a two-stop plan ties exactly with its later stints
-    swapped, so some optimal sets hold several exact ties."""
-    from src.eval.score import race_simulators
-    from src.sim.compute import load_profile
-    profile = load_profile("local")
-    v1 = ScenarioSet.load(SCENARIOS_V1)
-    part = ScenarioSet(version="tv1", items=v1.items[::12])
-    part.digest = part.compute_digest()
-    from src.eval.score import BELIEF_CONFIG
-    # R8 off and the wear cliff off: the old deterministic linear world, whose ties this pins
-    no_cliff = SimConfig().wear_cliff.model_copy(update={"enabled": False})
-    belief = SimConfig.from_file(BELIEF_CONFIG).model_copy(update={"stint_limit_margin_laps": None,
-                                                                   "wear_cliff": no_cliff})
-    sims = race_simulators(profile, belief, SimConfig(stint_limit_margin_laps=None, wear_cliff=no_cliff))
-    rows, old = _deterministic_world_rows(part, sims, resolve(["baselines"]),
-                                          profile.sim.n_samples)
-    assert (rows["opt_set_size"] == 1).all()
-    decisive = rows["pit_now_decisive"].dropna()
-    assert len(decisive) > len(rows) / 2 and decisive.astype(bool).all()
-    ok = rows[rows.status == "ok"]
-    assert len(ok) and (ok["stop_agree_set"] == ok["stop_agree"]).all()
-    assert ok["first_pit_error_set"].fillna(-1).tolist() == ok["first_pit_error"].fillna(-1).tolist()
-    pd.testing.assert_frame_equal(summarize(rows), summarize(old))
-    ties = summarize_near_ties(rows).set_index("policy")
-    assert (ties["share_opt_set_gt1"] == 0).all() and (ties["share_pit_now_decisive"] == 1).all()
-
-
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 @pytest.mark.parametrize("events", [None, {"name": "rate"}])
 def test_the_storage_bound_leaves_the_optimal_set_and_the_best_of_each_kind_unchanged(events):

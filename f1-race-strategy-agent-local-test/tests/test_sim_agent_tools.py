@@ -167,7 +167,19 @@ def test_compare_plans_expands_actions_with_the_optimizer(syn):
     assert to_flag["candidates"][0]["stints"][0]["laps"] == snap.remaining_laps
 
 
-def test_evaluate_action_pit_against_staying_out(syn):
+@pytest.fixture
+def legacy_gaps(monkeypatch):
+    """The legacy gap yardstick: within_sim_error against the remaining-time calibration error."""
+    monkeypatch.setenv(agent_tools.GAP_YARDSTICK_ENV, "calibration")
+
+
+@pytest.fixture(autouse=True)
+def default_gaps(monkeypatch, request):
+    if "legacy_gaps" not in request.fixturenames:   # the default whatever a local .env says
+        monkeypatch.delenv(agent_tools.GAP_YARDSTICK_ENV, raising=False)
+
+
+def test_evaluate_action_pit_against_staying_out(syn, legacy_gaps):
     sim, snap = syn
     out = agent_tools.evaluate_action(snap, {"action": "pit", "compound": "MEDIUM"}, sim=sim, profile=PROFILE)
     json.dumps(out, allow_nan=False)
@@ -186,6 +198,103 @@ def test_evaluate_action_pit_against_staying_out(syn):
     cal = agent_tools.calibration_error_s(sim, snap)   # the midrace summary's to_snapshot row
     assert out["calibration_error_s"] == (None if np.isnan(cal) else cal)   # NaN as of a dateless race
     assert out["within_sim_error"] == (abs(out["gap_mean_s"]) < max(2 * out["gap_std_s"], cal))
+    assert "gap_reading" not in out
+
+
+def test_the_paired_gap_reading_replaces_within_sim_error(syn):
+    """The default yardstick: the gap read from the belief's own paired draws, never the
+    remaining-time calibration error."""
+    sim, snap = syn
+    out = agent_tools.evaluate_action(snap, {"action": "pit", "compound": "MEDIUM"}, sim=sim, profile=PROFILE)
+    json.dumps(out, allow_nan=False)
+    assert not {"within_sim_error", "confidence_basis", "calibration_error_s", "calibration_error_note"} & set(out)
+    d, p = out["relative_race_time_delta_s"], out["probability_improves_outcome"]
+    fav, other, share = ("PIT MEDIUM", "STAY_OUT 1 lap", p) if p >= 0.5 else ("STAY_OUT 1 lap", "PIT MEDIUM", 1 - p)
+    assert out["gap_reading"] == (f"{fav} is faster than {other} in {share:.0%} of draws; PIT MEDIUM minus "
+                                  f"STAY_OUT 1 lap: {d['median']:+.1f} s (90%: {d['optimistic']:+.1f} to "
+                                  f"{d['pessimistic']:+.1f} s)")
+    c = agent_tools.compare_plans(snap, [{"action": "pit", "compound": "MEDIUM"}, {"action": "stay", "laps": 1},
+                                         [["SOFT", 1]]], sim=sim, profile=PROFILE)
+    i, j = c["best"], 1 - c["best"]
+    lo, hi = (c["gap_mean_s"][i][j] + s * agent_tools.Z90 * c["gap_std_s"][i][j] for s in (-1, 1))
+    assert c["gap_readings"] == [agent_tools.gap_reading(f"candidates[{i}]", f"candidates[{j}]", c["p_beats"][i][j],
+                                                         c["gap_mean_s"][i][j], lo, hi)]   # the invalid one left out
+    assert "inside model error" not in json.dumps(c) and "conservative tolerance" not in json.dumps(
+        agent_tools.model_report(snap, sim=sim, profile=PROFILE))
+
+
+def test_the_legacy_yardstick_keeps_the_old_outputs(syn, legacy_gaps):
+    sim, snap = syn
+    c = agent_tools.compare_plans(snap, [{"action": "pit", "compound": "MEDIUM"}, {"action": "stay", "laps": 1}],
+                                  sim=sim, profile=PROFILE)
+    assert "gap_readings" not in c
+    assert agent_tools.model_report(snap, sim=sim, profile=PROFILE)["calibration_error_note"] == \
+        agent_tools.CALIBRATION_NOTE
+
+
+def test_an_unknown_gap_yardstick_raises(monkeypatch):
+    monkeypatch.setenv(agent_tools.GAP_YARDSTICK_ENV, "absolute")
+    with pytest.raises(ValueError, match="paired, calibration"):
+        agent_tools.gap_yardstick()
+
+
+def test_gap_reading_names_the_faster_side():
+    assert agent_tools.gap_reading("A", "B", 0.18, 3.06, -0.2, 6.0) == \
+        "B is faster than A in 82% of draws; A minus B: +3.1 s (90%: -0.2 to +6.0 s)"
+    assert agent_tools.gap_reading("A", "B", None, 1.0, 0.0, 2.0) is None
+
+
+# --- rule replies: which stint, and the nearest legal alternative ------------------------------
+def test_stop_window_from_the_snapshot_and_the_minimum(syn):
+    _, snap = syn   # 20 laps on SOFT at lap 20 of 50, minimum 8
+    assert agent_tools.stop_window(snap) == (21, 42)
+    assert agent_tools.stop_window(syn_snap(k=2)) == (8, 42)    # 2 laps on the set: 6 more first
+    assert agent_tools.stop_window(syn_snap(k=47)) == (48, 42)  # no stop fits in the 3 laps left
+
+
+def test_a_pit_too_early_says_which_stint_and_the_earliest_legal_stop(syn):
+    sim, _ = syn
+    early = syn_snap(k=2)
+    msg = ("Below the 8-lap minimum stint: stopping at the end of lap 3 makes the current SOFT stint 3 laps "
+           "(2 run so far + 1). The earliest legal stop is at the end of lap 8 (stay out 5 laps first, then pit), "
+           "the latest at the end of lap 42.")
+    out = agent_tools.evaluate_action(early, {"action": "pit", "compound": "MEDIUM"}, sim=sim, profile=PROFILE)
+    assert out["errors"] == [msg] and out["error"] == msg
+    stay = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)
+    assert stay["alternative"]["errors"] == [msg]
+
+
+def test_a_pit_too_late_says_only_staying_out_is_legal(syn):
+    sim, _ = syn
+    late = syn_snap(k=47)
+    out = agent_tools.evaluate_action(late, {"action": "pit", "compound": "SOFT"}, sim=sim, profile=PROFILE)
+    assert out["error"] == ("Below the 8-lap minimum stint: the final stint (SOFT) would be 2 laps. No stop fits in "
+                            "the 3 laps left: only STAY_OUT to the flag is legal.")
+
+
+def test_compare_plans_restates_each_rule_reply(syn):
+    sim, snap = syn
+    rest = snap.remaining_laps
+    out = agent_tools.compare_plans(snap, [[["SOFT", 5], ["MEDIUM", 3], ["SOFT", rest - 8]],
+                                           [["SOFT", 5], ["MEDIUM", 20]], [["SOFT", rest]], [["SOFT", 1]]],
+                                    sim=sim, profile=PROFILE)
+    assert out["errors"][0] == ["Below the 8-lap minimum stint: stint 2 (MEDIUM) would be 3 laps. Make it at least "
+                                "8 laps or drop one of the stops around it."]
+    assert out["errors"][1] == ["Lap count: the stints sum to 25 laps but 30 remain (20 of 50 done); they must sum "
+                                "to exactly 30, e.g. make the last stint 25 laps."]
+    assert out["errors"][2] == ["Single compound: this plan runs only SOFT over the race; a dry race must use at least "
+                                "two different compounds, so it needs a stop onto another dry compound. The earliest "
+                                "legal stop is at the end of lap 21 (pitting now is legal), the latest at the end of "
+                                "lap 42; a stay_out of at most 21 laps keeps that stop possible."]
+    assert len(out["errors"][3]) == 2 and any(e.startswith("Lap count: the stints sum to 1 lap but 30") for e in out["errors"][3])
+
+
+def test_a_message_the_restatement_does_not_know_is_kept(syn):
+    _, snap = syn
+    assert agent_tools.explain_rule_errors(snap, None, ["Field required"]) == ["Field required"]
+    plan = agent_tools.Plan.of([["SOFT", 30]])
+    assert agent_tools.explain_rule_errors(snap, plan, ["First stint continues the current set (SOFT), got X."]) == \
+        ["First stint continues the current set (SOFT), got X."]
 
 
 def test_evaluate_action_stay_takes_the_pit_compare_prefers(syn):
@@ -198,7 +307,7 @@ def test_evaluate_action_stay_takes_the_pit_compare_prefers(syn):
     assert out["gap_mean_s"] == pytest.approx(c["gap_mean_s"][0][best])
 
 
-def test_within_sim_error_and_its_basis(syn, monkeypatch):
+def test_within_sim_error_and_its_basis(syn, monkeypatch, legacy_gaps):
     sim, snap = syn
     act = {"action": "pit", "compound": "MEDIUM"}
     base = agent_tools.evaluate_action(snap, act, sim=sim, profile=PROFILE)
@@ -221,7 +330,7 @@ def test_evaluate_action_errors_and_edges(syn):
     out = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)
     assert out["alternative"]["valid"] is False and out["alternative"]["errors"]
     assert out["relative_race_time_delta_s"] == {"optimistic": None, "median": None, "pessimistic": None}
-    assert out["within_sim_error"] is None and out["probability_improves_outcome"] is None
+    assert out["gap_reading"] is None and out["probability_improves_outcome"] is None
     # a stay past the flag runs the current set to the end, which breaks R3 on one compound
     flag = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 99}, sim=sim, profile=PROFILE)
     assert "two different compounds" in flag["error"]
@@ -258,7 +367,7 @@ def test_tools_keep_the_contract_and_read_min_stint_from_it():
     out = tools.estimate_pit_loss()
     assert out["recoverable"] is False and "syn" in out["error"]
     desc = next(t for t in tools.TOOL_SPECS if t["name"] == "evaluate_strategy")["description"]
-    assert "not model error" in desc and "confidence_basis" in desc
+    assert "not model error" in desc and "gap_reading" in desc and "within_sim_error" not in desc
 
 
 def test_view_of_an_unknown_race_rebuilds_its_contract():
@@ -288,7 +397,7 @@ def test_view_of_spain_takes_the_race_constants(spain):
 
 
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
-def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
+def test_ham_lap_20_is_within_sim_error_on_model_error(spain, legacy_gaps):
     """At HAM lap 20 the sampling spread alone would claim certainty (|gap| > 2 sd); the
     calibration error says the gap is inside the model's error."""
     snap = calibration.snapshot_at(spain.frame, spain.race, "HAM", 20)
@@ -297,10 +406,13 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
     # and with the cross-race tables read whatever the race (the legacy switches: the midrace
     # summary, measured on 2021 Spain itself, the Spain-derived shrinkage priors and event rates);
     # as of 2021 Spain there is no calibration error (docs/eval.md "Cross-race tables, as of the race");
-    # and iid lap noise (the belief before "Honest uncertainty": persistent stint offsets widen the gap)
+    # and iid lap noise (the belief before "Honest uncertainty": persistent stint offsets widen the gap);
+    # and no driver effects in the fit (the belief before the scorecard-chosen defaults)
     cfg = agent_tools.belief_config()
+    no_de = {k: v for k, v in cfg.degradation.params.items() if k != "driver_effects"}
     sim = agent_tools.belief_simulator(
         snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False}),
+                                            "degradation": cfg.degradation.model_copy(update={"params": no_de}),
                                             "lap_noise": "residual",
                                             "cross_race_as_of": False, "calibrator": ComponentSpec(name="shrinkage"),
                                             "events": ComponentSpec(name="rate"),
@@ -344,13 +456,17 @@ def test_run_agent_end_to_end_through_the_belief(spain):
     assert tools._contract() is snap
     out = {t["tool"]: t["output"] for t in traj}
     assert out["get_race_snapshot"]["min_stint_laps"] == snap.race.min_stint_laps
-    assert out["estimate_tyre_degradation"]["wear_at_bound"] is True
+    # the flag follows the fit: SOFT's wear sat on the bound 0 here without driver effects; with them
+    # (the belief's default since the scorecard) the fit recovers a positive wear
+    soft = out["estimate_tyre_degradation"]
+    assert soft["wear_at_bound"] is (soft["point_estimate"]["deg_per_lap_s"] <= 0.0)
     asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)
     assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == pytest.approx(asof["pit_loss_s"])
     assert out["estimate_pit_loss"]["source"] == "asof" and asof["pit_loss_s"] != spain.race.pit_loss_s
     assert out["compare_plans"]["valid"] == [True, True]
     ev = traj[-2]["output"]
-    assert ev["action"] == {"action": "stay_out", "laps": 3} and ev["within_sim_error"] is True
+    assert ev["action"] == {"action": "stay_out", "laps": 3} and "within_sim_error" not in ev
+    assert ev["gap_reading"].startswith(("STAY_OUT 3 laps is faster", "PIT ")) and " of draws; " in ev["gap_reading"]
     for t in traj:
         json.dumps(t["output"], allow_nan=False)
 

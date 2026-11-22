@@ -15,3 +15,6 @@ wandb/
 
 # learned calibrator fold outputs (src/sim/learned_calibrator.py --work), rebuilt by its train command.
 reports/calibration/learned/work/
+
+# smoke runs (python -m src.eval.rerun smoke), one directory each
+reports/eval/rerun/smoke/

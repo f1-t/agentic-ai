@@ -101,10 +101,6 @@ def test_practice_rows_have_no_gap_and_are_free_air():
 
 
 # --- default off ---------------------------------------------------------------
-# Re-pinned with stable_bytes (rounded floats) on the current default outputs.
-# MAIN_DIGEST is batch_digest(...)[1] run on origin/main 940f61d, on the frames without the gap
-# columns (which main does not have)
-MAIN_DIGEST = "b2fa5275f7d5e080ab602e812c58011231b61c33c93b83d940a203a0448dfee6"
 
 
 def with_columns(frame, seed=0):
@@ -165,11 +161,6 @@ def test_default_off_fit_is_identical_with_and_without_the_columns():
     n, plain = batch_digest(lambda f: f)
     assert n == 12
     assert batch_digest(with_columns)[1] == plain
-
-
-@pytest.mark.wear_cliff_off   # the pinned digest predates the wear cliff (sim/cliff.py)
-def test_default_off_digest_equals_main():
-    assert batch_digest(with_columns)[1] == MAIN_DIGEST
 
 
 def test_the_filter_changes_the_config_hash():

@@ -298,6 +298,7 @@ def test_build_weekend_is_a_stub(tmp_path):
 
 
 # --- Spain, end to end ------------------------------------------------------------------
+@pytest.mark.slow
 @pytest.mark.skipif(not os.path.isdir(os.path.join(CACHE_DIR, "2021")), reason="no cache")
 def test_local_profile_runs_g_on_spain_in_under_a_minute(tmp_path):
     p = compute.load_profile("local")

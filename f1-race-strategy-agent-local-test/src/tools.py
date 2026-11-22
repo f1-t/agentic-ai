@@ -169,8 +169,11 @@ def estimate_tyre_degradation(compound):
     if entry is None:
         return {"error": f"Unknown compound '{comp}'.", "recoverable": True,
                 "modelled": sorted(c for c, e in rep["compounds"].items() if e["modelled"])}
+    # the remaining-time calibration error only under the legacy gap yardstick: with the paired one it
+    # is in get_model_report, with the note that it is not a yardstick for a gap between plans
+    legacy = {"calibration_error_s": rep["calibration_error_s"]} if agent_tools.gap_yardstick() == "calibration" else {}
     return {"compound": comp, **entry, "fuel_s_per_lap_interval": rep.get("fuel_s_per_lap_interval"),
-            "fit_window": rep["fit_window"], "calibration_error_s": rep["calibration_error_s"],
+            "fit_window": rep["fit_window"], **legacy,
             "flags": entry.get("flags", []), "report_flags": rep["flags"],
             "warning": "This is an estimate, not a guaranteed degradation rate."}
 
@@ -228,6 +231,24 @@ def evaluate_strategy(action):
     }
 
 
+# How the descriptions say to read a gap between plans: AGENT_GAP_YARDSTICK as the tools are imported
+# (agent_tools.gap_yardstick; "calibration" restores the legacy text and within_sim_error)
+_LEGACY_GAPS = agent_tools.gap_yardstick() == "calibration"
+_REPORT_CALIBRATION = (
+    "the model's calibration error (None when no earlier race measured it)" if _LEGACY_GAPS else
+    "the model's calibration error of the absolute remaining race time (None when no earlier race measured it; "
+    "not a yardstick for the gap between two plans, whose common errors cancel)")
+_COMPARE_GAPS = (
+    "" if _LEGACY_GAPS else
+    " gap_readings: the fastest candidate against each other valid one, the share of draws it is faster in, "
+    "the gap and its 90% interval (from the paired draws; model error not included).")
+_EVALUATE_GAPS = (
+    "within_sim_error is true when the gap is smaller than max(2 x its sd, the model's calibration error; its sd "
+    "alone when that error is None), and confidence_basis says which decided." if _LEGACY_GAPS else
+    "gap_reading says which side is faster in what share of the draws, and the gap (action minus alternative, "
+    "negative: the action is faster) with its 90% interval; the interval is the model's own spread of the "
+    "difference over shared draws, so errors common to both plans cancel in it.")
+
 TOOL_SPECS = [
     {
         "name": "get_race_snapshot",
@@ -249,7 +270,7 @@ TOOL_SPECS = [
     },
     {
         "name": "get_model_report",
-        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the step seen in earlier races for a compound nobody raced), flags such as extrapolation or wear_at_bound, per compound tyre_life (the longest run seen so far and a pre-race tyre-life estimate with its sd from earlier races; a set run past its life loses time quickly, there is no hard stint limit), and the model's calibration error (None when no earlier race measured it). traffic: whether other cars are modelled; when they are (projected from what is known now), cars_within_pit_loss_behind_now (a stop now drops behind them), dirty_air_s and own_pace_s.",
+        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the step seen in earlier races for a compound nobody raced), flags such as extrapolation or wear_at_bound, per compound tyre_life (the longest run seen so far and a pre-race tyre-life estimate with its sd from earlier races; a set run past its life loses time quickly, there is no hard stint limit), and " + _REPORT_CALIBRATION + ". traffic: whether other cars are modelled; when they are (projected from what is known now), cars_within_pit_loss_behind_now (a stop now drops behind them), dirty_air_s and own_pace_s.",
         "input_schema": {
             "type": "object",
             "properties": {"ages": {"type": "object", "description": "Optional {compound: tyre age} to check for extrapolation.",
@@ -260,7 +281,7 @@ TOOL_SPECS = [
     },
     {
         "name": "compare_plans",
-        "description": "Score several candidates against each other under shared random draws. Each candidate is a remaining-race plan [[compound, laps], ...] whose first stint continues the current set, or an action {action:'pit', compound:'MEDIUM'} / {action:'stay_out', laps:3} completed by the optimizer. Returns per candidate summaries, p_best, pairwise p_beats and gaps. When traffic is modelled the times include it and traffic gives per candidate expected_rejoin_position and its band, cars_in_pit_window (cars that come by during the first stop), time_lost_s in traffic and final_position, from other cars projected from what is known now; otherwise traffic says it is not modelled.",
+        "description": "Score several candidates against each other under shared random draws. Each candidate is a remaining-race plan [[compound, laps], ...] whose first stint continues the current set, or an action {action:'pit', compound:'MEDIUM'} / {action:'stay_out', laps:3} completed by the optimizer. Returns per candidate summaries, p_best, pairwise p_beats and gaps; errors say which stint breaks a rule and what is legal instead." + _COMPARE_GAPS + " When traffic is modelled the times include it and traffic gives per candidate expected_rejoin_position and its band, cars_in_pit_window (cars that come by during the first stop), time_lost_s in traffic and final_position, from other cars projected from what is known now; otherwise traffic says it is not modelled.",
         "input_schema": {
             "type": "object",
             "properties": {"candidates": {"type": "array", "items": {"type": ["array", "object"]}}},
@@ -271,7 +292,7 @@ TOOL_SPECS = [
     },
     {
         "name": "evaluate_strategy",
-        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; within_sim_error is true when the gap is smaller than max(2 x its sd, the model's calibration error; its sd alone when that error is None), and confidence_basis says which decided. When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
+        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; " + _EVALUATE_GAPS + " When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
         "input_schema": {
             "type": "object",
             "properties": {
