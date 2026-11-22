@@ -126,12 +126,28 @@ def _wear_for(race_id):
     return wear_guard.races_for(race_id)
 
 
+def _overtaking_recorded():
+    from . import overtaking
+    return overtaking.recorded()
+
+
+def _overtaking_for(race_id):
+    from . import overtaking
+    return overtaking.races_for(race_id)
+
+
 POLICY_SIDE = {
     "wear_history": Artifact(
         "data/derived/wear_history.csv: the historical wear per compound the judge's thin-fit wear guard shrinks "
         "toward (wear_guard.wear_prior; SimConfig.wear_guard, judge only today), races strictly before the race; "
         "no earlier history: wear_guard.ROLE_PRIOR", "as_of", _wear_recorded, _wear_for,
         ("data/derived/wear_history.csv",)),
+    "overtaking_difficulty": Artifact(
+        "data/derived/overtaking.csv and overtaking_pairs.csv: the passing difficulty of the belief's traffic "
+        "(traffic difficulty \"asof\", overtaking.difficulty_prior), races strictly before the race; no earlier "
+        "race: the a priori overtaking.PRIOR_* values",
+        "as_of", _overtaking_recorded, _overtaking_for,
+        ("data/derived/overtaking.csv", "data/derived/overtaking_pairs.csv")),
     "compound_steps": Artifact(
         "configs/sim/compound_steps.json per_race and validation_rows: the proxy's tier-5 step, blend weights and sd "
         "floor, recomputed as of the race (proxy.as_of_config); no earlier race: no step, equal weights, "

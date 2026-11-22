@@ -483,6 +483,8 @@ PHYSICS_MODULES = (
     "cliff",
     # the judge's thin-fit wear guard (SimConfig.wear_guard): moves the whole-race fit's wear slopes
     "wear_guard",
+    # the passing-difficulty table the ghost traffic's hazard pass rule reads (traffic difficulty)
+    "overtaking",
     # the historical tyre-life prior both simulators place the support edge with (cliff.history_prior,
     # SimConfig.wear_cliff.prior_source "tyre_history"); its committed tables (data/derived/tyre_*.csv,
     # configs/tyre_history.yaml) are read at run time and are not in config_hash

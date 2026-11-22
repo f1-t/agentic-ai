@@ -2131,6 +2131,7 @@ HEADLINES = [   # (name, direction: +1 higher is better, -1 lower is better, 0 c
     ("A_abs_mae_s", -1), ("A_abs_bias_s", 0), ("A_stop_gain_bias_s", 0),
     ("B1_mae_s", -1), ("B1_bias_s", 0), ("B1_green_mae_s", -1), ("B2_rank_rho_green", +1),
     ("B3_cov_90", 0), ("B3_factor_cov_90", 0), ("B4_mae_offset_s", -1),
+    ("E_real_regret_s", -1), ("E_real_over_20s", -1),
 ]
 HEADLINE_DEF = {
     "A_close_pair_acc": "judge, leave-one-driver-out fit, whole-race pace offset: share of close pairs (same laps, real gap < 10 s) in the right order",
@@ -2151,6 +2152,9 @@ HEADLINE_DEF = {
     "B3_cov_90": "share of panel plans whose judge remaining time is inside the predictive 90% interval (target 0.90)",
     "B3_factor_cov_90": "share of fitted factors whose judge value is inside the predictive 90% interval (target 0.90)",
     "B4_mae_offset_s": "predictive replay of the real remaining strategy against reality, pace-offset error (G)",
+    "E_real_regret_s": "expert consistency (secondary): judge time of the team's real remaining strategy less the judge's "
+                       "best panel plan, mean over snapshots; should fall where passing is hard, never chased to zero",
+    "E_real_over_20s": "same, share of snapshots where the judge says the real strategy lost more than 20 s",
 }
 
 
@@ -2204,7 +2208,30 @@ def race_stats(tables: dict) -> dict:
     g = tables.get("b_g")
     if g is not None and len(g):
         out["B4_mae_offset_s"] = _ns(np.abs(g["err_offset_s"]))
+    e = expert_regrets(tables.get("b_rows"))
+    if len(e):
+        out["E_real_regret_s"] = _ns(e)
+        out["E_real_over_20s"] = _ns(e > EXPERT_TAIL_S)
     return out
+
+
+EXPERT_TAIL_S = 20.0   # E_real_over_20s: a real strategy the judge says threw away more than this
+
+
+def expert_regrets(b_rows) -> np.ndarray:
+    """Expert consistency: per panel snapshot, the judge's time of the team's real remaining strategy
+    less the judge's best plan of the panel (both legal under the judge's rules), in s. A judge that
+    says experienced teams routinely threw away tens of seconds is probably wrong where passing is
+    hard; teams do err, so it is a secondary measure, never chased to zero."""
+    if b_rows is None or not len(b_rows) or "plan" not in b_rows:
+        return np.empty(0)
+    r = b_rows[b_rows["valid"] & b_rows["legal_w"] & np.isfinite(b_rows["pred_w_s"].astype(float))]
+    out = []
+    for _, t in r.groupby(["driver", "k"]):
+        real = t.loc[t["plan"] == "real", "pred_w_s"]
+        if len(real) and len(t) >= 2:
+            out.append(float(real.iloc[0]) - float(t["pred_w_s"].min()))
+    return np.asarray(out, dtype=float)
 
 
 def _pool(stats: list[dict]) -> dict:
