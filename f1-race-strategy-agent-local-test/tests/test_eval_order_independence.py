@@ -57,6 +57,7 @@ def test_the_default_world_has_lengths_that_differ_within_the_race():
     assert len(lens) > 1   # otherwise the tests below could not see the old cache collision
 
 
+@pytest.mark.slow
 def test_scores_do_not_depend_on_the_scenarios_scored_before():
     items = _items()
     fwd = _score(items, [0, 1, 2, 3])
@@ -145,6 +146,7 @@ def _args(d, **kw):
     return SimpleNamespace(**{**base, **kw})
 
 
+@pytest.mark.slow
 def test_the_references_and_baselines_stages_do_not_depend_on_jobs_or_order(tmp_path):
     """Two races of the committed dev6 set, two scenarios each with different total_laps: the stages
     with --jobs 1 and --jobs 3 and on the set in reversed order give the same rows."""

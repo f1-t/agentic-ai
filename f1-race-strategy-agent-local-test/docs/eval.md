@@ -345,9 +345,11 @@ a fallback chain, as of R's date and never R itself:
 
 The pool is `configs/sim/pit_loss_prior.json` (the six calibration races, built by `python -m
 src.sim.pit_loss build-prior`) plus every race in the FastF1 cache at run time (`real_run.cached_races`),
-whose entry is built from its whole race on first use and kept per process (a circuit with no history
-loads every earlier cached race once, about a minute): more cached seasons widen the pool with no
-code change. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
+whose entry is read from `configs/sim/pit_loss_entries.json` (the same entries, precomputed for the
+cached races outside the table by `python -m src.sim.pit_loss build-entries`; rebuild it when the
+cache or the default fit changes) or else built from its whole race on first use and kept per
+process: more cached seasons widen the pool with no code change, and a process loads no race to
+price a prior unless the cache holds a race neither file has. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
 itself held out, and then only if earlier. A circuit used once (no earlier season cached) gets tier
 2, or 3, and the estimate exists from lap 0 either way: a policy never fails for want of history and
 never falls back to the whole-race value. The SC and VSC factors (the share of a green stop paid
@@ -2664,6 +2666,52 @@ moves the headline by -0.005 order and -0.4 s, the real stops by +0.011 to +0.02
 order worse (0.55 alone): a recorded SC lap closes the real gap to the car ahead, not the
 simulated one, so the neutralised laps need the queue (whose order the earlier laps decide)
 rather than their lap times.
+
+### Pit-stop durations
+
+Switch `SimConfig.pit_stops` (`replay`, `team`, `team_prior_stops`), off by default. The judge
+charges every stop one whole-race pit loss (the median green stop), but real stops vary by
+seconds (pit-lane time, entry to exit: median absolute deviation about 0.5 s on the calibration
+races, sd 1.4 to 4.7 s with the slow ones, team medians spread 0.6 to 2.5 s) and a slow stop
+reorders close cars. The lap frame now carries the timing data's `pit_in_time_s` (in-lap row)
+and `pit_out_time_s` (out-lap row), and `pit_loss.stop_table` each stop's `lane_s` and `team`.
+
+- `replay: actual` (hindsight, ledger `pit_stops_replay`): a whole-race replay of a real
+  strategy in the fidelity tool charges each real stop the pit loss plus its lane time less
+  the race's median green lane time (`pit_loss.lane_deltas`). A stop's extra time is added
+  after the simulation, so a stop just before a safety car keeps it (the SC queue, when on,
+  would erase it).
+- `team: true`: every stop a simulation prices is the pit loss plus the car's team's typical
+  stop: the median lane-time difference of its green stops, shrunk toward 0 by n / (n + 3)
+  (`pit_loss.team_delta`). The judge reads every stop of the race (ledger `pit_stops_team`,
+  this race whole); a windowed fit (the belief) the stops completed when the car completed its
+  calibration lap (`pit_loss.snapshot_time`, the same cut as the as-of pit loss), so nothing
+  after the snapshot: `tests/test_sim_pit_stops.py` alters every other car's rows after the
+  cut and the belief's times stay identical (the judge's change: the canary).
+
+Measured (19 calibration races, main 2c7665b with this branch, the adopted judge and belief;
+A/B sections without the hindsight variants, leave-one-stint-out or components; race-cluster
+95% intervals; base close-pair order 0.753, Spearman 0.958, relative gap 13.17 s, abs 18.9 s,
+B2 rho 0.866, regret 4.12 s, pit-now 0.810):
+
+| arm | close-pair order | Spearman | rel gap s | abs MAE s | B2 rho | B2 regret s | pit-now |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| replay actual | +0.016 [-0.007, +0.043] | -0.001 | +0.02 [-0.31, +0.36] | -0.64 | 0 | 0 | 0 |
+| team typical (judge) | +0.000 [-0.013, +0.014] | +0.001 | -0.01 | -0.21 | +0.000 | +0.004 | +0.000 |
+| both, belief's as-of team stop too | +0.016 | -0.001 | +0.02 | -0.64 | +0.000 [-0.034, +0.031] | -0.001 | +0.001 |
+
+Decision. `replay: actual` moves the close-pair order the way the noise floor said real stops would
+(+0.016; its interval includes 0) and leaves the gaps alone. It touches only the replays of real
+strategies, so the eval's scoring of hypothetical plans is unchanged: it can be adopted as a
+measurement input (ledger `pit_stops_replay`, this race whole). `team: true` changes nothing
+measurable (team medians differ by tenths after shrinkage, the same for every plan of a car
+except through the stop count): not adopted. Both stay off by default.
+
+The noise floor on this main (19 races, 368 close pairs, the adopted judge): judge 0.753
+[0.698, 0.793] / 13.2 s; + per-stint pace 0.696 / 11.9 s; + pit laps 0.739 / 11.4 s; + SC/VSC
+laps 0.614 / 5.2 s; + lap 1 (the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]; pit laps alone
+0.755 / 12.6 s. The judge's order is at the ceiling; the room is in the gaps, almost all of it on
+the neutralised laps.
 
 Two things the floor's levels take as given. Level 4 hands the replay the recorded lap 1, which
 holds every place won or lost at the start: start-lap position changes are outside the model.

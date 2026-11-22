@@ -80,8 +80,10 @@ def _summary_for(race_id):
 
 
 def _pit_loss_recorded():
+    from . import pit_loss
     from .config import PitLossModel
-    return sorted((PitLossModel().prior or {}).get("races", {}))
+    entries = {r for r, e in pit_loss.committed_entries().items() if "left_out" not in e}
+    return sorted(set((PitLossModel().prior or {}).get("races", {})) | entries)
 
 
 def _pit_loss_for(race_id):
@@ -150,8 +152,10 @@ POLICY_SIDE = {
         "a8d9d3a; under as_of_history the base and fuel taus are the as-of sds instead",
         "a_priori", _none, _none_for, ("src/sim/config.py",)),
     "pit_loss_prior": Artifact(
-        "configs/sim/pit_loss_prior.json and the cached races: the as-of pit loss prior (pit_loss.pit_loss_prior)",
-        "as_of", _pit_loss_recorded, _pit_loss_for, ("configs/sim/pit_loss_prior.json",)),
+        "configs/sim/pit_loss_prior.json, configs/sim/pit_loss_entries.json and the cached races: the as-of "
+        "pit loss prior (pit_loss.pit_loss_prior)",
+        "as_of", _pit_loss_recorded, _pit_loss_for, ("configs/sim/pit_loss_prior.json",
+                                                      "configs/sim/pit_loss_entries.json")),
     "tyre_history": Artifact(
         "configs/sim/tyre_life_history.json and data/derived/tyre_history*.csv: the tyre-life prior "
         "(cliff.life_prior, tyre_history.tyre_life_prior), races strictly before the race",

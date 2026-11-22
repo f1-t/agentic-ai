@@ -9,7 +9,7 @@ the eval's world simulator against the optimizer's plan from the same snapshot.
 
 The regret against the lap-0 optimizer is reported, not asserted (Rishabh's call whether
 the graded test should assert more). Select a model backend in .env. This file is not
-collected by pytest (pytest.ini python_files); run it directly:
+collected by pytest (pytest.ini ignores it); run it directly:
 
     python tests/test_case.py
 """
