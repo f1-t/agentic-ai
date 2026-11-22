@@ -480,43 +480,51 @@ MEDIUM 0.50, SOFT 0.35). The earliest cached season is tier 4. A missing nominat
 target's or an earlier race's) compares compounds by role and never counts as the same compound.
 
 **Validation** (`python -m src.sim.tyre_history validate`, `reports/calibration/tyre_history/`).
-As of, hence leave-one-race-out, on the 20 usable (race, role) observations of the 9 races not
-held out on main (2024 Brazil has no dry observation, 2025 Qatar is excluded). Error = prior
-edge - observed edge, in laps; coverage of the stated 68% / 90% intervals; *beyond* = share of
-the race's usable stints on that role ending later than prior edge + 3 laps (*floor*: the same
-against the race's own observed edge, what a perfect prior would give):
+As of, hence leave-one-race-out, on the 63 usable (race, role) observations of the 27 cached races
+with a dry observation that are not held out (29 races built: 2021 Belgium and 2024 Brazil have
+no dry observation; 2025 Qatar is excluded; the five held-out 2021-22 draws, now in `data/eval_set.json`,
+are never loaded). Error = prior edge - observed edge, in laps; coverage of the stated 68% / 90%
+intervals; *beyond* = share of the race's usable stints on that role ending later than prior
+edge + 3 laps (*floor*: the same against the race's own observed edge, what a perfect prior would
+give):
 
 | group | n | mean error | MAE | cover 68 | cover 90 | stints | beyond | floor |
 |---|---|---|---|---|---|---|---|---|
-| all | 20 | -1.0 | 8.2 | 0.65 | 0.90 | 343 | 0.114 | 0.029 |
-| tier 1 | 4 | +3.0 | 3.0 | 0.75 | 1.00 | 79 | 0.000 | 0.025 |
-| tier 2 | 2 | +12.1 | 12.1 | 0.50 | 1.00 | 25 | 0.040 | 0.040 |
-| tier 3 | 11 | -4.5 | 10.9 | 0.55 | 0.82 | 202 | 0.168 | 0.025 |
+| all | 63 | -0.4 | 7.0 | 0.70 | 0.84 | 1004 | 0.149 | 0.029 |
+| tier 1 | 22 | -0.8 | 8.4 | 0.59 | 0.77 | 436 | 0.099 | 0.030 |
+| tier 2 | 5 | +10.4 | 10.4 | 0.40 | 0.60 | 60 | 0.017 | 0.017 |
+| tier 3 | 33 | -1.6 | 5.9 | 0.79 | 0.91 | 471 | 0.217 | 0.028 |
 | tier 4 | 3 | -2.6 | 2.9 | 1.00 | 1.00 | 37 | 0.108 | 0.054 |
-| era 2018-2021 | 5 | -3.1 | 3.2 | 1.00 | 1.00 | 90 | 0.167 | 0.033 |
-| era 2022+ | 15 | -0.4 | 9.9 | 0.53 | 0.87 | 253 | 0.095 | 0.028 |
+| era 2018-2021 | 21 | -1.5 | 6.0 | 0.76 | 0.86 | 301 | 0.196 | 0.027 |
+| era 2022+ | 42 | +0.1 | 7.5 | 0.67 | 0.83 | 703 | 0.129 | 0.030 |
 
-The weighting, each part switched off in turn (all 20 observations):
+The weighting, each part switched off in turn (all 63 observations):
 
 | variant | MAE | mean error | cover 90 | beyond |
 |---|---|---|---|---|
-| full (as shipped) | 8.2 | -1.0 | 0.90 | 0.114 |
-| no circuit severity scaling | 12.6 | -3.5 | 0.75 | 0.224 |
-| no C-number (compounds compared by role) | 9.6 | -0.7 | 0.80 | 0.125 |
-| no same-circuit weighting | 8.0 | -1.7 | 0.90 | 0.125 |
-| neither C-number nor circuit | 9.0 | -1.5 | 0.85 | 0.137 |
+| full (as shipped) | 7.0 | -0.4 | 0.84 | 0.149 |
+| no circuit severity scaling | 8.8 | -2.3 | 0.89 | 0.203 |
+| no C-number (compounds compared by role) | 6.9 | -0.8 | 0.86 | 0.155 |
+| no same-circuit weighting | 7.0 | -0.7 | 0.89 | 0.160 |
+| neither C-number nor circuit | 7.2 | -0.9 | 0.87 | 0.166 |
 
-Reading it: the C-number weighting improves the MAE by 1.4 laps over comparing by role, but only
-together with the severity scaling; matching the bare C-number across circuits without it is the
-worst variant (12.6), because Pirelli nominates harder rubber for harsher circuits, so a C3 at
-Imola and a C3 at Silverstone are not run alike. The same-circuit weighting does not help yet
-(8.2 vs 8.0): only 6 of the 20 cases have an earlier race at the same circuit (Silverstone and
-Catalunya), and its four tier-1 cases are the best predicted (MAE 3.0). 11% of real stints run
-past edge + 3 laps against a 3% floor, so the prior is somewhat short, mostly at tier 3; the
-worst cases are 2024 Monaco (a lap-1 red flag let the field change tyres and run to the flag:
-medium observed 76 laps, prior 35) and 2024 Imola's hard (50 observed, 39 prior). The evidence is
-thin (20 cases, 9 races); rerun `build` and `validate` when the 2021-22 weekends of
-`data-more-races` land on main.
+Reading it: the severity scaling is the one part that clearly pays (8.8 -> 7.0 laps); matching
+the bare C-number across circuits without it is the worst variant, because Pirelli nominates
+harder rubber for harsher circuits, so a C3 at Imola and a C3 at Silverstone are not run alike.
+With it, the C-number and the same-circuit weightings are each worth about nothing on this set
+(6.9 and 7.0 against 7.0; together 0.2 laps). Tier 1 is no better than tier 3 (8.4 vs 5.9): the
+same circuit a year earlier is often a different race (2024 Monaco after a lap-1 red flag ran its
+medium 76 laps against a prior of 37; 2022 Imola, damp, ran the medium 46 against 31; 2022
+Austria's hard 29 against 46), and a tier-1 prior leans on one or two such races with a tight
+floor, so its 90% coverage (0.77) is the lowest. 15% of real stints run past edge + 3 laps against
+a 3% floor: the prior is short on the long-running side, mostly at tier 3 (22%) and in 2021 (20%).
+
+Before the 2021-22 weekends of `data-more-races` (#92) were added the same validation had 20
+observations from 9 races: MAE 8.2 (tier 1: 3.0 on 4 cases; tier 2: 12.1 on 2; tier 3: 10.9 on
+11; tier 4: 2.9 on 3), 90% coverage 0.90, 11.4% of stints past edge + 3; there the C-number
+weighting looked worth 1.4 laps and the same-circuit weighting nothing, on 6 same-circuit cases.
+With 27 same-circuit cases the C-number gain is gone; the weights stay as stated (they are not
+tuned to this table).
 
 ## The agent policy
 
