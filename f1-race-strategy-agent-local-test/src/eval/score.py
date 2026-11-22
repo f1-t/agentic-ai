@@ -340,12 +340,17 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
 # reference (common random numbers). The replay accuracy that chose the recorded lap times over
 # the lap factors is in reports/calibration/neutralised (src/sim/neutral_report.py).
 WORLD_EVENTS = {"name": "hybrid", "params": {"lap_times": "recorded"}}
+# OFF until the integration decides it (the fidelity scorecard, PR #93): the default world draws no
+# neutralisations, as before. Opt in with `--world-config configs/sim/world_hybrid.yaml`.
+WORLD_EVENTS_DEFAULT = False
 
 
-def default_world_config(config):
-    """`config` (the profile's SimConfig) with WORLD_EVENTS: the world when no world config is
-    given. A config whose events are not "none" is returned as it is."""
-    if config.events.name != "none":
+def default_world_config(config, on: bool | None = None):
+    """The world when no world config is given: `config` (the profile's SimConfig), with
+    WORLD_EVENTS when `on` (default WORLD_EVENTS_DEFAULT, off). A config whose events are not
+    "none" is returned as it is."""
+    on = WORLD_EVENTS_DEFAULT if on is None else on
+    if not on or config.events.name != "none":
         return config
     return config.model_copy(update={"events": config.events.model_copy(
         update={"name": WORLD_EVENTS["name"], "params": dict(WORLD_EVENTS["params"])})})
@@ -368,8 +373,8 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
     by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
     residual lap noise on); the world runs
-    `world_config`, by default the profile's SimConfig (full window, traffic off) with
-    WORLD_EVENTS (default_world_config). The world alone gets the race's
+    `world_config`, by default the profile's SimConfig (full window, traffic off;
+    default_world_config, WORLD_EVENTS off by default). The world alone gets the race's
     whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
     and role."""

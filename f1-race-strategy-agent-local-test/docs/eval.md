@@ -28,7 +28,7 @@ Each race has two simulators over the same lap frame and practice
 | role | default config | fit | used by |
 | --- | --- | --- | --- |
 | belief | `configs/sim/belief.yaml` | `to_snapshot`: race laps up to the snapshot, shrunk toward the practice prior; traffic off; SC and VSC periods from the rate model (EventModel defaults, provisional, Spain-derived); samples carry posterior parameter draws and residual lap noise, drawn from seed + `agent_tools.BELIEF_SEED_OFFSET` so the belief never plans on the world's samples (docs/rules.md R6) | every policy: the baselines plan on it through the bridge (`from_contract(snapshot, belief)`, `pace_for_crossover(belief, snapshot)`), and agent decisions are expanded on it |
-| world | the profile's SimConfig with `score.WORLD_EVENTS` (the SC/VSC in progress as recorded, later ones drawn) | `full`: every race lap (hindsight); traffic off; the whole-race pit loss ("Pit loss and track status") | the reference `optimize_batch` and every scoring call |
+| world | the profile's SimConfig (no SC/VSC by default; `configs/sim/world_hybrid.yaml` adds them, "Safety cars and VSC in the scoring world") | `full`: every race lap (hindsight); traffic off; the whole-race pit loss ("Pit loss and track status") | the reference `optimize_batch` and every scoring call |
 
 A policy is called as `policy(scenario, belief, max_stops)` and never sees the world. The
 regret definition is unchanged: the policy's plan and the world optimizer's plan, both
@@ -126,7 +126,13 @@ Before, the world drew no SC or VSC: a snapshot taken under a safety car was sco
 race went green at once, and a stop there cost a full green pit loss, so "pit now, it is cheap"
 could never be right in the scorer, while the belief priced it at half.
 
-**What the world models now** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
+**Default: off.** The default world still draws no SC or VSC (`score.WORLD_EVENTS_DEFAULT` False);
+the world below is opt-in with `--world-config configs/sim/world_hybrid.yaml`. Whether it becomes the
+default is decided at integration by the fidelity scorecard (PR #93, `python -m src.sim.fidelity`):
+the replay accuracy below supports recorded neutralised laps, but drawing the later periods is a
+scoring-design choice that no accuracy measure here validates.
+
+**What the opt-in world models** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
 
 - the SC or VSC in progress at the snapshot ends where it really ended: the driver's own recorded
   laps of that kind from the next lap on (the scorer may know them; the policy knows only that it
@@ -1599,9 +1605,10 @@ the arm, the artifacts, `belief_learned.yaml` and the report.
   `stint_limit_margin_laps` so both can be shown; the committed tables are rank 1.
 - **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
   actual_strategy unavailable on 65 scenarios.
-- **The SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml), and the
-  scoring world draws later periods with the same rates ("Pit loss and track status"). Position
-  regret has the traffic limits of docs/traffic.md.
+- **The SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml). The
+  default world draws no events; the opt-in hybrid world (configs/sim/world_hybrid.yaml) draws later
+  periods with the same rates ("Safety cars and VSC in the scoring world"). Position regret has the
+  traffic limits of docs/traffic.md.
 - **d3 is rebuilt at the final evaluation**; its committed reference and baselines predate R8
   ("Reference cache").
 
