@@ -59,16 +59,17 @@ TAIL_S = (10.0, 20.0, 30.0)
 # (and the voyager reply cap), never a key, token or endpoint
 MODEL_ENV = ("LLM_BACKEND", "ANTHROPIC_MODEL", "HF_MODEL", "VOYAGER_MODEL", "VOYAGER_MAX_TOKENS", "VOYAGER_TEMPERATURE")
 LOOP_ENV = ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS", "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",
-            "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK", "AGENT_TURN_REPEAT")
+            "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK", "AGENT_TURN_REPEAT", "AGENT_PROTOCOL")
 
 
 def _loop_env() -> dict:
-    """LOOP_ENV as set, except AGENT_TURN_REPEAT, recorded as the mode in effect (the agent's
-    default when unset): the default moved from "end" to "run" on 2026-11-22, so an unset value
-    would not say which mode a pass ran with."""
-    from ..agent import DEFAULT_TURN_REPEAT
+    """LOOP_ENV as set, except AGENT_TURN_REPEAT and AGENT_PROTOCOL, recorded as the mode in effect
+    (the agent's default when unset): the turn-repeat default moved from "end" to "run" and the
+    protocol default from v1 to v2 on 2026-11-22, so an unset value would not say which a pass ran with."""
+    from ..agent import DEFAULT_TURN_REPEAT, protocol
     env = {k: os.environ.get(k) for k in LOOP_ENV}
     env["AGENT_TURN_REPEAT"] = env["AGENT_TURN_REPEAT"] or DEFAULT_TURN_REPEAT
+    env["AGENT_PROTOCOL"] = protocol(env["AGENT_PROTOCOL"])
     return env
 
 
