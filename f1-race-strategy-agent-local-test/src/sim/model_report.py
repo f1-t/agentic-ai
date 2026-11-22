@@ -26,14 +26,30 @@ def _coefficient(value, sd, weight):
                              shrinkage_weight=float(weight))
 
 
-def calibration_error(fit_window, horizon, summary=CALIBRATION_SUMMARY):
+# the races the committed midrace summary was measured on (its n_races column is 1: the
+# calibrate midrace run on 2021 Spain); calibration_error reads it as of a race
+CALIBRATION_SUMMARY_RACES = ("2021_04_spain",)
+
+
+def calibration_error(fit_window, horizon, summary=CALIBRATION_SUMMARY, race_id=None,
+                      summary_races=CALIBRATION_SUMMARY_RACES):
     """mae_offset_s for (fit_window, horizon bucket) from a midrace summary csv path or frame.
 
-    NaN when `summary` is None, the file is missing, or it has no such row.
+    NaN when `summary` is None, the file is missing, or it has no such row. With `race_id`
+    (docs/eval.md "Information contract") also NaN unless every race of `summary_races` started
+    before it (race_ids.as_of): a race no earlier race measured has no calibration error.
     """
     from .calibration import BUCKET_LAPS
     if summary is None:
         return float("nan")
+    if race_id is not None:
+        from .race_ids import as_of, canonical_race_id
+        try:
+            earlier = as_of(canonical_race_id(str(race_id)), list(summary_races))
+        except ValueError:
+            earlier = []
+        if len(earlier) < len(summary_races):
+            return float("nan")
     if isinstance(summary, pd.DataFrame):
         table = summary
     elif os.path.exists(summary):
@@ -73,7 +89,7 @@ def hazard_support(hazard):
 
 
 def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_SUMMARY,
-          hazard=None, min_samples=5) -> ModelReport:
+          hazard=None, min_samples=5, as_of=False) -> ModelReport:
     """The ModelReport of `model` (a fitted degradation model) for this snapshot.
 
     `hazard` is the fitted hazard model, when the simulator has one; modelled compounds
@@ -131,7 +147,8 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
         fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel,
         hinge=None if hinge is None else {c: dict(e) for c, e in hinge.items()},
         condition_number=rep["condition_number"], flags=flags,
-        calibration_error_s=calibration_error(fit_window, snapshot.remaining_laps, summary),
+        calibration_error_s=calibration_error(fit_window, snapshot.remaining_laps, summary,
+                                              race_id=snapshot.race.race_id if as_of else None),
         fuel_wear_corr=fuel_wear_corr(rep) if fuel is not None else None)
 
 

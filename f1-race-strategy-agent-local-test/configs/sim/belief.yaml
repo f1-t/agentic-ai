@@ -6,13 +6,20 @@
 # age, so the tools never show it. Physics, set a priori, and no worse on Spain's predicted
 # gain at real pit stops (stop-gain mae 0.99 s against 1.15 s without); the cross-race run
 # (0016 wear_nonneg) reports belief with and without it, and it comes off if it loses there.
-# Safety car and VSC periods are drawn from the rate model (src/sim/events.py) with the
-# EventModel defaults, so the belief carries the chance of a cheap stop under SC.
-# PROVISIONAL, Spain-derived: p_sc 0.015 per green lap and 3-lap periods from one SC in 66
-# laps of 2021 Spain; the VSC rates are placeholders. They are the rates the world takes
-# once the team decides; circuit rates (RaceParams) follow SPEC 0011b and override these
-# per race. Belief-side draws use seed + agent_tools.BELIEF_SEED_OFFSET, so the belief never
-# plans on the event samples the world scores on.
+# Safety car and VSC periods are drawn from the rate model (src/sim/events.py) with the rates
+# fitted on the races before this one (as_of: race_history.as_of_event_rates, event_rates'
+# global level shrunk toward the a priori race_history.EVENT_PRIOR; that prior with no earlier
+# race), so the belief carries the chance of a cheap stop under SC. as_of false takes the
+# EventModel defaults (Spain-derived, the earlier belief). Circuit rates in RaceParams (SPEC
+# 0011b) override both. Belief-side draws use seed + agent_tools.BELIEF_SEED_OFFSET, so the
+# belief never plans on the event samples the world scores on.
+# Every number estimated from other races is read as of the race (docs/eval.md "Information
+# contract"): the as_of_history calibrator takes the practice-to-race base delta, the fuel prior
+# (circuit history, else the a priori physics prior), the SC lap factor and the lap-1 extra from
+# configs/sim/race_history.csv, races strictly before this one (race_history.A_PRIORI with none);
+# the shrinkage calibrator ("shrinkage") is the earlier, Spain-derived belief.
+calibrator:
+  name: as_of_history
 # Pit loss as of the snapshot (src/sim/pit_loss.py, docs/eval.md "Pit loss and track status"):
 # a prior from earlier races at the circuit, else across circuits, updated with this race's
 # green stops seen by then, drawn per sample with its sd; the SC and VSC factors likewise. The
@@ -24,6 +31,8 @@ traffic:
   name: none
 events:
   name: rate
+  params:
+    as_of: true
 degradation:
   name: linear_fuel
   params:

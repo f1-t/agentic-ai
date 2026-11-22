@@ -924,50 +924,27 @@ def identity_hits(value, race_id: str, frame: pd.DataFrame) -> list[tuple[str, s
     return out
 
 
-@dataclass
-class Artifact:
-    """A table or constant read on the policy side, fitted or chosen with other races."""
-    where: str
-    races: object = None   # fn() -> list of race ids it records, None when it records none
+# The policy-side artifacts are the project's registry (src/sim/provenance.py): each records the
+# races it was fitted on (recorded) and, per race, the races pricing that race reads (races_for);
+# kind "a_priori" reads none, "not_as_of" (the learned calibrator) is off by default and refused
+# for a race not after all its training races.
+from src.sim import provenance as _provenance   # noqa: E402
 
-
-def _compound_steps_races():
-    import json
-    from src.sim.config import COMPOUND_STEPS_FILE
-    with open(COMPOUND_STEPS_FILE) as f:
-        races = json.load(f).get("races")
-    return list(races) if races else None
-
-
-PROVENANCE_FILE = "configs/sim/provenance.json"   # {name: {"races": [...]}}: where a fix records the rest
-
-
-POLICY_SIDE_ARTIFACTS = {
-    "compound_steps": Artifact("configs/sim/compound_steps.json: the proxy's cross-race steps and life ratios "
-                               "(src/sim/proxy.py)", _compound_steps_races),
-    "calibration_summary": Artifact("reports/calibration/midrace_summary.csv: calibration_error_s in the model "
-                                    "report and evaluate_strategy (src/sim/model_report.py:29)"),
-    "event_rates": Artifact("belief.yaml events 'rate' with config.EventModel defaults (p_sc 0.015, d_sc 3), "
-                            "from 2021 Spain (src/sim/config.py:50)"),
-    "pre_race_base_delta": Artifact("SimConfig.pre_race_base_delta_s 1.0, Spain's full-fit base less practice "
-                                    "(src/sim/config.py:194)"),
-    "fuel_prior": Artifact("SimConfig.pre_race_fuel_slope_s_per_lap -0.045 (src/sim/config.py:189)"),
-    "shrinkage": Artifact("SimConfig.shrinkage taus, the shrinkage calibrator's sds (src/sim/config.py:198)"),
-}
+POLICY_SIDE_ARTIFACTS = _provenance.POLICY_SIDE
 
 
 def provenance(name: str):
-    """The races `name` records it was fitted on: its own record, else PROVENANCE_FILE's entry;
-    None when neither exists."""
-    import json
-    import os
-    art = POLICY_SIDE_ARTIFACTS[name]
-    races = art.races() if art.races is not None else None
-    if races is None:
-        path = os.path.join(os.path.dirname(__file__), "..", PROVENANCE_FILE)
-        if os.path.isfile(path):
-            races = (json.load(open(path)).get(name) or {}).get("races")
-    return races
+    """The races `name` records it was fitted on ([] for an a priori constant); None when it
+    records none (no registry entry)."""
+    if name not in POLICY_SIDE_ARTIFACTS:
+        return None
+    return _provenance.recorded(name)
+
+
+def tyre_history_held_out() -> set:
+    """The races data/eval_set.json holds out: none may feed a policy-side table."""
+    from src.sim.tyre_history import held_out
+    return set(held_out())
 
 
 def _before(race_id, other) -> bool:
@@ -978,15 +955,17 @@ def _before(race_id, other) -> bool:
 
 
 def artifacts_not_before(race_id: str) -> dict:
-    """{artifact: why} for every policy-side artifact that records no races, or records one
-    not strictly before `race_id`."""
+    """{artifact: why} for every policy-side artifact that, pricing `race_id`, reads a race not
+    strictly before it, or records nothing."""
     out = {}
     for name in POLICY_SIDE_ARTIFACTS:
-        races = provenance(name)
-        if races is None:
+        if provenance(name) is None:
             out[name] = "records no races"
-        elif any(not _before(race_id, r) for r in races):
-            out[name] = f"fitted on {sorted(r for r in races if not _before(race_id, r))}"
+            continue
+        used = _provenance.races_for(name, race_id)
+        later = sorted(r for r in used if not _before(race_id, r))
+        if later:
+            out[name] = f"reads {later}"
     return out
 
 

@@ -53,7 +53,7 @@ class Fixed(calibrators.Calibrator):
 
 # --- registry and contract -------------------------------------------------------------
 def test_registry_and_defaults():
-    assert CALIBRATORS.keys() == ["event_rates", "fuel_circuit_features", "fuel_circuit_history", "fuel_config",
+    assert CALIBRATORS.keys() == ["as_of_history", "event_rates", "fuel_circuit_features", "fuel_circuit_history", "fuel_config",
                                   "fuel_practice_longrun", "gbm", "mlp", "none", "ridge", "shrinkage", "trained"]
     cfg = SimConfig()
     assert (cfg.calibrator.name, cfg.calibration_every, cfg.recalibrate_temp_delta_c) == ("shrinkage", 1, 3.0)

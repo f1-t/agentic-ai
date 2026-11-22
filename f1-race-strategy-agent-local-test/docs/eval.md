@@ -97,6 +97,36 @@ that does not set it keeps its hash; the behaviour change under the default show
 snapshots embed the driver's own lap count and the raced compounds. They load and score as
 before; a new set records `"rule": "as_of"` and the builder `snapshot_as_of`.
 
+### Cross-race tables, as of the race
+
+Everything the policy side reads that was estimated from other races records the races it was
+fitted on and, pricing race R, uses only races that started strictly before R
+(`race_ids.as_of`); with no earlier race it falls back to a documented a priori constant with a
+wide sd, never fails and never uses a later race. `src/sim/provenance.py` lists every such
+artifact with its kind and, per race, the races it reads; `tests/future_blindness.py` checks it
+for every real race, 2021 Bahrain, 2019 United Kingdom and a synthetic race dated 1990
+(`test_policy_side_artifacts_fitted_only_on_earlier_races`, `test_race_before_every_table_uses_documented_priors`).
+The tables are built from the calibration races only (`compound_steps.CALIBRATION_RACES`: the six
+development races, 2025 Qatar and fourteen 2021-22 weekends; 2022 Austria is left out because
+`jobs.load_race` cannot build it, laps with no recorded compound); no race of `data/eval_set.json`
+is ever loaded or feeds a table.
+
+| artifact | read as of the race | no earlier race (a priori) | legacy switch |
+| --- | --- | --- | --- |
+| proxy tier 5 (`configs/sim/compound_steps.json`) | `per_race` step rows and the forward-chained `validation_rows` (each race priced with the table of the races before it: `compound_steps validate --as-of`); `proxy.as_of_config` recomputes the steps (median), the blend weights (1 / mse per source, at least 3 rows) and the sd floor (the blend's rmse) | no step, equal weights, `proxy.PRIOR_SD_FLOOR` (pace 1.0 s, wear 0.1 s/lap) | `compound_proxy.as_of: false` |
+| base delta, fuel prior, SC lap factor, lap-1 extra (`configs/sim/race_history.csv`, `python -m src.sim.race_history build`) | the `as_of_history` calibrator (belief.yaml): median of the earlier races, sd their spread floored at `race_history.SD_FLOOR`; the fuel prior is `fuel_prior`'s circuit history (#45) on the earlier races; the sds are the base and fuel taus, the event factors are drawn per sample | `race_history.A_PRIORI`: base delta 0.5 ± 1.0 s, SC lap factor 1.4 ± 0.15, lap-1 extra 8 ± 4 s; the fuel prior is the physics prior (`fuel_practice_longrun`, -0.03 s/kg x 110 kg / laps) | `calibrator: shrinkage` (the Spain-derived config values) |
+| SC/VSC rates (`configs/sim/neutralised_history.csv`) | `events.rate` with `as_of: true`: `event_rates`' global posterior on the earlier dry races (#45's forward-chaining fits) | `race_history.EVENT_PRIOR`: p_sc 1/60 per lap, d_sc 3.5 laps; VSC 0.02, 2 laps | `as_of: false` (EventModel's Spain values) |
+| `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the tools fall back to the sampling spread) | `SimConfig.cross_race_as_of: false` |
+| pit-loss prior, tyre-life history | as-of already (`pit_loss.pit_loss_prior`, `cliff.life_prior` / `tyre_history`) | their constant tiers | their own |
+| shrinkage taus | a priori engineering priors (base 0.5 s, wear 0.03 s/lap, hinge), fitted on no race; under `as_of_history` the base and fuel taus are the as-of sds | | |
+| learned calibrator (`trained`) | not as of the race: fitted on a fixed race set, off by default; refused for a race not after all its training races unless `force_not_as_of` | | |
+
+The world (the judge and the hindsight reference) keeps the whole-set tables: its full window
+prices unraced compounds with the whole-set step table and runs the config's effects and rates.
+The step table, weights and sd floor were re-estimated on the twenty races (the whole-set values
+the world and the legacy switch read; the weights and sd floor in the file are still the earlier
+seven-race validation's).
+
 **Scoring a car that was lapped or later retired.** Every plan covers the scheduled
 distance, the reference's included, and the world scores all of it with its whole-race fit
 (the world has no per-car pace and draws no retirement). Policy and reference then cover the
@@ -422,13 +452,10 @@ against. `actual_strategy` is exempt by definition: it replays what the team did
 **The scorer** (the world simulator and the hindsight reference) may use the whole race. It
 expresses tyre life as lap time (the wear cliff below), never as a rule handed to policies.
 
-Known caveats (the pit loss is as-of since the pit-loss change, above). The other known leaks are
-listed in `tests/future_blindness.py` (KNOWN_LEAKS) and handled by their own changes. The
-cross-race tables in `configs/sim/compound_steps.json` (the proxy's pace and wear steps and
-blend weights) are estimated from all seven calibration races regardless of date, so a race is
-priced partly from later races: for 2019 United Kingdom every row is later, for 2021 Spain all but
-2019 United Kingdom, and so on by date (2025 Qatar is the only calibration race with no later
-race in them). The belief's life ratio (below) is as-of; the proxy's steps are not yet.
+The cross-race tables a policy reads (the proxy's steps, weights and sd floor among them) are
+read as of the race since the cross-race change: "Cross-race tables, as of the race" under the
+first "Information contract" section above. The other known leaks are listed in
+`tests/future_blindness.py` (KNOWN_LEAKS) and handled by their own changes.
 
 ## The wear cliff
 

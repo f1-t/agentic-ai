@@ -311,20 +311,18 @@ def test_no_real_identity_reaches_the_agent(race_id, monkeypatch):
 
 
 # --- cross-race artifacts: provenance -------------------------------------------------------------
-@pytest.mark.parametrize("name", [
-    pytest.param(n, marks=[] if fb.provenance(n) is not None else
-                 [pytest.mark.xfail(strict=True, reason=f"{n} records no races it was fitted on ({a.where})")])
-    for n, a in fb.POLICY_SIDE_ARTIFACTS.items()])
+# fixed: every policy-side artifact is in src/sim/provenance.py with the races it records
+@pytest.mark.parametrize("name", list(fb.POLICY_SIDE_ARTIFACTS))
 def test_policy_side_artifact_records_its_races(name):
-    assert fb.provenance(name) is not None
+    races = fb.provenance(name)
+    assert races is not None
+    kind = fb.POLICY_SIDE_ARTIFACTS[name].kind
+    assert kind in ("as_of", "a_priori", "not_as_of") and (kind != "a_priori" or races == [])
+    assert not set(races) & fb.tyre_history_held_out(), "a held-out race feeds a policy-side table"
 
 
-PROVENANCE = ("tables read on the policy side are not filtered by date: compound_steps.json is fitted on races "
-              "including the snapshot's own and later seasons, and the constants and summaries record no races")
-
-
-@pytest.mark.parametrize("race_id", [pytest.param(r, marks=pytest.mark.xfail(strict=True, reason=PROVENANCE))
-                                     for r in REAL])
+# fixed: each table is read as of the race (proxy.as_of_config, race_history, model_report.calibration_error)
+@pytest.mark.parametrize("race_id", [*REAL, "2021_01_bahrain", "2019_10_united_kingdom", "1990_01_synthetic"])
 def test_policy_side_artifacts_fitted_only_on_earlier_races(race_id):
     """Every table or constant the policy side reads records its races, all before this race."""
     later = fb.artifacts_not_before(race_id)
@@ -336,7 +334,8 @@ PRIORS = ("a race dated before every cross-race table still prices from them: th
           "(reports/calibration/midrace_summary.csv via src/sim/model_report.py:29)")
 
 
-@pytest.mark.xfail(strict=True, reason=PRIORS)
+# fixed: with no earlier race the tier-5 step is unavailable, calibration_error_s is NaN and every
+# as-of factor is its documented a priori constant (race_history.A_PRIORI, EVENT_PRIOR)
 def test_race_before_every_table_uses_documented_priors():
     """A synthetic race dated 1990 runs (no failure) and nothing it shows the agent comes from a
     table fitted on later races."""

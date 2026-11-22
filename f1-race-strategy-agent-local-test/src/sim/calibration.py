@@ -482,6 +482,10 @@ PHYSICS_MODULES = (
     # SimConfig.wear_cliff.prior_source "tyre_history"); its committed tables (data/derived/tyre_*.csv,
     # configs/tyre_history.yaml) are read at run time and are not in config_hash
     "tyre_history",
+    # the per-race history tables read as of the race: the as_of_history calibrator (base delta, fuel,
+    # SC lap factor, lap-1 extra) and the as-of SC/VSC rates (configs/sim/race_history.csv,
+    # neutralised_history.csv, read at run time, not in config_hash)
+    "race_history",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -505,6 +509,8 @@ NON_PHYSICS = (
     "learned_calibrator",
     # the neutralisations off/on accuracy report behind the world's events; runs the simulator only
     "neutral_report",
+    # the registry of what the policy side reads from other races, with its races (docs and tests)
+    "provenance",
 )
 
 
@@ -533,7 +539,7 @@ SIM_CODE_VERSION = _code_version()   # report column sim_code_version, computed 
 # SimConfig fields added after hashes were published: left out of config_hash while they hold
 # their default, so a config that does not set one keeps its hash (as scenarios._ADDED_FIELDS
 # does for the set digest). A behaviour change behind a new default shows in SIM_CODE_VERSION.
-HASH_OMIT_AT_DEFAULT = ("policy_view",)
+HASH_OMIT_AT_DEFAULT = ("policy_view", "cross_race_as_of")
 
 
 def config_hash(config: SimConfig) -> str:
@@ -549,7 +555,8 @@ def config_hash(config: SimConfig) -> str:
     import json
     data = config.model_dump(mode="json", exclude={"fit_window"})
     for name in HASH_OMIT_AT_DEFAULT:   # added after configs were hashed: a default keeps the old value
-        if data.get(name) == SimConfig.model_fields[name].get_default(call_default_factory=True).model_dump(mode="json"):
+        default = SimConfig.model_fields[name].get_default(call_default_factory=True)
+        if data.get(name) == (default.model_dump(mode="json") if hasattr(default, "model_dump") else default):
             del data[name]
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
 BUCKET_LAPS = 10         # horizon bucket width in aggregate()

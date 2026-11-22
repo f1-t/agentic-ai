@@ -224,6 +224,7 @@ class Simulator:
         self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
         self.calibration = None   # CalibrationState on a pre_race or to_snapshot instance
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
+        self._race_id = None   # the snapshot race of a windowed instance (as-of cross-race tables)
         self._fits, self._cliffs = {}, {}
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
         self._windows = {}   # window_rows, shared with the windowed copies
@@ -330,7 +331,11 @@ class Simulator:
         cfg = self.config
         if prior is None and self._has_practice:
             prior = self.physics_prior(self.window[2] if self.window is not None else None)
-        return _proxy.apply(model, cfg.compound_proxy, min_samples=cfg.min_samples, practice=prior,
+        px = cfg.compound_proxy
+        if px.as_of and self.window is not None and cfg.fit_window != "full":
+            # a policy's fit: the tier-5 inputs from the races before this one (proxy.as_of_config)
+            px = _proxy.as_of_config(px, self._race_id or "")
+        return _proxy.apply(model, px, min_samples=cfg.min_samples, practice=prior,
                             quali=self.quali_gaps(), knot=lambda c: cfg.hinge_knots.get(c, cfg.hinge_knot_default),
                             wear_lower_bound=cfg.degradation.params.get("wear_lower_bound"))
 
@@ -451,6 +456,7 @@ class Simulator:
         """
         cfg = self.config
         drop = snapshot.driver if cfg.exclude_snapshot_driver else None
+        self._race_id = snapshot.race.race_id
         keep = self._keep(drop)
         if cfg.fit_window == "full":
             return self._fit(keep(self.laps))
@@ -531,7 +537,8 @@ class Simulator:
         """
         fit = self.fitted_for(snapshot)
         rep = _report.build(fit.degradation, self.config.fit_window, snapshot, ages, calibration_summary,
-                            hazard=fit.hazard, min_samples=self.config.min_samples)
+                            hazard=fit.hazard, min_samples=self.config.min_samples,
+                            as_of=self.config.cross_race_as_of and self.config.fit_window != "full")
         sources = fit.calibration.output.diagnostics.get("sources") if fit.calibration is not None else None
         return rep.model_copy(update={"prior_sources": dict(sources)}) if sources else rep
 

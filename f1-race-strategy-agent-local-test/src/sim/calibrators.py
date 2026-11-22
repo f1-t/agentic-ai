@@ -538,6 +538,14 @@ def artifact_sha256(directory) -> str:
     return h.hexdigest()[:12]
 
 
+def _before(race, other) -> bool:
+    """`race` started strictly before `other` (race_ids.as_of); False when either has no date."""
+    try:
+        return parse_race_id(canonical_race_id(race))[:2] < parse_race_id(canonical_race_id(other))[:2]
+    except ValueError:
+        return False
+
+
 @CALIBRATORS.register("trained")
 class TrainedCalibrator(Calibrator):
     """A learned calibrator committed as JSON (learned_calibrator.py train), loaded by race id;
@@ -587,7 +595,15 @@ class TrainedCalibrator(Calibrator):
 
     def calibrate(self, ctx):
         path = self.artifact_for(ctx.race.race_id)
-        out = self.model_for(ctx.race.race_id).calibrate(ctx)
+        model = self.model_for(ctx.race.race_id)
+        # docs/eval.md "Information contract": the artifacts are fitted on a fixed race set, not as
+        # of the race; a race dated before any of its training races would read later races, so it
+        # is refused unless the config says force_not_as_of (an explicit hindsight study)
+        later = [r for r in getattr(model, "train_races", []) if not _before(r, ctx.race.race_id)]
+        if later and not self.params.get("force_not_as_of"):
+            raise ValueError(f"calibrator 'trained': {path.name} was fitted on {sorted(later)}, not all before "
+                             f"{ctx.race.race_id}; the artifacts are not as of the race (force_not_as_of to use them)")
+        out = model.calibrate(ctx)
         rel = path.relative_to(self.directory).as_posix()
         return out.model_copy(update={"source": self.name,
                                       "diagnostics": {**out.diagnostics, "artifact": rel,
@@ -1179,3 +1195,5 @@ def selection_table(results: dict, window="to_snapshot", horizons=(20, 40), cali
 # themselves; imported last, as they build on Calibrator
 from . import event_rates  # noqa: E402,F401
 from . import fuel_prior  # noqa: E402,F401
+# "as_of_history" (docs/eval.md "Information contract": the cross-race tables as of the race)
+from . import race_history  # noqa: E402,F401
