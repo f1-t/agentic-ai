@@ -16,6 +16,7 @@ race_id,kind,start_lap,end_lap,total_laps,wet
 2022_09_canada,vsc,9,10,70,False
 2022_09_canada,vsc,19,20,70,False
 2022_09_canada,sc,48,54,70,False
+2022_11_austria,vsc,57,59,71,False
 2022_12_france,sc,18,20,53,False
 2022_12_france,vsc,49,50,53,False
 2022_20_mexico,vsc,64,65,71,False

@@ -35,7 +35,33 @@
    "vsc": {
     "factors": [],
     "stops": []
-   }
+   },
+   "wet": false
+  },
+  "2021_01_bahrain": {
+   "circuit": "bahrain",
+   "n_green_stops": 38,
+   "pit_loss_s": 23.504,
+   "replay_mean_s": 23.48,
+   "sc": {
+    "factors": [
+     -0.5258
+    ],
+    "stops": [
+     "PER:2"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 56,
+   "vsc": {
+    "factors": [
+     1.8444
+    ],
+    "stops": [
+     "GAS:4"
+    ]
+   },
+   "wet": false
   },
   "2021_04_spain": {
    "circuit": "spain",
@@ -59,7 +85,136 @@
    "vsc": {
     "factors": [],
     "stops": []
-   }
+   },
+   "wet": false
+  },
+  "2021_09_austrian": {
+   "circuit": "austrian",
+   "n_green_stops": 26,
+   "pit_loss_s": 20.299,
+   "replay_mean_s": 20.8,
+   "sc": {
+    "factors": [
+     0.662
+    ],
+    "stops": [
+     "GIO:1"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 71,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
+  },
+  "2021_20_qatar": {
+   "circuit": "qatar",
+   "n_green_stops": 29,
+   "pit_loss_s": 26.79,
+   "replay_mean_s": 28.2,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 57,
+   "vsc": {
+    "factors": [
+     1.2644
+    ],
+    "stops": [
+     "VER:55"
+    ]
+   },
+   "wet": false
+  },
+  "2021_22_united_arab_emirates": {
+   "circuit": "united_arab_emirates",
+   "n_green_stops": 17,
+   "pit_loss_s": 23.665,
+   "replay_mean_s": 23.12,
+   "sc": {
+    "factors": [
+     -2.7452,
+     1.0112,
+     -1.775,
+     0.6847,
+     0.5598,
+     -1.9805,
+     -1.6506
+    ],
+    "stops": [
+     "GAS:54",
+     "MSC:52",
+     "PER:53",
+     "RIC:52",
+     "STR:52",
+     "TSU:53",
+     "VER:53"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 58,
+   "vsc": {
+    "factors": [
+     0.8066,
+     0.6924,
+     0.6096,
+     0.741,
+     0.7282
+    ],
+    "stops": [
+     "ALO:36",
+     "GAS:36",
+     "LEC:35",
+     "PER:36",
+     "VER:36"
+    ]
+   },
+   "wet": false
+  },
+  "2022_01_bahrain": {
+   "circuit": "bahrain",
+   "n_green_stops": 44,
+   "pit_loss_s": 24.759,
+   "replay_mean_s": 23.19,
+   "sc": {
+    "factors": [
+     0.9961,
+     0.5039,
+     1.0316,
+     0.5023,
+     1.5877,
+     0.1701,
+     0.7525,
+     0.8783,
+     0.0836,
+     1.0377,
+     0.8044
+    ],
+    "stops": [
+     "ALB:46",
+     "BOT:45",
+     "HUL:44",
+     "LAT:45",
+     "LEC:46",
+     "MAG:46",
+     "NOR:45",
+     "RIC:44",
+     "RUS:45",
+     "STR:45",
+     "ZHO:45"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 57,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
   },
   "2022_02_saudi_arabia": {
    "circuit": "saudi_arabia",
@@ -99,7 +254,280 @@
     "stops": [
      "HAM:40"
     ]
-   }
+   },
+   "wet": false
+  },
+  "2022_06_spain": {
+   "circuit": "spain",
+   "n_green_stops": 53,
+   "pit_loss_s": 23.23,
+   "replay_mean_s": 24.32,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 66,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
+  },
+  "2022_08_azerbaijan": {
+   "circuit": "azerbaijan",
+   "n_green_stops": 10,
+   "pit_loss_s": 24.392,
+   "replay_mean_s": 26.16,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 51,
+   "vsc": {
+    "factors": [
+     0.7521,
+     0.4009,
+     0.5386,
+     0.5743,
+     0.3547,
+     0.4102,
+     0.5947,
+     0.8437,
+     0.4262,
+     -0.0649,
+     0.4907,
+     0.4151,
+     0.1076,
+     0.6679,
+     -0.3593,
+     0.5157,
+     0.6309
+    ],
+    "stops": [
+     "ALB:9",
+     "BOT:33",
+     "GAS:9",
+     "HAM:9",
+     "HAM:33",
+     "LEC:9",
+     "MAG:9",
+     "MSC:9",
+     "OCO:33",
+     "PER:33",
+     "RIC:33",
+     "RUS:9",
+     "RUS:33",
+     "TSU:9",
+     "VER:33",
+     "VET:9",
+     "ZHO:9"
+    ]
+   },
+   "wet": false
+  },
+  "2022_09_canada": {
+   "circuit": "canada",
+   "n_green_stops": 10,
+   "pit_loss_s": 19.61,
+   "replay_mean_s": 20.88,
+   "sc": {
+    "factors": [
+     0.8595,
+     0.2628,
+     0.5697,
+     0.0845,
+     0.4062,
+     -0.5048,
+     0.5188
+    ],
+    "stops": [
+     "ALB:48",
+     "ALO:49",
+     "BOT:49",
+     "OCO:49",
+     "RIC:49",
+     "SAI:49",
+     "ZHO:49"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 70,
+   "vsc": {
+    "factors": [
+     0.5112,
+     0.3769,
+     1.108,
+     0.4973,
+     0.61,
+     0.4656,
+     1.2111,
+     0.5764,
+     0.4881,
+     0.3496,
+     0.5274
+    ],
+    "stops": [
+     "HAM:9",
+     "LAT:9",
+     "NOR:19",
+     "OCO:19",
+     "RIC:19",
+     "RUS:19",
+     "SAI:20",
+     "TSU:9",
+     "VER:9",
+     "VET:19",
+     "ZHO:19"
+    ]
+   },
+   "wet": false
+  },
+  "2022_11_austria": {
+   "circuit": "austria",
+   "n_green_stops": 26,
+   "pit_loss_s": 21.64,
+   "replay_mean_s": 22.86,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 71,
+   "vsc": {
+    "factors": [
+     0.6831,
+     1.5016,
+     1.0231,
+     0.9916
+    ],
+    "stops": [
+     "ALO:57",
+     "ALO:58",
+     "LEC:58",
+     "VER:58"
+    ]
+   },
+   "wet": false
+  },
+  "2022_12_france": {
+   "circuit": "france",
+   "n_green_stops": 9,
+   "pit_loss_s": 29.164,
+   "replay_mean_s": 32.95,
+   "sc": {
+    "factors": [
+     0.366,
+     0.5838,
+     0.4222,
+     0.3883,
+     0.8266,
+     0.0655,
+     0.5884,
+     0.6502,
+     0.4993,
+     0.514,
+     0.7836,
+     0.2871,
+     0.8298,
+     0.4271,
+     0.3873,
+     0.407
+    ],
+    "stops": [
+     "ALB:18",
+     "ALO:18",
+     "BOT:18",
+     "GAS:18",
+     "HAM:18",
+     "LAT:19",
+     "MAG:18",
+     "MSC:18",
+     "NOR:18",
+     "OCO:18",
+     "PER:18",
+     "RIC:18",
+     "RUS:18",
+     "SAI:18",
+     "STR:18",
+     "VET:19"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 53,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
+  },
+  "2022_20_mexico": {
+   "circuit": "mexico",
+   "n_green_stops": 23,
+   "pit_loss_s": 24.512,
+   "replay_mean_s": 24.41,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 71,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
+  },
+  "2022_21_brazil": {
+   "circuit": "brazil",
+   "n_green_stops": 38,
+   "pit_loss_s": 22.585,
+   "replay_mean_s": 23.42,
+   "sc": {
+    "factors": [
+     0.0998,
+     1.9602
+    ],
+    "stops": [
+     "ALB:4",
+     "TSU:54"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 71,
+   "vsc": {
+    "factors": [
+     0.5081,
+     0.6907,
+     1.3331,
+     0.284
+    ],
+    "stops": [
+     "ALO:52",
+     "GAS:52",
+     "LAT:52",
+     "SAI:53"
+    ]
+   },
+   "wet": false
+  },
+  "2022_22_united_arab_emirates": {
+   "circuit": "united_arab_emirates",
+   "n_green_stops": 31,
+   "pit_loss_s": 22.877,
+   "replay_mean_s": 25.2,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 58,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
   },
   "2023_01_bahrain": {
    "circuit": "bahrain",
@@ -129,7 +557,8 @@
      "SAR:40",
      "TSU:40"
     ]
-   }
+   },
+   "wet": false
   },
   "2023_07_spain": {
    "circuit": "spain",
@@ -145,7 +574,8 @@
    "vsc": {
     "factors": [],
     "stops": []
-   }
+   },
+   "wet": false
   },
   "2024_07_emilia_romagna": {
    "circuit": "emilia_romagna",
@@ -161,7 +591,8 @@
    "vsc": {
     "factors": [],
     "stops": []
-   }
+   },
+   "wet": false
   }
  }
 }

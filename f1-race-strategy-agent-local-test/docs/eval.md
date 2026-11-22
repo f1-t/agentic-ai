@@ -292,9 +292,9 @@ artifact with its kind and, per race, the races it reads; `tests/future_blindnes
 for every real race, 2021 Bahrain, 2019 United Kingdom and a synthetic race dated 1990
 (`test_policy_side_artifacts_fitted_only_on_earlier_races`, `test_race_before_every_table_uses_documented_priors`).
 The tables are built from the calibration races only (`compound_steps.CALIBRATION_RACES`: the six
-development races, 2025 Qatar and fourteen 2021-22 weekends; 2022 Austria is left out because
-`jobs.load_race` cannot build it, laps with no recorded compound); no race of `data/eval_set.json`
-is ever loaded or feeds a table.
+development races, 2025 Qatar and thirteen 2021-22 weekends, 2022 Austria among them since its
+unlabelled-compound laps load as `UNKNOWN`; the pit-loss prior table holds the nineteen of them
+`dev20` samples, 2025 Qatar not); no race of `data/eval_set.json` is ever loaded or feeds a table.
 
 | artifact | read as of the race | no earlier race (a priori) | legacy switch |
 | --- | --- | --- | --- |

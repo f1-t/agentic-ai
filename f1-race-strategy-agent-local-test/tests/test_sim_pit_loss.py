@@ -89,9 +89,12 @@ def test_prior_pool_reads_the_cache_and_keeps_held_out_races_out_of_development_
 
 
 def test_committed_prior_holds_calibration_races_only():
+    # the nineteen calibration races sampled into dev20 (configs/eval/rerun_sets.yaml), 2022 Austria
+    # included since it loads; never a held-out race
+    from src.eval.rerun import set_spec
+    from src.eval.scenarios import load_eval_set
     races = set(PitLossModel().prior["races"])
-    assert races == {"2021_04_spain", "2023_07_spain", "2023_01_bahrain", "2019_10_united_kingdom",
-                     "2022_02_saudi_arabia", "2024_07_emilia_romagna"}
+    assert races == set(set_spec("dev20")["races"]) and not races & set(load_eval_set()[0])
 
 
 # --- the as-of estimate on a real race -----------------------------------------------------
