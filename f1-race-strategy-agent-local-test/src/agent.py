@@ -91,7 +91,7 @@ You choose the plan for the rest of the race: any legal plan (stops, laps, compo
 The tools are a simulator fitted only on the laps so far, and an optimizer that searches every plan on it. Their numbers are estimates: a share of draws covers parameter and lap noise under this model, not model error. """ + GAP_SENTENCE + """
 
 How to decide:
-1. Call rank_plans and race_picture first (one turn). rank_plans is the simulator's look-ahead across the strategy space: the best plan of each strategy family (stops left and compound sequence), plan 1 the lowest mean time on the simulator, each with its stints, first stop, immediate action, the submit fields that keep it, gap_s to plan 1 with its 90% interval, best_share and flags; decision reads the best PIT-now plan against the best STAY_OUT plan. race_picture is the race as you see it: your position and gaps, the cars around you and their tyres, your set's observed wear against the model's, what the field has shown on each compound, where a stop would rejoin, and how thin each estimate is.
+1. Call rank_plans and race_picture first (one turn). rank_plans is the simulator's look-ahead across the strategy space: the best plan of each strategy family (stops left and compound sequence), plan 1 the lowest mean time on the simulator, each with its stints, first stop, immediate action, the submit fields that keep it, gap_s to plan 1 with its 90% interval (the plan's time minus plan 1's: positive is slower), best_share and flags; decision reads the best PIT-now plan against the best STAY_OUT plan. race_picture is the race as you see it: your position and gaps, the cars around you and their tyres, your set's observed wear against the model's, what the field has shown on each compound, where a stop would rejoin, and how thin each estimate is.
 2. The look-ahead is the simulator's best estimate, not the answer. It can be wrong where it flags a weak estimate (a compound priced without race laps or from thin practice data, a tyre life from a generic prior or a stint past it, a safety car or VSC in progress) or where the race so far contradicts it (your set or the field wearing faster or slower than the model, runs longer than its tyre life). Where nothing in the picture bears on the choice, the ranking is your best evidence. Where something does, weigh it and make the call: you may choose any plan, not only the ones listed. evaluate_plan prices one plan, or a stop at lap L onto compound C, against plan 1; estimate_tyre_degradation and estimate_pit_loss give one estimate in full. Do not probe one lap count after another: rank_plans already searched every stop lap.
 3. Submit the plan you choose: its submit fields (decision, compound, reassess_after_laps, first_stop_lap), or plan with the whole plan to keep it exactly. In one line of the rationale state the evidence your choice rests on; when it is not plan 1, say what in the picture made you depart from it.
 
@@ -292,8 +292,9 @@ def _contradiction_note(rec, evidence, readings=None):
     key = _plan_key(rec)
     seen = (readings or {}).get(key) if key else None
     if seen and seen[2] < 1 - CONTRADICTION_SHARE and seen[1] > 0:
-        lines.append(f"the plan you name ({seen[0]}) was read as slower than plan 1 in {1 - seen[2]:.0%} of draws "
-                     f"(gap {seen[1]:+.1f} s).")
+        # a positive gap is slower: said in words, since a live episode read gap_s +11.1 as 11.1 s faster
+        lines.append(f"the plan you name ({seen[0]}) was read as slower than plan 1 in {1 - seen[2]:.0%} of draws: "
+                     f"gap_s {seen[1]:+.1f} means it is {seen[1]:.1f} s SLOWER than plan 1 on average, not faster.")
     if not lines:
         return None
     return ("Not final yet: " + " Also, ".join(lines) + " Call submit_recommendation again: the same submission to "

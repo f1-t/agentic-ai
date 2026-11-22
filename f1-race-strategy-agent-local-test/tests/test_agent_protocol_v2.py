@@ -455,7 +455,7 @@ def test_v2free_holds_a_named_plan_read_as_slower_in_most_draws(snaps, monkeypat
     rec, traj = run_agent(snaps["mid"], verbose=False, backend=backend, max_steps=3, stats=stats)
     assert stats["check_fired"] is held and rec["first_stop_lap"] == done + 3
     if held:
-        assert "slower than plan 1 in 100% of draws" in traj[1]["output"]["held"]
+        assert "slower than plan 1 in 100% of draws" in traj[1]["output"]["held"] and "SLOWER" in traj[1]["output"]["held"]
 
 
 @pytest.mark.agent_protocol_v2free
