@@ -1899,6 +1899,23 @@ runs of one scenario, a small run-to-run check). `agent_run.json` (copied into `
 records K, N, each pass's start, end, wall time, model and loop switches, and which figure is the
 headline.
 
+**Pre-registered reporting** (`configs/eval/reporting.yaml`, `src/eval/reporting.py`). The
+reporting choices for the held-out run are fixed in a committed file before the held-out set
+exists: the lead comparisons (agent minus `run_to_flag`, then `one_stop_total`), the secondary ones
+(`actual_strategy`, `belief_optimizer`), the reference-only and footnoted ones; the statistic (mean
+paired regret difference, agent minus comparator, on scenarios both scored) with a 95% percentile
+cluster bootstrap on (race, driver) clusters as the primary interval and the race-cluster interval
+beside it (2,000 resamples, seed 0) and the verdict words from the primary interval ("ahead",
+"behind", "level"); the tail threshold (20 s, with 10 and 30 s beside it, median and worst); the
+three-way held-out split in order (the fresh five, the earlier four labelled a second look, all
+nine) and by era; the run settings; the handling rules; and the fidelity context printed with the
+results. The `scenarios` stage records the file's sha256 in the set's `sampling`; the `tables` stage
+refuses a report set whose recorded sha256 differs from the file's, writes
+`tables/reporting_paired.csv` (per group, the comparators in order, both intervals, the verdict),
+`reporting_tail.csv`, `reporting_counts.csv` (rows per policy and status), `reporting_paired_by_era.csv`
+and `reporting_header.txt`, and copies the file verbatim with its sha256 into `provenance.json`. A
+development set is one group, "development (all)".
+
 **Smoke run.** `python -m src.eval.rerun smoke [--n 8] [--jobs 4]` (key and `LLM_BACKEND` as for the
 agent stage) samples set `smoke` (eight development races; a held-out race is refused, `--final`
 is refused) with the leak-free builder, keeps a fixed seeded handful (a lap-0 snapshot, one under

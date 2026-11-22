@@ -144,6 +144,10 @@ def stage_scenarios(args, build=None) -> Path:
     kw = {"max_per_race": spec["per_race"]} if args.rule == "as_of" else {}
     out = build(spec["races"], args.set, profile=load_profile(args.profile), rule=args.rule, seed=spec["seed"],
                 development=bool(spec["development"]), **kw)
+    from . import reporting
+    # the pre-registered reporting choices this set is built under: the tables stage refuses a
+    # report set whose recorded sha256 is not the reporting file's
+    out.sampling = reporting.record(dict(getattr(out, "sampling", None) or {}))
     out.save(path)
     print(f"{args.set} ({out.kind}, rule {args.rule}): {len(out.items)} scenarios, {len(out.skipped)} skipped, "
           f"digest {out.digest[:12]} -> {path}")
@@ -474,10 +478,18 @@ def stage_tables(args) -> Path:
     (race, driver) cluster intervals for every comparator (belief_optimizer stands in for the agent
     when there are no agent rows, said so in the file name), the chart CSV, the tail table (by era
     too for a set with eras), status counts, position metrics when traffic is on; provenance.json."""
+    from . import reporting
     from .compare import metric_table, paired_table
+    from .scenarios import ScenarioSet
     from .score import summarize
     d = out_dir(args)
     spec = set_spec(args.set, args.sets)
+    if not spec["development"]:
+        # a report set: the reporting choices must be the ones recorded when its scenarios were built
+        if not (d / "scenarios.json").exists():
+            raise SystemExit(f"{d / 'scenarios.json'} is missing: a report set's tables need it to check the "
+                             "pre-registered reporting choices")
+        reporting.check(ScenarioSet.load(d / "scenarios.json"))
     parts = [pd.read_csv(p) for p in (d / "baselines.csv", d / "agent.csv") if p.exists()]
     if not parts:
         raise SystemExit(f"no rows under {d}: run the baselines (and agent) stages first")
@@ -512,6 +524,15 @@ def stage_tables(args) -> Path:
     if timing is not None:
         for name, table in zip(("agent_latency.csv", "agent_latency_paired.csv", "agent_latency_pairs.csv"), timing):
             table.to_csv(t / name, index=False)
+    # the pre-registered tables (configs/eval/reporting.yaml): the group split, both intervals, verdicts
+    rep = reporting.load()
+    for name, table in reporting.tables(rows, rep, era_of).items():
+        table.to_csv(t / f"{name}.csv", index=False)
+    header = [f"reporting.yaml sha256 {reporting.sha256()}",
+              f"{'development set' if spec['development'] else 'report set'} {args.set}",
+              f"question: {rep['question']}", f"fidelity: {' '.join(rep['fidelity_context'].split())}"]
+    (t / "reporting_header.txt").write_text("\n".join(header) + "\n")
+    print("\n".join(header))
     write_provenance(args, rows)
     print(f"tables -> {t}")
     return t
@@ -614,6 +635,7 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
     file sha256 and config_hash, SIM_CODE_VERSION, the set digest, the model id and loop settings,
     the stamps the rows carry, and every command run here."""
     from ..sim import SimConfig, calibration
+    from . import reporting as _reporting
     from .scenarios import ScenarioSet
     d = out_dir(args)
     s = ScenarioSet.load(d / "scenarios.json") if (d / "scenarios.json").exists() else None
@@ -643,6 +665,7 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
            "builder": s.builder if s else None,
            "future_blindness": future_blindness(run=getattr(args, "harness", False)),
            "as_of_tables": as_of_tables(_races(s) if s else []),
+           "reporting": _reporting.provenance(),   # the pre-registered choices, verbatim, with the sha256
            "agent_run": json.loads((d / "agent_run.json").read_text()) if (d / "agent_run.json").exists() else None,
            "agent_timing": _timing_doc(d),
            "commands": (d / "commands.log").read_text().splitlines() if (d / "commands.log").exists() else []}
