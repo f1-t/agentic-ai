@@ -524,14 +524,6 @@ def _restore_total_laps(orig_snap, alt_snap):
     return alt_snap.model_copy(update={"race": alt_snap.race.model_copy(update={"total_laps": orig_snap.race.total_laps})})
 
 
-def _stint_limits_patch(orig):
-    recorded = orig.frame
-
-    def stint_limits(laps, rank=1):
-        return rules.stint_limits(recorded, rank)
-    return [mock.patch.object(engine, "stint_limits", stint_limits)]
-
-
 KNOWN_LEAKS: dict[str, Leak] = {}
 # leaks whose fix has landed: never neutralised; test_leak_<name> stays as the regression check
 FIXED_LEAKS: dict[str, Leak] = {}
@@ -543,12 +535,6 @@ def register(leak: Leak, fixed: bool = False):
 
 
 # Most severe first (by how far they move what the belief and the policies plan).
-register(Leak(
-    "stint_limit", "R8's stint limit is the oldest tyre age any car ran on the compound in the whole race "
-    "(and, under the compound proxy, whether a compound counts as raced at all)",
-    "src/sim/engine.py:197 Simulator.__init__ stint_limits(laps) (src/sim/rules.py:103; proxy.unraced_limits) -> "
-    "rules.stint_limit, optimizer_bridge._stint_limit_filter:183, eval/policies.py:74,136", "scramble",
-    patches=_stint_limits_patch))
 register(Leak(
     "frame_filter", "data.lap_frame's clean flag (with pace_resid_s and driver_offset_s) comes from one robust "
     "pace fit over every lap of the race, so which laps before the snapshot count as clean depends on later laps",
@@ -564,6 +550,13 @@ register(Leak(
     "pit_loss", "RaceParams.pit_loss_s is the observed pit loss of a full-race replay",
     "src/sim/jobs.py:98 load_race -> src/sim/calibrate.py:137 _pit_loss (calibration.run observed_pit_loss_s) -> "
     "snapshot.race; src/sim/engine.py:500, src/sim/agent_tools.py:383", "scramble", data=_restore_race("pit_loss_s")),
+    fixed=True)
+register(Leak(
+    "stint_limit", "R8's stint limit was the oldest tyre age any car ran on the compound in the whole race "
+    "(and, under the compound proxy, whether a compound counts as raced at all)",
+    "retired (docs/rules.md R8): src/sim/rules.py stint_limits and proxy.unraced_limits run only under the "
+    "legacy setting; tyre life is the wear cliff, the belief's edge from what is visible at the snapshot "
+    "(src/sim/cliff.py as_of_cliffs, Simulator.cliffs_for)", "scramble"),
     fixed=True)
 register(Leak(
     "race_length", "the snapshot's race length is the laps the driver drove in the whole race, so a driver "

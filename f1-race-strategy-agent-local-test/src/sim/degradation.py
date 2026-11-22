@@ -1018,6 +1018,39 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     return _apply_base_delta(_coefs(comps, beta), rep, base_delta), fuel, hinges, rep
 
 
+NO_KNOT = 10 ** 6   # a knot no tyre reaches: the hinge column is empty, so the hinge is dropped
+
+
+def _life_knots(data, fraction) -> dict[str, int]:
+    """compound -> knot at `fraction` of the oldest tyre age the fit's rows reach on it (every row:
+    the whole race under the full window, the laps so far under to_snapshot), at least 1. The
+    prior on where fall-off starts: a share of the longest life seen, per compound."""
+    f = data[data["compound"].notna() & data["tyre_age"].notna()]
+    return {str(c): max(1, int(np.floor(fraction * float(a))))
+            for c, a in f.groupby("compound")["tyre_age"].max().items()}
+
+
+def _bounded_hinges(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots, wear_lower_bound,
+                    driver_effects, bound, fit):
+    """The unpenalised fit with every fitted hinge below `bound` dropped and the rest refitted,
+    until none is below (a negative hinge would extrapolate a late-stint flattening into free
+    pace). A dropped hinge reports source "dropped_bound", value 0, at its knot."""
+    coefs, fuel, hinges, rep = fit
+    off = {}
+    while True:
+        low = [c for c, h in rep["hinge"].items() if h["source"] == "fitted" and h["value"] < bound]
+        if not low:
+            break
+        for c in low:
+            off[c] = rep["hinge"][c]
+        coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
+                                             {**knots, **{c: NO_KNOT for c in off}}, wear_lower_bound, driver_effects)
+    for c, h in off.items():
+        rep["hinge"][c] = _hinge_entry(0.0, float("nan"), "dropped_bound", 0.0, knots[c], h["n_past_knot"])
+        hinges[c] = 0.0
+    return coefs, fuel, hinges, rep
+
+
 @DEGRADATION.register("linear_fuel_hinge")
 class LinearFuelHingeDegradation(LinearFuelDegradation):
     """linear_fuel plus a per compound hinge: lap time = base_c + wear_c * age
@@ -1032,7 +1065,13 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     the prior's hinge (0 when the prior has none) with tau shrinkage["hinge_s_per_lap"].
 
     fit_report["hinge"]: {compound: {value, sd, source, weight, knot, n_past_knot}}, source
-    "fitted", "shrunk", "prior" (no race rows past the knot) or "dropped".
+    "fitted", "shrunk", "prior" (no race rows past the knot), "dropped" or "dropped_bound".
+
+    Two options (SimConfig.degradation.params, off by default): `knot_life_fraction` places each
+    compound's knot at that share of the oldest tyre age the fit's rows reach on it (_life_knots:
+    a prior on where fall-off starts, per compound, from the rows the fit may read), overriding
+    hinge_knots; `hinge_lower_bound` (unpenalised fits only) drops a fitted hinge below it and
+    refits (_bounded_hinges), so a flattening of long stints is not extrapolated into free pace.
     """
 
     def __init__(self, coefs, fuel_slope, hinges, knots, fit_report=None):
@@ -1044,10 +1083,12 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
             clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False,
-            driver_effects="off", **_):
+            driver_effects="off", knot_life_fraction=None, hinge_lower_bound=None, **_):
         driver_effects = driver_effects_mode(driver_effects)
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
+        if knot_life_fraction is not None:
+            knots.update(_life_knots(data, knot_life_fraction))
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound,
                                        collinear_hold, divide_data_by_s2, driver_effects)
@@ -1056,6 +1097,10 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
                        rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots,
                                              wear_lower_bound, driver_effects)
+        if hinge_lower_bound is not None:
+            coefs, fuel, hinges, rep = _bounded_hinges(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
+                                                       knots, wear_lower_bound, driver_effects, hinge_lower_bound,
+                                                       (coefs, fuel, hinges, rep))
         return cls(coefs, fuel, hinges, {c: knots[c] for c in coefs}, rep).with_draw(draw, clip_wear_at_zero,
                                                                                      wear_lower_bound)
 

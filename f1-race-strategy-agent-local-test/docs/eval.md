@@ -325,12 +325,10 @@ turns it into the plan the world scores:
   `max_stops`. Every plan from a decision lies inside the space the reference searched, so
   an agent row with negative regret (beyond 1e-6 s) is a bug, and `summarize` warns
   (`AgentRegretWarning`). Baselines keep their exception: an actual three-stop can beat a
-  two-stop reference. The R8 stint limit (docs/rules.md) binds every plan alike: the
-  reference and the continuation search only inside it, and the world rejects a plan past
-  it as invalid, a baseline's as an agent's. The eval wrapper (`eval.policies._bridged`, not
-  `src/baselines`, which is unchanged) makes `fixed_one_stop` and `greedy_crossover`
-  limit-aware first (docs/rules.md R8): fixed_one_stop moves its first stop to the last
-  legal lap, greedy_crossover takes a forced stop on the lap its set would pass the limit;
+  two-stop reference. No tyre-life limit binds any plan (R8 is retired, docs/rules.md): an
+  over-long stint is priced by the wear cliff, the world's from the whole race and the
+  belief's from what is known at the snapshot ("The wear cliff" below), and a plan is invalid
+  only for a published-regulation violation;
 
 - `Simulator.expand_action` joins the two. A stay of n at least the laps left runs the
   current set to the flag.
@@ -347,8 +345,8 @@ decision imposed, and the world scores that plan like any other. It answers what
 model adds over running the optimizer on what it can see. It is planned by
 `eval.decisions.belief_optimum`, with the same belief fit, seed (seed + `BELIEF_SEED_OFFSET`),
 samples and future-stop limit as the agent continuation in `to_plan`. It follows every rule
-(R1-R8); a plan the world rejects is an `invalid` row with the reason. Rows carry the usual
-plan, stops, first pit, regret and R8 stamps; the agent-only columns (`decision`, `p_pit`,
+(R1-R7); a plan the world rejects is an `invalid` row with the reason. Rows carry the usual
+plan, stops, first pit, regret and the (retired) R8 stamps, blank; the agent-only columns (`decision`, `p_pit`,
 tool calls, tokens) are blank. It is not in the `baselines` group, so default commands and
 existing result files are unchanged; select it by name.
 
@@ -363,7 +361,7 @@ has made their stop, when the sensible plan is usually to run to the flag.
 **run_to_flag.** Make no further stop when the rules allow it; otherwise the fewest stops
 that make the plan legal, each as late as the rules allow:
 
-1. The plan is the current set to the flag. If it passes every rule (R1-R4, R8 and the
+1. The plan is the current set to the flag. If it passes every rule (R1-R4 and the
    belief's known compounds, checked with `belief.validate` on the plan as a contract, sets
    assigned by `to_contract` as for every baseline), that is the plan.
 2. Otherwise, for k = 1, 2, ... up to `max_stops` (the future-stop limit every policy gets,
@@ -379,7 +377,10 @@ that make the plan legal, each as late as the rules allow:
 The compound rule is fixed: since the forced stops are placed as late as the rules allow, the
 stint after one is as short as they allow, and the softest legal compound is the usual choice
 for a short final stint. Placing the stops first and choosing the compound second is part of
-the rule: when a later stop needs a harder compound (an R8 limit), the later stop wins.
+the rule: when a later stop needs a harder compound, the later stop wins. With R8 retired the
+forced stops come from the published rules (R2 minimum stint, R3 two compounds) and the belief's
+as-of tyre-life estimate at the snapshot, the information every policy has ("The wear cliff",
+rule baselines).
 
 **one_stop_total.** A one-stop race in the ordinary sense, one stop in the whole race:
 
@@ -387,8 +388,8 @@ the rule: when a later stop needs a harder compound (an R8 limit), the later sto
   `snapshot.stints`, is empty), the decision is `fixed_one_stop`'s, through the same eval
   wrapper: the stop at the middle of the remaining laps (moved to respect the minimum stint,
   R2), onto the first of HARD, MEDIUM, SOFT the belief models that differs from the current
-  compound, and moved earlier to the last legal lap when the plan breaks R8
-  (`_one_stop_within_limit`). Where `fixed_one_stop` is unavailable or invalid, so is this row.
+  compound (`_one_stop_within_limit` moved it earlier under R8; it runs only under the legacy
+  setting). Where `fixed_one_stop` is unavailable or invalid, so is this row.
 - If the driver has stopped at least once (`snapshot.stints` is not empty), it is
   `run_to_flag`.
 
@@ -397,9 +398,228 @@ completed and left, the current compound, its age and laps on the set, the stint
 tyre sets, the set of compounds the belief models at the snapshot (fitted only on what is known
 there), the minimum stint (R2) and the future-stop limit. Neither reads a lap time, a pace or
 wear fit, the belief optimizer, the reference or any tuned constant, and neither reads the pit
-loss. The one thing they know that nobody at the snapshot could is what every policy already
-gets: the race-wide R8 stint limits, a hindsight race constant (docs/rules.md R8, "Limitations"
-below). A plan the world rejects is an `invalid` row with its reason, as for any policy.
+loss. Under R8 they also knew the race-wide stint limits, a hindsight race constant; R8 is
+retired, and their tyre life is the belief's as-of estimate, so they know nothing a driver could
+not know at the snapshot ("Information contract").
+A plan the world rejects is an `invalid` row with its reason, as for any policy.
+
+## Information contract
+
+What each side may know, and the test that holds it (`tests/test_tyre_life_future_blindness.py`).
+
+**A policy** at (race, lap L), and everything it calls (the belief simulator, the belief
+optimizer, the continuation of a decision, the baselines, the agent's tools), may use only:
+this weekend's practice, sprint and qualifying; race laps up to L (every car's); the published
+regulations (R1-R4, the race distance, the future-stop limit); and priors fixed in config or
+estimated from races strictly before this one (`race_ids.as_of`). No rule a policy sees depends
+on a lap after L, and the agent's tools state no whole-race fact. The test truncates or
+scrambles every lap after L (synthetic race at three snapshots, and 2021 / 2023 Spain at laps
+10, 25 and 40) and asserts that the belief's cliff ages, every tool output and error string,
+the belief optimizer's plan, the continuation of a PIT and a STAY_OUT, and every baseline plan
+are unchanged; with the legacy R8 setting the same check fails, which is the leak it guards
+against. `actual_strategy` is exempt by definition: it replays what the team did.
+
+**The scorer** (the world simulator and the hindsight reference) may use the whole race. It
+expresses tyre life as lap time (the wear cliff below), never as a rule handed to policies.
+
+Known caveats (the pit loss is as-of since the pit-loss change, above). The other known leaks are
+listed in `tests/future_blindness.py` (KNOWN_LEAKS) and handled by their own changes. The
+cross-race tables in `configs/sim/compound_steps.json` (the proxy's pace and wear steps and
+blend weights) are estimated from all seven calibration races regardless of date, so a race is
+priced partly from later races: for 2019 United Kingdom every row is later, for 2021 Spain all but
+2019 United Kingdom, and so on by date (2025 Qatar is the only calibration race with no later
+race in them). The belief's life ratio (below) is as-of; the proxy's steps are not yet.
+
+## The wear cliff
+
+A degradation model's wear is a line (or a line with a hinge), so with nothing else an optimizer
+plans absurd stints (a 59-lap SOFT at 2024 Emilia Romagna, 38-lap SOFT at 2023 Spain). R8 forbade
+them with a hindsight rule; the cliff prices them. Inside a compound's support the fitted model
+holds; past its support edge E a lap costs
+
+    min(kappa x (age - E)^2, cap)   seconds more,   kappa = 0.05 s/lap per lap^2, cap = 4 s/lap
+
+(`src/sim/cliff.py`, `SimConfig.wear_cliff`, added in `Simulator.simulate_batch` to green laps at
+their effective age, before the track factor). A plan 2 laps past the edge pays about 0.3 s; a
+dead tyre pays at most 4 s a lap, so one absurd plan cannot dominate a mean. Nothing is invalid
+for tyre age. The data cannot locate a cliff by itself: fitted curvature is significantly negative
+on several race/compound pairs (2023 Spain HARD and MEDIUM, 2024 Emilia Romagna HARD and MEDIUM,
+2025 Qatar HARD: long runs are survivorship-selected), so past the support the model's knowledge
+ends and this stated extrapolation takes over. kappa anywhere in 0.02-0.10 gives the same lap-0
+stop counts on the development races, so it is 0.05 and not tuned (design study on the six
+development races; the capped form is the study's recommendation, adopted).
+
+**The edge, judge and predictive simulator.** Both start from the same historical prior on tyre
+life (`cliff.history_prior`: races strictly before this one by date, held-out races never), so they
+agree as far as they can, and each extends it outward only where it has lap data.
+
+- *Predictive simulator (belief, every window but `full`)*: per sample, max(the oldest tyre age
+  seen so far, prior + sd z), the ages seen being this weekend's practice and sprint and race laps
+  up to the fit's calibration point (every car; never an advanced snapshot's lap, since a plan's
+  continuation is its hypothetical future), z standard normal from its own stream
+  (`engine.CLIFF_STREAM`, so every other draw is unchanged). Practice ages are run lengths, not
+  tyre life (2023 Spain HARD: 7 in practice, 50 in the race), so they are only a lower bound.
+- *Judge (world, `full`)*, `wear_cliff.world_edge`, three sources with the same cost form:
+  (a) `history_only`, the prior's point edge, nothing from this race; (b) `history` (the default
+  until the fidelity scorecard chooses between a and b by judge-versus-reality accuracy out of
+  sample), the prior extended by the ages this race has lap data for, max(prior, oldest age run),
+  the judge's one whole-race input here; (c) `race`, the oldest age run in this race (for an
+  unraced compound the proxy's practice-age rule), the earlier design. The world's
+  `fit_report["support_edge"]` (and `Simulator.cliff_ledger`) records per compound the edge, its
+  source ("history:<tier>", "history:<tier> extended by race data to age N", "race", ...) and
+  whether it used this race's laps, for the fidelity tool's hindsight ledger.
+
+**The prior.** `wear_cliff.prior_source: tyre_history` (the default) is the shared history model,
+`src/sim/tyre_history.py` `tyre_life_prior(race_id, compound)`: C-number and circuit weighted,
+strictly as-of by date, held-out races never, its own fallback chain (tiers 1-4) down to a
+documented constant; its validation reports a typical miss of 8 laps (3 with same-circuit
+history), 68/90 percent intervals covering 65/90 percent, and a slight short bias, which the
+belief's rule that observed ages extend the edge offsets. A race id with no date (a synthetic
+race) takes the stub's constant tier. `prior_source: stub` is the earlier as-of stub,
+`cliff.life_prior`, an explicit fallback chain, each tier with a wider sd (a share of race
+distance): the same circuit in an earlier season, scaled by race distance
+(`circuit_history:<race>`, sd 0.10); else the median share of race distance the compound's oldest
+stint ran in earlier races at any circuit (`history_fraction`, sd 0.15; 2025 Qatar left out, its
+stints were capped by regulation); else a neighbour's prior times the as-of life ratio (the median
+of the per-race ratios of earlier races in `compound_steps.json`, sd 0.18); else a documented
+constant, `prior_life_fraction` of race distance (SOFT 0.4, MEDIUM 0.55, HARD 0.7, a priori, sd
+0.20, the widest). Every dry compound gets a prior whatever history exists, and the belief never
+falls back to a quantity of this race. Its history is the committed table
+`configs/sim/tyre_life_history.json` (written by `python -m src.sim.cliff history --races ...`
+from the calibration races) plus, at run time, every cached race strictly before the race
+(`wear_cliff.scan_cache`; held-out races are left out before anything is loaded), so newly cached
+seasons enter without a code change. The measurements below (the prior's accuracy, the lap-0
+tables, the cross-race run) were taken with the stub prior, before the switch to
+`tyre_history`; the integration step re-measures them.
+
+The prior's own accuracy, scored against the oldest age actually run (the hindsight fact is the
+measurement target here, not an input), stub prior on the calibration races:
+
+| race | compound | history edge | sd | tier | oldest run | run - edge | within 1 sd |
+|---|---|---|---|---|---|---|---|
+| 2019_10_united_kingdom | SOFT | 20.8 | 10.4 | config_fraction | 23.0 | 2.2 | True |
+| 2019_10_united_kingdom | MEDIUM | 28.6 | 10.4 | config_fraction | 39.0 | 10.4 | True |
+| 2019_10_united_kingdom | HARD | 36.4 | 10.4 | config_fraction | 40.0 | 3.6 | True |
+| 2021_04_spain | SOFT | 29.2 | 9.9 | history_fraction | 32.0 | 2.8 | True |
+| 2021_04_spain | MEDIUM | 49.5 | 9.9 | history_fraction | 42.0 | -7.5 | True |
+| 2021_04_spain | HARD | 50.8 | 9.9 | history_fraction | - | - | - |
+| 2022_02_saudi_arabia | SOFT | 23.2 | 7.5 | history_fraction | - | - | - |
+| 2022_02_saudi_arabia | MEDIUM | 34.7 | 7.5 | history_fraction | 16.0 | -18.7 | False |
+| 2022_02_saudi_arabia | HARD | 38.5 | 7.5 | history_fraction | 41.0 | 2.5 | True |
+| 2023_01_bahrain | SOFT | 26.4 | 8.5 | history_fraction | 25.0 | -1.4 | True |
+| 2023_01_bahrain | MEDIUM | 36.3 | 8.5 | history_fraction | 10.0 | -26.3 | False |
+| 2023_01_bahrain | HARD | 45.3 | 8.5 | history_fraction | 29.0 | -16.3 | False |
+| 2023_07_spain | SOFT | 32.0 | 6.6 | circuit_history:2021_04_spain | 28.0 | -4.0 | True |
+| 2023_07_spain | MEDIUM | 42.0 | 6.6 | circuit_history:2021_04_spain | 32.0 | -10.0 | False |
+| 2023_07_spain | HARD | 50.8 | 9.9 | history_fraction | 50.0 | -0.8 | True |
+| 2024_07_emilia_romagna | SOFT | 27.7 | 9.4 | history_fraction | 8.0 | -19.7 | False |
+| 2024_07_emilia_romagna | MEDIUM | 30.5 | 9.4 | history_fraction | 38.0 | 7.5 | True |
+| 2024_07_emilia_romagna | HARD | 48.1 | 9.4 | history_fraction | 54.0 | 5.9 | True |
+| 2025_23_qatar | SOFT | 24.2 | 8.5 | history_fraction | 25.0 | 0.8 | True |
+| 2025_23_qatar | MEDIUM | 32.5 | 8.5 | history_fraction | 25.0 | -7.5 | True |
+| 2025_23_qatar | HARD | 43.8 | 8.5 | history_fraction | 25.0 | -18.8 | False |
+
+**The agent's tools** report the belief's edge per compound (`model_report`'s `tyre_life`: the
+longest run seen so far and where, the prior and its sd and tier, the cost form, and the sentence
+"longest run seen so far on this compound: N laps (...); pre-race tyre-life estimate M laps (sd
+S, tier); wear beyond that is uncertain"); it is never an error or a limit.
+
+**Rule baselines** (`fixed_one_stop`, `greedy_crossover`, `run_to_flag`, `one_stop_total`) get the
+same as-of estimate every policy has: their limit is the belief's point edge per compound at the
+snapshot, margin 0 (`eval.policies._stint_limit`). Without it run_to_flag would run any set to the
+flag. Their plans are still invalid only for a published-regulation violation.
+
+**Switches** (each in `SimConfig`, hashed): `wear_cliff.enabled: false` removes the cost (the
+legacy R8 setting does); `wear_cliff.world_edge`; `wear_cliff.prior_source`;
+`min_race_rows_to_fit: N` leaves a compound with fewer than N clean race rows to the compound
+proxy instead of fitting it from a handful of laps (default off; at 50 on the calibration races the
+lap-0 references are unchanged except 2024 Emilia Romagna's SOFT, 13 to 12 laps under edge (c)).
+
+Over the 19 raced (race, compound) pairs the prior is 5.0 laps long on average (mean absolute
+error 8.8 laps) and the oldest age run lies within one prior sd in 68 percent of them. Its large
+misses are compounds that were barely raced, whose oldest age says little about tyre life (2023
+Bahrain MEDIUM 10, 2022 Saudi Arabia MEDIUM 16, 2024 Emilia Romagna SOFT 8), and 2025 Qatar, whose
+stints were capped at 25 laps by regulation.
+
+### The world's wear fit, and the measures before and after
+
+Selected by the cross-race rule (`python -m src.sim.calibrate cross run --races 2021_04_spain
+2023_07_spain 2023_01_bahrain 2019_10_united_kingdom 2022_02_saudi_arabia 2024_07_emilia_romagna
+2025_23_qatar --no-tau-grid`, explicit calibration races; held-out races never loaded). The rule
+was amended before this run: `MIN_RACES` 8 could never pass on the seven calibration races left
+after the hold-out, so it is 5, and a candidate must also be worse than its comparator on at most
+one race (`cross_race.MAX_WORSE_RACES`, on G for the world, on stop-gain for the belief). With the
+cliff in place, `driver_effects_hinge` (linear_fuel_hinge, knot 25, driver offsets on the race
+rows) passes the world rule against the SimConfig default: G mae_offset 17.89 to 17.12 s, paired
+difference -0.77 [-1.16, -0.38], worse on no race; stop-gain bias -0.18 to -0.12 s, mae 0.53 to
+0.44. It is the eval world (`config.WORLD_DEGRADATION`, `score.race_simulators`,
+`configs/sim/world.yaml`); the SimConfig default stays linear_fuel, the comparator the arms are
+overlays on. Per-compound knots at 75 percent of the longest life (`knot_life_fraction`) and
+dropping negative hinges (`hinge_lower_bound: 0`) were measured and did not pass
+(`driver_effects_hinge_life`: G CI upper end +0.01; `driver_effects_hinge_bound` against
+`driver_effects_hinge`: +0.06 [-0.23, 0.41]); both stay as options. A negative fitted hinge acts
+only inside the support (2023 Spain HARD -0.081 s/lap past 25): past the edge the cliff applies
+whatever the hinge does. The belief: no arm passes its rule, so `wear_nonneg` stays; driver effects
+alone (`driver_effects_nonneg`) improve G (-2.45 [-4.62, -0.21]) but not stop-gain (-0.02 [-0.06,
+0.02]).
+
+Per calibration race, before (main: linear_fuel world with R8; belief wear_nonneg) and after (the
+`driver_effects_hinge` world with the cliff, edge source (c) in the stop-count column; the belief
+with the as-of cliff). G is the race's mae_offset at horizons 10-49 (s), SG the stop-gain bias and
+mae at real stops (s, predicted less real gain); stops are the lap-0 reference's against the
+field's mode.
+
+| race | world G before / after | world SG bias before / after | world SG mae before / after | belief G before / after | belief SG bias / mae (both) | field mode | lap-0 ref stops before / after |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2019 United Kingdom | 16.84 / 16.51 | -0.04 / +0.07 | 0.34 / 0.28 | 27.79 / 27.63 | -0.81 / 1.16 | 1 | 1:17 / 1:17 |
+| 2021 Spain | 10.93 / 9.71 | -0.34 / -0.16 | 0.53 / 0.38 | 19.12 / 19.22 | -1.01 / 1.09 | 2 | 1:12 2:7 / 1:2 2:17 |
+| 2022 Saudi Arabia | 44.14 / 42.62 | +0.31 / +0.01 | 0.55 / 0.37 | 28.49 / 28.66 | -0.22 / 0.60 | 1 | 1:14 / 1:14 |
+| 2023 Bahrain | 20.09 / 19.94 | -0.44 / -0.13 | 0.77 / 0.73 | 34.33 / 34.34 | -0.15 / 0.85 | 2 | 1:1 2:16 / 2:17 |
+| 2023 Spain | 8.07 / 7.75 | -0.53 / -0.31 | 0.66 / 0.54 | 11.66 / 11.94 | +0.02 / 0.67 | 2 | 1:20 / 1:20 |
+| 2024 Emilia Romagna | 13.27 / 11.80 | -0.13 / -0.18 | 0.37 / 0.31 | 17.03 / 19.09 | +0.36 / 0.59 | 1 | 1:17 2:2 / 1:17 2:2 |
+| 2025 Qatar | 11.93 / 11.53 | -0.11 / -0.12 | 0.50 / 0.48 | 29.57 / 29.68 | -0.78 / 0.89 | 2 | 1:5 2:13 / 1:18 |
+
+Lap-0 stop-count mode matches the field's in 5 of 7 races before (R8) and after. 2023 Spain stays
+one-stop under every world model (its HARD and MEDIUM show negative curvature); 2025 Qatar now
+one-stops because its mandated 25-lap maximum is not modelled (docs/rules.md R8, "Not modelled").
+
+Longest planned stint (end age, lap-0 references of every field car) against the longest run,
+before (R8) and after under each judge edge source (world `driver_effects_hinge`):
+
+| race | longest run S / M / H | before, R8 | after, (c) race | after, (b) history (default) |
+| --- | --- | --- | --- | --- |
+| 2021 Spain | 32 / 42 / - | S35 M33 H21 | S33 M31 | S29 M27 H41 (proxied HARD; one-stop) |
+| 2023 Spain | 28 / 32 / 50 | S31 M35 H38 | S22 M18 H49 | S22 M18 H49 |
+| 2023 Bahrain | 25 / 10 / 29 | S27 H28 | S19 H21 | S19 H21 |
+| 2019 United Kingdom | 23 / 39 / 40 | S26 M31 | S26 M31 H33 | S26 M31 H33 |
+| 2022 Saudi Arabia | - / 16 / 41 | M18 H34 | M11 H41 | M11 H41 |
+| 2024 Emilia Romagna | 8 / 38 / 54 | S11 M29 H35 | S13 M31 H33 | S33 M31 H30 |
+| 2025 Qatar | 25 / 25 / 25 | S6 M28 H28 | S27 M28 H30 | S18 M23 H39 |
+
+No plan is absurd under (c): the worst overshoot is 5 laps (Qatar HARD, the unmodelled cap). Under
+(b) the edge sits where history puts it when this race ran a compound less: 2024 Emilia Romagna's
+SOFT (8 laps raced, a slightly negative fitted wear from 11 race laps) is planned to 33, and 2021
+Spain turns one-stop on the proxied HARD (lap-0 stop mode 4 of 7). That is the trade the fidelity
+scorecard measures; (b) is the default until it does.
+
+### Fuel identification (measured, not adopted)
+
+The fuel slope's stated interval was far too tight: the config prior (-0.045 s/lap, tau 0.008)
+covers the hindsight fuel slope within one sd in 1 of 7 calibration races (2 of 7 within 1.645
+sd; rms error 0.030). The physics prior (`fuel_practice_longrun`: -0.03 s/kg x 110 kg / race laps
+plus practice evolution, no race lap and no other race read) with its sd set by coverage, 0.03
+s/lap (the 68th percentile of |prior - hindsight| over the seven races), covers 5 of 7 (6 of 7 at
+1.645 sd). The posterior's coverage barely moves (fuel 68/90 percent intervals cover 26/44 percent
+of (race, lap) points before, 33/51 percent with the physics prior; wear 39/57 percent either way),
+because the posterior sd is set by the data term, which treats residuals as independent while their
+lag-1 autocorrelation is 0.78-0.94: that is the noise model, a separate change. The joint draws
+carry the fuel-wear correlation (median draw correlation -0.22 against -0.15 in the covariance; the
+gap is the wear bound's truncation). In the cross-race run, `fuel_physics_driver_effects` (the
+physics prior, tau 0.03, driver effects) improves the belief's stop-gain mae 0.84 to 0.74 (paired
+-0.10 [-0.15, -0.04], worse on one race) and its bias -0.37 to -0.19 s, and G mae 24.4 to 21.7, but
+the G difference's CI upper end, +2.20 s, is over the rule's +2 s non-inferiority margin, so the
+rule does not adopt it and belief.yaml is unchanged. The arm files
+(`configs/sim/arms/fuel_physics*.yaml`) and the calibrator's `sd_s_per_lap` stay for the follow-up.
 
 ## Proxied compounds
 
@@ -1359,8 +1579,22 @@ rebuild the report references (`python -m src.eval reference ...`) and check
 
 Which committed table is current. Every current file has its `*_summary.csv` beside it.
 
+**Superseded by the tyre-life change.** Every result below that was scored before it was
+produced under the hindsight stint limit R8 (docs/rules.md R8, retired) and without the wear
+cliff, so all of them are superseded: the held-out d4 result at tag `d4-final-eval`
+(`d4_baselines.csv`, `d4_agent.csv`, `d4_combined*.csv`, `d4_rule_baselines.csv` and their
+compare tables), the dev6 live agent runs 1-3 (`dev6_agent_pass1*`, `dev6_run2_*`,
+`dev6_run3_*`), the rule-baseline files (`dev6_rule_baselines.csv`, `d4_rule_baselines.csv`,
+`*_combined_rules.csv`, `*_rules_compare_*`), the dev6 baselines (`dev6_baselines.csv`,
+`dev6_run2_baselines.csv`) and the v1, pilot1 and d2 `*_r8` tables. They stay as the record of
+that setting; `configs/sim/legacy/world_r8.yaml` with `configs/sim/legacy/belief_r8.yaml`
+reproduces it. The current development table is the first row. d4 is re-evaluated in a later,
+separate step (its reference is on the expected-stale list); until then no held-out number is
+current.
+
 | set | current | superseded (kept as the record) |
 | --- | --- | --- |
+| dev6, non-LLM policies under the tyre-life physics (development, a sanity check, not a result to tune against) | `reports/eval/dev6_tyrelife_baselines.csv` (baselines, `belief_optimizer`, `run_to_flag`, `one_stop_total`; world `config.WORLD_DEGRADATION` with the cliff, R8 off; reference rebuilt on this branch) | every R8-era dev6 table below |
 | v1, baselines + recorded run | `reports/eval/v1_baselines_r8.csv` (R8 rank 1, margin 3, limit-aware baselines) | `v1_baselines_split.csv` (Milestone 2: belief/world split, before R8); `v1_baselines.csv` (before the split) |
 | v1, world traffic on | none under R8 yet | `v1_world_baselines.csv` (before R8) |
 | pilot1, baselines | `reports/eval/pilot1_baselines_r8.csv` | `pilot1.csv` baseline rows (Milestone 2, before R8) |
@@ -1378,8 +1612,8 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | dev6, live agent run 2 (development, calibration races) | `reports/eval/dev6_run2_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run2/`; `dev6_run2_combined.csv` (agent + baseline + belief_optimizer rows, the input to `dev6_run2_compare_regret_s_*` with driver clusters and `dev6_run2_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run2_compare_per_race_regret_s_paired.csv`; figure table `dev6_run2_chart.csv` | pass 1 stays as the record of the earlier loop and world |
 | dev6, live agent run 3 (variance repeat of run 2; development, calibration races) | `reports/eval/dev6_run3_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run3/`; `dev6_run3_combined.csv` (run 3's agent rows + run 2's baseline and belief_optimizer rows, the input to `dev6_run3_compare_regret_s_*` with driver clusters and `dev6_run3_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run3_compare_per_race_regret_s_paired.csv`; figure table `dev6_run3_chart.csv` | not a replacement: run 2 stays the cited dev6 result; run 3 only measures run-to-run variation |
 
-Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
-under R8.
+Rows scored under R8 carry `stint_limit_rank` and `stint_limit_margin_laps`; rows scored after
+the tyre-life change carry a blank `stint_limit_margin_laps` (R8 off).
 
 ## Current numbers (v1, R8, deterministic)
 
@@ -1674,23 +1908,22 @@ the arm, the artifacts, `belief_learned.yaml` and the report.
 
 - **The world is fitted on hindsight.** It reads every race lap (`full` window); only the
   belief is held to the laps up to the snapshot (above, "Who sees what").
-- **The R8 stint limit reads the whole race, so the belief side sees that much hindsight.**
-  `rules.stint_limits` takes the oldest tyre age run on each compound over the full race lap
-  frame, laps after the snapshot included, and the belief applies the same limits as the
-  world. So the baselines' limit-aware adjustment, the belief's continuation search and the
-  agent's rule errors all know a race-wide constant that nobody at the snapshot could know.
-  It is the class of hindsight the pit loss had before its as-of estimate ("Pit loss and track
-  status"); an as-of source (earlier
-  seasons, Pirelli guidance) can replace it later (docs/rules.md R8).
+- **Tyre life is a cliff, priced, not a limit** ("The wear cliff"). The R8 stint limit that read
+  the whole race is retired; results scored under it are superseded ("Result files"). The
+  world's cliff age is the oldest age raced (hindsight, allowed for the scorer); the belief's is
+  an as-of estimate whose prior is a share of race distance from earlier races, so early in a
+  race real strategies can run past its point estimate (on the calibration races 13 percent of
+  the teams' remaining plans have a stint past it, median 2.7 laps; measured with the
+  belief's point edge before the history edge and the capped form were settled).
+- **2025 Qatar's mandated 25-lap maximum stint is not modelled.** It is a published regulation
+  and would be a legitimate rule; R8 happened to stand in for it. Without it the world's lap-0
+  reference there is a one-stop against the field's two.
 - **A proxied compound's price has no race laps behind it** ("Proxied compounds"): its pace
   and wear are a step from a raced compound measured in practice, qualifying or other races,
-  with the validation errors listed there, and its R8 limit is a practice age. At 2021 Spain
+  with the validation errors listed there, and its world cliff age is a practice age. At 2021 Spain
   the ordering constraint makes the proxied HARD a copy of SOFT, which 66 of v1's references
   use as a second SOFT-like compound; rows carry `proxied_compounds` and
   `opt_proxied_compounds` so results can be read with and without the rows that rest on one.
-- **The R8 rank moves the results.** At rank 3 instead of 1, 9 of d2's 13 references at laps
-  0 to 20 are two-stops instead of 0. Rows and summaries carry `stint_limit_rank` and
-  `stint_limit_margin_laps` so both can be shown; the committed tables are rank 1.
 - **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
   actual_strategy unavailable on 65 scenarios.
 - **The SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml). The

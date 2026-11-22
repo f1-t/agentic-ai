@@ -61,7 +61,10 @@ STORE_SE = 5.0         # plus the best pit-now and best stay-out plans
 # set versions whose stale references are expected (docs/eval.md "Reference cache"): `reference
 # --check` lists them apart, with the reason, rather than as stale. stale_references still
 # returns them, so a real run's references stage rebuilds them when it is run.
-EXPECTED_STALE = {"d3": "d3 is rebuilt at the final evaluation"}
+EXPECTED_STALE = {"d3": "d3 is rebuilt at the final evaluation",
+                  # held-out: rebuilding it loads held-out races, so it waits for the separate step
+                  "d4": "d4 went stale with the tyre-life change (wear cliff, R8 retired); it is re-evaluated "
+                        "in a later, separate step"}
 
 
 class ReferenceMissing(LookupError):

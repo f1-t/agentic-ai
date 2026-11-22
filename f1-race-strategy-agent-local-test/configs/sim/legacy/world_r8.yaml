@@ -1,0 +1,9 @@
+# LEGACY, for reproducing results produced before the tyre-life change (docs/eval.md "Result
+# files": tag d4-final-eval, dev6 runs 1-3, the rule-baseline files). The eval world as it was:
+# the SimConfig defaults (linear_fuel), the retired R8 hindsight stint limit on (oldest age raced
+# in the whole race + 3, docs/rules.md R8), no wear cliff. Pass with
+#   score --world-config configs/sim/legacy/world_r8.yaml --belief-config configs/sim/legacy/belief_r8.yaml
+# Never a default: R8 hands every policy a fact computed from laps after the snapshot.
+stint_limit_margin_laps: 3
+wear_cliff:
+  enabled: false

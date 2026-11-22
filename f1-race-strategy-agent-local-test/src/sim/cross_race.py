@@ -53,7 +53,12 @@ every comparison incumbent-first: the incumbent is the arm the config carries no
       stop-gain mae difference (challenger less comparator) is below 0 AND the upper end of
       the paired G mae_offset CI at horizons 10-49 is under +NONINFERIORITY_S.
   full (the WORLD) and pre_race, against the SimConfig default: when the paired G
-      mae_offset difference at horizons 10-49 is below 0 AND its 95 percent CI excludes 0.
+      mae_offset difference at horizons 10-49 is below 0 AND its 95 percent CI excludes 0
+      AND the arm's G mae is worse than the comparator's on at most MAX_WORSE_RACES (1) races
+      (the belief rule adds the same per-race condition on stop-gain mae). Amended before the
+      tyre-life run: MIN_RACES 8 could never pass on the seven calibration races left
+      after the hold-out, so it is 5 and the per-race condition guards against one race
+      carrying a pooled gain.
       In the full window an arm that differs only in its calibrator or a to_snapshot-only
       option is the baseline by construction: n/a.
 Among arms that pass, the lowest primary metric wins; ties go to the simpler arm
@@ -86,7 +91,7 @@ import pandas as pd
 from ..contracts import RaceParams
 from . import calibrate, calibration, calibrators, jobs, pace, proxy
 from .compute import load_profile
-from .config import EventModel, SimConfig
+from .config import EventModel, SimConfig, world_default
 from .engine import Simulator
 from .race_ids import canonical_race_id, parse_race_id
 
@@ -99,7 +104,11 @@ LOADER = "src.sim.cross_race:load_race"
 ARMS = ("baseline", "none", "hinge", "free_air", "hinge_free", "posterior", "wear_nonneg", "collinear_hold",
         "collinear_hold_hinge", "collinear_hold_nonneg", "collinear_hold_nonneg_hinge",
         # wear identification: one pace offset per driver in the degradation fit (degradation.py)
-        "driver_effects", "driver_effects_nonneg", "driver_effects_hinge")
+        "driver_effects", "driver_effects_nonneg", "driver_effects_hinge",
+        # per-compound knots at a share of the longest life seen, negative hinges dropped
+        "driver_effects_hinge_life", "driver_effects_hinge_bound",
+        # fuel identification (belief): the physics fuel prior, tau by coverage
+        "fuel_physics", "fuel_physics_driver_effects")
 BASELINE = "baseline"
 COVERAGE_ONLY = ("posterior",)
 # learned calibrator arms (SPEC 0024), run only when asked (run(learned=...), --learned): each
@@ -116,8 +125,12 @@ CALIBRATOR_ROLE = "calibrator comparison (learned_calibrator.py)"
 # simplest first: the tie-break among arms that pass
 SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air",
               "driver_effects", "driver_effects_nonneg", "hinge", "collinear_hold_hinge", "collinear_hold_nonneg_hinge",
-              "driver_effects_hinge", "hinge_free")
-MIN_RACES = 8               # below this the selection is provisional and the defaults stay
+              "driver_effects_hinge", "driver_effects_hinge_bound", "driver_effects_hinge_life", "fuel_physics", "fuel_physics_driver_effects",
+              "hinge_free")
+# below this the selection is provisional and the defaults stay. 5: the race-cluster CI needs a
+# handful of races; 8 could never pass on the seven calibration races left after the hold-out
+MIN_RACES = 5
+MAX_WORSE_RACES = 1         # a candidate may be worse than its comparator on at most this many races
 G_HORIZONS = (10, 49)       # selection horizons, inclusive
 TAU_HORIZONS = (20, 40)     # tau grid horizons, inclusive
 NONINFERIORITY_S = 2.0      # belief rule: upper end of the paired G mae_offset CI, a priori
@@ -866,13 +879,28 @@ def _g_window(rows, window, horizons=G_HORIZONS):
 
 def passes_g(row) -> bool:
     """WORLD and pre_race rule: G mae lower (race-weighted paired difference below 0) AND its
-    95 percent CI excludes 0 (NaN fails)."""
-    return bool(row["g_diff"] < 0 and (row["g_diff_hi"] < 0 or row["g_diff_lo"] > 0))
+    95 percent CI excludes 0 (NaN fails) AND G mae worse on at most MAX_WORSE_RACES races."""
+    return bool(row["g_diff"] < 0 and (row["g_diff_hi"] < 0 or row["g_diff_lo"] > 0)
+                and row.get("g_worse_races", 0) <= MAX_WORSE_RACES)
 
 
 def passes_belief(row) -> bool:
-    """BELIEF rule: the paired stop-gain CI below 0 AND the paired G CI's upper end under the margin."""
-    return bool(row["sg_diff_hi"] < 0 and row["g_diff_hi"] < NONINFERIORITY_S)
+    """BELIEF rule: the paired stop-gain CI below 0 AND the paired G CI's upper end under the margin
+    AND stop-gain mae worse on at most MAX_WORSE_RACES races."""
+    return bool(row["sg_diff_hi"] < 0 and row["g_diff_hi"] < NONINFERIORITY_S
+                and row.get("sg_worse_races", 0) <= MAX_WORSE_RACES)
+
+
+def worse_races(arm_rows, base_rows, keys, value) -> int:
+    """Races where the arm's mean |value| is above the comparator's, on the rows both have."""
+    if not len(arm_rows) or not len(base_rows):
+        return 0
+    m = arm_rows[keys + [value]].dropna(subset=[value]).merge(
+        base_rows[keys + [value]].dropna(subset=[value]), on=keys, suffixes=("_arm", "_base"))
+    if not len(m):
+        return 0
+    d = m.assign(a=m[f"{value}_arm"].abs(), b=m[f"{value}_base"].abs()).groupby("race_id")[["a", "b"]].mean()
+    return int(((d["a"] - d["b"]) > 1e-9).sum())
 
 
 def rule_for(window: str) -> str:
@@ -932,6 +960,9 @@ def compare_arms(arm_data: dict[str, dict], comparator: str, windows, n_boot=N_B
                    "role": role, "n_races": g["n_races"], "g_n": g["n_rows"],
                    **{f"g_{k}": v for k, v in g.items() if k not in ("n_rows", "n_races")},
                    "sg_n": sg["n_rows"], **{f"sg_{k}": v for k, v in sg.items() if k not in ("n_rows", "n_races")}}
+            row["g_worse_races"] = worse_races(_g_window(d["g"], window, horizons), _g_window(base["g"], window, horizons),
+                                               G_KEYS, "err_offset_s")
+            row["sg_worse_races"] = worse_races(sw, bw, SG_KEYS, "err_s")
             row["passes"] = role == "candidate" and (passes_belief(row) if window == BELIEF_WINDOW else passes_g(row))
             rows.append(row)
     return pd.DataFrame(rows)
@@ -944,7 +975,9 @@ INCUMBENTS = {
     "to_snapshot": (BOUND_ARM, "a priori",
                     "configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the "
                     "stop-gain check)"),
-    "full": (BASELINE, "default", "SimConfig defaults (configs/sim/world.yaml adds traffic only)"),
+    "full": ("driver_effects_hinge", "selected",
+             "config.WORLD_DEGRADATION, the eval world (score.race_simulators); selected on the seven "
+             "calibration races in the tyre-life change"),
     "pre_race": (BASELINE, "default", "SimConfig defaults"),
 }
 
@@ -967,7 +1000,7 @@ def current_defaults() -> pd.DataFrame:
     rows = []
     for w, (arm, source, set_by) in INCUMBENTS.items():
         cfg = arm_config(arm)
-        carried = belief if w == BELIEF_WINDOW else SimConfig()
+        carried = belief if w == BELIEF_WINDOW else world_default(SimConfig()) if w == "full" else SimConfig()
         rows.append({"window": w, "incumbent": arm, "config_hash": calibration.config_hash(cfg), "source": source,
                      "set by": set_by, "matches the config": _physics(cfg) == _physics(carried)})
     return pd.DataFrame(rows)
@@ -1000,8 +1033,11 @@ def selection_tables(out, races, profile, n_boot=N_BOOT, arms=ARMS) -> dict:
         if w == BELIEF_WINDOW:
             t, bound, chosen[w] = belief_selection(arm_data, n_boot)
         else:
-            t = compare_arms(arm_data, incumbent(w), [w], n_boot)
-            chosen[w] = choose(t, w, incumbent(w))
+            # a run of a subset of the arms (pipeline tests) without the incumbent compares
+            # against the baseline
+            inc = incumbent(w) if incumbent(w) in arm_data else BASELINE
+            t = compare_arms(arm_data, inc, [w], n_boot)
+            chosen[w] = choose(t, w, inc)
         parts.append(t)
     return {"table": pd.concat(parts, ignore_index=True), "chosen": chosen, "bound": bound, "arm_data": arm_data}
 

@@ -243,11 +243,12 @@ def _stale_sidecar(directory, **change):
 
 def test_a_stale_reference_is_rebuilt_with_its_own_inputs_once(tmp_path):
     from src.eval.score import default_world_config
+    from src.sim.config import world_default
     from src.sim.config import SimConfig
     refs = tmp_path / "references"
     # a reference stale by code version under today's default world (the committed sidecars carry
     # the world hash of their build, which a config change moves)
-    meta = _stale_sidecar(refs / "v1", world_config_hash=real_run.calibration.config_hash(default_world_config(SimConfig())))
+    meta = _stale_sidecar(refs / "v1", world_config_hash=real_run.calibration.config_hash(default_world_config(world_default(SimConfig()))))
     _stale_sidecar(refs / "v1", world_config_hash="ffffffffffff")
     built = []
 

@@ -1,0 +1,13 @@
+# Fuel identification arm "fuel_physics_driver_effects" (belief): fuel_physics (the physics fuel
+# prior, tau 0.03 s/lap by coverage) with driver effects on the race rows, so wear is read from
+# within-stint slopes net of the anchored fuel term plus the cross-stint contrasts the driver
+# offsets free. Fixed before the cross-race run that tests it.
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+    wear_lower_bound: 0.0
+calibrator:
+  name: fuel_practice_longrun
+  params:
+    sd_s_per_lap: 0.03

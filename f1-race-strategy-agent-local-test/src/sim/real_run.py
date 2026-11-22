@@ -360,11 +360,11 @@ def stage_fuel_prior(run: RealRun):
 def world_config_for(config_hash: str):
     """(label, SimConfig or None) of the world config with this config_hash: None for the
     races' own default config (score.race_simulators' world default,
-    score.default_world_config(SimConfig())), else a configs/sim/*.yaml file. None when no
-    candidate has that hash."""
+    score.default_world_config(config.world_default(SimConfig()))), else a configs/sim/*.yaml
+    file. None when no candidate has that hash."""
     from ..eval.score import default_world_config
-    from .config import SimConfig
-    if calibration.config_hash(default_world_config(SimConfig())) == config_hash:
+    from .config import SimConfig, world_default
+    if calibration.config_hash(default_world_config(world_default(SimConfig()))) == config_hash:
         return "default (score.default_world_config)", None
     for path in sorted(SIM_CONFIG_DIR.glob("*.yaml")):
         cfg = SimConfig.from_file(path)

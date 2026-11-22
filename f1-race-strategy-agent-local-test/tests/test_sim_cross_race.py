@@ -358,8 +358,10 @@ def test_current_defaults_name_each_windows_incumbent_and_match_the_config():
     t = cross_race.current_defaults().set_index("window")
     assert t.loc["to_snapshot", "incumbent"] == "wear_nonneg" and t.loc["to_snapshot", "source"] == "a priori"
     assert "belief.yaml" in t.loc["to_snapshot", "set by"]
-    assert (t.loc[["full", "pre_race"], "incumbent"] == BASELINE).all()
-    assert (t.loc[["full", "pre_race"], "source"] == "default").all() and t["matches the config"].all()
+    assert t.loc["pre_race", "incumbent"] == BASELINE and t.loc["pre_race", "source"] == "default"
+    # the world's wear fit, selected in the tyre-life change (config.WORLD_DEGRADATION)
+    assert t.loc["full", "incumbent"] == "driver_effects_hinge" and t.loc["full", "source"] == "selected"
+    assert t["matches the config"].all()
     assert t.loc["to_snapshot", "config_hash"] == calibration.config_hash(cross_race.arm_config("wear_nonneg"))
 
 

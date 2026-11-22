@@ -347,8 +347,9 @@ def test_observation_is_a_high_quantile_of_usable_stint_ends():
     assert np.isnan(few.loc["SOFT", "edge_laps"])
 
 
-def test_module_is_classified_non_physics():
-    assert "tyre_history" in calibration.NON_PHYSICS and "tyre_history" not in calibration.PHYSICS_MODULES
+def test_module_is_classified_physics():
+    """The engine places the wear cliff's support edge with it (cliff.history_prior), so it moves lap times."""
+    assert "tyre_history" in calibration.PHYSICS_MODULES and "tyre_history" not in calibration.NON_PHYSICS
 
 
 def test_validation_runs_on_the_committed_tables():
