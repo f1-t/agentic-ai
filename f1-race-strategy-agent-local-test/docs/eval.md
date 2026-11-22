@@ -1562,6 +1562,64 @@ group B: 2021_22_united_arab_emirates, 2022_08_azerbaijan, 2022_09_canada, 2022_
 2022_20_mexico, 2022_21_brazil and 2022_22_united_arab_emirates. Now that the five are in
 `data/eval_set.json`, `--races auto` leaves them out.
 
+`jobs.load_race` builds 2022_11_austria: its 299 laps with no recorded compound (whole stints of
+twelve cars, Compound None in the timing data) are labelled `UNKNOWN` by `data.lap_frame`, with
+a log warning per load. They keep their timing (other cars' gaps and positions need it) but are
+never clean, so no fit reads them; `calibration.run` does not replay a driver with one, and
+`snapshot_as_of` builds no snapshot on one (the sampler skips the point with that reason).
+
+## Rerunning the evaluation
+
+`python -m src.eval.rerun <stage> --set <name> --world-config <file|default> --belief-config
+<file|default> [--jobs N]` reruns the whole evaluation under the corrected protocol, one command
+per stage, under `--out-dir` (default `reports/eval/rerun/<set>`). The sets are in
+`configs/eval/rerun_sets.yaml`:
+
+- `dev20`: the nineteen calibration races that are ever sampled (the six development races and
+  thirteen 2021-22 weekends; 2025 Qatar, the twentieth calibration race, is calibration only), 25
+  scenarios per race, seed 0, a development set.
+- `test9`: the nine races of `data/eval_set.json`, 25 per race, seed 0, a report set, tables split
+  by era (2019-20, 2021, 2022, 2024-25). It is built once, later, on the owner's word: the
+  `scenarios` stage refuses a report set without `--final`, because building it is the first load
+  of the five new held-out races.
+
+| stage | what it does |
+| --- | --- |
+| `scenarios` | the set with the leak-free sampler (`--rule as_of`, the default, or `stratified`), builder `calibration.snapshot_as_of`; never over an existing `scenarios.json` |
+| `references` | every scenario's reference on the world config, race-parallel (`--jobs`, spawned workers, BLAS at one thread each) and resumable (`parts/references/<race>.pkl`); the cache under `references/` |
+| `baselines` | every non-LLM policy (below) on the belief config, race-parallel and resumable (`parts/baselines/<race>.csv`), the references required; `baselines.csv` |
+| `agent` | one sequential pass of the live agent (`LLM_BACKEND`), its tools on the belief config (`AGENT_BELIEF_CONFIG`), trajectories to `trajectories/`; refuses to overwrite `agent.csv` or a non-empty `trajectories/` |
+| `tables` | `tables/`: the combined rows, per-race and pooled summary, agent-minus-X paired tables with (race, driver) cluster intervals for every comparator (belief_optimizer stands in when there are no agent rows, named in the file), the chart CSV, the tail table (share over 10, 20, 30 s, median, p90, worst), status counts by reason, by era for a set with eras, position metrics when traffic is on; and `provenance.json` |
+
+`provenance.json` records the commit (and tag, and whether the tree was dirty), the world and
+belief configs with their file sha256 and config_hash, SIM_CODE_VERSION, the set's digest,
+builder and sampling rule, the profile, the model and loop settings from the environment, the
+stamps the rows carry, the future-blindness harness on this commit (the fixed and the still
+known leaks of `tests/future_blindness.py`; with `--harness` the default part's counts), the as-of
+tables (`src/sim/provenance.py`: each artifact's kind, file hashes, the races it records and, per
+race of the set, the races it read), and every command run in the directory (`commands.log`).
+
+What each non-LLM policy does now (the stint limit is retired: R8 off, the wear cliff on; a plan
+is invalid only for a breach of R1-R4, the published regulations, or a compound the simulator
+cannot price):
+
+- `fixed_one_stop`: one stop at half the remaining laps (kept inside the minimum stints) onto the
+  hardest other dry compound; when the current set would run past the belief's as-of tyre-life
+  estimate (`Simulator.cliffs_for`: the larger of the longest run seen so far and the pre-race prior
+  from earlier races, `tyre_history.tyre_life_prior`), the stop moves earlier to the last lap that
+  keeps the plan legal and inside it.
+- `fixed_two_stop`: two stops splitting the remaining laps in thirds, current set, the other
+  compound (MEDIUM, HARD, SOFT preference), the current compound again; not tyre-life-aware.
+- `greedy_crossover`: pits when the current set's next lap on the belief's pace is slower than the
+  fastest new set's first lap (no pit-loss term, at most the future-stop limit); a lap past the
+  as-of tyre-life estimate costs `PAST_LIMIT_S`, so it stops there when a stop is left.
+- `actual_strategy`: what the team did, its last set run to the scheduled distance (a comparator; it
+  reads the future by definition).
+- `run_to_flag`: no further stop when that is legal and inside the as-of tyre-life estimate, else
+  the fewest stops (each as late as possible, softest compound first) that are.
+- `one_stop_total`: `fixed_one_stop` before the driver's first stop, `run_to_flag` after it.
+- `belief_optimizer`: the optimizer on the belief (`decisions.belief_optimum`), its own plan.
+
 ## Metrics
 
 For each scenario the optimizer (`optimizer_bridge.optimize_batch`, Quan's search scored by

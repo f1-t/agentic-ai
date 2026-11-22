@@ -13,7 +13,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from .config import FREE_AIR_GAP_S, HINGE_KNOT, LongRun   # HINGE_KNOT lives in config, shared with linear_fuel_hinge
+from .config import DEFAULT_COMPOUND_CLASSES, FREE_AIR_GAP_S, HINGE_KNOT, LongRun   # HINGE_KNOT: shared with linear_fuel_hinge
 
 log = logging.getLogger(__name__)
 
@@ -127,11 +127,34 @@ def _columns(laps):
 
 
 def _green(df):
-    """Green flag, non pit laps with a lap time, tyre age and compound."""
+    """Green flag, non pit laps with a lap time, tyre age and a recorded compound."""
     return (
         (df["track_status"] == "1") & ~df["pit_in"] & ~df["pit_out"]
         & df["lap_time_s"].notna() & df["tyre_age"].notna() & df["compound"].notna()
+        & (df["compound"] != UNKNOWN_COMPOUND)
     )
+
+
+# a race lap whose compound the timing data does not name (None, "None", NaN, a test or unknown
+# tyre): lap_frame labels it UNKNOWN_COMPOUND, logged. Such a lap keeps its timing (clock,
+# positions, gaps) but is never clean, so no fit reads it; a driver with one is not replayed
+# (calibration.run) and no snapshot is built on it (calibration.snapshot_as_of). As practice_frame
+# drops non-dry laps, the race frame keeps the rows (other cars' gaps need them) but uses none.
+UNKNOWN_COMPOUND = "UNKNOWN"
+KNOWN_RACE_COMPOUNDS = frozenset(DEFAULT_COMPOUND_CLASSES)
+
+
+def label_unknown_compounds(df):
+    """`df` (a frame of _columns' columns) with every compound outside KNOWN_RACE_COMPOUNDS set
+    to UNKNOWN_COMPOUND, and one log warning naming the laps per driver."""
+    bad = ~df["compound"].isin(KNOWN_RACE_COMPOUNDS)
+    if bad.any():
+        per = df.loc[bad].groupby("driver").size().sort_index()
+        log.warning("lap_frame: %d laps with no recorded compound labelled %s (%s)", int(bad.sum()),
+                    UNKNOWN_COMPOUND, ", ".join(f"{d}: {n}" for d, n in per.items()))
+        df = df.copy()
+        df.loc[bad, "compound"] = UNKNOWN_COMPOUND
+    return df
 
 
 def evolution_columns(d):
@@ -301,8 +324,8 @@ def lap_frame(laps, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, k
     Either way every row gets the gap columns (gap_columns, with `free_air_gap_s`). They
     feed no fit unless SimConfig.fit_free_air_only is set.
     """
-    return derive_columns(_columns(laps), outlier_factor=outlier_factor, k_resid=k_resid, n_iter=n_iter,
-                          min_samples=min_samples, knot=knot, free_air_gap_s=free_air_gap_s)
+    return derive_columns(label_unknown_compounds(_columns(laps)), outlier_factor=outlier_factor, k_resid=k_resid,
+                          n_iter=n_iter, min_samples=min_samples, knot=knot, free_air_gap_s=free_air_gap_s)
 
 
 def derive_columns(df, outlier_factor=None, k_resid=2.5, n_iter=2, min_samples=5, knot=HINGE_KNOT,
