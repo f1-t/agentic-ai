@@ -123,7 +123,7 @@ def test_traffic_is_part_of_the_config_hash():
     # the as-of pit loss (SimConfig.pit_loss, with its prior table) off ccb08edf391b, and the
     # tyre-life change (R8 off by default, SimConfig.wear_cliff, min_race_rows_to_fit) off f4ffd7f05fad
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "2aeba2ae441a" and ghost_on == "0d1f5b5a5742"
+    assert default == "e4eba32e56c6" and ghost_on == "771ad1ecb57a"
     assert default not in ("0778d5ef02f6", "eccb59070c14", "07dc9587709d", "09c60db53ac9", "ccb08edf391b", "f4ffd7f05fad")
 
 

@@ -166,8 +166,22 @@ HISTORY = {"races": {
 }}
 
 
-def _wc(**kw):
-    return SimConfig().wear_cliff.model_copy(update={"scan_cache": False, "history": HISTORY, **kw})
+def _wc(**kw):   # the stub prior on a synthetic history table
+    return SimConfig().wear_cliff.model_copy(update={"prior_source": "stub", "scan_cache": False,
+                                                     "history": HISTORY, **kw})
+
+
+def test_the_default_prior_is_the_shared_history_model_and_never_fails():
+    """prior_source tyre_history: every dry compound gets an edge at any race id, a synthetic one
+    (no date) through the stub's constant tier."""
+    wc = SimConfig().wear_cliff
+    assert wc.prior_source == "tyre_history"
+    for race_id in ("2023_07_spain", "2018_03_nowhere", "syn"):
+        prior = cliff.history_prior(race_id, 60, wc)
+        assert set(prior) >= {"SOFT", "MEDIUM", "HARD"}
+        assert all(e > 0 and sd > 0 for e, sd, _ in prior.values())
+    assert cliff.history_prior("syn", 60, wc)["SOFT"][2] == "config_fraction"
+    assert cliff.history_prior("2023_07_spain", 60, wc)["SOFT"][2].startswith("tyre_history_tier")
 
 
 def test_prior_tiers_fall_back_in_order_with_widening_sd():

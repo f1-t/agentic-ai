@@ -277,8 +277,14 @@ agree as far as they can, and each extends it outward only where it has lap data
   source ("history:<tier>", "history:<tier> extended by race data to age N", "race", ...) and
   whether it used this race's laps, for the fidelity tool's hindsight ledger.
 
-**The prior (stub until the standalone module is switched in).** `wear_cliff.prior_source: stub`
-is `cliff.life_prior`, an explicit fallback chain, each tier with a wider sd (a share of race
+**The prior.** `wear_cliff.prior_source: tyre_history` (the default) is the shared history model,
+`src/sim/tyre_history.py` `tyre_life_prior(race_id, compound)`: C-number and circuit weighted,
+strictly as-of by date, held-out races never, its own fallback chain (tiers 1-4) down to a
+documented constant; its validation reports a typical miss of 8 laps (3 with same-circuit
+history), 68/90 percent intervals covering 65/90 percent, and a slight short bias, which the
+belief's rule that observed ages extend the edge offsets. A race id with no date (a synthetic
+race) takes the stub's constant tier. `prior_source: stub` is the earlier as-of stub,
+`cliff.life_prior`, an explicit fallback chain, each tier with a wider sd (a share of race
 distance): the same circuit in an earlier season, scaled by race distance
 (`circuit_history:<race>`, sd 0.10); else the median share of race distance the compound's oldest
 stint ran in earlier races at any circuit (`history_fraction`, sd 0.15; 2025 Qatar left out, its
@@ -290,8 +296,9 @@ falls back to a quantity of this race. Its history is the committed table
 `configs/sim/tyre_life_history.json` (written by `python -m src.sim.cliff history --races ...`
 from the calibration races) plus, at run time, every cached race strictly before the race
 (`wear_cliff.scan_cache`; held-out races are left out before anything is loaded), so newly cached
-seasons enter without a code change. `prior_source: tyre_history` switches to
-`src/sim/tyre_history.py` (C-number weighted, its own fallback chain) once that module is on main.
+seasons enter without a code change. The measurements below (the prior's accuracy, the lap-0
+tables, the cross-race run) were taken with the stub prior, before the switch to
+`tyre_history`; the integration step re-measures them.
 
 The prior's own accuracy, scored against the oldest age actually run (the hindsight fact is the
 measurement target here, not an input), stub prior on the calibration races:

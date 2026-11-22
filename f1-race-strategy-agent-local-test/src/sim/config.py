@@ -247,9 +247,9 @@ class WearCliff(_Cfg):
     # race has lap data for; the default until the fidelity scorecard chooses between a and b) or
     # "race" (c: the oldest age raced in this race, the earlier design)
     world_edge: Literal["history_only", "history", "race"] = "history"
-    # the historical prior (sim/cliff.py history_prior): "stub" (cliff.life_prior) until the
-    # standalone module (src/sim/tyre_history.py) is on main, then "tyre_history"
-    prior_source: Literal["stub", "tyre_history"] = "stub"
+    # the historical prior (sim/cliff.py history_prior): "tyre_history" (src/sim/tyre_history.py,
+    # the shared history model) or "stub" (cliff.life_prior, the earlier as-of stub)
+    prior_source: Literal["stub", "tyre_history"] = "tyre_history"
     kappa: float = Field(default=CLIFF_KAPPA, ge=0)
     cap_s_per_lap: float = Field(default=CLIFF_CAP_S_PER_LAP, ge=0)
     # belief prior on tyre life as a share of race distance, when no earlier race has the compound

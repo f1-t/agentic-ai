@@ -149,18 +149,19 @@ def world_ledger(cliffs: dict) -> dict[str, dict]:
 def history_prior(race_id, total_laps, wc, role="belief") -> dict[str, tuple[float, float, str]]:
     """compound -> (edge laps, sd laps, tier): the historical tyre-life prior both simulators
     share (`role` is "world" or "belief"; the prior is the same for both). WearCliff.prior_source
-    picks it: "stub" (the default) is this module's as-of life_prior; "tyre_history" is the
-    standalone module (src/sim/tyre_history.py, tyre_life_prior(race_id, compound, total_laps) ->
-    TyreLifePrior with edge_laps, sd_laps and tier), switched over once it is on main (it then
-    joins calibration.PHYSICS_MODULES). Both are strictly as-of by date and never read a held-out
-    race."""
-    if wc.prior_source == "stub":
+    picks it: "tyre_history" (the default) is src/sim/tyre_history.py, tyre_life_prior(race_id,
+    compound, total_laps) (C-number and circuit weighted, its own fallback chain, tiers 1-4);
+    "stub" is this module's as-of life_prior. Both are strictly as-of by date and never read a
+    held-out race. A race id with no date (a synthetic race) takes the stub, whose chain ends in
+    a documented constant."""
+    rid, _ = _race_key(race_id)
+    if wc.prior_source == "stub" or rid is None:
         return life_prior(race_id, total_laps, wc)
     from .tyre_history import tyre_life_prior
     out = {}
     for c in SOFTNESS:
-        p = tyre_life_prior(race_id, c, total_laps=total_laps)
-        out[c] = (float(p.edge_laps), float(p.sd_laps), str(p.tier))
+        p = tyre_life_prior(rid, c, total_laps=total_laps)
+        out[c] = (float(p.edge_laps), float(p.sd_laps), f"tyre_history_tier{p.tier}")
     return out
 
 

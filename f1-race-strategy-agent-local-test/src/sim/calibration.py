@@ -478,6 +478,10 @@ PHYSICS_MODULES = (
     "pit_loss",
     # the wear cliff: where each simulator places a compound's tyre life (world and belief)
     "cliff",
+    # the historical tyre-life prior both simulators place the support edge with (cliff.history_prior,
+    # SimConfig.wear_cliff.prior_source "tyre_history"); its committed tables (data/derived/tyre_*.csv,
+    # configs/tyre_history.yaml) are read at run time and are not in config_hash
+    "tyre_history",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -496,11 +500,6 @@ NON_PHYSICS = (
     # estimates the proxy's tier-5 table into configs/sim/compound_steps.json (read through
     # SimConfig.compound_proxy.steps, so config_hash covers the numbers) and runs its validation
     "compound_steps",
-    # the historical tyre-life prior (tyre_life_prior) and the command that builds its committed
-    # history table; nothing in the simulator calls it yet, so it moves no simulated time. The
-    # change that places the support edge with it must move it to PHYSICS_MODULES (or carry its
-    # numbers into SimConfig), since from then on it moves lap times.
-    "tyre_history",
     # trains and evaluates the learned calibrator into committed artifacts, which the "trained"
     # calibrator (calibrators.py) reads, pinned by its sha256 param, so config_hash covers them
     "learned_calibrator",
