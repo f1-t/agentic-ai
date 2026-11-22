@@ -531,7 +531,17 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                     # the scorer's own checks: a submission accepted here is one it can score
                     error = tools.check_submission(rec)
                     rec = None if error else rec
+                dropped = None
+                if (error and proto == "v2" and args.get(KEPT_STOP) is not None
+                        and step == evidence_end + submit_grace_steps):
+                    # the last turn, and only the named stop is wrong: scored without it (the v1 expansion)
+                    # rather than no submission at all; logged in the event
+                    plain, err2 = _normalise_submission({k: v for k, v in args.items() if k != KEPT_STOP})
+                    if err2 is None and tools.check_submission(plain) is None:
+                        rec, dropped, error = plain, error, None
                 out = {"accepted": error is None} if error is None else {"error": error, "recoverable": True}
+                if dropped:
+                    out["kept_stop_dropped"] = dropped
             elif phase == "grace":
                 out = {"error": "Evidence turns are spent; call not run. Submit your recommendation now with "
                                 "submit_recommendation.", "recoverable": True}

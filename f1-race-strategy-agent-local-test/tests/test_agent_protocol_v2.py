@@ -239,6 +239,21 @@ def test_a_named_first_stop_that_breaks_the_action_is_refused_with_the_fix(snaps
     assert "needs the compound" in msg
 
 
+def test_a_broken_named_stop_says_how_to_fix_it_and_on_the_last_turn_is_dropped(snaps, tmp_path):
+    """A live check-sample episode repeated a first_stop_lap without its compound until the turns ran
+    out (no submission): the reply now says what to copy, and on the very last turn the submission is
+    scored without the named stop rather than not at all."""
+    snap = snaps["mid"]
+    bad = {"decision": "STAY_OUT", "reassess_after_laps": 3, "compound": None,
+           "first_stop_lap": snap.laps_completed + 4}
+    backend = Recording([ModelTurn(tool_calls=[submit(**bad)]) for _ in range(3)])
+    stats = {}
+    rec, traj = run_agent(snap, verbose=False, backend=backend, max_steps=1, submit_grace_steps=2, stats=stats)
+    assert "Copy first_stop_lap and compound together" in traj[0]["output"]["error"]
+    assert "first_stop_lap" not in rec and rec["reassess_after_laps"] == 3
+    assert "kept_stop_dropped" in traj[-1]["output"] and traj[-1]["output"]["accepted"] is True
+
+
 def test_what_v2_accepts_the_scorer_scores(snaps):
     """test_agent_contract's property for the kept-stop submissions: accepted means an ok row."""
     from src.eval.policies import Decision

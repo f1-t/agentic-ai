@@ -1026,6 +1026,9 @@ def submission_error(snapshot: Snapshot, decision: dict, *, sim=None, profile=No
         plan = decisions.to_plan(snapshot, decision, sim, profile.sim.max_stops, seed=0,
                                  n_samples=profile.sim.n_samples)
     except decisions.InvalidDecision as exc:
+        if decision.get("first_stop_lap") is not None:   # protocol v2's kept stop (decisions.kept_plan)
+            return (f"The named first stop cannot be kept: {exc}. Copy first_stop_lap and compound together from "
+                    f"rank_plans' submit field, or leave first_stop_lap out (the rest is then planned again).")
         return f"This decision has no legal plan ({exc}). {legal}."
     errors = sim.validate(snapshot, plan)
     if errors:
