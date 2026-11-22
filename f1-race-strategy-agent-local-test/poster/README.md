@@ -26,7 +26,7 @@ or prints below 16 pt (12 pt in the references and footer).
 | file | what |
 |---|---|
 | `build_poster.py` | layout, charts and text; every number comes from `poster_stats.py` |
-| `poster_stats.py` | all numbers, from `reports/eval/d4_combined.csv` (held-out) and `reports/eval/dev6_run2_combined.csv` (development) only; checks the paired results against the committed `*_compare_*_paired.csv` and stops on a mismatch |
+| `poster_stats.py` | all numbers, from the committed result files in `reports/eval/` only (see "Data used"); stops on any mismatch with the committed paired tables |
 | `numbers.md` | generated: every number on the poster, its file and its computation |
 | `check_layout.py` | layout check in headless Chromium |
 | `PITWALL_poster_24x36in.html` / `.pdf` | the poster (vector PDF, fonts embedded, no raster images) |
@@ -35,12 +35,14 @@ or prints below 16 pt (12 pt in the references and footer).
 | `2023_F1_CourseLayout_Spain.svg` | circuit map, unmodified from Wikimedia Commons ([file page](https://commons.wikimedia.org/wiki/File:2023_F1_CourseLayout_Spain.svg)), by ごひょううべこ, CC BY-SA 4.0, SHA-1 `7efd092b460d872da5a14db6c60c87c31e03c03c` (as listed on the file page) |
 | `CHANGES.md` | what changed from the earlier drafts |
 
-## Adding the fairer rule baselines
+## Data used
 
-Panel 6 has two "pending" slots, "Run to the flag" and "One stop in total". When their rows are in
-`reports/eval/d4_combined.csv` (and `dev6_run2_combined.csv`), set their policy names in `FAIR_RULES` in
-`poster_stats.py` and rebuild: the paired difference, interval and chart row fill in by themselves. If the
-rows are in a separate file, also concatenate it in `poster_stats.load()`.
+`poster_stats.py` reads `reports/eval/d4_combined_rules.csv` and `dev6_run2_combined_rules.csv` (the
+combined rows plus the rule baselines `run_to_flag` and `one_stop_total`, frozen at `5a2bc41` and scored
+once on the held-out races after its results were known). It checks their other rows against
+`d4_combined.csv` / `dev6_run2_combined.csv`, and their paired results against the committed
+`*_rules_compare_*_paired.csv`. Run-to-run variation comes from `dev6_run3_combined.csv`, an identical
+repeat pass on development.
 
 ## Printing
 

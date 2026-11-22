@@ -64,7 +64,7 @@ def marker(shape, x, y, color, r=9.0, hollow=False):
     return f'<path d="M{x:.1f},{y - d:.1f}L{x + d:.1f},{y:.1f}L{x:.1f},{y + d:.1f}L{x - d:.1f},{y:.1f}Z" {st}/>'
 
 
-LO, HI, X0, X1 = -8.0, 3.0, 14.0, 458.0
+LO, HI, X0, X1 = -8.0, 4.0, 14.0, 458.0
 
 
 def sx(val):
@@ -73,11 +73,11 @@ def sx(val):
 
 def axis(y_top, y_bot):
     s = []
-    for t in range(-8, 3, 2):
+    for t in range(-8, 5, 2):
         x = sx(t)
         s.append(f'<line x1="{x:.1f}" y1="{y_top}" x2="{x:.1f}" y2="{y_bot}" stroke="{GRID}" stroke-width="1"/>')
         s.append(f'<text x="{x:.1f}" y="{y_bot + 24}" text-anchor="middle" font-size="18" fill="{MUTED}">'
-                 f'{str(t).replace("-", chr(0x2212))}{" s" if t == 2 else ""}</text>')
+                 f'{str(t).replace("-", chr(0x2212))}{" s" if t == 4 else ""}</text>')
     x = sx(0)
     s.append(f'<line x1="{x:.1f}" y1="{y_top - 6}" x2="{x:.1f}" y2="{y_bot}" stroke="{INK}" stroke-width="2"/>')
     s.append(f'<text x="{sx(-0.25):.1f}" y="{y_top - 12}" text-anchor="end" font-size="18" fill="{MUTED}">← agent better</text>')
@@ -98,7 +98,7 @@ def survival(N, tag="h"):
     """Share of the common scenarios whose regret is above x, PITWALL against the teams' actual strategy."""
     ra, rt = N[f"{tag}_tail_curve"].value
     USED.append(f"{tag}_tail_curve")
-    W, H, L, R, T, B, XM = CHART_W, 330, 62, 444, 20, 276, 50.0
+    W, H, L, R, T, B, XM = CHART_W, 300, 62, 444, 20, 248, 50.0
     px = lambda x: L + (R - L) * x / XM
     py = lambda f: B - (B - T) * f
     s = [f'<svg class="chart" viewBox="0 0 {W} {H}" role="img" aria-label="Share of decisions more than x seconds '
@@ -110,7 +110,7 @@ def survival(N, tag="h"):
         s.append(f'<line x1="{px(x):.1f}" y1="{T}" x2="{px(x):.1f}" y2="{B}" stroke="{GRID}" stroke-width="1"/>')
         s.append(f'<text x="{px(x):.1f}" y="{B + 24}" text-anchor="middle" font-size="18" fill="{MUTED}">{x}{" s" if x == 50 else ""}</text>')
     s.append(f'<text x="{(L + R) / 2:.1f}" y="{H - 4}" text-anchor="middle" font-size="18" fill="{MUTED}">'
-             f'x: seconds from the hindsight reference</text>')
+             f'x, seconds</text>')
     for vals, color, dash, label, ly in ((rt, TEAMS_C, "10 6", "Teams’ actual", 0), (ra, SYSTEM_C, "", "PITWALL", 1)):
         v_ = np.sort(np.asarray(vals))
         n = len(v_)
@@ -127,38 +127,37 @@ def survival(N, tag="h"):
     return "".join(s)
 
 
-SECONDARY = [("belief_optimizer",) + COMP["belief_optimizer"], ("fixed_one_stop",) + COMP["fixed_one_stop"],
-             (ps.FAIR_RULES[0][0], ps.FAIR_RULES[0][1], "#F0E442", "square"),
-             (ps.FAIR_RULES[1][0], ps.FAIR_RULES[1][1], "#D55E00", "diamond")]
+RULE_C = {"run_to_flag": ("Run to the flag", "#F0E442", "circle"),
+          "one_stop_total": ("One stop in total", "#D55E00", "diamond")}
+ALL_C = {**COMP, **RULE_C}
+SECONDARY = ["run_to_flag", "one_stop_total", "fixed_one_stop"]
 
 
 def forest_secondary(N):
-    """Held-out: agent minus the other comparators; fairer rule baselines print 'pending' until scored."""
-    top, row = 40, 68
+    """Held-out: agent minus the rule baselines and the belief optimizer, with values on each row."""
+    top, row = 40, 62
     h = top + row * len(SECONDARY) + 34
     s = [f'<svg class="chart" viewBox="0 0 {CHART_W} {h}" role="img" '
-         f'aria-label="Held-out: agent minus other comparators, with 95% intervals">']
+         f'aria-label="Held-out: agent minus rule baselines and the belief optimizer, with 95% intervals">']
     s.append(axis(top, top + row * len(SECONDARY)))
-    for i, (pol, name, color, shape) in enumerate(SECONDARY):
+    for i, pol in enumerate(SECONDARY):
+        name, color, shape = ALL_C[pol]
         y = top + row * i
+        lo, hi = N[f"h_ci_{pol}"].value
         s.append(f'<rect x="0" y="{y + 4}" width="{CHART_W}" height="32" fill="{PANEL}" opacity="0.9"/>')
         s.append(f'<text x="4" y="{y + 28}" font-size="21" font-weight="700" fill="{INK}">{name}</text>')
-        if f"h_diff_{pol}" in N:
-            lo, hi = N[f"h_ci_{pol}"].value
-            s.append(f'<text x="{CHART_W - 2}" y="{y + 28}" text-anchor="end" font-size="21" fill="{INK}">'
-                     f'<tspan font-weight="700">{v(N, f"h_diff_{pol}")}</tspan> {v(N, f"h_ci_{pol}")}</text>')
-            s.append(interval(lo, hi, N[f"h_diff_{pol}"].value, y + 54, shape, color))
-        else:
-            s.append(f'<text x="{CHART_W - 2}" y="{y + 28}" text-anchor="end" font-size="20" font-style="italic" '
-                     f'fill="{MUTED}">pending: being scored</text>')
+        s.append(f'<text x="{CHART_W - 2}" y="{y + 28}" text-anchor="end" font-size="21" fill="{INK}">'
+                 f'<tspan font-weight="700">{v(N, f"h_diff_{pol}")}</tspan> {v(N, f"h_ci_{pol}")}</text>')
+        s.append(interval(lo, hi, N[f"h_diff_{pol}"].value, y + 52, shape, color))
     s.append("</svg>")
     return "".join(s)
 
 
 # ---------------------------------------------------------------- html
-SHORT = {"fixed_one_stop": "vs one-stop rule", "actual_strategy": "vs teams’ actual",
-         "belief_optimizer": "vs belief optimizer"}
-RACE_ROWS = ("actual_strategy", "belief_optimizer", "fixed_one_stop")
+SHORT = {"fixed_one_stop": "vs fixed one-stop", "actual_strategy": "vs teams’ actual",
+         "belief_optimizer": "vs belief optimizer", "run_to_flag": "vs run to the flag",
+         "one_stop_total": "vs one stop in total"}
+RACE_ROWS = ("actual_strategy", "belief_optimizer", "run_to_flag", "one_stop_total", "fixed_one_stop")
 
 
 def per_race_table(N):
@@ -167,7 +166,7 @@ def per_race_table(N):
     rows = ['<tr class="lvl"><th class="rl">Agent regret (s)</th>'
             + "".join(f"<td>{v(N, f'h_race_mean_agent_{r}')}</td>" for r in races) + "</tr>"]
     for pol in RACE_ROWS:
-        color = COMP[pol][1]
+        color = ALL_C[pol][1]
         cells = []
         for r in races:
             key = f"h_race_diff_{pol}_{r}"
@@ -196,18 +195,18 @@ def lead_table(N):
 
 
 def contrast_table(N):
-    def r(label, dk, ck, hk, hck):
-        return (f'<tr><th class="rl">{label}</th><td><b>{v(N, dk)}</b> {v(N, ck)}</td>'
+    def r(pol, label, dk, ck, hk, hck):
+        sw = f'<i class="sw" style="background:{ALL_C[pol][1]}"></i>' if pol else ""
+        return (f'<tr><th class="rl">{sw}{label}</th><td><b>{v(N, dk)}</b> {v(N, ck)}</td>'
                 f'<td><b>{v(N, hk)}</b> {v(N, hck)}</td></tr>')
+    rows = [r("actual_strategy", "teams, mean", "d_diff_actual_strategy", "d_ci_actual_strategy",
+              "h_diff_actual_strategy", "h_ci_actual_strategy"),
+            r(None, "&nbsp;&nbsp;over 20 s", "d_tail_20_diff", "d_tail_20_ci", "h_tail_20_diff", "h_tail_20_ci")]
+    for pol, label in (("belief_optimizer", "belief optim."), ("run_to_flag", "run to flag"),
+                       ("one_stop_total", "one stop total")):
+        rows.append(r(pol, label, f"d_diff_{pol}", f"d_ci_{pol}", f"h_diff_{pol}", f"h_ci_{pol}"))
     return ('<table class="tbl contrast"><thead><tr><th>agent minus</th><th>development</th>'
-            '<th>held-out</th></tr></thead><tbody>'
-            + '<tr class="grp"><th colspan="3"><i class="sw" style="background:' + TEAMS_C + '"></i>teams&rsquo; actual strategy</th></tr>'
-            + r("mean (s)", "d_diff_actual_strategy", "d_ci_actual_strategy", "h_diff_actual_strategy", "h_ci_actual_strategy")
-            + r("share over 20 s", "d_tail_20_diff", "d_tail_20_ci", "h_tail_20_diff", "h_tail_20_ci")
-            + r("90th pct (s)", "d_tail_p90_diff", "d_tail_p90_ci", "h_tail_p90_diff", "h_tail_p90_ci")
-            + '<tr class="grp"><th colspan="3"><i class="sw" style="background:' + COMP["belief_optimizer"][1] + '"></i>belief optimizer</th></tr>'
-            + r("mean (s)", "d_diff_belief_optimizer", "d_ci_belief_optimizer", "h_diff_belief_optimizer", "h_ci_belief_optimizer")
-            + "</tbody></table>")
+            f'<th>held-out</th></tr></thead><tbody>{"".join(rows)}</tbody></table>')
 
 
 def html(N):
@@ -219,7 +218,7 @@ def html(N):
     <h1>PITWALL</h1>
     <div class="acro">Predictive Intelligence for Tactical When-to-pit Agentic Lap-wise Logic</div>
     <div class="q">Can a language model call the pit stop?</div>
-    <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sara Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
+    <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sarah Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
       <span>Stakeholder: Manav Ananthakumar &middot; TA: Xiaoou Liu &middot; Professor: Hua Wei</span></div>
   </div>
   <figure class="map">
@@ -228,9 +227,18 @@ def html(N):
   </figure>
 </header>
 
-<div class="answer"><span class="tag held">Held-out, in our simulator</span>On {v(N, "h_races")} races the agent had
-  never been run on, PITWALL&rsquo;s decisions cost the same on average as the teams&rsquo; real strategies, with fewer
-  large errors. The optimizer alone does as well: the LLM added nothing measurable.</div>
+<div class="answer">
+  <div class="pts">
+    <div><span class="tag held">Held-out, in our simulator</span><br><b>Reliable.</b> A legal, explained pit call on
+      all {v(N, "h_n")} decisions from {v(N, "h_races")} races the agent had never been run on
+      ({v(N, "h_grace")} needed the forced-submission turns).</div>
+    <div><b>Parity.</b> The same average cost as the teams&rsquo; real strategies ({v(N, "h_diff_actual_strategy")} s
+      {v(N, "h_ci_actual_strategy")}) with fewer large errors ({v(N, "h_tail_20_agent")} vs {v(N, "h_tail_20_actual")}
+      more than 20 s off; suggestive here, clear on development), and the same as the optimizer in its tools.</div>
+    <div><b>Limit.</b> Two simple fixed rules do equally well, so this test does not yet separate good strategy
+      from adequate. Safety cars, traffic and rivals are not scored.</div>
+  </div>
+</div>
 
 <main class="cols">
 <section class="col">
@@ -254,11 +262,11 @@ def html(N):
       <div class="caveat">Not fully blind: stint-length limits and pit loss are read from the whole race.</div>
     </div>
     <p>Per scenario (race, driver, lap) the LLM (qwen3-30b-a3b) calls tools for up to 10 turns, then submits PIT
-    plus a tyre, or STAY OUT; two submit-only turns force a call. The belief optimizer turns the call into a plan.
+    plus a tyre, or STAY OUT; two submit-only turns force a call. The optimizer extends it into a plan.
     <b>PITWALL</b> = belief simulator + optimizer + LLM front end.</p>
     <p class="def"><b>Regret</b> is the extra remaining-race time (s) of a plan over the <b>hindsight
     reference</b>: the best plan with at most {v(N, "max_stops")} more stops, timed in a deterministic replay of the race
-    fitted on all its laps, with no safety cars or traffic. Lower is better.</p>
+    fitted on all its laps, with no safety cars or traffic. Lower is better. It measures planned strategy in clean air.</p>
   </article>
 
   <article class="panel grow">
@@ -270,8 +278,7 @@ def html(N):
     and Austria 2025 were in an earlier model comparison; Austria 2024 had none.</p>
     <p><span class="tag dev">Development</span>{v(N, "d_races")} races the simulator was calibrated on,
     {v(N, "d_n")} scenarios.</p>
-    <p>Comparators: the teams&rsquo; actual strategy; the belief optimizer (same belief, no LLM); rule baselines.
-    Differences are agent minus comparator on the same scenarios. Brackets: 95% interval, resampling drivers
+    <p>Differences are agent minus comparator on the same scenarios. Brackets: 95% interval, resampling drivers
     within races.</p>
   </article>
 </section>
@@ -284,77 +291,80 @@ def html(N):
       <div><b>{v(N, "h_voluntary_pct")}</b><span>before the turn limit</span></div>
       <div><b>{v(N, "h_latency_median")}</b><span>median per decision</span></div>
     </div>
-    <p class="lead"><span class="tag held">Held-out</span>Same average cost; fewer large errors (suggestive here,
-    clear on development races). The teams are more often near-perfect.</p>
+    <p class="lead"><span class="tag held">Held-out</span>Same average cost, fewer large errors; the teams are more
+    often near-perfect.</p>
     <div class="caption">Share of decisions more than x s from the hindsight reference</div>
     {survival(N)}
     {lead_table(N)}
     <p class="note"><b>Without Austria 2024</b> ({v(N, "aut24_share_agent_regret")} of the agent&rsquo;s regret): agent mean
     {v(N, "h_noaut_mean_agent")} s; minus teams {v(N, "h_noaut_diff_actual_strategy")} {v(N, "h_noaut_ci_actual_strategy")},
     minus belief optimizer {v(N, "h_noaut_diff_belief_optimizer")} {v(N, "h_noaut_ci_belief_optimizer")},
-    minus one-stop {v(N, "h_noaut_diff_fixed_one_stop")} {v(N, "h_noaut_ci_fixed_one_stop")}. Conclusions unchanged.</p>
+    minus fixed one-stop {v(N, "h_noaut_diff_fixed_one_stop")} {v(N, "h_noaut_ci_fixed_one_stop")}.</p>
     <div class="caption">Per race ({v(N, "h_per_race")} scenarios each); four races are the real sample</div>
     {per_race_table(N)}
-    <p class="note">Austria 2024: the hindsight reference uses Soft in {v(N, "aut24_ref_soft")}, priced from few race laps
-    (the sampled drivers&rsquo; only Soft stint is a final {v(N, "aut24_soft_stint")} laps); the belief priced Soft from practice.
-    Agent, belief optimizer and teams sit about {v(N, "aut24_about")} s from the reference; fixed one-stop
-    {v(N, "h_race_mean_fixed_one_stop_2024_11_austria")} s, fixed two-stop {v(N, "aut24_mean_fixed_two_stop")} s.</p>
+    <p class="note">Austria 2024: the reference uses Soft in {v(N, "aut24_ref_soft")}, priced from few race laps (the
+    sampled drivers&rsquo; only Soft stint: a final {v(N, "aut24_soft_stint")} laps); the belief priced it from practice.
+    Agent, optimizer and teams are about {v(N, "aut24_about")} s off, fixed one-stop
+    {v(N, "h_race_mean_fixed_one_stop_2024_11_austria")}, fixed two-stop {v(N, "aut24_mean_fixed_two_stop")}.</p>
   </article>
 
-  <article class="panel finding grow">
-    <h2><b>5</b>What the LLM adds <span class="tag held">held-out</span></h2>
-    <p>Nothing measurable over the belief optimizer: {v(N, "h_diff_belief_optimizer")} s {v(N, "h_ci_belief_optimizer")}.
-    Equal on average, not identical: {v(N, "h_ties_belief_optimizer")} exact ties, same plan in {v(N, "h_same_plan")}
-    of {v(N, "h_n")}. Where its immediate call differs ({v(N, "h_diff_call_n")}), the optimizer is better in
-    {v(N, "h_diff_call_bo_better")}; over those {v(N, "h_diff_call_n")} the agent is {v(N, "h_diff_call_mean")} s worse on
-    average. Pit-now calls agree with the reference {v(N, "h_pitnow_agree_agent")} of the time; &ldquo;always stay
-    out&rdquo; agrees {v(N, "h_pitnow_agree_stay")} ({v(N, "h_pitnow_base")} of scenarios are pit-now).</p>
+  <article class="panel limits grow">
+    <h2><b>5</b>Limitations</h2>
+    <ul>
+      <li>One agent pass, one model; {v(N, "h_races")} held-out races, {v(N, "h_circuits")} circuits.</li>
+      <li>The scoring world is a fitted simulator; stint limits and pit loss use hindsight. Teams raced with
+      traffic, rivals and live tyre data.</li>
+      <li>Identical repeat pass on development: mean regret {v(N, "d_mean_agent")} &rarr; {v(N, "r3_mean_agent")} s,
+      same pit/stay call in {v(N, "r3_same_call")} of {v(N, "d_n")}, agent minus optimizer
+      {v(N, "d_diff_belief_optimizer")} &rarr; {v(N, "r3_diff_belief_optimizer")} (a tie both times).</li>
+      <li>There {v(N, "r3_stalled")} episodes stalled (no usable tool call for nine turns), then were forced into an
+      unconsidered pit call, {v(N, "r3_stalled_invalid")} illegal.</li>
+    </ul>
   </article>
 </section>
 
 <section class="col">
   <article class="panel">
-    <h2><b>6</b>Other comparators <span class="tag held">held-out</span></h2>
-    <div class="caption">Agent minus comparator, mean regret (s)</div>
+    <h2><b>6</b>Rule baselines <span class="tag held">held-out</span></h2>
+    <div class="caption">Agent minus rule, mean regret (s)</div>
     {forest_secondary(N)}
-    <p class="caveat2"><b>One-stop caveat:</b> that rule always makes one more stop. Agent minus rule:
-    {v(N, "h_f1s_before")} s {v(N, "h_f1s_before_ci")} before the driver&rsquo;s first stop (n {v(N, "h_f1s_before_n")}),
-    {v(N, "h_f1s_after")} s {v(N, "h_f1s_after_ci")} after it (n {v(N, "h_f1s_after_n")}).</p>
+    <p class="note">Run to the flag and one stop in total were added after the held-out results were known: frozen on
+    development races (commit <code>5a2bc41</code>), then scored once on held-out; no held-out row was rerun. They win
+    at Monaco and Sakhir, lose at both Austrias (panel 4).</p>
+    <p class="caveat2"><b>Fixed one-stop</b> always makes one more stop: that is its 4.3 s deficit. Without it the lead
+    is gone: after the driver&rsquo;s first stop, agent minus one stop in total is {v(N, "h_ost_after")} s
+    {v(N, "h_ost_after_ci")}.</p>
+    <p class="note">Mean regret (s): one stop in total {v(N, "h_mean_one_stop_total")} ({v(N, "h_invalid_one_stop_total")}
+    invalid), teams {v(N, "h_mean_actual_strategy")}, agent {v(N, "h_mean_agent")}, belief optimizer
+    {v(N, "h_mean_belief_optimizer")}, run to the flag {v(N, "h_mean_run_to_flag")}, fixed one-stop {v(N, "h_mean_fixed_one_stop")}.</p>
   </article>
 
   <article class="panel">
     <h2><b>7</b>Development vs held-out</h2>
     {contrast_table(N)}
-    <p class="note">Clear on development, suggestive on held-out. Mean regret roughly doubles for both policies
-    that plan on the belief: agent {v(N, "d_mean_agent")} &rarr; {v(N, "h_mean_agent")} s, belief optimizer
-    {v(N, "d_mean_belief_optimizer")} &rarr; {v(N, "h_mean_belief_optimizer")} s (teams {v(N, "d_mean_actual_strategy")}
-    &rarr; {v(N, "h_mean_actual_strategy")} s).</p>
+    <p class="note">The lead over the teams is clear on development, suggestive on held-out. Mean regret roughly doubles
+    for both policies that plan on the belief: agent {v(N, "d_mean_agent")} &rarr; {v(N, "h_mean_agent")} s, belief
+    optimizer {v(N, "d_mean_belief_optimizer")} &rarr; {v(N, "h_mean_belief_optimizer")} s.</p>
   </article>
 
-  <article class="panel limits">
-    <h2><b>8</b>Limitations</h2>
-    <ul>
-      <li>One agent pass, one model; {v(N, "h_races")} held-out races, {v(N, "h_circuits")} circuits.</li>
-      <li>The scoring world is itself a fitted simulator.</li>
-      <li>Stint limits and pit loss use hindsight; teams raced with traffic, rivals and live tyre data.</li>
-      <li>{v(N, "h_grace")} of {v(N, "h_n")} held-out decisions came only in the forced-submission turns.</li>
-    </ul>
+  <article class="panel finding">
+    <h2><b>8</b>What the LLM adds <span class="tag held">held-out</span></h2>
+    <p>Nothing measurable over the belief optimizer: {v(N, "h_diff_belief_optimizer")} s {v(N, "h_ci_belief_optimizer")};
+    {v(N, "h_ties_belief_optimizer")} exact ties, same plan in {v(N, "h_same_plan")} of {v(N, "h_n")}. Where its immediate
+    call differs ({v(N, "h_diff_call_n")}) the optimizer is better in {v(N, "h_diff_call_bo_better")}. Pit-now calls agree
+    with the reference {v(N, "h_pitnow_agree_agent")} of the time, &ldquo;always stay out&rdquo; {v(N, "h_pitnow_agree_stay")}
+    ({v(N, "h_pitnow_base")} are pit-now).</p>
   </article>
 
-  <article class="panel stake">
+  <article class="panel stake grow">
     <h2><b>9</b>For the stakeholder</h2>
-    <p>Without the oracle, PITWALL matches the teams on average in our simulator. Its quality comes from the
-    belief simulator and optimizer, not the LLM, at a median {v(N, "h_latency_median")} and about
-    {v(N, "h_tokens_mean")} input tokens per decision. The LLM&rsquo;s value is a legal, explained call; better tyre
-    models are where gains are.</p>
-  </article>
-
-  <article class="panel grow">
-    <h2><b>10</b>Next steps</h2>
+    <p>PITWALL gives a reliable, explained call that matches the teams on average in our simulator. So do its own
+    optimizer and a sensible fixed plan: the scorer measures planned strategy in clean air.</p>
+    <p class="nexth">Next steps</p>
     <ul>
-      <li>Fairer rule baselines (slots in panel 6).</li>
-      <li>Repeat passes; a second model.</li>
-      <li>Safety cars and traffic in scoring; driver effects in the wear fit.</li>
+      <li>Score safety cars, traffic and position, so reactive decisions count.</li>
+      <li>A decision-critical scenario set.</li>
+      <li>Driver effects in the wear fit; a second model; fix stalled episodes.</li>
     </ul>
   </article>
 </section>
@@ -364,10 +374,9 @@ def html(N):
   <div class="refs">
     [1] Code, evaluation protocol (<code>docs/eval.md</code>) and tag <code>d4-final-eval</code>: github.com/f1-t/agentic-ai.
     Project page: rishabhbaral-asu.github.io/PITWALL.<br>
-    [2] Held-out: <code>reports/eval/d4_combined.csv</code>, <code>d4_compare_regret_s_paired.csv</code>,
-    <code>d4_compare_per_race_regret_s_paired.csv</code>. Development: <code>dev6_run2_combined.csv</code>,
-    <code>dev6_run2_compare_regret_s_paired.csv</code>. Every number and its computation: <code>poster/numbers.md</code>.<br>
-    [3] Race timing data: FastF1 Python package, offline cache in the repository.<br>
+    [2] Results: <code>reports/eval/d4_*</code> (held-out), <code>dev6_run2_*</code> (development),
+    <code>dev6_run3_*</code> (repeat pass). Every number and its computation: <code>poster/numbers.md</code>.<br>
+    [3] Race timing data: FastF1 Python package.<br>
     [4] Map: &ldquo;2023 F1 CourseLayout Spain.svg&rdquo; by <span lang="ja">ごひょううべこ</span>, Wikimedia Commons,
     CC BY-SA 4.0, unmodified. PITWALL is an independent student project, not affiliated with Formula 1, the FIA or Pirelli.
   </div>
@@ -401,16 +410,20 @@ h1{font-size:104pt;line-height:1;margin:.02in 0 0;letter-spacing:.02em;font-weig
 .map{margin:0;width:7in;flex:none;text-align:center}
 .map img{width:7in;height:auto;display:block}
 .map figcaption{font-size:17pt;color:var(--muted);margin-top:.02in}
-.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.14in .3in;font-size:28pt;
-  line-height:1.25;font-weight:600}
+.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.14in .3in .18in;font-size:24pt;
+  line-height:1.24}
+.answer-tag{font-size:22pt;font-weight:700;color:var(--muted);margin-bottom:.08in}
+.pts{display:grid;grid-template-columns:1fr 1.45fr 1fr;gap:.4in}
+.pts .tag{margin-bottom:.06in}
+.pts b{font-size:28pt;color:var(--amber)}
 .tag{display:inline-block;font-size:17pt;line-height:1.3;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
   padding:.01in .1in;border-radius:.06in;vertical-align:.18em;margin-right:.12in}
 .tag.held{background:var(--held);color:#141225}
 .tag.dev{background:var(--dev);color:#141225}
 .answer .tag{font-size:18pt}
 .cols{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:.42in;min-height:0}
-.col{display:flex;flex-direction:column;gap:.24in;min-height:0;overflow:hidden}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.22in .28in;flex:none}
+.col{display:flex;flex-direction:column;gap:.2in;min-height:0;overflow:hidden}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.18in .28in .2in;flex:none}
 .panel.grow{flex:1}
 h2{font-size:32pt;line-height:1.1;margin:0 0 .12in;display:flex;align-items:center;gap:.14in;white-space:nowrap}
 h2>b{display:inline-flex;align-items:center;justify-content:center;width:.56in;height:.56in;border-radius:50%;
@@ -456,6 +469,7 @@ li{margin-bottom:.05in}
 .finding{border-color:var(--red)}
 .limits ul{font-size:21pt;line-height:1.24}
 .stake{background:#16263a;border-color:var(--dev)}
+.nexth{font-size:26pt;font-weight:800;margin:.16in 0 .06in}
 footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;flex-direction:column;gap:.05in}
 .refs{font-size:13pt;line-height:1.35;color:var(--muted)}
 .refs code{font-size:1em}

@@ -20,16 +20,20 @@ h1{font-size:104pt;line-height:1;margin:.02in 0 0;letter-spacing:.02em;font-weig
 .map{margin:0;width:7in;flex:none;text-align:center}
 .map img{width:7in;height:auto;display:block}
 .map figcaption{font-size:17pt;color:var(--muted);margin-top:.02in}
-.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.14in .3in;font-size:28pt;
-  line-height:1.25;font-weight:600}
+.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.14in .3in .18in;font-size:24pt;
+  line-height:1.24}
+.answer-tag{font-size:22pt;font-weight:700;color:var(--muted);margin-bottom:.08in}
+.pts{display:grid;grid-template-columns:1fr 1.45fr 1fr;gap:.4in}
+.pts .tag{margin-bottom:.06in}
+.pts b{font-size:28pt;color:var(--amber)}
 .tag{display:inline-block;font-size:17pt;line-height:1.3;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
   padding:.01in .1in;border-radius:.06in;vertical-align:.18em;margin-right:.12in}
 .tag.held{background:var(--held);color:#141225}
 .tag.dev{background:var(--dev);color:#141225}
 .answer .tag{font-size:18pt}
 .cols{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:.42in;min-height:0}
-.col{display:flex;flex-direction:column;gap:.24in;min-height:0;overflow:hidden}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.22in .28in;flex:none}
+.col{display:flex;flex-direction:column;gap:.2in;min-height:0;overflow:hidden}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.18in .28in .2in;flex:none}
 .panel.grow{flex:1}
 h2{font-size:32pt;line-height:1.1;margin:0 0 .12in;display:flex;align-items:center;gap:.14in;white-space:nowrap}
 h2>b{display:inline-flex;align-items:center;justify-content:center;width:.56in;height:.56in;border-radius:50%;
@@ -75,6 +79,7 @@ li{margin-bottom:.05in}
 .finding{border-color:var(--red)}
 .limits ul{font-size:21pt;line-height:1.24}
 .stake{background:#16263a;border-color:var(--dev)}
+.nexth{font-size:26pt;font-weight:800;margin:.16in 0 .06in}
 footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;flex-direction:column;gap:.05in}
 .refs{font-size:13pt;line-height:1.35;color:var(--muted)}
 .refs code{font-size:1em}
@@ -89,7 +94,7 @@ footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;
     <h1>PITWALL</h1>
     <div class="acro">Predictive Intelligence for Tactical When-to-pit Agentic Lap-wise Logic</div>
     <div class="q">Can a language model call the pit stop?</div>
-    <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sara Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
+    <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sarah Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
       <span>Stakeholder: Manav Ananthakumar &middot; TA: Xiaoou Liu &middot; Professor: Hua Wei</span></div>
   </div>
   <figure class="map">
@@ -98,9 +103,18 @@ footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;
   </figure>
 </header>
 
-<div class="answer"><span class="tag held">Held-out, in our simulator</span>On 4 races the agent had
-  never been run on, PITWALL&rsquo;s decisions cost the same on average as the teams&rsquo; real strategies, with fewer
-  large errors. The optimizer alone does as well: the LLM added nothing measurable.</div>
+<div class="answer">
+  <div class="pts">
+    <div><span class="tag held">Held-out, in our simulator</span><br><b>Reliable.</b> A legal, explained pit call on
+      all 100 decisions from 4 races the agent had never been run on
+      (29 needed the forced-submission turns).</div>
+    <div><b>Parity.</b> The same average cost as the teams&rsquo; real strategies (−0.19 s
+      [−1.88, 1.43]) with fewer large errors (13% vs 19%
+      more than 20 s off; suggestive here, clear on development), and the same as the optimizer in its tools.</div>
+    <div><b>Limit.</b> Two simple fixed rules do equally well, so this test does not yet separate good strategy
+      from adequate. Safety cars, traffic and rivals are not scored.</div>
+  </div>
+</div>
 
 <main class="cols">
 <section class="col">
@@ -124,11 +138,11 @@ footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;
       <div class="caveat">Not fully blind: stint-length limits and pit loss are read from the whole race.</div>
     </div>
     <p>Per scenario (race, driver, lap) the LLM (qwen3-30b-a3b) calls tools for up to 10 turns, then submits PIT
-    plus a tyre, or STAY OUT; two submit-only turns force a call. The belief optimizer turns the call into a plan.
+    plus a tyre, or STAY OUT; two submit-only turns force a call. The optimizer extends it into a plan.
     <b>PITWALL</b> = belief simulator + optimizer + LLM front end.</p>
     <p class="def"><b>Regret</b> is the extra remaining-race time (s) of a plan over the <b>hindsight
     reference</b>: the best plan with at most two more stops, timed in a deterministic replay of the race
-    fitted on all its laps, with no safety cars or traffic. Lower is better.</p>
+    fitted on all its laps, with no safety cars or traffic. Lower is better. It measures planned strategy in clean air.</p>
   </article>
 
   <article class="panel grow">
@@ -140,8 +154,7 @@ footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;
     and Austria 2025 were in an earlier model comparison; Austria 2024 had none.</p>
     <p><span class="tag dev">Development</span>6 races the simulator was calibrated on,
     150 scenarios.</p>
-    <p>Comparators: the teams&rsquo; actual strategy; the belief optimizer (same belief, no LLM); rule baselines.
-    Differences are agent minus comparator on the same scenarios. Brackets: 95% interval, resampling drivers
+    <p>Differences are agent minus comparator on the same scenarios. Brackets: 95% interval, resampling drivers
     within races.</p>
   </article>
 </section>
@@ -154,77 +167,80 @@ footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;
       <div><b>71%</b><span>before the turn limit</span></div>
       <div><b>26 s</b><span>median per decision</span></div>
     </div>
-    <p class="lead"><span class="tag held">Held-out</span>Same average cost; fewer large errors (suggestive here,
-    clear on development races). The teams are more often near-perfect.</p>
+    <p class="lead"><span class="tag held">Held-out</span>Same average cost, fewer large errors; the teams are more
+    often near-perfect.</p>
     <div class="caption">Share of decisions more than x s from the hindsight reference</div>
-    <svg class="chart" viewBox="0 0 472 330" role="img" aria-label="Share of decisions more than x seconds from the hindsight reference, PITWALL and the teams’ actual strategy"><line x1="62" y1="276.0" x2="444" y2="276.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="282.0" text-anchor="end" font-size="18" fill="#c9c6d8">0%</text><line x1="62" y1="212.0" x2="444" y2="212.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="218.0" text-anchor="end" font-size="18" fill="#c9c6d8">25%</text><line x1="62" y1="148.0" x2="444" y2="148.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="154.0" text-anchor="end" font-size="18" fill="#c9c6d8">50%</text><line x1="62" y1="84.0" x2="444" y2="84.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="90.0" text-anchor="end" font-size="18" fill="#c9c6d8">75%</text><line x1="62" y1="20.0" x2="444" y2="20.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="26.0" text-anchor="end" font-size="18" fill="#c9c6d8">100%</text><line x1="62.0" y1="20" x2="62.0" y2="276" stroke="#4a4866" stroke-width="1"/><text x="62.0" y="300" text-anchor="middle" font-size="18" fill="#c9c6d8">0</text><line x1="138.4" y1="20" x2="138.4" y2="276" stroke="#4a4866" stroke-width="1"/><text x="138.4" y="300" text-anchor="middle" font-size="18" fill="#c9c6d8">10</text><line x1="214.8" y1="20" x2="214.8" y2="276" stroke="#4a4866" stroke-width="1"/><text x="214.8" y="300" text-anchor="middle" font-size="18" fill="#c9c6d8">20</text><line x1="291.2" y1="20" x2="291.2" y2="276" stroke="#4a4866" stroke-width="1"/><text x="291.2" y="300" text-anchor="middle" font-size="18" fill="#c9c6d8">30</text><line x1="367.6" y1="20" x2="367.6" y2="276" stroke="#4a4866" stroke-width="1"/><text x="367.6" y="300" text-anchor="middle" font-size="18" fill="#c9c6d8">40</text><line x1="444.0" y1="20" x2="444.0" y2="276" stroke="#4a4866" stroke-width="1"/><text x="444.0" y="300" text-anchor="middle" font-size="18" fill="#c9c6d8">50 s</text><text x="253.0" y="326" text-anchor="middle" font-size="18" fill="#c9c6d8">x: seconds from the hindsight reference</text><path d="M62.0,90.5H62.0V93.1H62.2V95.8H63.0V98.4H64.9V101.0H66.2V103.6H67.5V106.2H67.5V108.8H67.5V111.4H70.4V114.0H70.5V119.3H72.3V121.9H72.7V127.1H73.8V129.7H73.8V132.3H74.3V134.9H74.4V137.6H76.0V140.2H76.2V142.8H76.4V145.4H78.7V148.0H84.5V150.6H89.8V153.2H91.4V155.8H91.4V158.4H95.1V161.1H102.7V163.7H104.7V166.3H107.9V168.9H107.9V171.5H119.3V174.1H120.4V176.7H123.6V182.0H127.7V184.6H148.4V187.2H150.3V189.8H151.0V192.4H151.0V195.0H153.5V197.6H155.4V200.2H155.4V202.9H160.0V205.5H162.3V208.1H167.8V210.7H174.6V213.3H174.6V215.9H175.4V218.5H188.6V221.1H190.7V223.8H211.8V226.4H216.5V229.0H222.3V231.6H227.0V234.2H231.2V236.8H239.4V239.4H239.4V242.0H245.3V244.7H253.3V247.3H275.1V249.9H278.7V252.5H282.7V255.1H285.0V260.3H285.0V262.9H285.4V265.6H298.2V268.2H314.7V270.8H431.7V273.4H435.5V276.0H444.0" fill="none" stroke="#2BB88A" stroke-width="4" stroke-dasharray="10 6"/><path d="M62.0,72.2H62.5V74.9H65.2V77.5H65.5V80.1H66.3V82.7H67.4V85.3H68.7V87.9H68.9V90.5H69.1V93.1H69.4V95.8H69.7V98.4H72.9V101.0H73.8V103.6H76.0V106.2H76.4V108.8H76.7V111.4H77.5V114.0H84.5V116.7H87.5V119.3H87.9V121.9H90.8V124.5H91.8V127.1H92.3V129.7H92.5V132.3H99.3V134.9H100.1V137.6H101.5V140.2H102.7V142.8H107.8V148.0H110.3V150.6H113.5V153.2H119.3V155.8H120.8V158.4H124.2V161.1H124.9V163.7H125.8V166.3H127.9V168.9H129.3V171.5H129.7V174.1H130.4V176.7H132.7V179.3H133.4V182.0H137.9V184.6H138.9V187.2H142.7V189.8H148.4V192.4H150.2V195.0H160.0V197.6H162.3V200.2H165.0V202.9H172.0V205.5H172.4V208.1H173.2V210.7H176.2V215.9H178.3V218.5H181.2V221.1H182.3V223.8H182.9V226.4H185.7V229.0H188.0V231.6H188.5V234.2H199.8V236.8H206.3V239.4H211.8V242.0H219.0V244.7H222.3V247.3H229.4V249.9H246.4V252.5H246.8V255.1H250.3V257.7H251.6V260.3H257.7V262.9H268.5V265.6H285.6V268.2H286.7V270.8H291.6V273.4H303.0V276.0H444.0" fill="none" stroke="#56B4E9" stroke-width="4" stroke-dasharray=""/><text x="222.4" y="76.3" font-size="20" font-weight="700" fill="#56B4E9">PITWALL (solid)</text><text x="222.4" y="102.3" font-size="20" font-weight="700" fill="#2BB88A">Teams’ actual (dashed)</text><line x1="214.8" y1="20" x2="214.8" y2="276" stroke="#f4f2f8" stroke-width="1.5" stroke-dasharray="3 4"/></svg>
+    <svg class="chart" viewBox="0 0 472 300" role="img" aria-label="Share of decisions more than x seconds from the hindsight reference, PITWALL and the teams’ actual strategy"><line x1="62" y1="248.0" x2="444" y2="248.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="254.0" text-anchor="end" font-size="18" fill="#c9c6d8">0%</text><line x1="62" y1="191.0" x2="444" y2="191.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="197.0" text-anchor="end" font-size="18" fill="#c9c6d8">25%</text><line x1="62" y1="134.0" x2="444" y2="134.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="140.0" text-anchor="end" font-size="18" fill="#c9c6d8">50%</text><line x1="62" y1="77.0" x2="444" y2="77.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="83.0" text-anchor="end" font-size="18" fill="#c9c6d8">75%</text><line x1="62" y1="20.0" x2="444" y2="20.0" stroke="#4a4866" stroke-width="1"/><text x="54" y="26.0" text-anchor="end" font-size="18" fill="#c9c6d8">100%</text><line x1="62.0" y1="20" x2="62.0" y2="248" stroke="#4a4866" stroke-width="1"/><text x="62.0" y="272" text-anchor="middle" font-size="18" fill="#c9c6d8">0</text><line x1="138.4" y1="20" x2="138.4" y2="248" stroke="#4a4866" stroke-width="1"/><text x="138.4" y="272" text-anchor="middle" font-size="18" fill="#c9c6d8">10</text><line x1="214.8" y1="20" x2="214.8" y2="248" stroke="#4a4866" stroke-width="1"/><text x="214.8" y="272" text-anchor="middle" font-size="18" fill="#c9c6d8">20</text><line x1="291.2" y1="20" x2="291.2" y2="248" stroke="#4a4866" stroke-width="1"/><text x="291.2" y="272" text-anchor="middle" font-size="18" fill="#c9c6d8">30</text><line x1="367.6" y1="20" x2="367.6" y2="248" stroke="#4a4866" stroke-width="1"/><text x="367.6" y="272" text-anchor="middle" font-size="18" fill="#c9c6d8">40</text><line x1="444.0" y1="20" x2="444.0" y2="248" stroke="#4a4866" stroke-width="1"/><text x="444.0" y="272" text-anchor="middle" font-size="18" fill="#c9c6d8">50 s</text><text x="253.0" y="296" text-anchor="middle" font-size="18" fill="#c9c6d8">x, seconds</text><path d="M62.0,82.8H62.0V85.1H62.2V87.5H63.0V89.8H64.9V92.1H66.2V94.4H67.5V96.8H67.5V99.1H67.5V101.4H70.4V103.8H70.5V108.4H72.3V110.7H72.7V115.4H73.8V117.7H73.8V120.0H74.3V122.4H74.4V124.7H76.0V127.0H76.2V129.3H76.4V131.7H78.7V134.0H84.5V136.3H89.8V138.7H91.4V141.0H91.4V143.3H95.1V145.6H102.7V148.0H104.7V150.3H107.9V152.6H107.9V154.9H119.3V157.3H120.4V159.6H123.6V164.2H127.7V166.6H148.4V168.9H150.3V171.2H151.0V173.6H151.0V175.9H153.5V178.2H155.4V180.5H155.4V182.9H160.0V185.2H162.3V187.5H167.8V189.8H174.6V192.2H174.6V194.5H175.4V196.8H188.6V199.1H190.7V201.5H211.8V203.8H216.5V206.1H222.3V208.4H227.0V210.8H231.2V213.1H239.4V215.4H239.4V217.8H245.3V220.1H253.3V222.4H275.1V224.7H278.7V227.1H282.7V229.4H285.0V234.0H285.0V236.4H285.4V238.7H298.2V241.0H314.7V243.3H431.7V245.7H435.5V248.0H444.0" fill="none" stroke="#2BB88A" stroke-width="4" stroke-dasharray="10 6"/><path d="M62.0,66.5H62.5V68.9H65.2V71.2H65.5V73.5H66.3V75.8H67.4V78.2H68.7V80.5H68.9V82.8H69.1V85.1H69.4V87.5H69.7V89.8H72.9V92.1H73.8V94.4H76.0V96.8H76.4V99.1H76.7V101.4H77.5V103.8H84.5V106.1H87.5V108.4H87.9V110.7H90.8V113.1H91.8V115.4H92.3V117.7H92.5V120.0H99.3V122.4H100.1V124.7H101.5V127.0H102.7V129.3H107.8V134.0H110.3V136.3H113.5V138.7H119.3V141.0H120.8V143.3H124.2V145.6H124.9V148.0H125.8V150.3H127.9V152.6H129.3V154.9H129.7V157.3H130.4V159.6H132.7V161.9H133.4V164.2H137.9V166.6H138.9V168.9H142.7V171.2H148.4V173.6H150.2V175.9H160.0V178.2H162.3V180.5H165.0V182.9H172.0V185.2H172.4V187.5H173.2V189.8H176.2V194.5H178.3V196.8H181.2V199.1H182.3V201.5H182.9V203.8H185.7V206.1H188.0V208.4H188.5V210.8H199.8V213.1H206.3V215.4H211.8V217.8H219.0V220.1H222.3V222.4H229.4V224.7H246.4V227.1H246.8V229.4H250.3V231.7H251.6V234.0H257.7V236.4H268.5V238.7H285.6V241.0H286.7V243.3H291.6V245.7H303.0V248.0H444.0" fill="none" stroke="#56B4E9" stroke-width="4" stroke-dasharray=""/><text x="222.4" y="70.2" font-size="20" font-weight="700" fill="#56B4E9">PITWALL (solid)</text><text x="222.4" y="96.2" font-size="20" font-weight="700" fill="#2BB88A">Teams’ actual (dashed)</text><line x1="214.8" y1="20" x2="214.8" y2="248" stroke="#f4f2f8" stroke-width="1.5" stroke-dasharray="3 4"/></svg>
     <table class="tbl lead"><thead><tr><th>held-out, n 98</th><th><i class="sw" style="background:#56B4E9"></i>PITWALL</th><th><i class="sw" style="background:#2BB88A"></i>Teams</th><th>difference [95%]</th></tr></thead><tbody><tr><th class="rl">Mean regret</th><td>8.68 s</td><td>8.87 s</td><td class="d"><b>−0.19</b> [−1.88, 1.43]</td></tr><tr><th class="rl">Median</th><td>6.2 s</td><td>2.6 s</td><td class="d"></td></tr><tr><th class="rl">Within 1 s</th><td>30%</td><td>36%</td><td class="d"><b>−6 pts</b> [−18, 4]</td></tr><tr><th class="rl">Over 20 s</th><td>13%</td><td>19%</td><td class="d"><b>−6 pts</b> [−13, 0]</td></tr><tr><th class="rl">Over 30 s</th><td>2%</td><td>4%</td><td class="d"></td></tr><tr><th class="rl">90th percentile</th><td>22.6 s</td><td>28.0 s</td><td class="d"><b>−5.5</b> [−10.4, 0.2]</td></tr><tr><th class="rl">Worst</th><td>31.5 s</td><td>48.9 s</td><td class="d"></td></tr></tbody></table>
     <p class="note"><b>Without Austria 2024</b> (45% of the agent&rsquo;s regret): agent mean
     6.51 s; minus teams −0.16 [−2.33, 1.99],
     minus belief optimizer +0.05 [−0.08, 0.18],
-    minus one-stop −3.35 [−6.23, −0.51]. Conclusions unchanged.</p>
+    minus fixed one-stop −3.35 [−6.23, −0.51].</p>
     <div class="caption">Per race (25 scenarios each); four races are the real sample</div>
-    <table class="tbl race"><thead><tr><th>agent minus &hellip;</th><th>Monaco<br>2019</th><th>Sakhir<br>2020</th><th>Austria<br>2024</th><th>Austria<br>2025</th></tr></thead><tbody><tr class="lvl"><th class="rl">Agent regret (s)</th><td>8.6</td><td>8.4</td><td>16.2</td><td>2.5</td></tr><tr><th class="rl"><i class="sw" style="background:#2BB88A"></i>vs teams’ actual</th><td>+1.7</td><td>−2.4</td><td>−0.3</td><td>+0.2</td></tr><tr><th class="rl"><i class="sw" style="background:#E69F00"></i>vs belief optimizer</th><td>−0.03</td><td>−0.02</td><td>−0.25</td><td>+0.20</td></tr><tr><th class="rl"><i class="sw" style="background:#CC79A7"></i>vs one-stop rule</th><td>−4.7</td><td>−3.8</td><td>−7.5</td><td>−1.4</td></tr></tbody></table>
-    <p class="note">Austria 2024: the hindsight reference uses Soft in 23 of 25, priced from few race laps
-    (the sampled drivers&rsquo; only Soft stint is a final 7 laps); the belief priced Soft from practice.
-    Agent, belief optimizer and teams sit about 16 s from the reference; fixed one-stop
-    23.0 s, fixed two-stop 35.9 s.</p>
+    <table class="tbl race"><thead><tr><th>agent minus &hellip;</th><th>Monaco<br>2019</th><th>Sakhir<br>2020</th><th>Austria<br>2024</th><th>Austria<br>2025</th></tr></thead><tbody><tr class="lvl"><th class="rl">Agent regret (s)</th><td>8.6</td><td>8.4</td><td>16.2</td><td>2.5</td></tr><tr><th class="rl"><i class="sw" style="background:#2BB88A"></i>vs teams’ actual</th><td>+1.7</td><td>−2.4</td><td>−0.3</td><td>+0.2</td></tr><tr><th class="rl"><i class="sw" style="background:#E69F00"></i>vs belief optimizer</th><td>−0.03</td><td>−0.02</td><td>−0.25</td><td>+0.20</td></tr><tr><th class="rl"><i class="sw" style="background:#F0E442"></i>vs run to the flag</th><td>+3.5</td><td>+4.3</td><td>−2.8</td><td>−6.4</td></tr><tr><th class="rl"><i class="sw" style="background:#D55E00"></i>vs one stop in total</th><td>+6.9</td><td>+5.5</td><td>−1.2</td><td>−5.4</td></tr><tr><th class="rl"><i class="sw" style="background:#CC79A7"></i>vs fixed one-stop</th><td>−4.7</td><td>−3.8</td><td>−7.5</td><td>−1.4</td></tr></tbody></table>
+    <p class="note">Austria 2024: the reference uses Soft in 23 of 25, priced from few race laps (the
+    sampled drivers&rsquo; only Soft stint: a final 7 laps); the belief priced it from practice.
+    Agent, optimizer and teams are about 16 s off, fixed one-stop
+    23.0, fixed two-stop 35.9.</p>
   </article>
 
-  <article class="panel finding grow">
-    <h2><b>5</b>What the LLM adds <span class="tag held">held-out</span></h2>
-    <p>Nothing measurable over the belief optimizer: −0.03 s [−0.29, 0.22].
-    Equal on average, not identical: 39 exact ties, same plan in 33
-    of 100. Where its immediate call differs (11), the optimizer is better in
-    8; over those 11 the agent is 0.41 s worse on
-    average. Pit-now calls agree with the reference 83% of the time; &ldquo;always stay
-    out&rdquo; agrees 90% (10% of scenarios are pit-now).</p>
+  <article class="panel limits grow">
+    <h2><b>5</b>Limitations</h2>
+    <ul>
+      <li>One agent pass, one model; 4 held-out races, 3 circuits.</li>
+      <li>The scoring world is a fitted simulator; stint limits and pit loss use hindsight. Teams raced with
+      traffic, rivals and live tyre data.</li>
+      <li>Identical repeat pass on development: mean regret 3.95 &rarr; 4.36 s,
+      same pit/stay call in 145 of 150, agent minus optimizer
+      −0.16 &rarr; +0.24 (a tie both times).</li>
+      <li>There 4 episodes stalled (no usable tool call for nine turns), then were forced into an
+      unconsidered pit call, one illegal.</li>
+    </ul>
   </article>
 </section>
 
 <section class="col">
   <article class="panel">
-    <h2><b>6</b>Other comparators <span class="tag held">held-out</span></h2>
-    <div class="caption">Agent minus comparator, mean regret (s)</div>
-    <svg class="chart" viewBox="0 0 472 346" role="img" aria-label="Held-out: agent minus other comparators, with 95% intervals"><line x1="14.0" y1="40" x2="14.0" y2="312" stroke="#4a4866" stroke-width="1"/><text x="14.0" y="336" text-anchor="middle" font-size="18" fill="#c9c6d8">−8</text><line x1="94.7" y1="40" x2="94.7" y2="312" stroke="#4a4866" stroke-width="1"/><text x="94.7" y="336" text-anchor="middle" font-size="18" fill="#c9c6d8">−6</text><line x1="175.5" y1="40" x2="175.5" y2="312" stroke="#4a4866" stroke-width="1"/><text x="175.5" y="336" text-anchor="middle" font-size="18" fill="#c9c6d8">−4</text><line x1="256.2" y1="40" x2="256.2" y2="312" stroke="#4a4866" stroke-width="1"/><text x="256.2" y="336" text-anchor="middle" font-size="18" fill="#c9c6d8">−2</text><line x1="336.9" y1="40" x2="336.9" y2="312" stroke="#4a4866" stroke-width="1"/><text x="336.9" y="336" text-anchor="middle" font-size="18" fill="#c9c6d8">0</text><line x1="417.6" y1="40" x2="417.6" y2="312" stroke="#4a4866" stroke-width="1"/><text x="417.6" y="336" text-anchor="middle" font-size="18" fill="#c9c6d8">2 s</text><line x1="336.9" y1="34" x2="336.9" y2="312" stroke="#f4f2f8" stroke-width="2"/><text x="326.8" y="28" text-anchor="end" font-size="18" fill="#c9c6d8">← agent better</text><text x="347.0" y="28" font-size="18" fill="#c9c6d8">agent worse →</text><rect x="0" y="44" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="68" font-size="21" font-weight="700" fill="#f4f2f8">Belief optimizer (no LLM)</text><text x="470" y="68" text-anchor="end" font-size="21" fill="#f4f2f8"><tspan font-weight="700">−0.03</tspan> [−0.29, 0.22]</text><line x1="325.3" y1="94.0" x2="345.7" y2="94.0" stroke="#E69F00" stroke-width="4"/><line x1="325.3" y1="86.0" x2="325.3" y2="102.0" stroke="#E69F00" stroke-width="3"/><line x1="345.7" y1="86.0" x2="345.7" y2="102.0" stroke="#E69F00" stroke-width="3"/><circle cx="335.9" cy="94.0" r="9.0" fill="#E69F00" stroke="#1a1930" stroke-width="1.5"/><rect x="0" y="112" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="136" font-size="21" font-weight="700" fill="#f4f2f8">Fixed one-stop rule</text><text x="470" y="136" text-anchor="end" font-size="21" fill="#f4f2f8"><tspan font-weight="700">−4.28</tspan> [−6.73, −1.90]</text><line x1="65.1" y1="162.0" x2="260.2" y2="162.0" stroke="#CC79A7" stroke-width="4"/><line x1="65.1" y1="154.0" x2="65.1" y2="170.0" stroke="#CC79A7" stroke-width="3"/><line x1="260.2" y1="154.0" x2="260.2" y2="170.0" stroke="#CC79A7" stroke-width="3"/><rect x="156.4" y="154.3" width="15.3" height="15.3" fill="#CC79A7" stroke="#1a1930" stroke-width="1.5"/><rect x="0" y="180" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="204" font-size="21" font-weight="700" fill="#f4f2f8">Run to the flag</text><text x="470" y="204" text-anchor="end" font-size="20" font-style="italic" fill="#c9c6d8">pending: being scored</text><rect x="0" y="248" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="272" font-size="21" font-weight="700" fill="#f4f2f8">One stop in total</text><text x="470" y="272" text-anchor="end" font-size="20" font-style="italic" fill="#c9c6d8">pending: being scored</text></svg>
-    <p class="caveat2"><b>One-stop caveat:</b> that rule always makes one more stop. Agent minus rule:
-    +7.44 s [3.59, 11.42] before the driver&rsquo;s first stop (n 25),
-    −8.53 s [−10.66, −6.37] after it (n 69).</p>
+    <h2><b>6</b>Rule baselines <span class="tag held">held-out</span></h2>
+    <div class="caption">Agent minus rule, mean regret (s)</div>
+    <svg class="chart" viewBox="0 0 472 260" role="img" aria-label="Held-out: agent minus rule baselines and the belief optimizer, with 95% intervals"><line x1="14.0" y1="40" x2="14.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="14.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">−8</text><line x1="88.0" y1="40" x2="88.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="88.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">−6</text><line x1="162.0" y1="40" x2="162.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="162.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">−4</text><line x1="236.0" y1="40" x2="236.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="236.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">−2</text><line x1="310.0" y1="40" x2="310.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="310.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">0</text><line x1="384.0" y1="40" x2="384.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="384.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">2</text><line x1="458.0" y1="40" x2="458.0" y2="226" stroke="#4a4866" stroke-width="1"/><text x="458.0" y="250" text-anchor="middle" font-size="18" fill="#c9c6d8">4 s</text><line x1="310.0" y1="34" x2="310.0" y2="226" stroke="#f4f2f8" stroke-width="2"/><text x="300.8" y="28" text-anchor="end" font-size="18" fill="#c9c6d8">← agent better</text><text x="319.2" y="28" font-size="18" fill="#c9c6d8">agent worse →</text><rect x="0" y="44" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="68" font-size="21" font-weight="700" fill="#f4f2f8">Run to the flag</text><text x="470" y="68" text-anchor="end" font-size="21" fill="#f4f2f8"><tspan font-weight="700">−0.33</tspan> [−2.14, 1.47]</text><line x1="230.9" y1="92.0" x2="364.4" y2="92.0" stroke="#F0E442" stroke-width="4"/><line x1="230.9" y1="84.0" x2="230.9" y2="100.0" stroke="#F0E442" stroke-width="3"/><line x1="364.4" y1="84.0" x2="364.4" y2="100.0" stroke="#F0E442" stroke-width="3"/><circle cx="297.6" cy="92.0" r="9.0" fill="#F0E442" stroke="#1a1930" stroke-width="1.5"/><rect x="0" y="106" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="130" font-size="21" font-weight="700" fill="#f4f2f8">One stop in total</text><text x="470" y="130" text-anchor="end" font-size="21" fill="#f4f2f8"><tspan font-weight="700">+1.66</tspan> [−0.33, 3.65]</text><line x1="297.8" y1="154.0" x2="445.2" y2="154.0" stroke="#D55E00" stroke-width="4"/><line x1="297.8" y1="146.0" x2="297.8" y2="162.0" stroke="#D55E00" stroke-width="3"/><line x1="445.2" y1="146.0" x2="445.2" y2="162.0" stroke="#D55E00" stroke-width="3"/><path d="M371.5,142.3L383.2,154.0L371.5,165.7L359.8,154.0Z" fill="#D55E00" stroke="#1a1930" stroke-width="1.5"/><rect x="0" y="168" width="472" height="32" fill="#1a1930" opacity="0.9"/><text x="4" y="192" font-size="21" font-weight="700" fill="#f4f2f8">Fixed one-stop rule</text><text x="470" y="192" text-anchor="end" font-size="21" fill="#f4f2f8"><tspan font-weight="700">−4.28</tspan> [−6.73, −1.90]</text><line x1="60.9" y1="216.0" x2="239.7" y2="216.0" stroke="#CC79A7" stroke-width="4"/><line x1="60.9" y1="208.0" x2="60.9" y2="224.0" stroke="#CC79A7" stroke-width="3"/><line x1="239.7" y1="208.0" x2="239.7" y2="224.0" stroke="#CC79A7" stroke-width="3"/><rect x="143.9" y="208.3" width="15.3" height="15.3" fill="#CC79A7" stroke="#1a1930" stroke-width="1.5"/></svg>
+    <p class="note">Run to the flag and one stop in total were added after the held-out results were known: frozen on
+    development races (commit <code>5a2bc41</code>), then scored once on held-out; no held-out row was rerun. They win
+    at Monaco and Sakhir, lose at both Austrias (panel 4).</p>
+    <p class="caveat2"><b>Fixed one-stop</b> always makes one more stop: that is its 4.3 s deficit. Without it the lead
+    is gone: after the driver&rsquo;s first stop, agent minus one stop in total is −0.40 s
+    [−2.55, 1.81].</p>
+    <p class="note">Mean regret (s): one stop in total 7.02 (5
+    invalid), teams 8.87, agent 8.93, belief optimizer
+    8.95, run to the flag 9.26, fixed one-stop 12.87.</p>
   </article>
 
   <article class="panel">
     <h2><b>7</b>Development vs held-out</h2>
-    <table class="tbl contrast"><thead><tr><th>agent minus</th><th>development</th><th>held-out</th></tr></thead><tbody><tr class="grp"><th colspan="3"><i class="sw" style="background:#2BB88A"></i>teams&rsquo; actual strategy</th></tr><tr><th class="rl">mean (s)</th><td><b>−3.25</b> [−5.50, −1.25]</td><td><b>−0.19</b> [−1.88, 1.43]</td></tr><tr><th class="rl">share over 20 s</th><td><b>−12 pts</b> [−20, −6]</td><td><b>−6 pts</b> [−13, 0]</td></tr><tr><th class="rl">90th pct (s)</th><td><b>−9.3</b> [−16.0, −2.6]</td><td><b>−5.5</b> [−10.4, 0.2]</td></tr><tr class="grp"><th colspan="3"><i class="sw" style="background:#E69F00"></i>belief optimizer</th></tr><tr><th class="rl">mean (s)</th><td><b>−0.16</b> [−0.58, 0.20]</td><td><b>−0.03</b> [−0.29, 0.22]</td></tr></tbody></table>
-    <p class="note">Clear on development, suggestive on held-out. Mean regret roughly doubles for both policies
-    that plan on the belief: agent 3.95 &rarr; 8.93 s, belief optimizer
-    4.11 &rarr; 8.95 s (teams 7.15
-    &rarr; 8.87 s).</p>
+    <table class="tbl contrast"><thead><tr><th>agent minus</th><th>development</th><th>held-out</th></tr></thead><tbody><tr><th class="rl"><i class="sw" style="background:#2BB88A"></i>teams, mean</th><td><b>−3.25</b> [−5.50, −1.25]</td><td><b>−0.19</b> [−1.88, 1.43]</td></tr><tr><th class="rl">&nbsp;&nbsp;over 20 s</th><td><b>−12 pts</b> [−20, −6]</td><td><b>−6 pts</b> [−13, 0]</td></tr><tr><th class="rl"><i class="sw" style="background:#E69F00"></i>belief optim.</th><td><b>−0.16</b> [−0.58, 0.20]</td><td><b>−0.03</b> [−0.29, 0.22]</td></tr><tr><th class="rl"><i class="sw" style="background:#F0E442"></i>run to flag</th><td><b>−0.31</b> [−2.10, 1.35]</td><td><b>−0.33</b> [−2.14, 1.47]</td></tr><tr><th class="rl"><i class="sw" style="background:#D55E00"></i>one stop total</th><td><b>−0.24</b> [−2.24, 1.56]</td><td><b>+1.66</b> [−0.33, 3.65]</td></tr></tbody></table>
+    <p class="note">The lead over the teams is clear on development, suggestive on held-out. Mean regret roughly doubles
+    for both policies that plan on the belief: agent 3.95 &rarr; 8.93 s, belief
+    optimizer 4.11 &rarr; 8.95 s.</p>
   </article>
 
-  <article class="panel limits">
-    <h2><b>8</b>Limitations</h2>
-    <ul>
-      <li>One agent pass, one model; 4 held-out races, 3 circuits.</li>
-      <li>The scoring world is itself a fitted simulator.</li>
-      <li>Stint limits and pit loss use hindsight; teams raced with traffic, rivals and live tyre data.</li>
-      <li>29 of 100 held-out decisions came only in the forced-submission turns.</li>
-    </ul>
+  <article class="panel finding">
+    <h2><b>8</b>What the LLM adds <span class="tag held">held-out</span></h2>
+    <p>Nothing measurable over the belief optimizer: −0.03 s [−0.29, 0.22];
+    39 exact ties, same plan in 33 of 100. Where its immediate
+    call differs (11) the optimizer is better in 8. Pit-now calls agree
+    with the reference 83% of the time, &ldquo;always stay out&rdquo; 90%
+    (10% are pit-now).</p>
   </article>
 
-  <article class="panel stake">
+  <article class="panel stake grow">
     <h2><b>9</b>For the stakeholder</h2>
-    <p>Without the oracle, PITWALL matches the teams on average in our simulator. Its quality comes from the
-    belief simulator and optimizer, not the LLM, at a median 26 s and about
-    85k input tokens per decision. The LLM&rsquo;s value is a legal, explained call; better tyre
-    models are where gains are.</p>
-  </article>
-
-  <article class="panel grow">
-    <h2><b>10</b>Next steps</h2>
+    <p>PITWALL gives a reliable, explained call that matches the teams on average in our simulator. So do its own
+    optimizer and a sensible fixed plan: the scorer measures planned strategy in clean air.</p>
+    <p class="nexth">Next steps</p>
     <ul>
-      <li>Fairer rule baselines (slots in panel 6).</li>
-      <li>Repeat passes; a second model.</li>
-      <li>Safety cars and traffic in scoring; driver effects in the wear fit.</li>
+      <li>Score safety cars, traffic and position, so reactive decisions count.</li>
+      <li>A decision-critical scenario set.</li>
+      <li>Driver effects in the wear fit; a second model; fix stalled episodes.</li>
     </ul>
   </article>
 </section>
@@ -234,10 +250,9 @@ footer{flex:none;border-top:2px solid var(--line);padding-top:.1in;display:flex;
   <div class="refs">
     [1] Code, evaluation protocol (<code>docs/eval.md</code>) and tag <code>d4-final-eval</code>: github.com/f1-t/agentic-ai.
     Project page: rishabhbaral-asu.github.io/PITWALL.<br>
-    [2] Held-out: <code>reports/eval/d4_combined.csv</code>, <code>d4_compare_regret_s_paired.csv</code>,
-    <code>d4_compare_per_race_regret_s_paired.csv</code>. Development: <code>dev6_run2_combined.csv</code>,
-    <code>dev6_run2_compare_regret_s_paired.csv</code>. Every number and its computation: <code>poster/numbers.md</code>.<br>
-    [3] Race timing data: FastF1 Python package, offline cache in the repository.<br>
+    [2] Results: <code>reports/eval/d4_*</code> (held-out), <code>dev6_run2_*</code> (development),
+    <code>dev6_run3_*</code> (repeat pass). Every number and its computation: <code>poster/numbers.md</code>.<br>
+    [3] Race timing data: FastF1 Python package.<br>
     [4] Map: &ldquo;2023 F1 CourseLayout Spain.svg&rdquo; by <span lang="ja">ごひょううべこ</span>, Wikimedia Commons,
     CC BY-SA 4.0, unmodified. PITWALL is an independent student project, not affiliated with Formula 1, the FIA or Pirelli.
   </div>

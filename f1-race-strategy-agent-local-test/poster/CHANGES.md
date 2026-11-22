@@ -55,8 +55,27 @@ comes from `reports/eval/d4_combined.csv` (held-out) or `reports/eval/dev6_run2_
   size). The PDF has no raster images.
 - 0.65-0.75 in from the trim to any text; checked by `check_layout.py`.
 
+## Update after #85 (rule baselines) and #86 (development repeat pass)
+
+- Author name corrected to "Sarah Maisha".
+- Banner rewritten as three held-out points, "in our simulator": **Reliable** (a legal, explained call on
+  all 100 decisions; 29 needed the forced-submission turns), **Parity** (same average cost as the teams,
+  -0.19 s [-1.88, 1.43], fewer large errors, 13% vs 19% more than 20 s off; the same as the optimizer),
+  **Limit** (two simple fixed rules do equally well; safety cars, traffic and rivals are not scored).
+- Panel 6 "Rule baselines" fills the two slots from `d4_combined_rules.csv`: run to the flag -0.33 s
+  [-2.14, 1.47], one stop in total +1.66 [-0.33, 3.65], with the disclosure that both were frozen on
+  development races (5a2bc41) and scored once on held-out after its results were known. The fixed one-stop
+  caveat now says its 4.3 s deficit is the forced extra stop (after the driver's first stop, agent minus one
+  stop in total is -0.40 [-2.55, 1.81]). Pooled mean regret of every policy is listed for context.
+- Per-race table (panel 4) gains the two rules: the agent loses to them at Monaco and Sakhir (+3.5 / +6.9,
+  +4.3 / +5.5) and beats them at both Austrias (-2.8 / -1.2, -6.4 / -5.4).
+- Development vs held-out table (panel 7) gains the two rules (development -0.31, -0.24).
+- Limitations: the development repeat pass (mean regret 3.95 to 4.36 s, same pit/stay call in 145 of 150,
+  agent minus optimizer -0.16 to +0.24) and its 4 stalled episodes (one illegal).
+- "For the stakeholder" and Next steps rewritten for the clean-air reading and merged into one panel; the
+  belief optimizer row left the rule chart (it is in panels 4, 7 and 8).
+- Words: about 1,250 in total including about 110 in the references and footer.
+
 ## Still open
 
-- "Sara Maisha" spelling to be confirmed (carried over from the Nov 21 draft).
-- The fairer rule baselines ("run to the flag", "one stop in total") print as "pending" until scored.
 - Bleed: none; see README "Printing".

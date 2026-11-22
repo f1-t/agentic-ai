@@ -1,8 +1,11 @@
 """Every number printed on the 24 x 36 in PITWALL poster, computed from the committed result files.
 
-Reads only `reports/eval/d4_*.csv` (held-out, report set, tag d4-final-eval, one agent pass) and
-`reports/eval/dev6_run2_*.csv` (development, calibration races). Nothing is loaded, simulated or
-scored: no race data, no simulator, no model.
+Reads only `reports/eval/d4_*.csv` (held-out, report set, tag d4-final-eval, one agent pass; the rule
+baselines `run_to_flag` and `one_stop_total` from `d4_combined_rules.csv`, scored once afterwards),
+`reports/eval/dev6_run2_*.csv` (development, calibration races) and `reports/eval/dev6_run3_*.csv`
+(an identical repeat pass on development, for run-to-run variation). Nothing is loaded, simulated or
+scored: no race data, no simulator, no model. The `*_combined_rules.csv` files are used for every
+number; their non-rule rows are checked identical to the `*_combined.csv` files.
 
     python poster/poster_stats.py          # prints the provenance table (also written by build_poster.py)
 
@@ -33,10 +36,10 @@ HELD_RACES = ["2019_06_monaco", "2020_16_sakhir", "2024_11_austria", "2025_11_au
 RACE_NAMES = {"2019_06_monaco": "Monaco 2019", "2020_16_sakhir": "Sakhir 2020",
               "2024_11_austria": "Austria 2024", "2025_11_austria": "Austria 2025"}
 COMPARATORS = ["fixed_one_stop", "actual_strategy", "belief_optimizer"]
-# Fairer rule baselines being scored after d4-final-eval. Their rows are picked up automatically
-# once they are in the combined CSVs under these policy names (rename here to match the files);
-# until then the poster prints "pending" in their slot.
+# Fairer rule baselines (docs/eval.md, "Rule baselines added after the held-out run"): frozen at
+# 5a2bc41 on the development races, then scored once on the held-out races.
 FAIR_RULES = [("run_to_flag", "Run to the flag"), ("one_stop_total", "One stop in total")]
+RULES = [p for p, _ in FAIR_RULES]
 
 
 @dataclass
@@ -47,8 +50,20 @@ class Num:
     how: str           # computation
 
 
-def load(prefix: str) -> pd.DataFrame:
-    d = pd.read_csv(EVAL / f"{prefix}_combined.csv")
+def load(prefix: str, rules: bool = True) -> pd.DataFrame:
+    """`<prefix>_combined_rules.csv` (the combined rows plus the rule baselines), after checking that its
+    other rows equal `<prefix>_combined.csv`; with rules=False, `<prefix>_combined.csv` itself."""
+    base = pd.read_csv(EVAL / f"{prefix}_combined.csv")
+    d = base
+    if rules:
+        d = pd.read_csv(EVAL / f"{prefix}_combined_rules.csv")
+        sub = d[~d["policy"].isin(RULES)]
+        m = base.merge(sub, on=["scenario_id", "policy"], suffixes=("", "_r"))
+        same = ((m["status"] == m["status_r"]).all() and (m["regret_s"].isna() == m["regret_s_r"].isna()).all()
+                and ((m["regret_s"] - m["regret_s_r"]).abs().fillna(0) < 1e-12).all())
+        if not (len(m) == len(base) == len(sub) and same and set(RULES) <= set(d["policy"])):
+            raise SystemExit(f"{prefix}_combined_rules.csv does not extend {prefix}_combined.csv row for row")
+    d = d.copy()
     d["lap"] = d["lap"].astype(int)
     return d
 
@@ -131,7 +146,7 @@ def _check(mine: dict, committed: pd.Series, label: str):
 def compute() -> dict[str, Num]:
     N: dict[str, Num] = {}
     held, dev = load(HELD), load(DEV)
-    HC, DC = f"{HELD}_combined.csv", f"{DEV}_combined.csv"
+    HC, DC = f"{HELD}_combined_rules.csv", f"{DEV}_combined_rules.csv"
 
     def put(key, value, text, source, how):
         N[key] = Num(value, text, source, how)
@@ -156,17 +171,19 @@ def compute() -> dict[str, Num]:
             "median latency_s, agent rows (episode wall time per decision)")
         put(f"{tag}_tokens_mean", float(a["input_tokens"].mean()), f"{a['input_tokens'].mean() / 1000:.0f}k", src,
             "mean input_tokens per decision, summed over the episode's model turns")
-        for pol in ["agent"] + COMPARATORS:
-            r = rows[(rows["policy"] == pol) & (rows["status"] == "ok")]
+        for pol in ["agent"] + COMPARATORS + RULES:
+            allp = rows[rows["policy"] == pol]
+            r = allp[allp["status"] == "ok"]
             put(f"{tag}_mean_{pol}", float(r["regret_s"].mean()), s(r["regret_s"].mean()), src,
                 f"mean regret_s of {pol}, its own ok rows (n {len(r)})")
-        present = set(rows["policy"])
-        for pol in COMPARATORS + [p for p, _ in FAIR_RULES if p in present]:
+            put(f"{tag}_scoredn_{pol}", len(r), str(len(r)), src, f"{pol} rows with status ok")
+            inv = int((allp["status"] == "invalid").sum())
+            put(f"{tag}_invalid_{pol}", inv, str(inv), src, f"{pol} rows with status invalid")
+        cfile = f"{HELD if tag == 'h' else DEV}_rules_compare_regret_s_paired.csv"
+        committed = pd.read_csv(EVAL / cfile)
+        for pol in COMPARATORS + RULES:
             p = paired(rows, pol)
-            committed = pd.read_csv(EVAL / f"{HELD if tag == 'h' else DEV}_compare_regret_s_paired.csv")
-            if (committed["policy"] == pol).any():
-                _check(p, committed[committed["policy"] == pol].iloc[0], f"{tag} {pol}")
-            cfile = f"{HELD if tag == 'h' else DEV}_compare_regret_s_paired.csv"
+            _check(p, committed[committed["policy"] == pol].iloc[0], f"{tag} {pol}")
             how = (f"agent minus {pol}, mean over {p['n']} paired ok scenarios; 95% cluster bootstrap over "
                    f"{p['clusters']} (race, driver) clusters, 2000 resamples, seed 0; equals {cfile}")
             put(f"{tag}_diff_{pol}", p["mean"], s(p["mean"], sign=True), src, how)
@@ -177,19 +194,19 @@ def compute() -> dict[str, Num]:
                 f"scenarios agent better / {pol} better")
 
     # per-race paired differences and agent means (held-out)
-    per_committed = pd.read_csv(EVAL / f"{HELD}_compare_per_race_regret_s_paired.csv")
+    per_committed = pd.read_csv(EVAL / f"{HELD}_rules_compare_per_race_regret_s_paired.csv")
     for race in HELD_RACES:
         sub = held[held["race_id"] == race]
         a = sub[(sub["policy"] == "agent") & (sub["status"] == "ok")]
         put(f"h_race_mean_agent_{race}", float(a["regret_s"].mean()), f"{a['regret_s'].mean():.1f}", HC,
             f"mean agent regret_s at {race} ({len(a)} scenarios)")
-        for pol in COMPARATORS:
+        for pol in COMPARATORS + RULES:
             p = paired(sub, pol)
             c = per_committed[(per_committed["race"] == race) & (per_committed["cluster"] == "driver")
                               & (per_committed["policy"] == pol)].iloc[0]
             _check(p, c, f"{race} {pol}")
             put(f"h_race_diff_{pol}_{race}", p["mean"], s(p["mean"], 1, sign=True), HC,
-                f"agent minus {pol} at {race}, {p['n']} paired scenarios; equals {HELD}_compare_per_race_regret_s_paired.csv")
+                f"agent minus {pol} at {race}, {p['n']} paired scenarios; equals {HELD}_rules_compare_per_race_regret_s_paired.csv")
         for pol in ("belief_optimizer", "actual_strategy", "fixed_one_stop"):
             r = sub[(sub["policy"] == pol) & (sub["status"] == "ok")]
             put(f"h_race_mean_{pol}_{race}", float(r["regret_s"].mean()), f"{r['regret_s'].mean():.1f}", HC,
@@ -310,6 +327,44 @@ def compute() -> dict[str, Num]:
         f"(plan {soft['plan']} from lap {soft['lap']})")
     same_plan = int((ag["plan"] == bo["plan"]).sum())
     put("h_same_plan", same_plan, str(same_plan), HC, "agent plan string identical to belief_optimizer plan")
+
+    # stopped / not-yet-stopped split: the committed table (scenario-file definition) for the rule
+    # baselines; our tyre_age split must reproduce its fixed_one_stop rows
+    sf = f"{HELD}_rules_compare_stopped_regret_s_paired.csv"
+    st = pd.read_csv(EVAL / sf)
+    for part, subset in (("before", "not yet stopped"), ("after", "already stopped")):
+        c = st[(st["subset"] == subset) & (st["policy"] == "fixed_one_stop")].iloc[0]
+        p = N[f"h_f1s_{part}"].value, N[f"h_f1s_{part}_ci"].value, N[f"h_f1s_{part}_n"].value
+        if abs(p[0] - c["mean_diff"]) > 1e-9 or abs(p[1][0] - c["ci_low"]) > 1e-9 or p[2] != c["paired"]:
+            raise SystemExit(f"fixed_one_stop {part}-first-stop split differs from {sf}")
+    c = st[(st["subset"] == "already stopped") & (st["policy"] == "one_stop_total")].iloc[0]
+    how = f"agent minus one_stop_total on scenarios where the driver has already stopped (n {c['paired']}); read from {sf}"
+    put("h_ost_after", float(c["mean_diff"]), s(c["mean_diff"], sign=True), sf, how)
+    put("h_ost_after_ci", (c["ci_low"], c["ci_high"]), ci(c["ci_low"], c["ci_high"]), sf, how)
+
+    # run-to-run variation: development run 3 (identical repeat) against run 2
+    R3 = f"{DEV}_run3"
+    r3 = load("dev6_run3", rules=False)
+    R3C = "dev6_run3_combined.csv"
+    a2 = dev[dev["policy"] == "agent"].set_index("scenario_id")
+    a3 = r3[r3["policy"] == "agent"].set_index("scenario_id").loc[a2.index]
+    m3 = a3.loc[a3["status"] == "ok", "regret_s"]
+    put("r3_mean_agent", float(m3.mean()), s(m3.mean()), R3C, f"mean agent regret_s in run 3, its ok rows (n {len(m3)})")
+    agree = int((a2["decision"] == a3["decision"]).sum())
+    put("r3_same_call", agree, str(agree), f"{DC}, {R3C}", "scenarios where run 2 and run 3 give the same PIT/STAY_OUT decision")
+    p = paired(r3, "belief_optimizer")
+    c3 = pd.read_csv(EVAL / "dev6_run3_compare_regret_s_paired.csv")
+    _check(p, c3[c3["policy"] == "belief_optimizer"].iloc[0], "run3 belief_optimizer")
+    how = f"run 3 agent minus belief_optimizer, {p['n']} paired ok scenarios; equals dev6_run3_compare_regret_s_paired.csv"
+    put("r3_diff_belief_optimizer", p["mean"], s(p["mean"], sign=True), R3C, how)
+    put("r3_ci_belief_optimizer", (p["lo"], p["hi"]), ci(p["lo"], p["hi"]), R3C, how)
+    stall = a3[(a3["submitted_in_grace"].fillna(0).astype(bool)) & (a3["decision"] == "PIT") & (a3["evidence_calls"] <= 3)]
+    put("r3_stalled", len(stall), str(len(stall)), R3C,
+        "run 3 episodes that pitted in a grace turn after only 3 evidence calls (the stalled episodes "
+        f"docs/eval.md describes: {', '.join(stall.index)})")
+    inv = int((stall["status"] == "invalid").sum())
+    put("r3_stalled_invalid", inv, "one" if inv == 1 else str(inv), R3C, "of those, rows with status invalid")
+    del R3
 
     circuits = held["race_id"].str.split("_", n=2).str[2].nunique()
     put("h_circuits", circuits, str(circuits), HC, "distinct circuits among held-out race_id (Austria twice)")
