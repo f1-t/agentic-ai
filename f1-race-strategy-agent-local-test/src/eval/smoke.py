@@ -295,8 +295,11 @@ def lint(d: Path, profile=None) -> list[str]:
     profile = profile or load_profile()
     s = ScenarioSet.load(d / "scenarios.json")
     found, checkers = [], {}
+    ran = set(pd.read_csv(d / "agent.csv")["scenario_id"]) if (d / "agent.csv").exists() else None
     for sc in s.items:
         name = sc.scenario_id
+        if ran is not None and name not in ran:   # an --only pass: the scenarios it ran
+            continue
         path = d / "trajectories" / f"{name.replace(':', '_')}.jsonl"
         if sc.race_id not in checkers:
             checkers[sc.race_id] = _identity_checker(sc.race_id, profile)
@@ -345,3 +348,20 @@ def summary(d: Path, findings: list[str], timings: dict, jobs: int) -> list[str]
             "stages: " + ", ".join(f"{k} {v:.0f} s" for k, v in timings.items()),
             f"total {sum(timings.values()):.0f} s",
             f"findings: {len(findings)}" + ("" if findings else " (clean)")]
+
+
+def main(argv=None) -> int:
+    """python -m src.eval.smoke DIR [DIR ...]: the lint over any agent pass's out dir (scenarios.json,
+    trajectories/, agent.csv, tables/combined.csv, provenance.json); one FINDING line each, exit 1 on
+    any."""
+    dirs = sys.argv[1:] if argv is None else list(argv)
+    if not dirs:
+        raise SystemExit("usage: python -m src.eval.smoke DIR [DIR ...]")
+    found = [f"{d}: {f}" for d in dirs for f in lint(Path(d))]
+    print("\n".join(f"FINDING {f}" for f in found) or "lint: clean", flush=True)
+    print(f"findings: {len(found)}")
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

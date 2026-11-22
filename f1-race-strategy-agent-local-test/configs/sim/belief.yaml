@@ -41,11 +41,16 @@ events:
   name: rate
   params:
     as_of: true
+# Driver effects (docs/eval.md "What the ablation says"): per-driver pace offsets fitted on the race
+# rows visible at the snapshot, as in the world's wear fit. The fidelity scorecard's best belief
+# factor: plan-rank agreement with the judge +0.031 [+0.007, +0.053], judge-regret of the belief's
+# favourite -1.0 [-1.8, -0.3] s on 18 races. Without them: degradation.params.driver_effects "off".
 degradation:
   name: linear_fuel
   params:
     draw: posterior
     wear_lower_bound: 0.0
+    driver_effects: race
 # Persistent lap noise (docs/eval.md "Honest uncertainty"): the residuals are autocorrelated, so
 # each sample draws one offset per plan stint (the as-of driver-stint residual sd) plus the
 # lap-to-lap part iid. "residual" (iid, residual_s) is the belief before it. The coverage-chosen

@@ -246,6 +246,37 @@ def test_agent_runs_mid_race_without_the_lap0_guard(items, sim, tmp_path):
     assert d.plan is None and d.submission["decision"] == "STAY_OUT" and d.tool_calls == 1
 
 
+def test_the_agent_tools_plan_on_the_scorers_belief(items, sim, tmp_path):
+    """One belief config: inside AgentPolicy the tools read the belief the scorer expands the
+    submission on (and belief_optimizer plans with); a full-window simulator passed as the belief
+    (no belief given: the world in both roles) is never handed to them."""
+    from types import SimpleNamespace
+
+    from src.eval.policies import AgentPolicy
+    from src.llm.base import ModelBackend, ModelTurn, ToolCall
+    from src.sim import agent_tools
+
+    seen = []
+
+    class Scripted(ModelBackend):
+        name = "test"
+
+        def run_turn(self, **kw):
+            seen.append(agent_tools.belief_config())
+            return ModelTurn(tool_calls=[ToolCall("1", "submit_recommendation", {
+                "decision": "STAY_OUT", "reassess_after_laps": 2, "confidence": 0.6, "rationale": "r",
+                "key_risks": []})])
+
+    mid = next(s for s in items if s.lap > 0)
+    tools_default = agent_tools.belief_config()
+    scorer = tools_default.model_copy(update={"lap_noise": "residual"})
+    AgentPolicy(set_name="t", max_steps=2, log_dir=tmp_path, backend=Scripted())(
+        mid, SimpleNamespace(config=scorer), 2)
+    AgentPolicy(set_name="t", max_steps=2, log_dir=tmp_path, backend=Scripted())(mid, sim, 2)
+    assert seen[0] is scorer and seen[-1] is tools_default and sim.config.fit_window == "full"
+    assert agent_tools.belief_config() is tools_default
+
+
 # --- committed Spain cache -------------------------------------------------------
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_committed_v1_set_loads_and_matches_its_digest():

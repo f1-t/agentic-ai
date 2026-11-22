@@ -1,0 +1,16 @@
+# LEGACY, for reproducing results produced before the scorecard-chosen defaults (docs/eval.md
+# "Simulator fidelity", the "current configuration"): the eval world as it was from PR #108 to the
+# adoption, linear_fuel with driver effects, the wear cliff's edge "history" (the historical prior
+# extended by this race's tyre ages), no SC/VSC. Its config_hash is d230d3a56b0b, the one the
+# references and results of that period carry. Pass with
+#   score --world-config configs/sim/legacy/world_pre_scorecard.yaml --belief-config configs/sim/legacy/belief_pre_scorecard.yaml
+# tests/test_eval_default_config.py checks the hash.
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history
+events:
+  name: none
