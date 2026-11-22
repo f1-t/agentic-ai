@@ -51,9 +51,13 @@ def main(argv=None):
     p.add_argument("--version", required=True, help="e.g. v1; never reuse a published version")
     p.add_argument("--out", required=True)
     p.add_argument("--drivers", nargs="+", help="limit to these driver codes")
-    p.add_argument("--rule", choices=["as_of", "legacy"], default="as_of",
-                   help="sampling rule (src/eval/scenarios.py): as_of reads nothing after each decision "
-                        "moment; legacy is the rule sets up to dev6 and d4 were sampled under")
+    p.add_argument("--rule", choices=("as_of", "stratified", "legacy"), default="as_of",
+                   help="sampling rule (src/eval/scenarios.py): as_of (default) every 5th lap for the drivers "
+                        "running then, read off nothing after each decision moment; stratified the decision-"
+                        "critical set (scenarios.sample_stratified): the as_of pool every 2nd lap, strata pit_opt "
+                        "/ close (from the world reference) and neutral / window / rest (from the laps so far), "
+                        "quotas per race and inclusion weights, scorer-side only; never on held-out races; legacy "
+                        "the rule the sets up to dev6 and d4 were sampled under (reads the future)")
     p.add_argument("--max-laps-down", type=int, default=2, help="legacy rule only")
     p.add_argument("--max-per-race", type=int, help="seeded subsample of each race's decision points")
     p.add_argument("--seed", type=int, default=0)

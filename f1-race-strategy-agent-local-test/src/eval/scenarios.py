@@ -51,6 +51,7 @@ import random
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,7 +72,8 @@ AS_OF_BUILDER = "src.sim.calibration.snapshot_as_of"   # the as_of rule's builde
 # leaves each out while it holds its default, so a set saved before the field existed keeps
 # its digest, and a set that fills the field hashes it.
 _ADDED_FIELDS = {("snapshot", "recent_lap_times_s"): [], ("snapshot", "context"): {},
-                 ("snapshot", "weather", "rain_probability"): None, ("snapshot", "field", "nearby"): []}
+                 ("snapshot", "weather", "rain_probability"): None, ("snapshot", "field", "nearby"): [],
+                 ("stratum",): None, ("weight",): None}
 
 
 def _digest_view(item: dict) -> dict:
@@ -93,6 +95,10 @@ class Scenario(BaseModel):
     lap: int = Field(ge=0)               # laps completed at the decision point
     snapshot: Snapshot
     actual_stints: list[tuple[str, int]]  # the driver's full-race stints, for the actual-strategy policy
+    # stratified sets only (sample_stratified): the scorer-side stratum and the inclusion weight
+    # (stratum pool size / sampled). Never shown to a policy: score.policy_scenario drops both.
+    stratum: str | None = None
+    weight: float | None = None
 
 
 class ScenarioSet(BaseModel):
@@ -154,8 +160,7 @@ def decision_laps(frame: pd.DataFrame, race: RaceParams, driver_laps: int) -> li
             if k <= driver_laps - race.min_stint_laps]
 
 
-GRID_EVERY = 5          # as_of decision laps: every 5th lap from 0
-GRID_END_MARGIN = 10   # ... to the scheduled distance less this many laps
+GRID_EVERY = 5          # as_of decision laps: every 5th lap from 0 (the stratified pool: every 2nd)
 
 
 def _neutralised(status) -> bool:
@@ -163,33 +168,44 @@ def _neutralised(status) -> bool:
     return "4" in s or "6" in s or "7" in s
 
 
-def decision_laps_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, neutralised: bool = False) -> list[int]:
-    """The as_of rule's decision laps for one driver; each lap L reads nothing completed after
-    the driver's lap L. A fixed grid (every GRID_EVERY laps from 0 to the scheduled distance
-    less GRID_END_MARGIN); with `neutralised`, also every lap whose own record shows a
-    neutralisation in progress (SC or VSC in the driver's lap-L track status) and the first green
-    lap after one (lap L - 1 neutralised, lap L not). Off by default: such a lap is chosen at the
-    driver's own moment, which for a car behind comes after other cars' moments at the same lap
-    number, so the set of points up to a lap would depend on later records. A lap L is kept
-    while the driver was still running at it (laps 1..L recorded without a gap; lap 0 always)
-    and it leaves at least one minimum stint of the scheduled distance to run. Whether the car
-    later retired or was lapped is not read."""
+def as_of_pool(frame: pd.DataFrame, race: RaceParams, every: int) -> list[tuple[str, int]]:
+    """The one candidate pool of the as_of and stratified rules: (driver, L) for every L from 0
+    to total_laps - min_stint_laps in steps of `every`, for the drivers running at L (their laps
+    1..L all present; lap 1 at L = 0). Reads no lap after L, and the scheduled race length, not
+    the driver's final lap count: whether a car later retired or was lapped is not read."""
+    out = []
+    for k in range(0, race.total_laps - race.min_stint_laps + 1, every):
+        seen = frame[frame["lap"] <= max(k, 1)]
+        for driver, g in seen.groupby("driver", sort=True):
+            if sorted(int(x) for x in g["lap"]) == list(range(1, max(k, 1) + 1)):
+                out.append((str(driver), k))
+    return out
+
+
+def decision_laps_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, neutralised: bool = False,
+                        every: int = GRID_EVERY) -> list[int]:
+    """The as_of rule's decision laps for one driver: its laps in as_of_pool (every `every`
+    laps). With `neutralised`, also every lap L it was running at whose own record shows a
+    neutralisation in progress (SC or VSC in its lap-L track status) or just ended (lap L - 1
+    neutralised, lap L not), within the same cap. Off by default: such a lap is chosen at the
+    driver's own moment, which for a car behind comes after other cars' moments at the same
+    lap number, so the set of points up to a lap would depend on later records."""
     g = frame[frame["driver"] == driver]
-    status = {int(lap): st for lap, st in zip(g["lap"], g["track_status"])}
-    laps = set(range(0, race.total_laps - GRID_END_MARGIN + 1, GRID_EVERY))
-    for lap, st in status.items():
-        if not neutralised:
-            break
-        if _neutralised(st) or (lap > 1 and _neutralised(status.get(lap - 1, "")) and not _neutralised(st)):
-            laps.add(lap)
-    recorded = sorted(status)
-    running = 0   # laps 1..running recorded without a gap
-    while running < len(recorded) and recorded[running] == running + 1:
-        running += 1
-    return sorted(k for k in laps if 0 <= k <= running and k <= race.total_laps - race.min_stint_laps)
+    laps = {k for _, k in as_of_pool(g, race, every)}
+    if neutralised:
+        status = {int(lap): st for lap, st in zip(g["lap"], g["track_status"])}
+        running = 0   # laps 1..running recorded without a gap
+        while running + 1 in status:
+            running += 1
+        for lap, st in status.items():
+            if (_neutralised(st) or (lap > 1 and _neutralised(status.get(lap - 1, "")))) and lap <= running:
+                laps.add(lap)
+        laps = {k for k in laps if k <= race.total_laps - race.min_stint_laps}
+    return sorted(laps)
 
 
-SAMPLING_RULES = ("as_of", "legacy")
+# "as_of" (default) and "legacy" are sample_race's; "stratified" is sample_stratified's
+SAMPLING_RULES = ("as_of", "stratified", "legacy")
 
 
 def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuilder | None = None,
@@ -204,8 +220,9 @@ def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuild
     under, which reads the future: eligible_drivers (finishers at most max_laps_down laps down)
     at decision_laps (default_laps_k: the lap before each SC and VSC period too), built by
     calibration.snapshot_at by default."""
-    if rule not in SAMPLING_RULES:
-        raise ValueError(f"sampling rule must be one of {SAMPLING_RULES}, got {rule!r}")
+    if rule not in ("as_of", "legacy"):
+        raise ValueError(f"sampling rule must be one of {SAMPLING_RULES} (stratified: sample_stratified), "
+                         f"got {rule!r}")
     race_id = race.race_id
     if builder is None:
         builder = calibration.snapshot_as_of if rule == "as_of" else calibration.snapshot_at
@@ -235,6 +252,98 @@ def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuild
         items.append(Scenario(scenario_id=f"{race_id}:{driver}:{k:02d}", race_id=race_id, driver=driver,
                               lap=k, snapshot=snapshot, actual_stints=actual))
     return items, skipped
+
+
+# --- the stratified (decision-critical) sampler: rule "stratified" -------------------------------
+STRATA = ("pit_opt", "close", "neutral", "window", "rest")   # assigned in this order
+DEFAULT_QUOTAS = {"pit_opt": 7, "close": 6, "neutral": 4, "window": 4, "rest": 4}   # per race, 25
+POOL_EVERY = 2            # the pool: every 2nd lap
+CLOSE_GAP_S = 3.0         # close: |best pit-now - best stay-out| at most this ...
+CLOSE_SPREAD_S = 10.0     # ... and the worst searched plan at least this far behind the reference
+WINDOW_LAPS = 2           # window: some car pitted on laps L - 2 .. L
+AFTER_LAPS = 2            # neutral: under SC/VSC at L, or one ended within the 2 laps before L
+
+
+def stratified_pool(frame: pd.DataFrame, race: RaceParams, every: int = POOL_EVERY) -> list[tuple[str, int]]:
+    """as_of_pool every `every` (2) laps: the stratified rule's candidates, the as_of rule's pool
+    at a finer step."""
+    return as_of_pool(frame, race, every)
+
+
+# What the stratified rule reads beyond the as_of pool is scorer-side and never reaches a policy:
+# the strata (record_stratum, reference_stratum: the world's hindsight reference) and the
+# weights choose WHICH candidates are scored and how they are weighted; each scored snapshot is
+# still built by the as_of builder from the records up to its own moment, and
+# score.policy_scenario strips stratum and weight before a policy is called. The selection is
+# conditioned on the future by design (decision-critical points), corrected by the weights.
+def record_stratum(frame: pd.DataFrame, driver: str, k: int) -> str | None:
+    """"neutral" or "window" from the race's laps up to L only, else None: neutral when the
+    driver's lap L is under SC or VSC or one of the AFTER_LAPS laps before it was (and L is
+    green); window when some car pitted on laps L - WINDOW_LAPS .. L. Scorer-side (above)."""
+    if k == 0:
+        return None
+    seen = frame[frame["lap"] <= k]
+    own = seen[seen["driver"] == driver].set_index("lap")["track_status"].astype(str)
+
+    def neutral(lap):
+        s = own.get(lap, "1")
+        return "4" in s or "6" in s or "7" in s
+    if neutral(k) or any(neutral(j) for j in range(k - AFTER_LAPS, k)):
+        return "neutral"
+    recent = seen[(seen["lap"] >= k - WINDOW_LAPS) & (seen["lap"] >= 1)]
+    return "window" if bool(recent["pit_in"].astype(bool).any()) else None
+
+
+def reference_stratum(ref, snapshot) -> str | None:
+    """"pit_opt" (the world's reference pits at the end of the next lap) or "close" (not
+    pit_opt; the best pit-now and best stay-out plans within CLOSE_GAP_S of each other, and the
+    worst searched plan at least CLOSE_SPREAD_S behind the reference: a call that matters and is
+    hard), else None. `ref` is eval.reference.compute_reference(..., keep_all=True) on the world.
+    Scorer-side: a policy never sees the reference, and the stratum only chooses which snapshots
+    are scored and with what weight."""
+    from .reference import near_ties
+    if ref is None or ref.status != "ok":
+        return None
+    if ref.pit_now_opt:
+        return "pit_opt"
+    gap = near_ties(ref, snapshot)["pit_now_gap_s"]
+    spread = float(np.max(ref.plan_gap_s)) if len(ref.plan_gap_s) else 0.0
+    return "close" if np.isfinite(gap) and abs(gap) <= CLOSE_GAP_S and spread >= CLOSE_SPREAD_S else None
+
+
+def sample_stratified(frame: pd.DataFrame, race: RaceParams, world, *, builder: SnapshotBuilder = calibration.snapshot_as_of,
+                      quotas: dict | None = None, seed: int = 0, n_samples: int | None = None, max_stops: int = 2,
+                      every: int = POOL_EVERY, drivers: list[str] | None = None) -> tuple[list[Scenario], list[dict]]:
+    """(scenarios, skipped) of one race under the stratified rule: every stratified_pool point
+    gets the first stratum in STRATA that applies (reference_stratum on the `world`'s reference,
+    then record_stratum, else "rest"); each stratum is sampled down to its quota (DEFAULT_QUOTAS)
+    with a seeded rng, a shortfall going to "rest"; every item carries its stratum and weight
+    (stratum pool size / sampled), so a pooled estimate reweights to the uniform pool. Depends
+    on the race record and the world reference only, never on a policy."""
+    quotas = dict(DEFAULT_QUOTAS if quotas is None else quotas)
+    race_id = race.race_id
+    pool = [(d, k) for d, k in stratified_pool(frame, race, every) if drivers is None or d in set(drivers)]
+    by, skipped = {s: [] for s in STRATA}, []
+    from .reference import compute_reference
+    for driver, k in pool:
+        try:
+            snapshot = builder(frame, race, driver, k)
+        except ValueError as exc:
+            skipped.append({"race_id": race_id, "driver": driver, "lap": k, "reason": str(exc)})
+            continue
+        actual = [(str(c), int(n)) for c, n, _, _ in race_stints(frame, driver)]
+        item = Scenario(scenario_id=f"{race_id}:{driver}:{k:02d}", race_id=race_id, driver=driver, lap=k,
+                        snapshot=snapshot, actual_stints=actual)
+        ref = compute_reference(item, world, seed=seed, n_samples=n_samples, max_stops=max_stops, keep_all=True)
+        stratum = reference_stratum(ref, snapshot) or record_stratum(frame, driver, k) or "rest"
+        by[stratum].append(item)
+    items, spare = [], 0
+    for s in STRATA:
+        n = quotas.get(s, 0) + (spare if s == "rest" else 0)
+        got = by[s] if len(by[s]) <= n else random.Random(f"{seed}:{race_id}:{s}").sample(by[s], n)
+        spare += 0 if s == "rest" else max(0, n - len(by[s]))
+        items += [x.model_copy(update={"stratum": s, "weight": len(by[s]) / len(got)}) for x in got]
+    return sorted(items, key=lambda x: (x.driver, x.lap)), skipped
 
 
 class OutsideEvalSet(ValueError):
@@ -288,9 +397,10 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     report set (development False) stamped with sampling["eval_set_digest"]. Without it the
     set is a development set. `development` True asks for a development set while the split
     exists: any race is sampled and the digest is still recorded. A CALIBRATION_ONLY race
-    raises CalibrationOnly in either mode, before anything is sampled. `rule` is sample_race's
-    ("as_of" by default), recorded as sampling["rule"]; the builder defaults to the rule's
-    (AS_OF_BUILDER or DEFAULT_BUILDER), and its name is recorded as the set's builder."""
+    raises CalibrationOnly in either mode, before anything is sampled. `rule` (SAMPLING_RULES,
+    "as_of" by default; "stratified" runs sample_stratified on the world) is recorded as
+    sampling["rule"]; the builder defaults to AS_OF_BUILDER (DEFAULT_BUILDER under "legacy"),
+    and its name is recorded as the set's builder."""
     from ..sim import jobs
     from ..sim.compute import load_profile
 
@@ -310,12 +420,23 @@ def build_set(race_ids: list[str], version: str, *, profile=None, builder: Snaps
     profile = profile or load_profile()
     check_schedule_ids(race_ids)
     items, skipped = [], []
+    if rule not in SAMPLING_RULES:
+        raise ValueError(f"sampling rule must be one of {SAMPLING_RULES}, got {rule!r}")
     if builder is None:
-        builder = calibration.snapshot_as_of if rule == "as_of" else calibration.snapshot_at
-        builder_name = builder_name or (AS_OF_BUILDER if rule == "as_of" else DEFAULT_BUILDER)
+        builder = calibration.snapshot_at if rule == "legacy" else calibration.snapshot_as_of
+        builder_name = builder_name or (DEFAULT_BUILDER if rule == "legacy" else AS_OF_BUILDER)
+    world_for = None
+    if rule == "stratified":   # the scorer's world stratifies (sample_stratified)
+        from .score import race_simulators
+        world_for = race_simulators(profile)
     for race_id in race_ids:
         data = jobs.load_race(race_id, profile)
-        got, miss = sample_race(data.frame, data.race, builder=builder, rule=rule, **sampling)
+        if world_for is not None:
+            kw = {k: v for k, v in sampling.items() if k in ("quotas", "seed", "drivers", "max_stops")}
+            got, miss = sample_stratified(data.frame, data.race, world_for(data.race_id, "world"), builder=builder,
+                                          n_samples=profile.sim.n_samples, **kw)
+        else:
+            got, miss = sample_race(data.frame, data.race, builder=builder, rule=rule, **sampling)
         items += got
         skipped += miss
     return ScenarioSet(version=version, builder=builder_name or DEFAULT_BUILDER,

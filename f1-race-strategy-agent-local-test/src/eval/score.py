@@ -154,6 +154,9 @@ def policy_scenario(scenario, belief):
     estimate under SimConfig.pit_loss.source "asof"). A frozen scenario set carries the
     whole-race value, which no policy may read (docs/eval.md "Pit loss and track status").
     Unchanged when the belief reads the snapshot's own value."""
+    if getattr(scenario, "stratum", None) is not None or getattr(scenario, "weight", None) is not None:
+        # a stratified set's stratum and weight are scorer-side (scenarios.sample_stratified)
+        scenario = scenario.model_copy(update={"stratum": None, "weight": None})
     if not hasattr(belief, "pit_loss_inputs"):
         return scenario
     snap = scenario.snapshot
@@ -181,6 +184,8 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
     base = {"scenario_id": scenario.scenario_id, "race_id": scenario.race_id, "driver": scenario.driver,
             "lap": scenario.lap, "compound": snap.compound, "tyre_age": snap.tyre_age,
             "remaining_laps": snap.remaining_laps, "seed": seed, "max_stops": max_stops}
+    if getattr(scenario, "stratum", None) is not None:   # a stratified set: for weighted summaries
+        base.update(stratum=scenario.stratum, weight=scenario.weight)
     opt = reference if reference is not None else compute_reference(scenario, world, seed=seed,
                                                                     n_samples=n_samples, max_stops=max_stops)
     if opt.status == "no_reference":
@@ -329,6 +334,23 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
     return pd.DataFrame(rows)
 
 
+# The scoring world's SC and VSC (docs/eval.md "Pit loss and track status"): the period in
+# progress at the snapshot ends where it really ended, with the field's recorded lap times on
+# it; later periods are drawn at the rate model's rates, the same draws for every plan and the
+# reference (common random numbers). The replay accuracy that chose the recorded lap times over
+# the lap factors is in reports/calibration/neutralised (src/sim/neutral_report.py).
+WORLD_EVENTS = {"name": "hybrid", "params": {"lap_times": "recorded"}}
+
+
+def default_world_config(config):
+    """`config` (the profile's SimConfig) with WORLD_EVENTS: the world when no world config is
+    given. A config whose events are not "none" is returned as it is."""
+    if config.events.name != "none":
+        return config
+    return config.model_copy(update={"events": config.events.model_copy(
+        update={"name": WORLD_EVENTS["name"], "params": dict(WORLD_EVENTS["params"])})})
+
+
 def world_pit_loss(data, world) -> float:
     """The world's whole-race pit loss, read from the loaded race, never from a snapshot:
     under world.config.pit_loss.world "median" (the default) sim.pit_loss.whole_race on the
@@ -346,9 +368,9 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
     by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
     residual lap noise on); the world runs
-    `world_config`, by default the profile's SimConfig (full window, traffic off, as before
-    the split). The world alone gets the race's
-    whole-race pit loss (Simulator(pit_loss_s=...)); the belief prices stops with the as-of
+    `world_config`, by default the profile's SimConfig (full window, traffic off) with
+    WORLD_EVENTS (default_world_config). The world alone gets the race's
+    whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
     and role."""
     from ..sim import SimConfig, jobs
@@ -366,7 +388,7 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
             if race_id not in races:
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
-            config = belief_config if role == "belief" else world_config or data.config
+            config = belief_config if role == "belief" else world_config or default_world_config(data.config)
             sim = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
             if role == "world":
                 sim.race_pit_loss_s = world_pit_loss(data, sim)
