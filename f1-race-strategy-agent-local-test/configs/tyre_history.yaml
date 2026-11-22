@@ -23,9 +23,10 @@ observation:
 excluded_observations:
   2025_23_qatar: "mandated 25-lap maximum stint (Pirelli safety limit), so its stint ends say nothing about tyre life"
 
-# Races held out in addition to data/eval_set.json (e.g. the draw the data-more-races branch
-# proposes once it is agreed): never built into the history, never fed to the prior by default.
-held_out_extra: []
+# Races held out in addition to data/eval_set.json: never built into the history, never fed to
+# the prior by default. The five below are the held-out draw from the 2021-22 weekends cached by
+# data-more-races (#92), listed here until they reach data/eval_set.json.
+held_out_extra: [2021_07_france, 2021_18_mexico, 2022_05_miami, 2022_03_australia, 2022_14_belgium]
 
 # --- the prior (tyre_life_prior) --------------------------------------------------------------
 weights:
