@@ -469,11 +469,18 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
     if dp.get("draw", "none") != "none" or cfg.lap_noise != "none":
         add("draws", f"parameter draws ({dp.get('draw', 'none')}) and lap noise ({cfg.lap_noise})", wt,
             "the fit's own covariance and residual sd")
+    ps = getattr(cfg, "pit_stops", None)
+    if ps is not None and ps.replay == "actual":
+        add("pit_stops_replay", "whole-race replays: each real stop at its own lane time", _W,
+            "the timing data's pit entry to exit less the race's median green lane time")
+    if ps is not None and ps.team:
+        add("pit_stops_team", "the team's typical stop on every stop priced", _W if cfg.fit_window == "full" else _K,
+            "every green stop of the race" if cfg.fit_window == "full" else "the green stops completed by the snapshot")
     add("min_stint_two_compounds", "R1-R3: minimum stint, two dry compounds", _R)
     covered = {"fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
-               "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit"}
+               "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit", "pit_stops"}
     default = SimConfig().model_dump(mode="json")
     mine = cfg.model_dump(mode="json")
     for k in sorted(mine):
@@ -569,7 +576,7 @@ def _replay(sim, data, race, d):
     recorded events when it models them (replay_events)."""
     if replay_events(sim.config) == "scenario":
         g, res = calibration.replay_driver(sim, data.frame, race, d)
-        return g, res, np.asarray(res.lap_times_s, dtype=float)
+        return g, _actual_stops(sim, data.frame, d, res), np.asarray(res.lap_times_s, dtype=float)
     from ..contracts import Snapshot
     frame = data.frame
     g = frame[frame["driver"] == d].sort_values("lap")
@@ -580,7 +587,26 @@ def _replay(sim, data, race, d):
                        return_laps=True)
     if not res.valid:
         raise ValueError(f"{d}: replay plan rejected: {res.errors}")
-    return g, res, np.asarray(res.lap_times_s, dtype=float)
+    return g, _actual_stops(sim, data.frame, d, res), np.asarray(res.lap_times_s, dtype=float)
+
+
+def _actual_stops(sim, frame, d, res):
+    """`res` with each of car d's stops at its real duration under the judge's
+    config.pit_stops.replay "actual": the charged pit loss plus the stop's lane time less the race's
+    median green lane time (pit_loss.lane_deltas; the team's typical stop taken back out where
+    pit_stops.team charged it). Unchanged otherwise, or where the timing data has no lane times."""
+    ps = getattr(sim.config, "pit_stops", None)
+    if ps is None or ps.replay != "actual" or not res.valid:
+        return res
+    from . import pit_loss as _pl
+    stops = _pl.stop_table(frame)
+    dev = _pl.lane_deltas(stops)[(stops["driver"] == d).to_numpy()].dropna()
+    if not len(dev):
+        return res
+    team = sim.team_pit_delta_for(d, None) if ps.team else 0.0
+    add = float(dev.sum() - team * len(dev))
+    return res.model_copy(update={"remaining": res.remaining.model_copy(update={"mean_s": res.remaining.mean_s + add}),
+                                  "pit_loss_total_s": (res.pit_loss_total_s or 0.0) + add})
 
 
 def _green_pit(g):

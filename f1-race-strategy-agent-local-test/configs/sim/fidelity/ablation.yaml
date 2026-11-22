@@ -70,4 +70,15 @@ factors:
   r8_legacy:
     note: the retired R8 hindsight limit on and the cliff off in both (configs/sim/legacy/*_r8.yaml)
     both: {stint_limit_margin_laps: 3, wear_cliff: {enabled: false}}
+  # pit-stop durations (pit_loss.lane_deltas / team_delta, SimConfig.pit_stops)
+  pit_stops_replay:
+    note: the judge's whole-race replays charge each real stop its own lane time (less the race's median)
+    world: {pit_stops: {replay: actual}}
+  pit_stops_team:
+    note: the judge prices every stop at the pit loss plus the car's team's typical stop (whole race)
+    world: {pit_stops: {team: true}}
+  pit_stops_both:
+    note: actual stops in replays and the team's typical stop for every plan, judge; the belief's as-of team stop
+    world: {pit_stops: {replay: actual, team: true}}
+    belief: {pit_stops: {team: true}}
 all_on: [traffic_both, world_events_hybrid]

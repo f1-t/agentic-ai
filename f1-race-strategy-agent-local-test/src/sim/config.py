@@ -292,6 +292,24 @@ PRIOR_SD_FRACTION = {"circuit_history": 0.10, "history_fraction": 0.15, "life_ra
                      "config_fraction": 0.20}
 
 
+class PitStops(_Cfg):
+    """Pit-stop durations (pit_loss.lane_deltas / team_delta, docs/eval.md "Pit-stop durations").
+    The pit loss is one whole-race number; real stops vary by seconds and reorder close cars.
+
+    replay  "charged" (as before): a whole-race replay of a real strategy charges every stop the
+            pit loss; "actual": plus each stop's own lane time less the race's median green lane
+            time (the timing data's pit entry to exit, hindsight; the fidelity tool's replays).
+    team    every stop a simulation prices is the pit loss plus the snapshot car's team's typical
+            stop: the median lane-time difference of the team's green stops, shrunk toward 0 by
+            n / (n + team_prior_stops). The judge (fit_window "full") reads every stop of the race,
+            a windowed fit the stops completed by the snapshot moment (pit_loss.snapshot_time).
+    Off (the defaults): bit for bit as before. team_prior_stops 3, set a priori."""
+
+    replay: Literal["charged", "actual"] = "charged"
+    team: bool = False
+    team_prior_stops: float = Field(default=3.0, ge=0)
+
+
 class WearCliff(_Cfg):
     """Tyre life as physics (sim/cliff.py): past a compound's support edge E a lap costs
     min(kappa (age - E)^2, cap_s_per_lap) more. Both simulators start from the same historical
@@ -429,6 +447,8 @@ class SimConfig(_Cfg):
     min_race_rows_to_fit: int | None = Field(default=None, ge=1)
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
+    # pit-stop durations (PitStops); left out of config_hash at its default
+    pit_stops: PitStops = Field(default_factory=PitStops)
 
     @classmethod
     def from_file(cls, path):

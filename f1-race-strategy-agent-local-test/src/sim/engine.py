@@ -670,6 +670,7 @@ class Simulator:
             for i in idx:
                 out.support_warnings[i] = out.support_warnings[i] + tw
         offset = self._pace_offset(snapshot.driver)
+        team_pit = self.team_pit_delta(snapshot)   # 0.0 unless config.pit_stops.team
 
         # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
         # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
@@ -831,7 +832,7 @@ class Simulator:
             if tstate is not None:
                 # the full pit loss is booked at the end of the in-lap, so the out-lap starts
                 # from the rejoin position; it stays out of lap_s, as below
-                pit_lap = v["pit_loss_s"] * stops * scale
+                pit_lap = v["pit_loss_s"] * stops * scale + team_pit * stops
                 # traffic draws nothing, so a sample whose inputs equal the previous one's (a world
                 # that draws no events, no noise and no parameters: every sample) reuses its
                 # result; a projected field cycles its variants per sample, so it never does
@@ -853,6 +854,8 @@ class Simulator:
                 if k == 0 and return_laps:
                     out.sc_field_delta[idx] = field_delta
             pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
+            if team_pit:   # the team's typical stop (config.pit_stops.team), on every stop
+                pit_s = pit_s + team_pit * stops.sum(axis=1)
             out.times[idx, k] = lap_s.sum(axis=1) + pit_s
             out.pit_loss[idx, k] = pit_s
             cs = np.concatenate([np.zeros((len(valid), 1)), lap_s.cumsum(axis=1)], axis=1)
@@ -864,6 +867,36 @@ class Simulator:
         for r, i in enumerate(idx):
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
+
+    def team_pit_delta(self, snapshot: Snapshot) -> float:
+        """The snapshot car's team's typical stop less the field's (pit_loss.team_delta) under
+        config.pit_stops.team, else 0. The full window (the judge) reads every stop of the race; a
+        windowed fit the stops completed when the car completed its fit's calibration point."""
+        k0 = None if self.config.fit_window == "full" else (
+            (self.window[1] or 0) if self.window is not None and self.config.fit_window == "to_snapshot" else 0)
+        return self.team_pit_delta_for(snapshot.driver, k0)
+
+    def team_pit_delta_for(self, driver, k0) -> float:
+        """team_pit_delta for `driver` from the stops completed when it completed lap k0 (None: every
+        stop of the race, the judge's reading)."""
+        ps = self.config.pit_stops
+        if not ps.team or self.laps is None or "team" not in self.laps:
+            return 0.0
+        key = ("team_pit", driver, k0)
+        if key not in self._pit_loss_cache:
+            from . import pit_loss as _pl
+            if "stops" not in self._pit_stops:
+                self._pit_stops["stops"] = _pl.stop_table(self.laps)
+            stops = self._pit_stops["stops"]
+            if k0 is not None:
+                t = _pl.snapshot_time(self.laps, driver, k0) if k0 > 0 else None
+                stops = stops[stops["known_s"] <= t] if t is not None else stops.iloc[0:0]
+            team = self.laps.loc[self.laps["driver"] == driver, "team"]
+            if len(self._pit_loss_cache) >= FIT_CACHE_SIZE:
+                del self._pit_loss_cache[next(iter(self._pit_loss_cache))]
+            self._pit_loss_cache[key] = _pl.team_delta(stops, team.iloc[0] if len(team) else None,
+                                                       ps.team_prior_stops)[0]
+        return self._pit_loss_cache[key]
 
     def pit_loss_inputs(self, snapshot: Snapshot) -> dict:
         """{pit_loss_s, sd_s, sc_factor, vsc_factor, source, ...} this simulation prices a stop
