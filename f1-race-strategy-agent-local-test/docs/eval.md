@@ -43,6 +43,79 @@ Rows carry `belief_config_hash`, `world_config_hash` and `belief_window`. The co
 leaves `fit_window` out, so the two hashes are equal under the defaults and
 `belief_window` says which window the policies planned on.
 
+## Pit loss and track status
+
+**The information contract for pit loss.** At (race R, driver D, lap L) a policy may know the
+pit loss of earlier races and the stops made in R whose out-lap ended by the time D ended lap L.
+It may not know the race's whole-race value, which is measured from stops that have not
+happened yet.
+
+| who | pit loss | where it comes from |
+| --- | --- | --- |
+| world (scorer, reference) | the whole-race value: the median green stop of R (in- plus out-lap time less the full-window fit's lap times), the prior when R has fewer than 3 green stops | `score.world_pit_loss` from the loaded race (`sim.pit_loss.whole_race`), passed as `Simulator.race_pit_loss_s`; never read from a snapshot |
+| belief, agent tools, baselines, belief optimizer | the as-of estimate at L, with an sd drawn per sample (engine `PIT_LOSS_STREAM`) | `SimConfig.pit_loss.source: asof` (`configs/sim/belief.yaml`), `sim.pit_loss.estimate` on the belief's fit at L |
+| snapshot contract (`calibration.snapshot_at`) | the pre-race prior only | `calibration.pre_race_pit_loss`; frozen sets built before this carry the old whole-race value, so `score.policy_scenario` replaces it with the belief's as-of value before any policy sees the scenario |
+
+The as-of estimate: a prior, then this race's green stops (in- and out-lap both green) seen by
+the snapshot, each stop's loss against the belief's own fit, stops outside 0.5-1.5 times the
+prior left out, summarised by their median with a per-stop sd max(MAD, 2.5 s); the interval
+adds 1.5 s in quadrature for the gap between a per-stop and a whole-race number. The prior is
+a fallback chain, as of R's date and never R itself:
+
+1. `same_circuit_asof`: earlier seasons at the same circuit (sd 1.5 s);
+2. `cross_circuit_asof`: at least two earlier races at any circuit (sd their spread, at least 2 s);
+3. `constant`: 22 s, sd 5 s (no earlier race at all, or a synthetic race id).
+
+The pool is `configs/sim/pit_loss_prior.json` (the six calibration races, built by `python -m
+src.sim.pit_loss build-prior`) plus every race in the FastF1 cache at run time (`real_run.cached_races`),
+whose entry is built from its whole race on first use: more cached seasons widen the pool with no
+code change. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
+itself held out, and then only if earlier. A circuit used once (no earlier season cached) gets tier
+2, or 3, and the estimate exists from lap 0 either way: a policy never fails for want of history and
+never falls back to the whole-race value. The SC and VSC factors (the share of a green stop paid
+when the in-lap is under SC or VSC) start from 0.5 and 0.6 (sd 0.2, worth 5 stops) and are updated
+with this race's SC / VSC stops seen by then, each measured against the field's median lap on
+those laps. `estimate_pit_loss` reports the as-of range and its basis (prior, prior tier, stops
+seen), the factor for the current status and `pit_loss_now_s`, how many laps the current SC or VSC
+has lasted, and the chance of a new SC or VSC in the next 5 and 10 laps (below).
+
+**The world's value changed** from the replay mean (`calibrate._pit_loss`, still the G replays')
+to the median green stop, which a few slow stops or a mostly neutralised race cannot drag:
+
+| race | replay mean (old world) | median green stop (world) | green stops |
+| --- | --- | --- | --- |
+| 2019_10_united_kingdom | 24.61 | 21.21 | 20 |
+| 2021_04_spain | 23.85 | 22.57 | 34 |
+| 2022_02_saudi_arabia | 15.05 | 24.39 | 5 |
+| 2023_01_bahrain | 26.59 | 25.14 | 44 |
+| 2023_07_spain | 24.94 | 23.77 | 42 |
+| 2024_07_emilia_romagna | 28.46 | 28.67 | 27 |
+
+**As-of error** against the world's value, mean signed error (s) by snapshot lap, one snapshot per
+5 laps (the driver at the median position), `python -m src.sim.pit_loss report`
+(reports/calibration/pit_loss/asof_error.csv):
+
+| race | prior tier (prior s) | laps 0-9 | 10-19 | 20-29 | 30-39 | 40+ | MAE | 90% interval covers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2019_10_united_kingdom | constant (22.00) | +0.79 | -0.10 | -1.09 | -0.74 | -0.71 | 0.84 | 1.00 |
+| 2021_04_spain | constant (22.00) | -0.57 | -0.57 | +1.32 | -0.16 | +0.03 | 0.50 | 1.00 |
+| 2022_02_saudi_arabia | cross_circuit_asof (21.89) | -2.50 | -2.18 | -1.22 | -1.78 | -1.79 | 1.90 | 1.00 |
+| 2023_01_bahrain | cross_circuit_asof (22.72) | -2.42 | -1.54 | -0.23 | -0.11 | -0.43 | 0.93 | 1.00 |
+| 2023_07_spain | same_circuit_asof (22.57) | -1.20 | -0.37 | -0.12 | -0.03 | +0.05 | 0.30 | 1.00 |
+| 2024_07_emilia_romagna | cross_circuit_asof (23.42) | -5.25 | -1.78 | -1.67 | -1.28 | -0.95 | 1.98 | 0.83 |
+
+Over all 63 snapshots the MAE is 1.04 s (0.71 s from lap 20), and the 90% interval covers the
+world's value at 97% of them. The error is the prior's until the first green stops (Imola's prior,
+23.4 s, is 5 s short of a long pit lane), then a second or less. Saudi Arabia keeps a -1.8 s bias:
+by lap 45 only 4 green stops are in.
+
+**Test.** `tests/test_sim_pit_loss.py`: altering every stop after the snapshot (moved, added,
+slowed, an SC added) leaves the belief's pit loss, `estimate_pit_loss`, `simulate_plan`,
+`evaluate_action` and the belief optimizer's plan unchanged at 2021 Spain HAM lap 30; slowing
+the stops already made moves the estimate; the fallback chain's tiers and widths; a circuit with
+no history. The future-blindness harness's `test_leak_pit_loss` (tests/test_future_blindness.py)
+passes: `pit_loss` moved from `KNOWN_LEAKS` to `FIXED_LEAKS`.
+
 ## Decisions
 
 The agent submits one decision at a snapshot, not a whole plan: PIT with a compound, or
@@ -944,7 +1017,8 @@ SC-bunching limit applies (docs/traffic.md, limits 1 and 5). Read it beside
   frame, laps after the snapshot included, and the belief applies the same limits as the
   world. So the baselines' limit-aware adjustment, the belief's continuation search and the
   agent's rule errors all know a race-wide constant that nobody at the snapshot could know.
-  It is the same class of hindsight as the observed pit loss; an as-of source (earlier
+  It is the class of hindsight the pit loss had before its as-of estimate ("Pit loss and track
+  status"); an as-of source (earlier
   seasons, Pirelli guidance) can replace it later (docs/rules.md R8).
 - **A proxied compound's price has no race laps behind it** ("Proxied compounds"): its pace
   and wear are a step from a raced compound measured in practice, qualifying or other races,

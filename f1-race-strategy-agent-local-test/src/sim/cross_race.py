@@ -429,7 +429,7 @@ def reference_stops(data: jobs.RaceData, cfg: SimConfig, max_stops: int, within=
     world = Simulator(data.frame, cfg.model_copy(update={"fit_window": "full", "n_samples": 1}), data.practice)
     rows = []
     for d in field_drivers(data.frame, data.race.total_laps, within):
-        snap = calibration.snapshot_at(data.frame, data.race, d, 0)
+        snap = calibration.with_race(calibration.snapshot_at(data.frame, data.race, d, 0), data.race)
         row = {"race_id": data.race_id, "driver": d, "start_compound": snap.compound}
         try:
             res = optimize_batch(snap, world, seed=0, n_samples=1, max_stops=max_stops, return_times=True)

@@ -187,6 +187,10 @@ class PitLossModel(_Cfg):
     default_sd_s: float = 5.0
     # also pool every race in the FastF1 cache at run time (pit_loss.prior_pool), not the table only
     cache_lookup: bool = True
+    # the world's whole-race value (eval.score.race_simulators): "median" pit_loss.whole_race, the
+    # median green stop against the full fit; "replay_mean" the race's calibrate._pit_loss value
+    world: Literal["median", "replay_mean"] = "median"
+    min_green_stops: int = 3           # whole_race: below this many green stops, the prior
     same_circuit_sd_s: float = 1.5     # pit lane length and speed limit carry over
     min_cross_sd_s: float = 2.0
     stop_sd_floor_s: float = 2.5       # per-stop sd floor (stationary time spread)

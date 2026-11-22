@@ -174,7 +174,8 @@ def test_pit_loss_config_band_and_calibrator_sd(syn, monkeypatch):
         update={"source": "snapshot"})}))
     out = agent_tools.pit_loss(snap, sim=sim, profile=PROFILE)
     assert out["source"] == "config" and out["sd_s"] is None
-    assert out["pit_loss_s"] == pytest.approx({"low": 18.0, "median": 20.0, "high": 22.0})
+    pl = snap.race.pit_loss_s   # the snapshot carries the pre-race prior (calibration.pre_race_pit_loss)
+    assert out["pit_loss_s"] == pytest.approx({"low": 0.9 * pl, "median": pl, "high": 1.1 * pl})
     assert (out["sc_pit_loss_factor"], out["vsc_pit_loss_factor"]) == (0.5, 0.6)
     assert out["track_status"] == "green"
     assert out["pit_loss_now_factor"] == 1.0 and out["pit_loss_now_s"] == out["pit_loss_s"]

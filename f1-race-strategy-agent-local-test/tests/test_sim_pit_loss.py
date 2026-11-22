@@ -64,6 +64,17 @@ def test_as_of_estimate_exists_on_a_circuit_with_no_history_and_learns_from_its_
     assert late["pit_loss_s"] != none["pit_loss_s"]
 
 
+def test_world_value_is_the_median_green_stop_else_the_prior():
+    from test_sim_agent_tools import syn_frame
+    cfg = table(**TABLE)
+    df = syn_frame()
+    model = Simulator(df, SimConfig()).degradation
+    out = pit_loss.whole_race(df, model, "2023_01_nowhere", cfg)
+    assert out["source"] == "green_median" and out["n_green_stops"] == 3
+    thin = pit_loss.whole_race(df[df["driver"] != "AAA"], model, "2023_01_nowhere", cfg)   # 2 stops
+    assert thin["source"] == "prior" and thin["pit_loss_s"] == pytest.approx(23.0)
+
+
 def test_prior_pool_reads_the_cache_and_keeps_held_out_races_out_of_development_runs():
     cfg = PitLossModel(prior={"races": TABLE})
     cached = ["2019_06_monaco", "2024_11_austria", "2025_11_austria", "2023_01_bahrain"]
@@ -150,7 +161,8 @@ def test_world_takes_the_whole_race_value_and_policies_the_belief_one(spain):
     seen = policy_scenario(sc, belief)
     assert seen.snapshot.race.pit_loss_s == pytest.approx(belief.fitted_for(snap).pit_loss_inputs(snap)["pit_loss_s"],
                                                           abs=1e-3)
-    assert seen.snapshot.race.pit_loss_s != spain.race.pit_loss_s and sc.snapshot.race.pit_loss_s == spain.race.pit_loss_s
+    assert seen.snapshot.race.pit_loss_s != spain.race.pit_loss_s
+    assert sc.snapshot.race.pit_loss_s == calibration.pre_race_pit_loss("2021_04_spain")   # the snapshot: the prior
     # a continuation's advanced snapshot reads no stop beyond the fit's lap
     fit = belief.fitted_for(snap)
     later = snap.model_copy(update={"laps_completed": L + 5, "tyre_age": snap.tyre_age + 5})

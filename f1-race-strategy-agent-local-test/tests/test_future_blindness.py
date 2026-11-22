@@ -117,7 +117,9 @@ def test_aggregates_shift_every_whole_race_constant():
 
 
 def test_every_known_leak_has_its_own_test():
-    assert set(fb.KNOWN_LEAKS) == {name[len("test_leak_"):] for name in globals() if name.startswith("test_leak_")}
+    assert set(fb.KNOWN_LEAKS) | set(fb.FIXED_LEAKS) == \
+        {name[len("test_leak_"):] for name in globals() if name.startswith("test_leak_")}
+    assert not set(fb.KNOWN_LEAKS) & set(fb.FIXED_LEAKS)
 
 
 # --- the guard: no leak beyond the known ones ---------------------------------------------------
@@ -164,9 +166,13 @@ def test_leak_compound_list(race_id):
     _leak("compound_list", race_id)
 
 
-@pytest.mark.parametrize("race_id", _leak_params("pit_loss", POINTS))
-def test_leak_pit_loss(race_id):
-    _leak("pit_loss", race_id)
+# fixed (fb.FIXED_LEAKS): the frame scrambled after the snapshot, and every whole-race constant
+# shifted (the pit loss by 6.5 s), with the remaining known leaks neutralised
+@pytest.mark.parametrize("alteration", ["scramble", "aggregates"])
+@pytest.mark.parametrize("race_id", [_race(r) for r in POINTS])
+def test_leak_pit_loss(race_id, alteration):
+    diffs = differences(race_id, alteration, list(fb.KNOWN_LEAKS))
+    assert not diffs, report(diffs)
 
 
 @pytest.mark.parametrize("race_id", _leak_params("stint_limit", POINTS))

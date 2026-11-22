@@ -4,18 +4,19 @@
   "2019_10_united_kingdom": {
    "circuit": "united_kingdom",
    "n_green_stops": 20,
-   "pit_loss_s": 24.61,
+   "pit_loss_s": 21.21,
+   "replay_mean_s": 24.61,
    "sc": {
     "factors": [
-     0.5508,
-     0.7378,
-     0.1309,
-     1.161,
-     0.4133,
-     0.4164,
-     0.1788,
-     0.0864,
-     0.0082
+     0.639,
+     0.856,
+     0.1519,
+     1.3471,
+     0.4796,
+     0.4832,
+     0.2075,
+     0.1003,
+     0.0096
     ],
     "stops": [
      "HAM:20",
@@ -29,6 +30,7 @@
      "VET:20"
     ]
    },
+   "source": "green_median",
    "total_laps": 52,
    "vsc": {
     "factors": [],
@@ -38,12 +40,13 @@
   "2021_04_spain": {
    "circuit": "spain",
    "n_green_stops": 34,
-   "pit_loss_s": 23.85,
+   "pit_loss_s": 22.568,
+   "replay_mean_s": 23.85,
    "sc": {
     "factors": [
-     1.9656,
-     -0.6275,
-     -0.5092
+     2.0772,
+     -0.6631,
+     -0.5381
     ],
     "stops": [
      "GIO:8",
@@ -51,6 +54,7 @@
      "RUS:9"
     ]
    },
+   "source": "green_median",
    "total_laps": 66,
    "vsc": {
     "factors": [],
@@ -60,18 +64,19 @@
   "2022_02_saudi_arabia": {
    "circuit": "saudi_arabia",
    "n_green_stops": 5,
-   "pit_loss_s": 15.05,
+   "pit_loss_s": 24.387,
+   "replay_mean_s": 15.05,
    "sc": {
     "factors": [
-     0.9878,
-     1.0376,
-     2.0743,
-     0.8591,
-     1.0119,
-     1.4192,
-     2.0224,
-     1.9886,
-     1.2413
+     0.6096,
+     0.6403,
+     1.2801,
+     0.5302,
+     0.6244,
+     0.8758,
+     1.2481,
+     1.2272,
+     0.766
     ],
     "stops": [
      "ALO:16",
@@ -85,10 +90,11 @@
      "ZHO:16"
     ]
    },
+   "source": "green_median",
    "total_laps": 50,
    "vsc": {
     "factors": [
-     2.0149
+     1.2435
     ],
     "stops": [
      "HAM:40"
@@ -98,20 +104,22 @@
   "2023_01_bahrain": {
    "circuit": "bahrain",
    "n_green_stops": 44,
-   "pit_loss_s": 26.59,
+   "pit_loss_s": 25.142,
+   "replay_mean_s": 26.59,
    "sc": {
     "factors": [],
     "stops": []
    },
+   "source": "green_median",
    "total_laps": 57,
    "vsc": {
     "factors": [
-     0.0178,
-     -0.0042,
-     0.2106,
-     0.0745,
-     0.0377,
-     0.1041
+     0.0188,
+     -0.0045,
+     0.2228,
+     0.0788,
+     0.0399,
+     0.1101
     ],
     "stops": [
      "ALB:40",
@@ -125,12 +133,14 @@
   },
   "2023_07_spain": {
    "circuit": "spain",
-   "n_green_stops": 43,
-   "pit_loss_s": 24.94,
+   "n_green_stops": 42,
+   "pit_loss_s": 23.772,
+   "replay_mean_s": 24.94,
    "sc": {
     "factors": [],
     "stops": []
    },
+   "source": "green_median",
    "total_laps": 66,
    "vsc": {
     "factors": [],
@@ -140,11 +150,13 @@
   "2024_07_emilia_romagna": {
    "circuit": "emilia_romagna",
    "n_green_stops": 27,
-   "pit_loss_s": 28.46,
+   "pit_loss_s": 28.67,
+   "replay_mean_s": 28.46,
    "sc": {
     "factors": [],
     "stops": []
    },
+   "source": "green_median",
    "total_laps": 63,
    "vsc": {
     "factors": [],

@@ -329,6 +329,18 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
     return pd.DataFrame(rows)
 
 
+def world_pit_loss(data, world) -> float:
+    """The world's whole-race pit loss, read from the loaded race, never from a snapshot:
+    under world.config.pit_loss.world "median" (the default) sim.pit_loss.whole_race on the
+    world's full-window fit, else the race's replay mean (data.race.pit_loss_s)."""
+    from ..sim import pit_loss
+    cfg = world.config.pit_loss
+    if cfg.world == "replay_mean":
+        return float(data.race.pit_loss_s)
+    # the world's root fit: every race lap under its (full) window
+    return round(pit_loss.whole_race(data.frame, world.degradation, data.race_id, cfg)["pit_loss_s"], 3)
+
+
 def race_simulators(profile=None, belief_config=None, world_config=None):
     """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
@@ -355,9 +367,10 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
             config = belief_config if role == "belief" else world_config or data.config
-            hindsight = {"pit_loss_s": data.race.pit_loss_s} if role == "world" else {}
-            cache[race_id, role] = Simulator(data.frame, config, data.practice,
-                                             qualifying=getattr(data, "qualifying", None), **hindsight)
+            sim = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
+            if role == "world":
+                sim.race_pit_loss_s = world_pit_loss(data, sim)
+            cache[race_id, role] = sim
         return cache[race_id, role]
     return sim_for
 

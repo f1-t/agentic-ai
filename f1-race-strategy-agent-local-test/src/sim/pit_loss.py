@@ -136,7 +136,7 @@ def stop_losses(stops: pd.DataFrame, model, medians: dict) -> pd.Series:
 # widen the pool with no code change. A held-out race (the registered split's file) enters the
 # pool only when the race being priced is itself held out (the held-out run), so a development
 # run never loads one; it is still used only when earlier in time.
-_ENTRIES: dict = {}     # race id -> run-time entry (race_entry), per process
+_ENTRIES: dict = {}     # (race id, the loader) -> run-time entry (race_entry), per process
 _CACHED: dict = {}      # cache dir -> cached race ids
 
 
@@ -176,18 +176,22 @@ def _entry(race_id: str, cfg) -> dict | None:
     table = (cfg.prior or {}).get("races", {})
     if race_id in table:
         return table[race_id]
-    if race_id not in _ENTRIES:
+    from . import jobs
+    key = (race_id, jobs.load_race)   # a replaced loader (a test's) never shares entries with the real one
+    if key not in _ENTRIES:
         try:
             from .config import SimConfig
             from .engine import Simulator
             data = _load(race_id)
+            if canonical_race_id(data.race_id) != race_id:   # a loader that serves another race (a test's)
+                raise ValueError(f"the loader returned {data.race_id}")
             full = Simulator(data.frame, SimConfig(), data.practice, qualifying=data.qualifying)
-            _ENTRIES[race_id] = race_entry(data, full.degradation)
+            _ENTRIES[key] = race_entry(data, full.degradation)
         except Exception as exc:   # an unloadable cached race is left out of the pool, never fatal
             import warnings
             warnings.warn(f"pit-loss prior: {race_id} left out ({exc})")
-            _ENTRIES[race_id] = None
-    return _ENTRIES[race_id]
+            _ENTRIES[key] = None
+    return _ENTRIES[key]
 
 
 def pit_loss_prior(race_id: str, cfg, cached=None, held=None) -> dict:
@@ -248,16 +252,17 @@ def snapshot_time(frame: pd.DataFrame, driver: str, lap: int) -> float | None:
     return float(row["end_s"].iloc[0]) if len(row) and pd.notna(row["end_s"].iloc[0]) else None
 
 
-def _normal_update(m0, s0, x, floor):
-    """Posterior (mean, sd) of a normal mean under N(m0, s0^2) given observations x with a
-    per-observation sd max(MAD, floor)."""
+def _normal_update(m0, s0, x, floor, center=np.mean):
+    """Posterior (mean, sd) of a normal location under N(m0, s0^2) given observations x summarised
+    by `center` (the median for green stops), with a per-observation sd max(MAD, floor); the
+    median's larger variance (pi / 2 of the mean's) is not added, MAD already widens it."""
     x = np.asarray(x, dtype=float)
     if len(x) == 0:
         return float(m0), float(s0)
     mad = 1.4826 * float(np.median(np.abs(x - np.median(x)))) if len(x) >= 3 else 0.0
     se2 = max(mad, floor) ** 2 / len(x)
     prec = 1.0 / s0 ** 2 + 1.0 / se2
-    return float((m0 / s0 ** 2 + x.mean() / se2) / prec), float(math.sqrt(1.0 / prec))
+    return float((m0 / s0 ** 2 + float(center(x)) / se2) / prec), float(math.sqrt(1.0 / prec))
 
 
 def estimate(frame: pd.DataFrame, race_id: str, driver: str, lap: int, model, cfg, stops=None) -> dict:
@@ -275,7 +280,7 @@ def estimate(frame: pd.DataFrame, race_id: str, driver: str, lap: int, model, cf
     green = seen[seen["kind"] == "green"]
     loss = stop_losses(green, model, medians).dropna()
     used = loss[(loss >= lo * prior["mean_s"]) & (loss <= hi * prior["mean_s"])]
-    mean, sd = _normal_update(prior["mean_s"], prior["sd_s"], used.to_numpy(), cfg.stop_sd_floor_s)
+    mean, sd = _normal_update(prior["mean_s"], prior["sd_s"], used.to_numpy(), cfg.stop_sd_floor_s, np.median)
     sd_total = math.sqrt(sd ** 2 + cfg.model_sd_s ** 2)
     out = {"pit_loss_s": mean, "sd_s": sd_total, "n_green_stops": int(len(used)),
            "n_green_stops_dropped": int(len(loss) - len(used)), "prior_s": prior["mean_s"],
@@ -295,17 +300,37 @@ def estimate(frame: pd.DataFrame, race_id: str, driver: str, lap: int, model, cf
     return out
 
 
+# --- the world's whole-race value -----------------------------------------------------------
+def whole_race(frame: pd.DataFrame, model, race_id: str, cfg) -> dict:
+    """The world's pit loss for a race (the scorer may use every stop): the median of every green
+    stop's loss against the full-window `model` (the per-stop estimand of `estimate`, so policy
+    and world measure the same thing), when the race has at least cfg.min_green_stops of them;
+    else the prior (pit_loss_prior). Robust to slow stops and to a race whose stops were mostly
+    neutralised, where the replay mean (calibrate._pit_loss) is not (2022 Saudi Arabia: 15.05 s
+    from 5 green stops, against a median of 24.4 s). Stops made under SC or VSC are not pooled
+    in: divided by the a priori factor, Saudi's (most made on the deployment lap) give 31 s."""
+    stops = stop_table(frame)
+    green = stop_losses(stops[stops["kind"] == "green"], model, _field_medians(frame)).dropna()
+    if len(green) >= cfg.min_green_stops:
+        return {"pit_loss_s": float(green.median()), "source": "green_median", "n_green_stops": int(len(green))}
+    return {"pit_loss_s": pit_loss_prior(race_id, cfg)["mean_s"], "source": "prior", "n_green_stops": int(len(green))}
+
+
 # --- the table and the report -----------------------------------------------------------------
-def race_entry(data, model) -> dict:
-    """One race's prior-table entry from its whole race: the whole-race pit loss (data.race) and
-    each SC / VSC stop's factor against it, the reference being the full-window `model` and the
-    field medians."""
+def race_entry(data, model, cfg=None) -> dict:
+    """One race's prior-table entry from its whole race: the world's whole-race pit loss
+    (whole_race on the full-window `model`; the replay mean beside it) and each SC / VSC stop's
+    factor against it, the reference being `model` and the field medians."""
+    from .config import PitLossModel
+    cfg = cfg or PitLossModel()
     f = data.frame
     stops = stop_table(f)
     medians = _field_medians(f)
-    pl = float(data.race.pit_loss_s)
-    out = {"pit_loss_s": pl, "circuit": circuit_key(data.race_id), "total_laps": int(data.race.total_laps),
-           "n_green_stops": int((stops["kind"] == "green").sum())}
+    world = whole_race(f, model, data.race_id, cfg)
+    pl = float(world["pit_loss_s"])
+    out = {"pit_loss_s": round(pl, 3), "source": world["source"], "replay_mean_s": float(data.race.pit_loss_s),
+           "circuit": circuit_key(data.race_id), "total_laps": int(data.race.total_laps),
+           "n_green_stops": world["n_green_stops"]}
     for kind in KINDS:
         k = stops[stops["kind"] == kind]
         x = (stop_losses(k, model, medians) / pl).dropna() if len(k) else pd.Series(dtype=float)
@@ -350,7 +375,9 @@ def asof_error(race_ids, laps_every=5, belief_config=None) -> pd.DataFrame:
     for rid in race_ids:
         data = _load(rid)
         sim = Simulator(data.frame, cfg, data.practice, qualifying=data.qualifying)
-        f, truth = data.frame, float(data.race.pit_loss_s)
+        f = data.frame
+        full = Simulator(f, SimConfig(), data.practice, qualifying=data.qualifying)
+        truth = whole_race(f, full.degradation, data.race_id, cfg.pit_loss)["pit_loss_s"]
         stops = stop_table(f)
         for lap in range(0, data.race.total_laps - 4, laps_every):
             at = f[f["lap"] == max(lap, 1)].sort_values("position")
@@ -360,6 +387,7 @@ def asof_error(race_ids, laps_every=5, belief_config=None) -> pd.DataFrame:
             snap = snapshot_at(f, data.race, driver, lap)
             est = estimate(f, data.race_id, driver, lap, sim.fitted_for(snap).degradation, cfg.pit_loss, stops)
             rows.append({"race_id": data.race_id, "lap": lap, "driver": driver, "whole_race_s": truth,
+                         "replay_mean_s": float(data.race.pit_loss_s),
                          "asof_s": est["pit_loss_s"], "sd_s": est["sd_s"], "err_s": est["pit_loss_s"] - truth,
                          "covered_90": abs(est["pit_loss_s"] - truth) <= 1.645 * est["sd_s"],
                          "prior_s": est["prior_s"], "prior_source": est["prior_source"],

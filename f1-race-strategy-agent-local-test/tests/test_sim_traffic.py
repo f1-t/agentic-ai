@@ -122,7 +122,7 @@ def test_traffic_is_part_of_the_config_hash():
     # proxy (SimConfig.compound_proxy, with the step table, weights and sd floor in it) off 09c60db53ac9,
     # and the as-of pit loss (SimConfig.pit_loss, with its prior table) off ccb08edf391b
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "3ce3caa6fab1" and ghost_on == "0f1de71de9d6"
+    assert default == "f4ffd7f05fad" and ghost_on == "870a94af3d37"
     assert default not in ("0778d5ef02f6", "eccb59070c14", "07dc9587709d", "09c60db53ac9", "ccb08edf391b")
 
 
