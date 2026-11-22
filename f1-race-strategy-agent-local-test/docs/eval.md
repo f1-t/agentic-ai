@@ -678,7 +678,7 @@ agree as far as they can, and each extends it outward only where it has lap data
   the judge's one whole-race input here; (c) `race`, the oldest age run in this race (for an
   unraced compound the proxy's practice-age rule), the earlier design. The world's
   `fit_report["support_edge"]` (and `Simulator.cliff_ledger`) records per compound the edge, its
-  source ("history:<tier>", "history:<tier> extended by race data to age N", "race", ...) and
+  source ("history:<tier>", "history:<tier> extended by this race's ages to N", "race", ...) and
   whether it used this race's laps, for the fidelity tool's hindsight ledger.
 
 **The prior.** `wear_cliff.prior_source: tyre_history` (the default) is the shared history model,
@@ -764,9 +764,16 @@ one race (`cross_race.MAX_WORSE_RACES`, on G for the world, on stop-gain for the
 cliff in place, `driver_effects_hinge` (linear_fuel_hinge, knot 25, driver offsets on the race
 rows) passes the world rule against the SimConfig default: G mae_offset 17.89 to 17.12 s, paired
 difference -0.77 [-1.16, -0.38], worse on no race; stop-gain bias -0.18 to -0.12 s, mae 0.53 to
-0.44. It is the eval world (`config.WORLD_DEGRADATION`, `score.race_simulators`,
-`configs/sim/world.yaml`); the SimConfig default stays linear_fuel, the comparator the arms are
-overlays on. Per-compound knots at 75 percent of the longest life (`knot_life_fraction`) and
+0.44. It was the eval world first; the eval world is now **driver effects alone**
+(`driver_effects`: linear_fuel with driver offsets; `config.WORLD_DEGRADATION`,
+`score.race_simulators`, `configs/sim/world.yaml`). The fidelity scorecard (`src/sim/fidelity.py`,
+six races) finds driver effects the only factor that improves its primary measure (close-pair
+finishing order +0.048 [+0.012, +0.077]), the hinge adding nothing and driver effects with the
+hinge slightly worse than without (-0.019); the G rule here does not separate the two
+(`driver_effects_nonneg` against `driver_effects_hinge`: +0.26 [-0.08, 0.62] s), so it does not
+contradict that, and the simpler one is the default. Both are named world overlays for the
+scorecard's ablation: `configs/sim/world_de.yaml` and `configs/sim/world_de_hinge.yaml`. The
+SimConfig default stays linear_fuel, the comparator the arms are overlays on. Per-compound knots at 75 percent of the longest life (`knot_life_fraction`) and
 dropping negative hinges (`hinge_lower_bound: 0`) were measured and did not pass
 (`driver_effects_hinge_life`: G CI upper end +0.01; `driver_effects_hinge_bound` against
 `driver_effects_hinge`: +0.06 [-0.23, 0.41]); both stay as options. A negative fitted hinge acts

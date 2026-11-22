@@ -167,6 +167,7 @@ def test_default_off_fit_is_identical_with_and_without_the_columns():
     assert batch_digest(with_columns)[1] == plain
 
 
+@pytest.mark.wear_cliff_off   # the pinned digest predates the wear cliff (sim/cliff.py)
 def test_default_off_digest_equals_main():
     assert batch_digest(with_columns)[1] == MAIN_DIGEST
 

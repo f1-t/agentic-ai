@@ -360,7 +360,7 @@ def test_current_defaults_name_each_windows_incumbent_and_match_the_config():
     assert "belief.yaml" in t.loc["to_snapshot", "set by"]
     assert t.loc["pre_race", "incumbent"] == BASELINE and t.loc["pre_race", "source"] == "default"
     # the world's wear fit, selected in the tyre-life change (config.WORLD_DEGRADATION)
-    assert t.loc["full", "incumbent"] == "driver_effects_hinge" and t.loc["full", "source"] == "selected"
+    assert t.loc["full", "incumbent"] == "driver_effects" and t.loc["full", "source"] == "selected"
     assert t["matches the config"].all()
     assert t.loc["to_snapshot", "config_hash"] == calibration.config_hash(cross_race.arm_config("wear_nonneg"))
 
@@ -649,8 +649,12 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     assert list(s1["arm"]) == ["wear_nonneg", BASELINE] and (s1["window"] == "to_snapshot").all()
     s2 = sel[sel["stage"] == "candidates"]
     assert len(s2) == len(ARMS) - 1 and (s2["comparator"] == record["belief_bound"]).all()
-    na = sel.loc[(sel["window"] == "full") & sel["arm"].isin(["none", "collinear_hold"]), "role"]
-    assert set(na) == {cross_race.NA_ROLE}
+    # the full window compares against its incumbent; none and collinear_hold are the baseline
+    # by construction there (same_by_construction), whatever the comparator
+    full = sel[(sel["stage"] == "arms") & (sel["window"] == "full")]
+    assert set(full["comparator"]) == {cross_race.incumbent("full")}
+    na = full.loc[full["arm"].isin(["none", "collinear_hold"]), "role"]
+    assert set(na) == ({cross_race.NA_ROLE} if cross_race.incumbent("full") == BASELINE else {"candidate"})
     assert set(sel.loc[sel["stage"] == "prior-sd fix", "arm"]) == {record["s2_arm"]}
     grid = pd.read_csv(out / "tau_grid.csv")
     assert len(grid) == 1 and grid["sg_n"].iloc[0] > 0 and {"non_inferior", "passes", "g_diff_hi"} <= set(grid)
@@ -674,7 +678,7 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
                     "## Stop-gain per race", "## Stop-count check (lap 0)", "## Held-out races",
                     "## Gate and pairs", "## Current defaults", "## Stop-gain decomposition", "## Factor summary", "## What changed from Spain"):
         assert heading in md
-    assert "PROVISIONAL: 3 eligible race(s), fewer than 8" in md and "the defaults stay" in md
+    assert f"PROVISIONAL: 3 eligible race(s), fewer than {cross_race.MIN_RACES}" in md and "the defaults stay" in md
     assert "Synthetic races in this run" in md and "No race features file" in md
 
 
