@@ -322,16 +322,13 @@ def test_race_compounds_sources():
 
 def test_snapshot_as_of_on_an_in_lap_and_for_a_car_not_running():
     f = derive_columns(raw_race())
-    snap = calibration.snapshot_as_of(f, race_for(f), "AAA", 14)   # AAA's in-lap: MEDIUM goes on
-    old = calibration.snapshot_at(f, race_for(f), "AAA", 14)
-    assert (snap.compound, snap.tyre_age, snap.stints) == (old.compound, old.tyre_age, old.stints)
-    assert snap.compound == "MEDIUM" and [s.compound for s in snap.stints] == ["SOFT"]
-    # the stop is visible, the out-lap's time is not: the snapshot is the same without that row's end
-    cut = f.copy()
-    cut.loc[(cut["driver"] == "AAA") & (cut["lap"] == 15), ["lap_time_s", "end_s"]] = np.nan
-    assert calibration.snapshot_as_of(cut, race_for(f), "AAA", 14) == snap
-    with pytest.raises(ValueError, match="no set"):
-        calibration.snapshot_as_of(f[~((f["driver"] == "AAA") & (f["lap"] > 14))], race_for(f), "AAA", 14)
+    snap = calibration.snapshot_as_of(f, race_for(f), "AAA", 14)   # AAA's in-lap; MEDIUM goes on
+    # no record by t holds the set going on: the car shows on the SOFT set it came in on, the
+    # same as from the race cut at t (snapshot_at read MEDIUM off the lap 15 row)
+    assert (snap.compound, snap.tyre_age, snap.stints) == ("SOFT", 14, [])
+    assert calibration.snapshot_at(f, race_for(f), "AAA", 14).compound == "MEDIUM"
+    assert calibration.snapshot_as_of(f[f["end_s"] <= f.loc[(f["driver"] == "AAA") & (f["lap"] == 14), "end_s"].iloc[0]],
+                                      race_for(f), "AAA", 14) == snap
     with pytest.raises(ValueError, match="not running"):
         calibration.snapshot_as_of(f[f["lap"] <= 20], race_for(f), "AAA", 25)
 

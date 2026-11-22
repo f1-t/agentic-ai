@@ -37,7 +37,7 @@ rest is not. Alterations keep every past row as it is, bit for bit and in order:
 test_snapshot_builds_from_the_past_alone checks the stricter cut, every row after T gone
 (no lap in progress either), on which the snapshot builder must still work.
   aggregates  the race frame is untouched; the whole-race constants passed beside it are
-              shifted: RaceParams.pit_loss_s + 6.5 s, the compound list with HARD toggled, the
+              shifted: RaceParams.pit_loss_s + 6.5 s (the compound list is the nominated three since its fix), the
               classification reversed.
 
 Policy-visible surfaces (observe), per snapshot:
@@ -446,9 +446,10 @@ def past_rows(laps: pd.DataFrame, driver: str, lap: int) -> pd.DataFrame:
 
 
 def shift_aggregates(data: jobs.RaceData) -> jobs.RaceData:
-    """`data` with the whole-race constants passed beside the frame shifted (module docstring)."""
-    compounds = sorted(set(data.race.compounds) ^ {"HARD"})
-    race = data.race.model_copy(update={"pit_loss_s": data.race.pit_loss_s + 6.5, "compounds": compounds})
+    """`data` with the whole-race constants passed beside the frame shifted (module docstring).
+    RaceParams.compounds is no longer one: since the compound_list fix it is the weekend's
+    nominated dry compounds (calibrate.race_compounds), a regulation constant."""
+    race = data.race.model_copy(update={"pit_loss_s": data.race.pit_loss_s + 6.5})
     results = data.results.copy()
     results["classified"] = results["classified"].to_numpy()[::-1]
     return dataclasses.replace(data, race=race, results=results)

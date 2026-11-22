@@ -138,7 +138,7 @@ def test_the_past_ends_at_the_snapshot_moment_not_at_a_lap_number(race_id):
 def test_aggregates_shift_every_whole_race_constant():
     _, orig, _ = race(SYNTHETIC)
     alt = fb.shift_aggregates(orig)
-    assert alt.race.pit_loss_s != orig.race.pit_loss_s and alt.race.compounds != orig.race.compounds
+    assert alt.race.pit_loss_s != orig.race.pit_loss_s   # compounds: the nominated three, not a race aggregate
     assert not alt.results["classified"].equals(orig.results["classified"])
     pd.testing.assert_frame_equal(alt.frame, orig.frame)
 
