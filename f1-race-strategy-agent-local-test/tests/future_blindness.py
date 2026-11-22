@@ -784,6 +784,10 @@ def _decisions_surface(belief, snap):
                                                                      n_samples=N_SAMPLES).as_pairs())}
     subs = {f"PIT_{c}": {"decision": "PIT", "compound": c, "confidence": 0.6} for c in DRY}
     subs["STAY_OUT_3"] = {"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": 0.6}
+    # protocol v2's kept stop (decisions.kept_plan): a named first stop now and five laps on
+    subs.update({f"KEEP_{c}_{w}": {"decision": "PIT" if w == 1 else "STAY_OUT", "reassess_after_laps": max(1, w - 1),
+                                   "compound": c, "first_stop_lap": snap.laps_completed + w, "confidence": 0.6}
+                 for c in DRY for w in (1, 5)})
     for k, sub in subs.items():
         out[k] = _call(lambda s=sub: decisions.to_plan(snap, s, belief, MAX_STOPS, seed=0, n_samples=N_SAMPLES).as_pairs())
     return out

@@ -1064,19 +1064,22 @@ def immediate_action(snapshot: Snapshot, pairs) -> dict:
     """What a plan from the snapshot does now and the submission that keeps it: a first stint of one
     lap is PIT onto the next compound now; a longer one is STAY_OUT with reassess_after_laps one
     less than the laps to its first stop (a STAY_OUT of k laps allows no stop before the end of lap
-    laps_completed + k + 1, eval.decisions); no stop is STAY_OUT to the flag."""
+    laps_completed + k + 1, eval.decisions); no stop is STAY_OUT to the flag. A submission with a
+    stop names it (first_stop_lap and compound), so the scorer keeps this plan (decisions.kept_plan)
+    rather than planning again after the stay."""
     pairs = [list(p) for p in pairs]
     done = snapshot.laps_completed
     if len(pairs) < 2:
         k = snapshot.remaining_laps
         return {"action": "STAY_OUT", "first_stop_lap": None,
                 "submit": {"decision": "STAY_OUT", "reassess_after_laps": k}}
-    w = int(pairs[0][1])
+    w, nxt = int(pairs[0][1]), pairs[1][0]
+    # first_stop_lap and compound name the stop the submission keeps (eval.decisions.kept_plan)
     if w == 1:
-        return {"action": f"PIT {pairs[1][0]}", "first_stop_lap": done + 1,
-                "submit": {"decision": "PIT", "compound": pairs[1][0]}}
+        return {"action": f"PIT {nxt}", "first_stop_lap": done + 1,
+                "submit": {"decision": "PIT", "compound": nxt, "first_stop_lap": done + 1}}
     return {"action": "STAY_OUT", "first_stop_lap": done + w,
-            "submit": {"decision": "STAY_OUT", "reassess_after_laps": w - 1}}
+            "submit": {"decision": "STAY_OUT", "reassess_after_laps": w - 1, "compound": nxt, "first_stop_lap": done + w}}
 
 
 def _shape(snapshot, pairs) -> tuple:
@@ -1155,8 +1158,8 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
     gap_to_best (mean, 90% interval over the paired draws, share of draws faster than the best),
     best_share (the share of draws in which it is the fastest of those shown), first_stop_range
     (the first-stop laps over which a plan of the same shape stays within FLEX_S of it) and flags.
-    `decision` reads the best PIT-now plan against the best STAY_OUT plan (gap_reading), the choice
-    the submission makes; `flags` are uncertainty_flags. Nothing after the snapshot enters."""
+    `decision` is plan 1's immediate action with the best PIT-now plan read against the best STAY_OUT
+    plan (gap_reading, the choice the submission makes); `flags` are uncertainty_flags. Nothing after the snapshot enters."""
     from ..baselines.domain import NoFeasiblePlan
     sim, profile = _setup(snapshot, sim, profile)
     n = n_samples or profile.sim.n_samples
@@ -1202,21 +1205,23 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
         if warn or flags:
             entry["flags"] = [*flags, *(f"extrapolates: {w}" for w in warn)]
         out.append(entry)
-    decision = None
+    # the immediate action is plan 1's (the lowest mean time, as the optimizer ranks); share is the
+    # share of draws in which the best plan of that action beats the best plan of the other one, which
+    # can be under one half when a few slow draws decide the mean
     a, b = best_of["PIT"], best_of["STAY"]
+    favoured = immediate_action(snapshot, pairs[0])["action"]
     if a is not None and b is not None:
         d = times[a] - times[b]
         lo, hi = np.percentile(d, [5, 95])
         p = float((d < 0).mean() + 0.5 * (d == 0).mean())
         pit = immediate_action(snapshot, pairs[a])["action"]
-        decision = {"favoured": pit if p >= 0.5 else "STAY_OUT", "share": round(max(p, 1 - p), 2),
+        decision = {"favoured": favoured, "share": round(p if favoured.startswith("PIT") else 1 - p, 2),
                     "reading": gap_reading(f"{pit} (best plan)", "STAY_OUT (best plan)", p, float(d.mean()),
                                            float(lo), float(hi))}
     elif b is not None:
-        decision = {"favoured": "STAY_OUT", "share": 1.0, "reading": f"no PIT now is legal or modelled: {window['summary']}"}
-    elif a is not None:
-        decision = {"favoured": immediate_action(snapshot, pairs[a])["action"], "share": 1.0,
-                    "reading": "every legal plan pits now"}
+        decision = {"favoured": favoured, "share": 1.0, "reading": f"no PIT now is legal or modelled: {window['summary']}"}
+    else:
+        decision = {"favoured": favoured, "share": 1.0, "reading": "every legal plan pits now"}
     return _jsonable({"plans": out, "decision": decision, "flags": general, "pit_window": window["summary"],
                       "n_draws": int(times.shape[1]),
                       "note": "gaps: plan minus the best plan over shared draws (negative: faster); shares cover "
@@ -1227,11 +1232,12 @@ def evaluate_plan(snapshot: Snapshot, plan=None, first_stop_lap=None, compound=N
                   sim=None, profile=None) -> dict:
     """One plan against the optimizer's best (rank_plans' plan 1) under the same draws: a full plan
     [[compound, laps], ...] whose first stint continues the current set, or a first stop at the end of
-    lap first_stop_lap onto compound (every legal modelled compound when None, the fastest shown) with
-    the best continuation after it (_stop_at). Returns the plan, its gap to the best (_gap), the
-    immediate action and submission that keep it (immediate_action), what the scorer would play for
-    that submission (scored_plan: eval.decisions.to_plan on this belief; a STAY_OUT only forbids an
-    earlier stop, the rest is planned again) and flags; rule replies say what is legal instead."""
+    lap first_stop_lap onto compound (every legal modelled compound when None, the fastest shown): the
+    best full plan with that first stop, the plan a submission naming it is scored on
+    (eval.decisions.kept_plan). Returns the plan, its gap to the best (_gap), the immediate action and
+    submission that keep it (immediate_action), scored_plan when the scorer would play another plan for
+    that submission (eval.decisions.to_plan on this belief: a full plan's later stints are the
+    optimizer's again) and flags; rule replies say what is legal instead."""
     from ..baselines.domain import NoFeasiblePlan
     from ..eval import decisions
     sim, profile = _setup(snapshot, sim, profile)
@@ -1256,14 +1262,19 @@ def evaluate_plan(snapshot: Snapshot, plan=None, first_stop_lap=None, compound=N
         bad = [c for c in comps if c not in pits]
         if bad:
             return {"error": f"Compound {bad[0]} cannot be fitted; choose from {pits}.", "recoverable": True}
-        cont = _continuation(fit, n, profile.sim.max_stops)
+        # the plan the scorer plays for a submission naming this stop (decisions.kept_plan)
+        done = snapshot.laps_completed
+        act = {"action": "pit"} if lap == done + 1 else {"action": "stay", "laps": lap - done - 1}
         cands = []
         for c in comps:
-            p, errors = _stop_at(fit, snapshot, lap, c, cont)
-            if p is None or errors:
-                errs = explain_rule_errors(snapshot, p, errors, sim.config) if p is not None else list(errors)
-                return {"error": f"A stop at the end of lap {lap} onto {c}: {'; '.join(errs)}", "recoverable": True}
-            cands.append(p)
+            try:
+                cands.append(decisions.kept_plan(snapshot, {"first_stop_lap": lap, "compound": c}, act, sim,
+                                                 profile.sim.max_stops, seed=0, n_samples=n))
+            except decisions.InvalidDecision as exc:
+                if len(comps) == 1:
+                    return {"error": f"A stop at the end of lap {lap} onto {c}: {exc}", "recoverable": True}
+        if not cands:
+            return {"error": f"No legal plan stops at the end of lap {lap}: {window['summary']}.", "recoverable": True}
     res = fit.compare(snapshot, [*cands, best_plan], seed=SEED, n_samples=n)
     k = len(cands)
     ok = [i for i in range(k) if res.valid[i]]

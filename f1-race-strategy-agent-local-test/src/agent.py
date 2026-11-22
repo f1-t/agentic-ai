@@ -56,23 +56,21 @@ Finish by calling submit_recommendation. Its confidence is your probability (0 t
 # tool surface and loop before it, unchanged (docs/eval.md "Agent protocol v2").
 PROTOCOLS = ("v1", "v2")
 DEFAULT_PROTOCOL = "v2"
-CHECK_SHARE = 0.8   # the consistency check fires when the evidence favours the other action in more draws than this
-
 SYSTEM_PROMPT_V2 = """You are a Formula 1 race strategist making a MID-RACE decision from a snapshot in time.
 
 The snapshot is the only current race state. The race is not named and cars are labelled (your car is Car A); decide from the snapshot and the tools, not from memory of any real race.
 
-Your decision is the immediate action: PIT now onto a compound, or STAY_OUT for k laps. It is scored as a whole plan: after your action the same optimizer the tools use plans the rest of the race.
+Your decision is the immediate action: PIT now onto a compound, or STAY_OUT for k laps. It is scored as a whole plan for the rest of the race.
 
-The tools are a simulator fitted only on the laps so far. Its numbers are estimates: a share of draws covers parameter and lap noise under this model, not model error. """ + GAP_SENTENCE + """
+The tools are a simulator fitted only on the laps so far, and an optimizer that searches every plan on it. Their numbers are estimates: a share of draws covers parameter and lap noise under this model, not model error. """ + GAP_SENTENCE + """
 
 Decision protocol:
-1. Call rank_plans first, once. It lists the optimizer's best distinct plans: the stints, the first stop, the immediate action each implies and the submission that keeps it, gap_s to the best plan with its 90% interval, best_share (the share of draws in which that plan is the fastest of those shown) and flags; decision reads the best PIT-now plan against the best STAY_OUT plan.
-2. The optimizer's ranking is the default. If the top plans agree on the immediate action, submit it.
-3. Depart from plan 1 only for a stated reason tied to a flag: a compound priced without race laps, a tyre-life estimate from a generic prior, a stint past the estimated tyre life, a safety car or VSC in progress. Then prefer the plan that does not rest on the weak estimate, if its gap is small. To check one plan or a stop at lap L onto compound C, call evaluate_plan; for one estimate, estimate_tyre_degradation or estimate_pit_loss. Do not probe one lap count after another: rank_plans already searched every stop lap.
-4. Before submitting, write one line in the rationale with the evidence for your action: which plan, its gap to the best and its share of draws. If that evidence favours the other action, revise.
+1. Call rank_plans first, once. It lists the optimizer's best distinct plans, plan 1 the lowest mean time: the stints, the first stop, the immediate action, the submit fields that keep the plan, gap_s to plan 1 with its 90% interval, best_share (the share of draws in which the plan is the fastest of those shown) and flags. decision is plan 1's immediate action, with the best PIT-now plan read against the best STAY_OUT plan.
+2. Plan 1 is the default: submit its submit fields (decision, compound, reassess_after_laps, first_stop_lap) as given. A share of draws under one half for plan 1 is not a reason to leave it: the mean decides.
+3. Depart from plan 1 only for a stated reason tied to an uncertainty flag from the tools (a compound priced without race laps; a tyre life from a generic prior or a stint past it; a safety car or VSC in progress), and only for a plan close to it (gap_s within its interval). Name the flag in the rationale. To check one plan or a stop at lap L onto compound C, call evaluate_plan; for one estimate, estimate_tyre_degradation or estimate_pit_loss. Do not probe one lap count after another: rank_plans already searched every stop lap.
+4. Before submitting, write one line in the rationale with the evidence for your action: which plan, its gap to plan 1 and its share of draws.
 
-STAY_OUT k forbids a stop before the end of lap (current lap + k + 1); after it the optimizer plans again. To keep a plan whose first stop is at the end of lap L use k = L - current lap - 1, as its submit field says; a larger k delays that stop.
+STAY_OUT k forbids a stop before the end of lap (current lap + k + 1). first_stop_lap (with compound) names the first stop of the plan you keep, and the scorer plays the best plan with that stop; without it the rest is planned again after the stay.
 
 Confidence is your probability (0 to 1) that your immediate action beats the other one (PIT now against STAY_OUT). Start from decision.share, and move it toward 0.5 when a flag makes the estimate weak; do not copy a tool number without that judgement.
 
@@ -102,10 +100,20 @@ SUBMIT_TOOL = {
 # v2: the same arguments, a description that says what reassess_after_laps does to the plan
 SUBMIT_TOOL_V2 = {**SUBMIT_TOOL, "input_schema": {**SUBMIT_TOOL["input_schema"], "properties": {
     **SUBMIT_TOOL["input_schema"]["properties"],
+    "compound": {"type": ["string", "null"], "description": (
+        "PIT: the compound fitted now. STAY_OUT with first_stop_lap: the compound fitted at that stop.")},
     "reassess_after_laps": {"type": "integer", "description": (
-        "STAY_OUT: the laps to stay out; no stop before the end of lap (current lap + this + 1), then the "
-        "optimizer plans again (rank_plans' submit field gives it per plan). PIT: when to reassess after the stop.")},
+        "STAY_OUT: the laps to stay out; no stop before the end of lap (current lap + this + 1). PIT: when to "
+        "reassess after the stop.")},
+    "first_stop_lap": {"type": ["integer", "null"], "description": (
+        "Optional: the lap at whose end the plan you keep makes its first stop (with compound). The scorer then "
+        "plays the best plan with that first stop; without it the rest is planned again after a STAY_OUT. "
+        "rank_plans' submit field gives it per plan.")},
 }}}
+SUBMIT_TOOL_V2["input_schema"]["properties"] = {   # the order of SUBMIT_TOOL, first_stop_lap after reassess
+    k: SUBMIT_TOOL_V2["input_schema"]["properties"][k]
+    for k in ("decision", "compound", "reassess_after_laps", "first_stop_lap", "confidence", "rationale", "key_risks")}
+KEPT_STOP = "first_stop_lap"   # the v2-only submission field (eval.decisions.kept_plan); v1 drops it
 
 
 def protocol(value=None) -> str:
@@ -182,30 +190,33 @@ def _evidence_of(name, out):
     return {"decision": out.get("decision"), "best": plans[0] if plans else None}
 
 
+def _keeps(rec, sub):
+    """Whether submission `rec` is plan 1's submit fields `sub` (the fields that decide the scored plan)."""
+    def same(f):
+        return str(rec.get(f) if rec.get(f) is not None else "").upper() == str(sub.get(f) if sub.get(f) is not None else "").upper()
+    fields = ["decision", "compound", "first_stop_lap"] + (["reassess_after_laps"] if sub.get("decision") == "STAY_OUT" else [])
+    return all(same(f) for f in fields)
+
+
 def _consistency_note(rec, evidence, laps_completed):
-    """What the harness says once when a submission does not match the evidence the model itself
-    gathered (the latest rank_plans): the other action favoured in more than CHECK_SHARE of the
-    draws, or a STAY_OUT whose k forbids plan 1's first stop. None when nothing contradicts it."""
-    if not evidence:
-        return None
-    lines = []
-    dec, best = evidence.get("decision") or {}, evidence.get("best") or {}
-    favoured, share = str(dec.get("favoured") or ""), dec.get("share")
-    kind = "PIT" if favoured.startswith("PIT") else "STAY_OUT" if favoured else None
-    if kind and kind != rec["decision"] and isinstance(share, (int, float)) and share > CHECK_SHARE:
-        lines.append(f"you submitted {rec['decision']}, but your rank_plans evidence favours {favoured}: "
-                     f"{dec.get('reading')}.")
+    """What the harness says once when a submission does not keep the plan the model's own latest
+    rank_plans put first: plan 1's immediate action and the submission that keeps it, with the
+    PIT-against-STAY_OUT reading, so a departure is a choice made knowingly (the model keeps the say;
+    a departure for a flagged weak estimate is allowed). None when it keeps plan 1 or saw no ranking."""
+    best = (evidence or {}).get("best") or {}
     sub = best.get("submit") or {}
-    k, keep = rec.get("reassess_after_laps"), sub.get("reassess_after_laps")
-    if (rec["decision"] == "STAY_OUT" and sub.get("decision") == "STAY_OUT" and isinstance(k, int)
-            and isinstance(keep, int) and k > keep and best.get("stops")):
-        lines.append(f"plan 1 ({best.get('plan')}) makes its first stop at the end of lap {laps_completed + keep + 1}, "
-                     f"but STAY_OUT {k} allows no stop before the end of lap {laps_completed + k + 1}; "
-                     f"reassess_after_laps {keep} keeps that stop.")
-    if not lines:
+    if not sub or _keeps(rec, sub):
         return None
-    return ("Not final yet: " + " Also, ".join(lines) + " Call submit_recommendation again: the same submission "
-            "to confirm it (with your reason), or a revised one. The next submission is final.")
+    dec = evidence.get("decision") or {}
+    shown = {k: v for k, v in rec.items() if k in ("decision", "compound", "reassess_after_laps", "first_stop_lap")}
+    line = (f"your submission {json.dumps(shown)} does not keep plan 1 of your rank_plans ({best.get('plan')}, "
+            f"immediate action {best.get('immediate')}), whose submit fields are {json.dumps(sub)}. "
+            f"{dec.get('reading') or ''}".rstrip())
+    if rec["decision"] == sub.get("decision") == "STAY_OUT" and rec.get("first_stop_lap") is None:
+        line += " Without first_stop_lap the rest of the race is planned again after the stay."
+    return ("Not final yet: " + line + " Call submit_recommendation again: plan 1's submit fields, or the same "
+            "submission with the uncertainty flag that justifies the departure named in the rationale. The next "
+            "submission is final.")
 
 
 def _normalise_submission(args: dict[str, Any]):
@@ -359,8 +370,9 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     model saw in their place; the model is shown pseudonyms unless AGENT_SHOW_IDENTITY is on).
     ``protocol_mode`` (AGENT_PROTOCOL, default DEFAULT_PROTOCOL) picks the prompt and tools: "v1"
     is everything above unchanged; "v2" uses SYSTEM_PROMPT_V2 and tools.TOOL_SPECS_V2, refuses a
-    call with an argument its schema does not name (the valid ones said), and holds the first
-    accepted submission that contradicts the latest rank_plans evidence (_consistency_note) when a
+    call with an argument its schema does not name (the valid ones said), passes a submission's
+    first_stop_lap on to the scorer (eval.decisions.kept_plan; v1 drops it), and holds the first
+    accepted submission that does not keep plan 1 of the latest rank_plans (_consistency_note) when a
     turn is left: the model is told the evidence once and its next accepted submission is final.
     ``stats`` then also gets ``protocol``, ``check_fired`` and ``check_changed`` (the final
     decision, compound or reassess laps differ from the held one), and the log a
@@ -512,7 +524,9 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             # using budget, even once the budget is spent (repeat_mode "cache").
             key = (call.name, json.dumps(args, sort_keys=True, default=str))
             if call.name == "submit_recommendation":
-                rec, error = _normalise_submission(args)
+                # v1 scores a submission as before: a first_stop_lap it was never offered is not passed on
+                rec, error = _normalise_submission(args if proto == "v2" else
+                                                   {k: v for k, v in args.items() if k != KEPT_STOP})
                 if error is None:
                     # the scorer's own checks: a submission accepted here is one it can score
                     error = tools.check_submission(rec)
@@ -568,7 +582,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                                        "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
             if call.name == "submit_recommendation" and rec is not None:
                 if held is not None:
-                    fields = ("decision", "compound", "reassess_after_laps")
+                    fields = ("decision", "compound", "reassess_after_laps", KEPT_STOP)
                     changed = any(str(rec.get(f)).upper() != str(held.get(f)).upper() for f in fields
                                   if not (f == "reassess_after_laps" and rec["decision"] == "PIT"))
                     stats["check_changed"] = changed

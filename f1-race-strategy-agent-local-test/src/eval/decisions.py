@@ -25,6 +25,14 @@ the flag, with no continuation. The continuation draws from seed +
 sim.agent_tools.BELIEF_SEED_OFFSET, like every belief-side simulation, so the belief never
 plans on the samples the world scores the plan on.
 
+A decision may also name the first stop it keeps (agent protocol v2, optional, kept_plan):
+
+    PIT c, first_stop_lap = lap + 1           -> the best full plan from the snapshot that pits now onto c
+    STAY_OUT n, first_stop_lap L, compound c  -> the best full plan whose first stop is at the end of L onto c
+
+searched as belief_optimum searches, so naming belief_optimum's own first stop scores its plan; without
+first_stop_lap a decision is expanded as above, unchanged.
+
 For the Brier score, p_pit is the stated probability that pitting now is right: the
 confidence for a PIT, 1 - confidence for a STAY_OUT.
 """
@@ -86,6 +94,8 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     action = to_action(decision)
     if action["action"] == "stay" and action["laps"] >= snapshot.remaining_laps:
         return Plan.of([[snapshot.compound, snapshot.remaining_laps]])
+    if decision.get("first_stop_lap") is not None:
+        return kept_plan(snapshot, decision, action, belief_sim, max_stops, seed=seed, n_samples=n_samples)
     # the fit at the decision snapshot plans the continuation too, as Simulator.compare does:
     # refitting at the advanced snapshot would let a to_snapshot belief see the laps stayed out
     fit = belief_sim.fitted_for(snapshot)
@@ -105,6 +115,40 @@ def to_plan(snapshot: Snapshot, decision: dict, belief_sim, max_stops: int, *, s
     if errors:
         raise InvalidDecision("; ".join(errors))
     return plan
+
+
+def kept_plan(snapshot: Snapshot, decision: dict, action: dict, belief_sim, max_stops: int, *, seed: int = 0,
+              n_samples: int | None = None) -> Plan:
+    """The plan of a decision that names the first stop it keeps (agent protocol v2's optional
+    first_stop_lap, with compound the compound fitted there): the belief's best full plan from the
+    snapshot whose first stop is at the end of lap first_stop_lap onto compound, searched as
+    belief_optimum searches (seed + BELIEF_SEED_OFFSET, n_samples, max_stops from the snapshot) with
+    that first stop fixed (optimize_batch's min_first_laps = max_first_laps, next_compound). So a
+    decision naming belief_optimum's own first stop is scored on belief_optimum's plan, where a bare
+    STAY_OUT k is re-planned after the stay. A PIT names the end of the next lap; a STAY_OUT of k laps
+    a stop no earlier than the end of lap laps_completed + k + 1. Raises InvalidDecision otherwise."""
+    lap, done = decision.get("first_stop_lap"), snapshot.laps_completed
+    if isinstance(lap, bool) or not isinstance(lap, int):
+        raise InvalidDecision(f"first_stop_lap must be a whole lap number, got {lap!r}")
+    compound = decision.get("compound")
+    if not compound:
+        raise InvalidDecision("first_stop_lap needs the compound fitted at that stop")
+    if action["action"] == "pit" and lap != done + 1:
+        raise InvalidDecision(f"PIT stops at the end of lap {done + 1}: first_stop_lap must be {done + 1} or left out")
+    if action["action"] == "stay" and lap < done + action["laps"] + 1:
+        raise InvalidDecision(f"STAY_OUT {action['laps']} allows no stop before the end of lap "
+                              f"{done + action['laps'] + 1}: first_stop_lap {lap} needs reassess_after_laps "
+                              f"of at most {max(1, lap - done - 1)}")
+    fit = belief_sim.fitted_for(snapshot)
+    compound = str(compound).upper()
+    if compound not in fit.modelled:
+        raise InvalidDecision(f"a stop onto {compound!r}, which the belief does not model (modelled: {sorted(fit.modelled)})")
+    w = lap - done
+    try:
+        return optimize_batch(snapshot, fit, seed=seed + agent_tools.BELIEF_SEED_OFFSET, n_samples=n_samples,
+                              max_stops=max_stops, min_first_laps=w, max_first_laps=w, next_compound=compound).plan
+    except NoFeasiblePlan as exc:
+        raise InvalidDecision(f"no legal plan stops at the end of lap {lap} onto {compound}: {exc}") from exc
 
 
 def belief_optimum(snapshot: Snapshot, belief_sim, max_stops: int, *, seed: int = 0,

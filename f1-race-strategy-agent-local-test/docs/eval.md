@@ -1519,6 +1519,43 @@ repeats, and 27 with the status line and cached repeats, while input
 tokens per episode went 53k, 63k, 85k. The decisions barely changed. The grace turns are
 what guarantee a submission.
 
+### Agent protocol v2
+
+`AGENT_PROTOCOL` = `v2` (the default since 2026-11-22) | `v1` (the prompt, tool surface, loop and
+submission handling before it, unchanged; rerun provenance records the protocol in effect). v2 is a
+development-side change made after the freeze: the held-out result above was run under v1 and
+stands as it is.
+
+- **Tools.** `rank_plans` (no arguments) runs the `belief_optimizer` policy's own search
+  (`optimize_batch` on the belief fit, `SEED`, the profile's samples and stop limit) and shows at
+  most four distinct plans: the best of each shape (immediate action and compounds), with the best
+  PIT-now and the best STAY_OUT plan always shown when both are legal. Plan 1 is the policy's plan.
+  Per plan: the stints, the first stop, the immediate action, `submit` (the submission fields that
+  keep it), `gap_s` to plan 1 with its 90% interval and `faster_share` over the paired draws,
+  `best_share` (fastest of those shown), `first_stop_range` (the stop laps within 1 s for that
+  shape) and flags. `decision` is plan 1's immediate action with the best PIT-now plan read against
+  the best STAY_OUT plan; `flags` names weak estimates (a compound with no race laps, a
+  prior-dominated compound, a safety car or VSC in progress; per plan, a stint past the estimated
+  tyre life or past the longest run seen when the life beyond it is a generic prior).
+  `evaluate_plan` takes a full plan, or `first_stop_lap` with an optional `compound`, and reads it
+  against plan 1. `estimate_tyre_degradation` and `estimate_pit_loss` stay. `evaluate_strategy`,
+  `compare_plans`, `get_model_report` and `get_race_snapshot` are v1 only.
+- **Submission.** v2 adds an optional `first_stop_lap` to `submit_recommendation`: with `compound`,
+  it names the first stop of the plan the submission keeps, and the scorer plays the belief's best
+  full plan with that first stop (`eval.decisions.kept_plan`: `optimize_batch` from the snapshot with
+  the first stint fixed, the same seed, samples and stop limit as `belief_optimum`). Without it a
+  decision is expanded as before. A PIT names the end of the next lap; a STAY_OUT of k laps a stop no
+  earlier than the end of lap `laps_completed + k + 1`; anything else is refused with the fix. Under
+  v1 the loop drops a `first_stop_lap` the model was never offered.
+- **Loop.** Under v2 an argument a tool's schema does not name is refused with the valid ones (v1
+  drops it silently), and an unknown tool name gets the tool list. A submission that does not keep
+  plan 1 of the model's latest `rank_plans` is held once when a turn is left: the model is shown plan
+  1's submit fields and the PIT/STAY_OUT reading, and its next accepted submission is final, changed
+  or not (`consistency_check` events in the trajectory; `check_fired`, `check_changed` in the stats).
+- **Prompt.** A decision protocol: rank_plans first, plan 1 is the default, a departure only for a
+  plan close to it and only for a named uncertainty flag; one line of evidence in the rationale; the
+  1,024-token reply cap and at most 3 calls per turn.
+
 `src.grade.grade_decision(snapshot, submission)` grades one submission the same way (valid,
 regret against the optimizer from that snapshot) for `tests/test_case.py`, which reports
 the regret and does not assert it.
