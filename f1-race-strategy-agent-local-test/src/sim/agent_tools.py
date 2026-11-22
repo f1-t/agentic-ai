@@ -4,8 +4,12 @@ Every function takes a contracts.Snapshot and returns a JSON-ready dict: NaN and
 values come back as None, and every number carries an interval, a source or a flag. They
 run on the belief simulator, configs/sim/belief.yaml as it stands (to_snapshot window,
 traffic off, SC and VSC periods from the rate model, the config's calibrator, posterior
-parameter draws, residual lap noise, the wear lower bound). The tools never build their
-own config.
+parameter draws, residual lap noise, the wear lower bound), or the yaml AGENT_BELIEF_CONFIG
+names. The tools never build their own config. Traffic is a switch (docs/eval.md
+"Traffic"): with configs/sim/belief_traffic.yaml the other cars are projected from what was
+visible at the snapshot (traffic.py, source "projected"; belief_simulator refuses the
+recorded source), and compare_plans, evaluate_action and model_report carry it compactly
+(traffic_view, traffic_report); with it off they say traffic is not modelled.
 
     race_state(snapshot)                       the snapshot, legal_compounds, remaining_laps, event_rates
     model_report(snapshot, ages)               the fit's coefficients with intervals and flags
@@ -37,6 +41,7 @@ from __future__ import annotations
 
 import copy
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +58,7 @@ from .optimizer_bridge import as_continuation
 from .race_ids import RACE_ID_ALIASES, canonical_race_id, parse_race_id, slug
 
 BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
+BELIEF_CONFIG_ENV = "AGENT_BELIEF_CONFIG"   # a belief yaml for the tools in place of BELIEF_CONFIG
 # added to the seed of every belief-side simulation, so the belief's samples are never the
 # world's (a prime, far from any seed a run uses)
 BELIEF_SEED_OFFSET = 1_000_003
@@ -64,6 +70,10 @@ PROBABILITY_COVERS = "parameter and lap-noise uncertainty under this model; does
 EVENT_RATES_PROVISIONAL = "provisional: SC from 2021 Spain, VSC placeholder"
 EVENT_RATES_CIRCUIT = "circuit"
 TRAFFIC_NOTE = "traffic is not modelled belief-side: the gaps and probabilities ignore cars on track"
+# belief traffic (traffic.py, source "projected"): how the numbers were made, in words
+TRAFFIC_BASIS = ("other cars projected from what is known at this lap only (their positions, gaps, pace and "
+                 "tyres so far); each is assumed to stop once more when its tyres reach the field's typical "
+                 "life so far; the bands cover that projection's spread, not cars reacting to us")
 CALIBRATION_NOTE = ("mean absolute error of the remaining race time for this fit window and horizon; "
                     "a conservative tolerance for a gap between plans, since the fuel error cancels between them")
 
@@ -74,9 +84,10 @@ _BELIEF: dict = {}
 
 # --- the belief simulator ---------------------------------------------------------------
 def belief_config() -> SimConfig:
-    """configs/sim/belief.yaml, read once."""
+    """configs/sim/belief.yaml, read once; the yaml AGENT_BELIEF_CONFIG names instead when set
+    (the agent's traffic switch: configs/sim/belief_traffic.yaml, docs/eval.md "Traffic")."""
     if "config" not in _BELIEF:
-        _BELIEF["config"] = SimConfig.from_file(BELIEF_CONFIG)
+        _BELIEF["config"] = SimConfig.from_file(os.environ.get(BELIEF_CONFIG_ENV) or BELIEF_CONFIG)
     return _BELIEF["config"]
 
 
@@ -95,6 +106,8 @@ def belief_simulator(snapshot: Snapshot, profile=None, config: SimConfig | None 
     profile = profile or load_profile()
     config = config or belief_config()
     race_id = canonical_race_id(snapshot.race.race_id)
+    if config.traffic.name != "none" and config.traffic.params.get("source", "recorded") != "projected":
+        raise ValueError("belief traffic must be the projected source: recorded ghosts read the race's future")
     key = (race_id, profile.hash, config.model_dump_json())
     if key not in _SIMS:
         data = _race_data(race_id, profile)
@@ -385,7 +398,57 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
             out["flags"] = [*out["flags"], "no_sd:fuel_s_per_lap_interval"]
     out["calibration_error_note"] = CALIBRATION_NOTE
     out["event_rates"] = event_rates(snapshot, sim.config)
+    out["traffic"] = traffic_report(snapshot, sim)
     return _jsonable(out)
+
+
+def traffic_on(config: SimConfig) -> bool:
+    return config.traffic.name != "none"
+
+
+def _band(b, digits=1):
+    return None if b is None else {k: round(float(v), digits) for k, v in b.items()}
+
+
+def traffic_view(est) -> dict | None:
+    """A plan's TrafficEstimate, compact: expected_rejoin_position and its 5-95 band,
+    cars_in_pit_window (cars within the first stop's pit loss behind, which come by while we
+    are in the pit lane), time_lost_s (included in the remaining time; negative: passes that
+    net gain) and final_position. None for an invalid plan."""
+    if est is None:
+        return None
+    est = est if isinstance(est, dict) else est.model_dump()
+    rejoin = est.get("rejoin_position")
+    return {"expected_rejoin_position": None if rejoin is None else round(float(rejoin["median"]), 1),
+            "rejoin_position_band": None if rejoin is None else [round(float(rejoin["low"]), 1),
+                                                                 round(float(rejoin["high"]), 1)],
+            "cars_in_pit_window": (None if est.get("cars_in_pit_window") is None
+                                   else round(float(est["cars_in_pit_window"]), 1)),
+            "time_lost_s": _band(est["time_lost_s"]), "final_position": _band(est["final_position"])}
+
+
+def traffic_report(snapshot: Snapshot, sim) -> dict:
+    """The belief's traffic at the snapshot: {modelled: False, note} with traffic off; else
+    modelled, the basis in words, cars_within_pit_loss_behind_now (other cars whose line
+    crossing at the end of this lap is within the pit loss behind ours: a stop now drops
+    behind them), dirty_air_s (the time a lap in dirty air costs, estimated from the laps so
+    far) and own_pace_s (our pace over the model on the track). Everything is from the laps up
+    to the snapshot (traffic.py, source "projected")."""
+    if not traffic_on(sim.config):
+        return {"modelled": False, "note": TRAFFIC_NOTE}
+    fit = sim.fitted_for(snapshot)
+    laps = np.arange(snapshot.laps_completed + 1, snapshot.race.total_laps + 1)
+    state = fit.traffic.prepare(snapshot, laps, fit.laps, snapshot.driver, ref_lap_s=fit.ref_lap_s,
+                                model=fit.degradation)
+    if state is None:
+        return {"modelled": True, "available": False, "basis": TRAFFIC_BASIS,
+                "note": "no lap completed yet: the field cannot be placed"}
+    pit = float(snapshot.race.pit_loss_s or 0.0)
+    start = state.table.G_prev[:, 0] if len(state.table.laps) else np.empty(0)
+    behind = int(((start > state.anchor) & (start <= state.anchor + pit)).sum())
+    return {"modelled": True, "available": True, "basis": TRAFFIC_BASIS,
+            "cars_within_pit_loss_behind_now": behind, "dirty_air_s": round(float(state.dirty_air_s), 2),
+            "own_pace_s": round(float(state.own_offset_s), 2)}
 
 
 NEUTRAL_HORIZONS = (5, 10)   # laps ahead for the chance of a new SC / VSC (pit_loss)
@@ -489,7 +552,13 @@ def compare_plans(snapshot: Snapshot, candidates, n_samples=None, *, sim=None, p
     cands = [_candidate(snapshot, c) for c in candidates]
     res = fit.compare(snapshot, cands, seed=SEED, n_samples=n,
                       continuation=_continuation(fit, n, profile.sim.max_stops))
-    return _jsonable(res.model_dump())
+    out = res.model_dump()
+    if res.traffic is not None:   # traffic on: compact per-candidate views and the basis
+        out["traffic"] = [traffic_view(t) for t in res.traffic]
+        out["traffic_basis"] = TRAFFIC_BASIS
+    else:
+        out["traffic"] = TRAFFIC_NOTE
+    return _jsonable(out)
 
 
 def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, profile=None) -> dict:
@@ -511,8 +580,12 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
       dominated, support_warnings  the action's, from the compare
       alternative                  its action, plan and remaining-time summary
 
-    No traffic_probability: traffic is not modelled belief-side (`traffic`). The numbers
-    are None when no alternative is legal; an illegal action returns {"error": ...}."""
+      traffic                      with belief traffic on: {action, alternative} as
+                                   traffic_view (expected rejoin position and band, cars in
+                                   the pit window, time lost in traffic, final position) and
+                                   basis (TRAFFIC_BASIS); TRAFFIC_NOTE with it off
+
+    The numbers are None when no alternative is legal; an illegal action returns {"error": ...}."""
     sim, profile = _setup(snapshot, sim, profile)
     n = _compare_n(profile, n_samples)
     fit = sim.fitted_for(snapshot)
@@ -536,6 +609,10 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
            "dominated": res.dominated[0], "support_warnings": res.support_warnings[0],
            "traffic": TRAFFIC_NOTE, "alternative": None, "n_samples": res.n_samples, "seed": res.seed,
            "assumptions": [f"SC and VSC rates: {event_rates(snapshot, sim.config)['source']}"]}
+    if res.traffic is not None:
+        out["traffic"] = {"action": traffic_view(res.traffic[0]),
+                          "alternative": traffic_view(res.traffic[j]) if j is not None else None,
+                          "basis": TRAFFIC_BASIS}
     if j is None:
         return _jsonable(out)
     alt = alts[j - 1]

@@ -8,7 +8,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..contracts import (Compound, CompareResult, ModelReport, Plan, PlanStint, SimResult, Snapshot,
-                         StintRecord, TimeSummary)
+                         StintRecord, TimeSummary, TrafficEstimate)
 from . import calibrators as _cal
 from . import cliff as _cliff
 from . import model_report as _report
@@ -108,6 +108,12 @@ class BatchResult:
     # bunched SC lap (traffic.py), NaN elsewhere; None without return_laps
     sc_field_delta: np.ndarray | None = None
     traffic_on: bool = False          # a traffic state was placed for this snapshot
+    # (n_plans, n_samples) with traffic placed, else None (traffic.py): the position at the
+    # flag, after the first out-lap (NaN without a stop), and the cars that come by during the
+    # first stop (within its pit loss behind at the in-lap's line; NaN without a stop)
+    final_pos: np.ndarray | None = None
+    rejoin_pos: np.ndarray | None = None
+    pit_window_cars: np.ndarray | None = None
 
     def __post_init__(self):
         self.valid = np.array([p is not None and not e for p, e in zip(self.plans, self.errors)], dtype=bool)
@@ -133,7 +139,27 @@ class BatchResult:
             bunching_s=float(self.bunching_s[i].mean()) if self.traffic_on else None,
             sc_field_delta_s=(self.sc_field_delta[i].tolist()
                               if self.traffic_on and self.sc_field_delta is not None else None),
+            traffic=self.traffic_estimate(i),
         )
+
+    def traffic_estimate(self, i) -> TrafficEstimate | None:
+        """Plan i's TrafficEstimate over the samples, None when traffic was not placed or the
+        plan is invalid."""
+        if not self.traffic_on or self.final_pos is None or not self.valid[i]:
+            return None
+
+        def band(x):
+            x = np.asarray(x, dtype=float)
+            x = x[np.isfinite(x)]
+            if not len(x):
+                return None
+            lo, med, hi = np.percentile(x, [5, 50, 95])
+            return {"low": float(lo), "median": float(med), "high": float(hi)}
+        window = self.pit_window_cars[i]
+        return TrafficEstimate(
+            time_lost_s=band(self.traffic_s[i] + self.bunching_s[i]), rejoin_position=band(self.rejoin_pos[i]),
+            cars_in_pit_window=float(np.nanmean(window)) if np.isfinite(window).any() else None,
+            final_position=band(self.final_pos[i]), passes_mean=float(self.passes[i].mean()))
 
 
 # support warning on every plan when recorded ghosts run under events other than the record's
@@ -579,10 +605,15 @@ class Simulator:
         if len(idx) == 0:
             return out
         # traffic: placed once per call, plan- and sample-independent, draws nothing
-        tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver, ref_lap_s=self.ref_lap_s)
+        tstate = self.traffic.prepare(snapshot, laps, self.laps, snapshot.driver, ref_lap_s=self.ref_lap_s,
+                                      model=self.degradation)
         out.traffic_on = tstate is not None
+        if out.traffic_on:
+            out.final_pos, out.rejoin_pos, out.pit_window_cars = (np.full((n_plans, n), np.nan) for _ in range(3))
         tw = self.traffic.support_warnings(snapshot, tstate)
-        if tstate is not None and self._events_drawn(snapshot, scenario):
+        # a projected field (traffic.py) reads nothing after the snapshot; _events_drawn reads
+        # the recorded race, so only the recorded ghosts are checked against it
+        if tstate is not None and getattr(self.traffic, "reads_future", True) and self._events_drawn(snapshot, scenario):
             tw = [*tw, TRAFFIC_DRAWN_EVENTS]
         if tw:
             for i in idx:
@@ -659,6 +690,7 @@ class Simulator:
             cliff_age = {name: cl.sample_ages(z_cl[:, cols.index(name)]) for name, cl in cliffs.items()}
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
+        t_cache = None   # the last traffic call's inputs and outputs (reused for an identical sample)
         for k in range(n):
             # main stream draw order: calibrated factors, correction z, hazard, track: do not
             # reorder, seeds depend on it (the hazard uniform is drawn here, ahead of the track
@@ -740,8 +772,25 @@ class Simulator:
             if tstate is not None:
                 # the full pit loss is booked at the end of the in-lap, so the out-lap starts
                 # from the rejoin position; it stays out of lap_s, as below
-                lap_s, extra = self.traffic.apply(tstate, lap_s, v["pit_loss_s"] * stops * scale, sc, vsc, scen)
+                pit_lap = v["pit_loss_s"] * stops * scale
+                # traffic draws nothing, so a sample whose inputs equal the previous one's (a world
+                # that draws no events, no noise and no parameters: every sample) reuses its
+                # result; a projected field cycles its variants per sample, so it never does
+                same = (t_cache is not None and not getattr(tstate, "variants", None)
+                        and np.array_equal(lap_s, t_cache[0]) and np.array_equal(pit_lap, t_cache[1])
+                        and np.array_equal(sc, t_cache[2]) and np.array_equal(vsc, t_cache[3])
+                        and scen.sc_laps == t_cache[4])
+                if same:
+                    lap_s, extra, tstate.positions = t_cache[5], t_cache[6], t_cache[7]
+                else:
+                    key = (lap_s.copy(), pit_lap, sc, vsc, list(scen.sc_laps))
+                    lap_s, extra = self.traffic.apply(tstate, lap_s, pit_lap, sc, vsc, scen)
+                    t_cache = (*key, lap_s, extra, getattr(tstate, "positions", None))
                 out.traffic_s[idx, k], out.passes[idx, k], out.bunching_s[idx, k], field_delta = extra
+                pos = getattr(tstate, "positions", None)
+                if pos is not None:   # positions at the first rejoin and at the flag
+                    out.final_pos[idx, k], out.rejoin_pos[idx, k] = pos["final_pos"], pos["rejoin_pos"]
+                    out.pit_window_cars[idx, k] = pos["pit_window_cars"]
                 if k == 0 and return_laps:
                     out.sc_field_delta[idx] = field_delta
             pit_s = v["pit_loss_s"] * (stops * scale).sum(axis=1)
@@ -842,8 +891,11 @@ class Simulator:
         valid = np.zeros(n_cand, dtype=bool)
         valid[todo] = batch.valid
         warnings = [[] for _ in plans]
+        traffic = [None] * len(plans) if batch.traffic_on else None
         for r, i in enumerate(todo):
             plans[i], errors[i], warnings[i] = batch.plans[r], batch.errors[r], batch.support_warnings[r]
+            if traffic is not None:
+                traffic[i] = batch.traffic_estimate(r)
 
         idx = np.flatnonzero(valid)
         summaries = [summarise(times[i]) if valid[i] else None for i in range(n_cand)]
@@ -867,7 +919,7 @@ class Simulator:
             p_beats=_matrix(beats, pair & ~np.eye(n_cand, dtype=bool)),
             gap_mean_s=_matrix(gap.mean(axis=2), pair), gap_std_s=_matrix(gap.std(axis=2), pair),
             best=int(idx[np.argmin([mean[i] for i in idx])]) if len(idx) else None,
-            dominated=dominated, n_samples=n, seed=seed, support_warnings=warnings,
+            dominated=dominated, n_samples=n, seed=seed, support_warnings=warnings, traffic=traffic,
         )
 
     def expand_action(self, snapshot: Snapshot, raw, continuation):
