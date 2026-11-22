@@ -1,0 +1,17 @@
+# LEGACY, for reproducing results produced before the SC alignment (docs/eval.md "Safety-car
+# duration and rates: the belief against the judge", adopted 2026-11-22): the eval's default world
+# as it was from the scorecard adoption (#114) to the alignment, its later SC/VSC periods drawn at
+# EventModel's provisional rates with memoryless geometric lengths. Pair it with
+# configs/sim/legacy/belief_pre_sc_alignment.yaml. tests/test_eval_default_config.py checks it is
+# the default world with the alignment off and nothing else.
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
