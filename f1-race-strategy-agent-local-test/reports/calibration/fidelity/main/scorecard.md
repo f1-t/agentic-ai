@@ -1,6 +1,6 @@
 # Simulator fidelity scorecard: main
 
-Races: 2019_10_united_kingdom, 2021_04_spain, 2022_02_saudi_arabia, 2023_01_bahrain, 2023_07_spain, 2024_07_emilia_romagna. Code version 58b50a00e0e3-2ebb1482c78f. World config 872d3a71bc43 (race default); belief config 8f32db455cfb. Options: {"b_drivers": 6, "b_every": 5, "samples": 20, "n_one": 4, "n_two": 3, "lodo": true, "loso": true, "grid_references": true, "hindsight_variants": true, "components": true, "seed": 0, "max_stops": 2}. Run time 41 s.
+Races: 2019_10_united_kingdom, 2021_04_spain, 2022_02_saudi_arabia, 2023_01_bahrain, 2023_07_spain, 2024_07_emilia_romagna. Code version 58b50a00e0e3-d2360f4838af. World config 872d3a71bc43 (race default); belief config 8f32db455cfb. Options: {"b_drivers": 6, "b_every": 5, "samples": 20, "n_one": 4, "n_two": 3, "lodo": true, "loso": true, "grid_references": true, "hindsight_variants": true, "components": true, "seed": 0, "max_stops": 2}. Run time 2 s.
 
 There are two simulators. The JUDGE (the eval's "world") scores every plan and builds the
 reference: it should be as close as possible to what really happened while using as little
@@ -57,52 +57,52 @@ fit: what the tyre parameters were fitted on (in-sample: every car's laps; leave
 
 | version | label | k | fit | pace | in_sample | close_pair_acc | close_pairs | spearman | mae_pos | within_1 | rel_gap_mae_s | abs_mae_s | bias_s | n_cars |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 judge | as configured | 0 | in-sample | insample | yes | 0.654 | 104 | 0.968 | 0.820 | 0.791 | 8.167 | 27.323 | -17.340 | 17.667 |
-| 1 judge | as configured | 0 | in-sample | none | yes | 0.606 | 104 | 0.689 | 2.897 | 0.373 | 24.477 | 43.839 | -17.884 | 17.667 |
-| 1 judge | as configured | 0 | in-sample | practice | yes | 0.529 | 104 | 0.783 | 2.125 | 0.541 | 21.797 | 36.443 | -22.824 | 17.667 |
-| 1 judge | as configured | 0 | leave-one-driver-out | insample | yes | 0.644 | 104 | 0.967 | 0.828 | 0.779 | 8.883 | 27.056 | -16.967 | 17.667 |
-| 1 judge | as configured | 0 | leave-one-driver-out | none | no | 0.596 | 104 | 0.632 | 3.210 | 0.309 | 26.805 | 45.541 | -17.438 | 17.667 |
-| 1 judge | as configured | 0 | leave-one-driver-out | practice | no | 0.538 | 104 | 0.761 | 2.219 | 0.522 | 23.322 | 37.266 | -22.379 | 17.667 |
-| 2 judge, substituted | pre_race_fit | 0 | in-sample | insample | yes | 0.529 | 104 | 0.933 | 1.283 | 0.654 | 10.097 | 26.014 | -14.938 | 17.667 |
-| 2 judge, substituted | pre_race_fit | 0 | in-sample | none | yes | 0.510 | 104 | 0.630 | 3.047 | 0.382 | 25.370 | 76.874 | 31.120 | 17.667 |
-| 2 judge, substituted | pre_race_fit | 0 | in-sample | practice | yes | 0.548 | 104 | 0.763 | 2.301 | 0.509 | 23.435 | 72.474 | 26.180 | 17.667 |
-| 2 judge, substituted | pre_race_fit | 0 | leave-one-driver-out | insample | yes | 0.538 | 104 | 0.928 | 1.359 | 0.644 | 10.245 | 25.809 | -14.966 | 17.667 |
-| 2 judge, substituted | pre_race_fit | 0 | leave-one-driver-out | none | no | 0.548 | 104 | 0.631 | 3.031 | 0.371 | 27.241 | 75.613 | 32.010 | 17.667 |
-| 2 judge, substituted | pre_race_fit | 0 | leave-one-driver-out | practice | no | 0.510 | 104 | 0.742 | 2.442 | 0.476 | 25.139 | 71.100 | 27.070 | 17.667 |
-| 2 judge, substituted | pit_loss_prior | 0 | in-sample | insample | yes | 0.683 | 104 | 0.968 | 0.809 | 0.781 | 8.461 | 27.469 | -21.847 | 17.667 |
-| 2 judge, substituted | pit_loss_prior | 0 | in-sample | none | yes | 0.606 | 104 | 0.686 | 2.879 | 0.381 | 24.588 | 43.739 | -22.391 | 17.667 |
-| 2 judge, substituted | pit_loss_prior | 0 | in-sample | practice | yes | 0.529 | 104 | 0.781 | 2.198 | 0.532 | 21.923 | 37.136 | -27.332 | 17.667 |
-| 2 judge, substituted | pit_loss_prior | 0 | leave-one-driver-out | insample | yes | 0.702 | 104 | 0.970 | 0.757 | 0.817 | 8.929 | 27.649 | -21.938 | 17.667 |
-| 2 judge, substituted | pit_loss_prior | 0 | leave-one-driver-out | none | no | 0.615 | 104 | 0.627 | 3.195 | 0.345 | 27.022 | 46.030 | -22.410 | 17.667 |
-| 2 judge, substituted | pit_loss_prior | 0 | leave-one-driver-out | practice | no | 0.538 | 104 | 0.759 | 2.269 | 0.494 | 23.378 | 38.498 | -27.350 | 17.667 |
-| 2 judge, substituted | r8_off | 0 | in-sample | insample | yes | 0.654 | 104 | 0.968 | 0.820 | 0.791 | 8.167 | 27.323 | -17.340 | 17.667 |
-| 2 judge, substituted | r8_off | 0 | in-sample | none | yes | 0.606 | 104 | 0.689 | 2.897 | 0.373 | 24.477 | 43.839 | -17.884 | 17.667 |
-| 2 judge, substituted | r8_off | 0 | in-sample | practice | yes | 0.529 | 104 | 0.783 | 2.125 | 0.541 | 21.797 | 36.443 | -22.824 | 17.667 |
-| 2 judge, substituted | r8_off | 0 | leave-one-driver-out | insample | yes | 0.644 | 104 | 0.967 | 0.828 | 0.779 | 8.883 | 27.056 | -16.967 | 17.667 |
-| 2 judge, substituted | r8_off | 0 | leave-one-driver-out | none | no | 0.596 | 104 | 0.632 | 3.210 | 0.309 | 26.805 | 45.541 | -17.438 | 17.667 |
-| 2 judge, substituted | r8_off | 0 | leave-one-driver-out | practice | no | 0.538 | 104 | 0.761 | 2.219 | 0.522 | 23.322 | 37.266 | -22.379 | 17.667 |
-| 2 judge, substituted | proxy_off | 0 | in-sample | insample | yes | 0.654 | 104 | 0.968 | 0.820 | 0.791 | 8.167 | 27.323 | -17.340 | 17.667 |
-| 2 judge, substituted | proxy_off | 0 | in-sample | none | yes | 0.606 | 104 | 0.689 | 2.897 | 0.373 | 24.477 | 43.839 | -17.884 | 17.667 |
-| 2 judge, substituted | proxy_off | 0 | in-sample | practice | yes | 0.529 | 104 | 0.783 | 2.125 | 0.541 | 21.797 | 36.443 | -22.824 | 17.667 |
-| 2 judge, substituted | proxy_off | 0 | leave-one-driver-out | insample | yes | 0.644 | 104 | 0.966 | 0.835 | 0.778 | 8.883 | 26.724 | -16.175 | 17.500 |
-| 2 judge, substituted | proxy_off | 0 | leave-one-driver-out | none | no | 0.596 | 104 | 0.622 | 3.238 | 0.302 | 26.805 | 45.326 | -16.666 | 17.500 |
-| 2 judge, substituted | proxy_off | 0 | leave-one-driver-out | practice | no | 0.538 | 104 | 0.758 | 2.235 | 0.516 | 23.322 | 36.931 | -21.674 | 17.500 |
-| 2 judge, substituted | all_substituted | 0 | in-sample | insample | yes | 0.559 | 59 | 0.923 | 1.294 | 0.658 | 12.387 | 32.595 | -21.854 | 16.750 |
-| 2 judge, substituted | all_substituted | 0 | in-sample | none | yes | 0.542 | 59 | 0.564 | 3.050 | 0.443 | 27.998 | 85.159 | 51.159 | 16.750 |
-| 2 judge, substituted | all_substituted | 0 | in-sample | practice | yes | 0.525 | 59 | 0.732 | 2.090 | 0.585 | 23.817 | 75.940 | 46.763 | 16.750 |
-| 2 judge, substituted | all_substituted | 0 | leave-one-driver-out | insample | yes | 0.542 | 59 | 0.917 | 1.355 | 0.655 | 12.531 | 32.807 | -22.482 | 16.750 |
-| 2 judge, substituted | all_substituted | 0 | leave-one-driver-out | none | no | 0.559 | 59 | 0.555 | 3.126 | 0.400 | 28.568 | 83.048 | 50.851 | 16.750 |
-| 2 judge, substituted | all_substituted | 0 | leave-one-driver-out | practice | no | 0.508 | 59 | 0.724 | 2.142 | 0.590 | 24.602 | 74.498 | 46.455 | 16.750 |
-| 3 predictive | predictive | 0 | as-of (to_snapshot) | asof | no | 0.510 | 104 | 0.760 | 2.359 | 0.461 | 23.699 | 75.803 | 41.197 | 17.667 |
-| 3 predictive | predictive | 10 | as-of (to_snapshot) | asof | no | 0.615 | 104 | 0.916 | 1.536 | 0.621 | 18.914 | 51.380 | 37.989 | 17.667 |
-| 3 predictive | predictive | 20 | as-of (to_snapshot) | asof | no | 0.606 | 104 | 0.902 | 1.589 | 0.611 | 16.173 | 33.678 | 26.304 | 17.667 |
-| 3 predictive | predictive | 30 | as-of (to_snapshot) | asof | no | 0.606 | 104 | 0.923 | 1.310 | 0.680 | 11.332 | 16.613 | 6.632 | 17.667 |
-| 3 predictive | predictive | 40 | as-of (to_snapshot) | asof | no | 0.673 | 104 | 0.938 | 1.135 | 0.771 | 8.073 | 11.037 | -1.707 | 17.667 |
-| 3 predictive | predictive | 0 | as-of (to_snapshot) | none | no | 0.519 | 104 | 0.666 | 3.014 | 0.363 | 25.428 | 80.091 | 46.137 | 17.667 |
-| 3 predictive | predictive | 10 | as-of (to_snapshot) | none | no | 0.587 | 104 | 0.792 | 2.349 | 0.411 | 21.731 | 57.227 | 35.712 | 17.667 |
-| 3 predictive | predictive | 20 | as-of (to_snapshot) | none | no | 0.615 | 104 | 0.798 | 2.097 | 0.505 | 19.888 | 35.220 | 24.808 | 17.667 |
-| 3 predictive | predictive | 30 | as-of (to_snapshot) | none | no | 0.615 | 104 | 0.865 | 1.635 | 0.639 | 16.695 | 24.117 | 5.729 | 17.667 |
-| 3 predictive | predictive | 40 | as-of (to_snapshot) | none | no | 0.702 | 104 | 0.926 | 1.187 | 0.726 | 12.487 | 18.034 | -1.862 | 17.667 |
+| 1 judge | as configured | 0 | in-sample | insample | yes | 0.654 | 104.000 | 0.968 | 0.820 | 0.791 | 8.167 | 27.323 | -17.340 | 17.667 |
+| 1 judge | as configured | 0 | in-sample | none | yes | 0.606 | 104.000 | 0.689 | 2.897 | 0.373 | 24.477 | 43.839 | -17.884 | 17.667 |
+| 1 judge | as configured | 0 | in-sample | practice | yes | 0.529 | 104.000 | 0.783 | 2.125 | 0.541 | 21.797 | 36.443 | -22.824 | 17.667 |
+| 1 judge | as configured | 0 | leave-one-driver-out | insample | yes | 0.644 | 104.000 | 0.967 | 0.828 | 0.779 | 8.883 | 27.056 | -16.967 | 17.667 |
+| 1 judge | as configured | 0 | leave-one-driver-out | none | no | 0.596 | 104.000 | 0.632 | 3.210 | 0.309 | 26.805 | 45.541 | -17.438 | 17.667 |
+| 1 judge | as configured | 0 | leave-one-driver-out | practice | no | 0.538 | 104.000 | 0.761 | 2.219 | 0.522 | 23.322 | 37.266 | -22.379 | 17.667 |
+| 2 judge, substituted | pre_race_fit | 0 | in-sample | insample | yes | 0.529 | 104.000 | 0.933 | 1.283 | 0.654 | 10.097 | 26.014 | -14.938 | 17.667 |
+| 2 judge, substituted | pre_race_fit | 0 | in-sample | none | yes | 0.510 | 104.000 | 0.630 | 3.047 | 0.382 | 25.370 | 76.874 | 31.120 | 17.667 |
+| 2 judge, substituted | pre_race_fit | 0 | in-sample | practice | yes | 0.548 | 104.000 | 0.763 | 2.301 | 0.509 | 23.435 | 72.474 | 26.180 | 17.667 |
+| 2 judge, substituted | pre_race_fit | 0 | leave-one-driver-out | insample | yes | 0.538 | 104.000 | 0.928 | 1.359 | 0.644 | 10.245 | 25.809 | -14.966 | 17.667 |
+| 2 judge, substituted | pre_race_fit | 0 | leave-one-driver-out | none | no | 0.548 | 104.000 | 0.631 | 3.031 | 0.371 | 27.241 | 75.613 | 32.010 | 17.667 |
+| 2 judge, substituted | pre_race_fit | 0 | leave-one-driver-out | practice | no | 0.510 | 104.000 | 0.742 | 2.442 | 0.476 | 25.139 | 71.100 | 27.070 | 17.667 |
+| 2 judge, substituted | pit_loss_prior | 0 | in-sample | insample | yes | 0.683 | 104.000 | 0.968 | 0.809 | 0.781 | 8.461 | 27.469 | -21.847 | 17.667 |
+| 2 judge, substituted | pit_loss_prior | 0 | in-sample | none | yes | 0.606 | 104.000 | 0.686 | 2.879 | 0.381 | 24.588 | 43.739 | -22.391 | 17.667 |
+| 2 judge, substituted | pit_loss_prior | 0 | in-sample | practice | yes | 0.529 | 104.000 | 0.781 | 2.198 | 0.532 | 21.923 | 37.136 | -27.332 | 17.667 |
+| 2 judge, substituted | pit_loss_prior | 0 | leave-one-driver-out | insample | yes | 0.702 | 104.000 | 0.970 | 0.757 | 0.817 | 8.929 | 27.649 | -21.938 | 17.667 |
+| 2 judge, substituted | pit_loss_prior | 0 | leave-one-driver-out | none | no | 0.615 | 104.000 | 0.627 | 3.195 | 0.345 | 27.022 | 46.030 | -22.410 | 17.667 |
+| 2 judge, substituted | pit_loss_prior | 0 | leave-one-driver-out | practice | no | 0.538 | 104.000 | 0.759 | 2.269 | 0.494 | 23.378 | 38.498 | -27.350 | 17.667 |
+| 2 judge, substituted | r8_off | 0 | in-sample | insample | yes | 0.654 | 104.000 | 0.968 | 0.820 | 0.791 | 8.167 | 27.323 | -17.340 | 17.667 |
+| 2 judge, substituted | r8_off | 0 | in-sample | none | yes | 0.606 | 104.000 | 0.689 | 2.897 | 0.373 | 24.477 | 43.839 | -17.884 | 17.667 |
+| 2 judge, substituted | r8_off | 0 | in-sample | practice | yes | 0.529 | 104.000 | 0.783 | 2.125 | 0.541 | 21.797 | 36.443 | -22.824 | 17.667 |
+| 2 judge, substituted | r8_off | 0 | leave-one-driver-out | insample | yes | 0.644 | 104.000 | 0.967 | 0.828 | 0.779 | 8.883 | 27.056 | -16.967 | 17.667 |
+| 2 judge, substituted | r8_off | 0 | leave-one-driver-out | none | no | 0.596 | 104.000 | 0.632 | 3.210 | 0.309 | 26.805 | 45.541 | -17.438 | 17.667 |
+| 2 judge, substituted | r8_off | 0 | leave-one-driver-out | practice | no | 0.538 | 104.000 | 0.761 | 2.219 | 0.522 | 23.322 | 37.266 | -22.379 | 17.667 |
+| 2 judge, substituted | proxy_off | 0 | in-sample | insample | yes | 0.654 | 104.000 | 0.968 | 0.820 | 0.791 | 8.167 | 27.323 | -17.340 | 17.667 |
+| 2 judge, substituted | proxy_off | 0 | in-sample | none | yes | 0.606 | 104.000 | 0.689 | 2.897 | 0.373 | 24.477 | 43.839 | -17.884 | 17.667 |
+| 2 judge, substituted | proxy_off | 0 | in-sample | practice | yes | 0.529 | 104.000 | 0.783 | 2.125 | 0.541 | 21.797 | 36.443 | -22.824 | 17.667 |
+| 2 judge, substituted | proxy_off | 0 | leave-one-driver-out | insample | yes | 0.644 | 104.000 | 0.966 | 0.835 | 0.778 | 8.883 | 26.724 | -16.175 | 17.500 |
+| 2 judge, substituted | proxy_off | 0 | leave-one-driver-out | none | no | 0.596 | 104.000 | 0.622 | 3.238 | 0.302 | 26.805 | 45.326 | -16.666 | 17.500 |
+| 2 judge, substituted | proxy_off | 0 | leave-one-driver-out | practice | no | 0.538 | 104.000 | 0.758 | 2.235 | 0.516 | 23.322 | 36.931 | -21.674 | 17.500 |
+| 2 judge, substituted | all_substituted | 0 | in-sample | insample | yes | 0.573 | 75.000 | 0.934 | 1.152 | 0.703 | 11.378 | 29.012 | -20.351 | 16.800 |
+| 2 judge, substituted | all_substituted | 0 | in-sample | none | yes | 0.547 | 75.000 | 0.599 | 3.040 | 0.413 | 26.533 | 81.242 | 27.845 | 16.800 |
+| 2 judge, substituted | all_substituted | 0 | in-sample | practice | yes | 0.520 | 75.000 | 0.741 | 2.190 | 0.527 | 24.891 | 76.363 | 21.800 | 16.800 |
+| 2 judge, substituted | all_substituted | 0 | leave-one-driver-out | insample | yes | 0.573 | 75.000 | 0.925 | 1.249 | 0.677 | 11.433 | 29.030 | -20.718 | 16.800 |
+| 2 judge, substituted | all_substituted | 0 | leave-one-driver-out | none | no | 0.560 | 75.000 | 0.583 | 3.148 | 0.367 | 28.554 | 80.053 | 28.152 | 16.800 |
+| 2 judge, substituted | all_substituted | 0 | leave-one-driver-out | practice | no | 0.493 | 75.000 | 0.728 | 2.279 | 0.531 | 26.389 | 74.656 | 22.106 | 16.800 |
+| 3 predictive | predictive | 0 | as-of (to_snapshot) | asof | no | 0.510 | 104.000 | 0.760 | 2.359 | 0.461 | 23.699 | 75.803 | 41.197 | 17.667 |
+| 3 predictive | predictive | 10 | as-of (to_snapshot) | asof | no | 0.615 | 104.000 | 0.916 | 1.536 | 0.621 | 18.914 | 51.380 | 37.989 | 17.667 |
+| 3 predictive | predictive | 20 | as-of (to_snapshot) | asof | no | 0.606 | 104.000 | 0.902 | 1.589 | 0.611 | 16.173 | 33.678 | 26.304 | 17.667 |
+| 3 predictive | predictive | 30 | as-of (to_snapshot) | asof | no | 0.606 | 104.000 | 0.923 | 1.310 | 0.680 | 11.332 | 16.613 | 6.632 | 17.667 |
+| 3 predictive | predictive | 40 | as-of (to_snapshot) | asof | no | 0.673 | 104.000 | 0.938 | 1.135 | 0.771 | 8.073 | 11.037 | -1.707 | 17.667 |
+| 3 predictive | predictive | 0 | as-of (to_snapshot) | none | no | 0.519 | 104.000 | 0.666 | 3.014 | 0.363 | 25.428 | 80.091 | 46.137 | 17.667 |
+| 3 predictive | predictive | 10 | as-of (to_snapshot) | none | no | 0.587 | 104.000 | 0.792 | 2.349 | 0.411 | 21.731 | 57.227 | 35.712 | 17.667 |
+| 3 predictive | predictive | 20 | as-of (to_snapshot) | none | no | 0.615 | 104.000 | 0.798 | 2.097 | 0.505 | 19.888 | 35.220 | 24.808 | 17.667 |
+| 3 predictive | predictive | 30 | as-of (to_snapshot) | none | no | 0.615 | 104.000 | 0.865 | 1.635 | 0.639 | 16.695 | 24.117 | 5.729 | 17.667 |
+| 3 predictive | predictive | 40 | as-of (to_snapshot) | none | no | 0.702 | 104.000 | 0.926 | 1.187 | 0.726 | 12.487 | 18.034 | -1.862 | 17.667 |
 
 ## A. Judge versus reality
 
@@ -172,18 +172,18 @@ A4: the judge's lap-0 reference against the field (and the share of reference pl
 
 A paired: each whole-race input replaced by its no-hindsight substitute, change against the judge as configured (order: pace insample; positive d_close_pair_acc is better):
 
-| substitute | variant | replaces | with | races_failed | d_close_pair_acc | d_spearman | d_rel_gap_mae_s | d_race_pace_mae_s | d_race_pace_bias_s | d_stop_gain_bias_s | d_pit_err_per_stop_s | d_stint_mae_s | d_match_field_mode | d_lap0_beyond_raced | d_lap0_beyond_raced_margin |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| pre_race_fit | in | fit_window | practice long runs plus the pre_race base delta (no race laps) |  | -0.125 | -0.035 | 1.930 | -0.787 | 1.828 | -0.146 | -0.081 | 1.821 | 0.115 | -0.501 | -0.026 |
-| pre_race_fit | lodo | fit_window | practice long runs plus the pre_race base delta (no race laps) |  | -0.106 | -0.039 | 1.362 | -0.866 | 1.521 | -0.130 | -0.136 | 1.634 | - | - | - |
-| pit_loss_prior | in | pit_loss | the code's constant prior, 22.0 s (no circuit history on this branch) |  | 0.029 | 0.000 | 0.294 | 0.553 | -4.885 | 0.000 | -2.725 | 0.000 | -0.043 | -0.010 | 0.026 |
-| pit_loss_prior | lodo | pit_loss | the code's constant prior, 22.0 s (no circuit history on this branch) |  | 0.058 | 0.004 | 0.046 | 0.841 | -5.164 | 0.000 | -2.881 | 0.000 | - | - | - |
-| r8_off | in | stint_limit | no stint limit (A4 only: replays do not apply R8) |  | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | -0.044 | 0.149 | 0.782 |
-| r8_off | lodo | stint_limit | no stint limit (A4 only: replays do not apply R8) |  | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | - | - | - |
-| proxy_off | in | proxy_raced | no compound proxy: only raced compounds are priced |  | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | -0.053 | -0.009 | -0.061 |
-| proxy_off | lodo | proxy_raced | no compound proxy: only raced compounds are priced |  | 0.000 | -0.001 | 0.000 | -0.312 | 0.407 | 0.002 | 0.270 | 0.164 | - | - | - |
-| all_substituted | in | every whole-race input above | every substitute together | 2023_07_spain 2024_07_emilia_romagna | -0.095 | -0.045 | 4.221 | 6.095 | -4.969 | -0.427 | -2.050 | 4.647 | 0.049 | -0.181 | 0.452 |
-| all_substituted | lodo | every whole-race input above | every substitute together | 2023_07_spain 2024_07_emilia_romagna | -0.102 | -0.050 | 3.648 | 6.330 | -5.764 | -0.399 | -2.228 | 4.443 | - | - | - |
+| substitute | variant | replaces | with | races_failed | close_pairs | close_pairs_base | d_close_pair_acc | d_spearman | d_rel_gap_mae_s | d_race_pace_mae_s | d_race_pace_bias_s | d_stop_gain_bias_s | d_pit_err_per_stop_s | d_stint_mae_s | d_match_field_mode | d_lap0_beyond_raced | d_lap0_beyond_raced_margin |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| pre_race_fit | in | fit_window | practice long runs plus the pre_race base delta (no race laps) |  | 104 | 104 | -0.125 | -0.035 | 1.930 | -0.787 | 1.828 | -0.146 | -0.081 | 1.821 | 0.115 | -0.501 | -0.026 |
+| pre_race_fit | lodo | fit_window | practice long runs plus the pre_race base delta (no race laps) |  | 104 | 104 | -0.106 | -0.039 | 1.362 | -0.866 | 1.521 | -0.130 | -0.136 | 1.634 | - | - | - |
+| pit_loss_prior | in | pit_loss | the code's constant prior, 22.0 s (no circuit history on this branch) |  | 104 | 104 | 0.029 | 0.000 | 0.294 | 0.553 | -4.885 | 0.000 | -2.725 | 0.000 | -0.043 | -0.010 | 0.026 |
+| pit_loss_prior | lodo | pit_loss | the code's constant prior, 22.0 s (no circuit history on this branch) |  | 104 | 104 | 0.058 | 0.004 | 0.046 | 0.841 | -5.164 | 0.000 | -2.881 | 0.000 | - | - | - |
+| r8_off | in | stint_limit | no stint limit (A4 only: replays do not apply R8) |  | 104 | 104 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | -0.044 | 0.149 | 0.782 |
+| r8_off | lodo | stint_limit | no stint limit (A4 only: replays do not apply R8) |  | 104 | 104 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | - | - | - |
+| proxy_off | in | proxy_raced | no compound proxy: only raced compounds are priced |  | 104 | 104 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | -0.053 | -0.009 | -0.061 |
+| proxy_off | lodo | proxy_raced | no compound proxy: only raced compounds are priced |  | 104 | 104 | 0.000 | -0.001 | 0.000 | -0.312 | 0.407 | 0.002 | 0.270 | 0.164 | - | - | - |
+| all_substituted | in | every whole-race input above | every substitute together |  | 75 | 104 | -0.081 | -0.034 | 3.211 | 2.331 | -3.547 | -0.209 | -2.567 | 3.219 | -0.034 | -0.352 | 0.281 |
+| all_substituted | lodo | every whole-race input above | every substitute together |  | 75 | 104 | -0.071 | -0.042 | 2.550 | 2.378 | -4.076 | -0.191 | -2.733 | 3.038 | - | - | - |
 
 A6: hindsight ledger (judge and predictive):
 
@@ -283,134 +283,64 @@ Each component's prediction from allowed information against the whole-race meas
 | tyre_life | belief support edge @k20 | median stint-end age | 16 | 6 | 10.406 | 10.406 | - | - |
 | tyre_life | as-of data (race to k20, practice) | oldest age run | 16 | 6 | 13.000 | -9.750 | - | - |
 | tyre_life | as-of data (race to k20, practice) | median stint-end age | 16 | 6 | 6.969 | 0.656 | - | - |
-| tyre_life | belief support edge @k33 | oldest age run | 5 | 2 | 0.000 | 0.000 | - | - |
-| tyre_life | belief support edge @k33 | median stint-end age | 5 | 2 | 13.100 | 13.100 | - | - |
-| tyre_life | as-of data (race to k33, practice) | oldest age run | 5 | 2 | 7.400 | -7.400 | - | - |
-| tyre_life | as-of data (race to k33, practice) | median stint-end age | 5 | 2 | 5.700 | 5.700 | - | - |
+| tyre_life | belief support edge @k(mid) | oldest age run | 16 | 6 | 0.000 | 0.000 | - | - |
+| tyre_life | belief support edge @k(mid) | median stint-end age | 16 | 6 | 10.406 | 10.406 | - | - |
+| tyre_life | as-of data (race to k(mid), practice) | oldest age run | 16 | 6 | 9.625 | -6.375 | - | - |
+| tyre_life | as-of data (race to k(mid), practice) | median stint-end age | 16 | 6 | 6.969 | 4.031 | - | - |
 | wear_rate | belief @k0 | within-stint slope less fuel | 15 | 6 | 0.033 | -0.008 | 0.600 | 0.933 |
 | wear_rate | belief @k10 | within-stint slope less fuel | 15 | 6 | 0.042 | -0.016 | 0.400 | 0.467 |
 | wear_rate | belief @k20 | within-stint slope less fuel | 15 | 6 | 0.042 | -0.024 | 0.333 | 0.467 |
-| wear_rate | belief @k33 | within-stint slope less fuel | 5 | 2 | 0.020 | -0.017 | 0.400 | 0.600 |
+| wear_rate | belief @k(mid) | within-stint slope less fuel | 15 | 6 | 0.034 | -0.022 | 0.333 | 0.533 |
 | wear_rate | judge (full fit) | within-stint slope less fuel | 15 | 6 | 0.016 | -0.013 | - | - |
 | fresh_tyre_gain | belief @k0 | real gain at the stop | 183 | 6 | 0.772 | -0.310 | - | - |
 | fresh_tyre_gain | belief @k10 | real gain at the stop | 169 | 6 | 1.126 | -0.534 | - | - |
 | fresh_tyre_gain | belief @k20 | real gain at the stop | 113 | 6 | 0.872 | -0.314 | - | - |
-| fresh_tyre_gain | belief @k33 | real gain at the stop | 37 | 2 | 0.510 | -0.168 | - | - |
+| fresh_tyre_gain | belief @k(mid) | real gain at the stop | 71 | 6 | 0.627 | 0.029 | - | - |
 | compound_gap | belief @k0 | race (judge full fit, fresh tyre, mid-race) | 14 | 6 | 0.934 | -0.598 | - | - |
 | compound_gap | belief @k0 | qualifying | 3 | 3 | 0.362 | 0.362 | - | - |
 | compound_gap | belief @k10 | race (judge full fit, fresh tyre, mid-race) | 14 | 6 | 0.724 | -0.467 | - | - |
 | compound_gap | belief @k10 | qualifying | 3 | 3 | 0.750 | 0.698 | - | - |
 | compound_gap | belief @k20 | race (judge full fit, fresh tyre, mid-race) | 14 | 6 | 0.514 | -0.123 | - | - |
 | compound_gap | belief @k20 | qualifying | 3 | 3 | 0.641 | 0.578 | - | - |
-| compound_gap | belief @k33 | race (judge full fit, fresh tyre, mid-race) | 4 | 2 | 0.312 | 0.312 | - | - |
-| compound_gap | belief @k33 | qualifying | 1 | 1 | 1.270 | 1.270 | - | - |
+| compound_gap | belief @k(mid) | race (judge full fit, fresh tyre, mid-race) | 14 | 6 | 0.317 | -0.030 | - | - |
+| compound_gap | belief @k(mid) | qualifying | 3 | 3 | 0.897 | 0.826 | - | - |
 | fuel | prior (config) | race (judge full fit) | 6 | 6 | 0.023 | 0.023 | - | - |
 | fuel | belief @k0 | race (judge full fit) | 6 | 6 | 0.023 | 0.023 | 0.167 | 0.333 |
 | fuel | belief @k10 | race (judge full fit) | 6 | 6 | 0.021 | 0.020 | 0.167 | 0.333 |
 | fuel | belief @k20 | race (judge full fit) | 6 | 6 | 0.015 | 0.015 | 0.333 | 0.333 |
-| fuel | belief @k33 | race (judge full fit) | 2 | 2 | 0.002 | 0.002 | 0.500 | 0.500 |
+| fuel | belief @k(mid) | race (judge full fit) | 6 | 6 | 0.008 | 0.004 | 0.500 | 0.667 |
 | pit_loss | prior (code constant) | whole race, robust (median of green stops) | 6 | 6 | 2.282 | -1.637 | - | - |
 | pit_loss | prior (code constant) | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 4.233 | -1.917 | - | - |
 | pit_loss | belief charged @k0 | whole race, robust (median of green stops) | 6 | 6 | 2.435 | 0.280 | - | - |
 | pit_loss | belief charged @k0 | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 0.000 | 0.000 | - | - |
 | pit_loss | belief charged @k0 | whole race, SC stops | 3 | 3 | 6.280 | -5.049 | - | - |
-| pit_loss | as-of data (green stops to k0, n=0) | whole race, robust (median of green stops) | 0 | 6 | - | - | - | - |
-| pit_loss | as-of data (green stops to k0, n=0) | whole race, mean (RaceParams.pit_loss_s) | 0 | 6 | - | - | - | - |
+| pit_loss | as-of data (green stops to k0) | whole race, robust (median of green stops) | 0 | 0 | - | - | - | - |
+| pit_loss | as-of data (green stops to k0) | whole race, mean (RaceParams.pit_loss_s) | 0 | 0 | - | - | - | - |
 | pit_loss | belief charged @k10 | whole race, robust (median of green stops) | 6 | 6 | 2.435 | 0.280 | - | - |
 | pit_loss | belief charged @k10 | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 0.000 | 0.000 | - | - |
 | pit_loss | belief charged @k10 | whole race, SC stops | 3 | 3 | 6.280 | -5.049 | - | - |
-| pit_loss | as-of data (green stops to k10, n=0) | whole race, robust (median of green stops) | 0 | 3 | - | - | - | - |
-| pit_loss | as-of data (green stops to k10, n=0) | whole race, mean (RaceParams.pit_loss_s) | 0 | 3 | - | - | - | - |
+| pit_loss | as-of data (green stops to k10) | whole race, robust (median of green stops) | 3 | 3 | 0.627 | -0.627 | - | - |
+| pit_loss | as-of data (green stops to k10) | whole race, mean (RaceParams.pit_loss_s) | 3 | 3 | 1.901 | -1.901 | - | - |
 | pit_loss | belief charged @k20 | whole race, robust (median of green stops) | 6 | 6 | 2.435 | 0.280 | - | - |
 | pit_loss | belief charged @k20 | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 0.000 | 0.000 | - | - |
 | pit_loss | belief charged @k20 | whole race, SC stops | 3 | 3 | 6.280 | -5.049 | - | - |
-| pit_loss | as-of data (green stops to k20, n=1) | whole race, robust (median of green stops) | 1 | 1 | 1.583 | 1.583 | - | - |
-| pit_loss | as-of data (green stops to k20, n=1) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 1.322 | 1.322 | - | - |
-| pit_loss | belief charged @k33 | whole race, robust (median of green stops) | 2 | 2 | 0.806 | 0.806 | - | - |
-| pit_loss | belief charged @k33 | whole race, mean (RaceParams.pit_loss_s) | 2 | 2 | 0.000 | 0.000 | - | - |
-| pit_loss | belief charged @k33 | whole race, SC stops | 1 | 1 | 3.148 | -3.148 | - | - |
-| pit_loss | as-of data (green stops to k33, n=17) | whole race, robust (median of green stops) | 1 | 1 | 0.835 | -0.835 | - | - |
-| pit_loss | as-of data (green stops to k33, n=17) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 1.096 | -1.096 | - | - |
+| pit_loss | as-of data (green stops to k20) | whole race, robust (median of green stops) | 6 | 6 | 0.459 | 0.077 | - | - |
+| pit_loss | as-of data (green stops to k20) | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 2.685 | -0.203 | - | - |
+| pit_loss | belief charged @k(mid) | whole race, robust (median of green stops) | 6 | 6 | 2.435 | 0.280 | - | - |
+| pit_loss | belief charged @k(mid) | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 0.000 | 0.000 | - | - |
+| pit_loss | belief charged @k(mid) | whole race, SC stops | 3 | 3 | 6.280 | -5.049 | - | - |
+| pit_loss | as-of data (green stops to k(mid)) | whole race, robust (median of green stops) | 6 | 6 | 0.257 | -0.091 | - | - |
+| pit_loss | as-of data (green stops to k(mid)) | whole race, mean (RaceParams.pit_loss_s) | 6 | 6 | 2.651 | -0.370 | - | - |
 | lap1_and_warmup | prior (config) | observed (median lap-1 residual + prior) | 6 | 6 | 1.725 | 1.535 | - | - |
 | lap1_and_warmup | model (no warm-up term: 0) | median residual of the first lap after the out-lap | 6 | 6 | 0.339 | 0.075 | - | - |
 | traffic_rejoin | judge rejoin position (horizon 2) | real position after the out-lap | 190 | 6 | 0.584 | 0.121 | - | - |
 | traffic_rejoin | belief rejoin position (horizon 2) | real position after the out-lap | 190 | 6 | 0.711 | 0.384 | - | - |
 | neutralisations | judge expected (none) | occurred | 24 | 6 | 0.917 | -0.917 | - | - |
-| neutralisations | judge config | observed (mean SC lap / ref lap) | 3 | 6 | 0.074 | -0.074 | - | - |
-| neutralisations | judge config | observed (median VSC lap / green prediction) | 2 | 6 | 0.072 | 0.061 | - | - |
+| neutralisations | judge config | observed (mean SC lap / ref lap) | 3 | 3 | 0.074 | -0.074 | - | - |
+| neutralisations | judge config | observed (median VSC lap / green prediction) | 2 | 2 | 0.072 | 0.061 | - | - |
 | neutralisations | belief expected (rate) | occurred | 24 | 6 | 1.347 | 0.853 | - | - |
-| neutralisations | belief config | observed (mean SC lap / ref lap) | 3 | 6 | 0.074 | -0.074 | - | - |
-| neutralisations | belief config | observed (median VSC lap / green prediction) | 2 | 6 | 0.072 | 0.061 | - | - |
-| pit_loss | as-of data (green stops to k10, n=5) | whole race, robust (median of green stops) | 1 | 1 | 0.393 | -0.393 | - | - |
-| pit_loss | as-of data (green stops to k10, n=5) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 1.745 | -1.745 | - | - |
-| pit_loss | as-of data (green stops to k20, n=16) | whole race, robust (median of green stops) | 1 | 1 | 0.026 | 0.026 | - | - |
-| pit_loss | as-of data (green stops to k20, n=16) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 1.326 | -1.326 | - | - |
-| pit_loss | as-of data (green stops to k33, n=23) | whole race, robust (median of green stops) | 1 | 1 | 0.077 | -0.077 | - | - |
-| pit_loss | as-of data (green stops to k33, n=23) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 1.428 | -1.428 | - | - |
-| tyre_life | belief support edge @k28 | oldest age run | 3 | 1 | 0.000 | 0.000 | - | - |
-| tyre_life | belief support edge @k28 | median stint-end age | 3 | 1 | 7.333 | 7.333 | - | - |
-| tyre_life | as-of data (race to k28, practice) | oldest age run | 3 | 1 | 8.000 | -1.333 | - | - |
-| tyre_life | as-of data (race to k28, practice) | median stint-end age | 3 | 1 | 6.000 | 6.000 | - | - |
-| wear_rate | belief @k28 | within-stint slope less fuel | 3 | 1 | 0.095 | -0.080 | 0.000 | 0.000 |
-| fresh_tyre_gain | belief @k28 | real gain at the stop | 19 | 1 | 0.707 | 0.097 | - | - |
-| compound_gap | belief @k28 | race (judge full fit, fresh tyre, mid-race) | 3 | 1 | 0.496 | 0.014 | - | - |
-| fuel | belief @k28 | race (judge full fit) | 1 | 1 | 0.002 | -0.002 | 1.000 | 1.000 |
-| pit_loss | as-of data (green stops to k10, n=1) | whole race, robust (median of green stops) | 1 | 1 | 1.323 | -1.323 | - | - |
-| pit_loss | as-of data (green stops to k10, n=1) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 3.333 | -3.333 | - | - |
-| pit_loss | as-of data (green stops to k20, n=18) | whole race, robust (median of green stops) | 1 | 1 | 0.158 | -0.158 | - | - |
-| pit_loss | as-of data (green stops to k20, n=18) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 2.168 | -2.168 | - | - |
-| pit_loss | belief charged @k28 | whole race, robust (median of green stops) | 1 | 1 | 2.009 | 2.009 | - | - |
-| pit_loss | belief charged @k28 | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.000 | 0.000 | - | - |
-| pit_loss | as-of data (green stops to k28, n=24) | whole race, robust (median of green stops) | 1 | 1 | 0.126 | 0.126 | - | - |
-| pit_loss | as-of data (green stops to k28, n=24) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 1.883 | -1.883 | - | - |
-| tyre_life | belief support edge @k26 | oldest age run | 3 | 1 | 0.000 | 0.000 | - | - |
-| tyre_life | belief support edge @k26 | median stint-end age | 3 | 1 | 12.667 | 12.667 | - | - |
-| tyre_life | as-of data (race to k26, practice) | oldest age run | 3 | 1 | 11.333 | -11.333 | - | - |
-| tyre_life | as-of data (race to k26, practice) | median stint-end age | 3 | 1 | 8.667 | 1.333 | - | - |
-| wear_rate | belief @k26 | within-stint slope less fuel | 3 | 1 | 0.014 | -0.014 | 0.667 | 1.000 |
-| fresh_tyre_gain | belief @k26 | real gain at the stop | 5 | 1 | 0.656 | -0.050 | - | - |
-| compound_gap | belief @k26 | race (judge full fit, fresh tyre, mid-race) | 3 | 1 | 0.389 | -0.389 | - | - |
-| compound_gap | belief @k26 | qualifying | 1 | 1 | 0.105 | -0.105 | - | - |
-| fuel | belief @k26 | race (judge full fit) | 1 | 1 | 0.006 | -0.006 | 0.000 | 1.000 |
-| pit_loss | as-of data (green stops to k20, n=12) | whole race, robust (median of green stops) | 1 | 1 | 0.160 | -0.160 | - | - |
-| pit_loss | as-of data (green stops to k20, n=12) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 4.223 | -4.223 | - | - |
-| pit_loss | belief charged @k26 | whole race, robust (median of green stops) | 1 | 1 | 4.063 | 4.063 | - | - |
-| pit_loss | belief charged @k26 | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.000 | 0.000 | - | - |
-| pit_loss | belief charged @k26 | whole race, SC stops | 1 | 1 | 1.846 | 1.846 | - | - |
-| pit_loss | as-of data (green stops to k26, n=13) | whole race, robust (median of green stops) | 1 | 1 | 0.002 | -0.002 | - | - |
-| pit_loss | as-of data (green stops to k26, n=13) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 4.064 | -4.064 | - | - |
-| tyre_life | belief support edge @k25 | oldest age run | 2 | 1 | 0.000 | 0.000 | - | - |
-| tyre_life | belief support edge @k25 | median stint-end age | 2 | 1 | 4.000 | 4.000 | - | - |
-| tyre_life | as-of data (race to k25, practice) | oldest age run | 2 | 1 | 10.500 | -3.500 | - | - |
-| tyre_life | as-of data (race to k25, practice) | median stint-end age | 2 | 1 | 7.500 | 0.500 | - | - |
-| wear_rate | belief @k25 | within-stint slope less fuel | 2 | 1 | 0.012 | -0.007 | 0.500 | 1.000 |
-| fresh_tyre_gain | belief @k25 | real gain at the stop | 4 | 1 | 0.805 | 0.244 | - | - |
-| compound_gap | belief @k25 | race (judge full fit, fresh tyre, mid-race) | 1 | 1 | 0.164 | -0.164 | - | - |
-| fuel | belief @k25 | race (judge full fit) | 1 | 1 | 0.031 | 0.031 | 0.000 | 0.000 |
-| pit_loss | as-of data (green stops to k20, n=2) | whole race, robust (median of green stops) | 1 | 1 | 0.340 | -0.340 | - | - |
-| pit_loss | as-of data (green stops to k20, n=2) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 6.126 | 6.126 | - | - |
-| pit_loss | belief charged @k25 | whole race, robust (median of green stops) | 1 | 1 | 6.467 | -6.467 | - | - |
-| pit_loss | belief charged @k25 | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.000 | 0.000 | - | - |
-| pit_loss | belief charged @k25 | whole race, SC stops | 1 | 1 | 13.846 | -13.846 | - | - |
-| pit_loss | as-of data (green stops to k25, n=2) | whole race, robust (median of green stops) | 1 | 1 | 0.374 | 0.374 | - | - |
-| pit_loss | as-of data (green stops to k25, n=2) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 6.841 | 6.841 | - | - |
-| tyre_life | belief support edge @k31 | oldest age run | 3 | 1 | 0.000 | 0.000 | - | - |
-| tyre_life | belief support edge @k31 | median stint-end age | 3 | 1 | 11.000 | 11.000 | - | - |
-| tyre_life | as-of data (race to k31, practice) | oldest age run | 3 | 1 | 12.667 | -6.667 | - | - |
-| tyre_life | as-of data (race to k31, practice) | median stint-end age | 3 | 1 | 8.000 | 4.333 | - | - |
-| wear_rate | belief @k31 | within-stint slope less fuel | 2 | 1 | 0.025 | 0.025 | 0.000 | 0.000 |
-| fresh_tyre_gain | belief @k31 | real gain at the stop | 6 | 1 | 0.950 | 0.950 | - | - |
-| compound_gap | belief @k31 | race (judge full fit, fresh tyre, mid-race) | 3 | 1 | 0.126 | -0.126 | - | - |
-| compound_gap | belief @k31 | qualifying | 1 | 1 | 1.315 | 1.315 | - | - |
-| fuel | belief @k31 | race (judge full fit) | 1 | 1 | 0.003 | -0.003 | 1.000 | 1.000 |
-| pit_loss | as-of data (green stops to k10, n=3) | whole race, robust (median of green stops) | 1 | 1 | 0.164 | -0.164 | - | - |
-| pit_loss | as-of data (green stops to k10, n=3) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.625 | -0.625 | - | - |
-| pit_loss | as-of data (green stops to k20, n=6) | whole race, robust (median of green stops) | 1 | 1 | 0.486 | -0.486 | - | - |
-| pit_loss | as-of data (green stops to k20, n=6) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.948 | -0.948 | - | - |
-| pit_loss | belief charged @k31 | whole race, robust (median of green stops) | 1 | 1 | 0.461 | 0.461 | - | - |
-| pit_loss | belief charged @k31 | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.000 | 0.000 | - | - |
-| pit_loss | as-of data (green stops to k31, n=15) | whole race, robust (median of green stops) | 1 | 1 | 0.130 | -0.130 | - | - |
-| pit_loss | as-of data (green stops to k31, n=15) | whole race, mean (RaceParams.pit_loss_s) | 1 | 1 | 0.591 | -0.591 | - | - |
+| neutralisations | belief config | observed (mean SC lap / ref lap) | 3 | 3 | 0.074 | -0.074 | - | - |
+| neutralisations | belief config | observed (median VSC lap / green prediction) | 2 | 2 | 0.072 | 0.061 | - | - |
 
 Component status:
 

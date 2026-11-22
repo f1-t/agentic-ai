@@ -92,7 +92,11 @@ def _sha12(data: bytes | str) -> str:
     return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()[:12]
 
 
-CODE_VERSION = f"{calibration.SIM_CODE_VERSION}-{_sha12(Path(__file__).read_bytes())}"
+# The cache key's code version: the simulator's physics version and this module's source up to
+# the "# summaries" banner (the sections that compute the cached tables). Summaries and writing
+# below it read the cached tables, so changing them does not recompute anything.
+SUMMARIES_BANNER = b"\n# summaries\n"
+CODE_VERSION = f"{calibration.SIM_CODE_VERSION}-{_sha12(Path(__file__).read_bytes().split(SUMMARIES_BANNER)[0])}"
 
 
 # --- small numeric helpers (no RuntimeWarning on empty input) -----------------------------------
@@ -563,8 +567,8 @@ def _reference_row(world, snap, raced, opts, **extra):
     from .optimizer_bridge import optimize_batch
     try:
         res = optimize_batch(snap, world, seed=opts.seed, n_samples=1, max_stops=opts.max_stops, return_times=True)
-    except NoFeasiblePlan:
-        return {**extra, "ref_stops": np.nan, "ref_plan": None}
+    except (NoFeasiblePlan, ValueError) as exc:   # no legal plan, or the start compound is not modelled
+        return {**extra, "ref_stops": np.nan, "ref_plan": None, "ref_error": f"{type(exc).__name__}: {exc}"}
     plan = res.plan
     return {**extra, "ref_stops": len(plan.stints) - 1, "ref_plan": " ".join(f"{s.compound}:{s.laps}" for s in plan.stints),
             "ref_mean_s": float(res.evaluation.mean_time_s),
@@ -1602,18 +1606,26 @@ def b1_by(per_race: dict, by: str) -> pd.DataFrame:
     return r.groupby(by)["err_s"].agg(n="count", mae_s=lambda x: _mae(x), bias_s="mean").reset_index()
 
 
+def _pooled_source(src: str) -> str:
+    """A component source for pooling across races: the count of stops seen dropped, and the
+    snapshot at half distance (a different lap per race) named k(mid)."""
+    import re
+    src = re.sub(r", n=\d+", "", src)
+    return re.sub(r"(@| to )k(\d+)", lambda m: m.group(0) if int(m.group(2)) in (0, 10, 20) else f"{m.group(1)}k(mid)", src)
+
+
 def d_summary(per_race: dict) -> pd.DataFrame:
     d = concat(per_race, "d_rows")
     if not len(d):
         return pd.DataFrame()
+    d = d.assign(source=d["source"].map(_pooled_source))
     rows = []
     for (comp, src, kind), part in d.groupby(["component", "source", "target_kind"], sort=False):
-        src_g = src.split(" @k")[0] + (" @k" if " @k" in src else "")
         rows.append({"component": comp, "source": src, "target_kind": kind, "n": int(part["err"].notna().sum()),
-                     "races": int(part["race_id"].nunique()), "mae": _mae(part["err"]), "bias": _mean(part["err"]),
-                     "cov_68": _share(part["covered_68"].dropna().astype(float)),
-                     "cov_90": _share(part["covered_90"].dropna().astype(float)), "_g": src_g})
-    return pd.DataFrame(rows).drop(columns="_g")
+                     "races": int(part.loc[part["err"].notna(), "race_id"].nunique()), "mae": _mae(part["err"]),
+                     "bias": _mean(part["err"]), "cov_68": _share(part["covered_68"].dropna().astype(float)),
+                     "cov_90": _share(part["covered_90"].dropna().astype(float))})
+    return pd.DataFrame(rows)
 
 
 def h_summary(per_race: dict) -> pd.DataFrame:
@@ -1645,6 +1657,8 @@ def h_summary(per_race: dict) -> pd.DataFrame:
                    "replaces": SUBSTITUTES[label]["replaces"] if label in SUBSTITUTES else "every whole-race input above",
                    "with": SUBSTITUTES[label]["with"] if label in SUBSTITUTES else "every substitute together",
                    "races_failed": " ".join(errs)}
+            row["close_pairs"] = int(o_sub["close_pairs"].iloc[0]) if len(o_sub) else 0
+            row["close_pairs_base"] = int(o_base["close_pairs"].iloc[0]) if len(o_base) else 0
             for col in ("close_pair_acc", "spearman", "rel_gap_mae_s"):
                 row[f"d_{col}"] = (float(o_sub[col].iloc[0] - o_base[col].iloc[0]) if len(o_sub) and len(o_base) else np.nan)
             for col in ("race_pace_mae_s", "race_pace_bias_s", "stop_gain_bias_s", "pit_err_per_stop_s", "stint_mae_s"):
@@ -1844,7 +1858,9 @@ def write_scorecard(label: str, per_race: dict, spec: Spec, opts: Options, out_d
               "ledger.csv": ledger_frame(spec), "field_replay.csv": concat(per_race, "o_field_replay")}
     for name, t in tables.items():
         if t is not None and len(t):
-            t.to_csv(out_dir / name, index=False)
+            # gzip without a timestamp, so an unchanged table writes an unchanged file
+            t.to_csv(out_dir / name, index=False,
+                     compression={"method": "gzip", "mtime": 0} if name.endswith(".gz") else None)
     h = headline(per_race)
     meta = {"label": label, "races": sorted(per_race), "code_version": CODE_VERSION,
             "world": "race default (jobs.load_race)" if spec.world is None else "file", "world_overlay": spec.world_overlay,
@@ -1962,7 +1978,7 @@ def ablation_table(results: dict, specs: list[Spec], n_boot=N_BOOT) -> pd.DataFr
     key = set(zip(led_base["role"], led_base["id"], led_base["tag"]))
     rows = []
     hb = headline(base)
-    rows.append({"factor": "base", **{k: hb.get(k, np.nan) for k, _ in HEADLINES}, "ledger_change": ""})
+    rows.append({"factor": "base", **{k: f"{hb.get(k, np.nan):.3f}" for k, _ in HEADLINES}, "ledger_change": ""})
     for s in specs[1:]:
         d = bootstrap_delta(base, results[s.label], n_boot=n_boot)
         led = ledger_frame(s)

@@ -8,7 +8,7 @@
     "2023_07_spain",
     "2024_07_emilia_romagna"
   ],
-  "code_version": "58b50a00e0e3-2ebb1482c78f",
+  "code_version": "58b50a00e0e3-d2360f4838af",
   "world": "race default (jobs.load_race)",
   "world_overlay": {},
   "belief_overlay": {},
@@ -53,5 +53,5 @@
     "status": "not checked",
     "detail": "tests/future_blindness.py is not on this branch"
   },
-  "run_seconds": 40.56216335296631
+  "run_seconds": 2.345477819442749
 }
