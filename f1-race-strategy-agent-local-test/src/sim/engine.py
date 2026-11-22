@@ -767,7 +767,8 @@ class Simulator:
         if cliffs:
             cols = sorted(set(self.config.compound_classes) | set(cliffs))
             z_cl = (batch_normals(seed, CLIFF_STREAM, n, len(cols))
-                    if any(cl.prior_sd > 0 for cl in cliffs.values()) else np.zeros((n, len(cols))))
+                    if any(cl.prior_sd > 0 for cl in cliffs.values()) and self.config.belief_cliff_edge == "draw"
+                    else np.zeros((n, len(cols))))
             cliff_age = {name: cl.sample_ages(z_cl[:, cols.index(name)]) for name, cl in cliffs.items()}
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent

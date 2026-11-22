@@ -1276,6 +1276,90 @@ block uses 60 draws and 1 driver, which reduces the Monte Carlo noise in the rep
   noise and no truncation bias), but the planner's ranking agreement and regret are the worst (0.830,
   6.76 s). The draws help ranking here, unlike in the design study (D3, with oracle tyre-life edges).
 
+### Belief priors: where the belief over-stops, and the tyre-life edge at its point
+
+**Where.** On the dev20 development results the belief's plans beat the two fixed rules by about
+6 s overall, but by less at circuits with no earlier race in the tyre history, and the rules win
+at four low-wear races (2019 Britain, 2021 Austria, 2021 Abu Dhabi, 2022 Azerbaijan). The fidelity
+scorecard on the 19 calibration races (adopted configuration at ebde038; 6 drivers, a snapshot
+every 5 laps, 20 draws) locates it. Over the plan panel, the belief's favourite has more stops than
+the judge's favourite at 14% of snapshots and fewer at 8%. Early in the race (the first third) the
+gap is wider: 27% against 8%, a mean of 1.68 stops against 1.49, and a judge-regret of 8.9 s
+against 2.4 s mid-race and 1.2 s late. The over-stopping snapshots carry 37% of all the
+judge-regret. Their commonest form is two stops where the judge's favourite is one long HARD stint.
+
+**Why.** A diagnosis, not a policy input: at the same snapshots, one belief component at a time
+was replaced by the judge's (hindsight), and the judge-regret of the belief's favourite was
+measured again (race-cluster 95% intervals):
+
+| belief component replaced by the judge's | regret, all (4.11 s) | early (8.92 s) | no circuit history (4.79 s) | low-wear four (5.19 s) |
+|---|---|---|---|---|
+| fresh pace and wear of every compound | -2.87 [-3.73, -2.08] | -6.38 [-8.89, -4.12] | -3.19 [-4.10, -2.32] | -3.75 [-4.77, -2.67] |
+| the same, HARD only | -0.82 [-1.72, +0.10] | -2.48 [-4.95, -0.62] | -1.19 [-2.42, -0.04] | -1.10 [-2.51, -0.25] |
+| fresh pace only (gaps to MEDIUM) | +0.08 [-0.85, +1.09] | -0.55 [-2.37, +1.34] | -0.17 [-1.44, +1.14] | -1.98 [-2.56, -1.32] |
+| wear only | +0.30 [-1.45, +2.37] | -0.12 [-3.78, +3.64] | -0.04 [-2.34, +3.12] | +2.77 [-2.46, +8.98] |
+| the tyre-life edges (the judge's: the prior's point) | -0.59 [-1.10, -0.18] | -0.53 [-1.02, -0.12] | -0.91 [-1.68, -0.24] | -0.64 [-1.24, -0.12] |
+| the edge not drawn (max(seen so far, prior)) | -0.20 [-0.38, -0.06] | -0.44 [-0.92, -0.05] | -0.30 [-0.58, -0.05] | -0.45 [-0.88, -0.11] |
+| no parameter draws or lap noise (point estimate) | +0.41 [-0.36, +1.31] | +0.91 [-1.21, +3.23] | +0.51 [-0.74, +1.87] | -0.22 [-0.90, +0.25] |
+
+Most of the regret is the belief's pace and wear per compound early in the race, and only as a
+pair: the fitted intercept and slope trade off against each other, so replacing either alone does
+nothing. At lap 0 the belief is the practice prior. Practice long runs on a compound come from one
+or two cars, in a fit without driver or session terms, and the HARD comes out 0.6 s/lap slower
+than MEDIUM fresh against the judge's race fit (2019 Britain: 2.1 s against 0.1 s). At lap 10 the
+HARD rows come from the few cars that started on it, often slow ones (Britain 2019: two Haas cars,
+whose pace is then taken for the HARD's, +2.4 s). The tyre-life prior is not short on average
+against the observed edge (the 0.9 quantile of stint ends: +0.9 to +2.6 laps by compound). The
+field's ages seen so far are already a lower bound on the belief's edge, and by lap 20 they rarely
+pass it. The edge's spread does matter, though. The cost past the edge is convex, so averaging it
+over drawn edges raises the expected cost of every long stint (Jensen's inequality): it penalises
+exactly the long one-stop the judge prefers.
+
+**The switch** `belief_cliff_edge` (SimConfig, left out of config_hash at its default): `draw`
+(the default, as before) draws each sample's edge, max(seen so far, prior + sd z); `point` takes
+max(seen so far, prior) in every sample, the edge the judge's `history_only` prior uses, with the
+same lower bound. The tools still report the prior and its sd. Measured on the fidelity scorecard,
+point minus draw, race-cluster 95% intervals (* excludes 0):
+
+| split | snapshots | rank rho | regret s | pit-now agreement | over-stop share |
+|---|---|---|---|---|---|
+| all | 1225 | 0.868, +0.005 [+0.001, +0.010]* | 4.11, -0.20 [-0.38, -0.06]* | 0.816, +0.003 [-0.009, +0.017] | 0.142, -0.008 [-0.019, +0.001] |
+| laps 0 to a third | 392 | 0.814, +0.014 [+0.005, +0.028]* | 8.92, -0.44 [-0.92, -0.05]* | 0.719, +0.008 [-0.027, +0.046] | 0.265, -0.010 [-0.037, +0.010] |
+| middle third | 461 | 0.892, +0.000 [-0.004, +0.005] | 2.40, -0.15 [-0.42, +0.04] | 0.857, +0.000 [-0.012, +0.014] | 0.124, -0.011 [-0.026, +0.000] |
+| last third | 372 | 0.896, +0.000 [+0.000, +0.001]* | 1.16, -0.03 [-0.10, +0.01] | 0.867, +0.003 [-0.005, +0.014] | 0.035, -0.003 [-0.009, +0.000] |
+| earlier race at the circuit (8 races) | 499 | 0.892, +0.003 [+0.002, +0.005]* | 3.12, -0.07 [-0.16, -0.00]* | 0.841, +0.004 [+0.000, +0.012] | 0.134, -0.010 [-0.022, +0.000] |
+| none (11 races) | 726 | 0.852, +0.006 [+0.000, +0.014]* | 4.79, -0.30 [-0.58, -0.05]* | 0.799, +0.003 [-0.017, +0.025] | 0.147, -0.007 [-0.024, +0.006] |
+| the low-wear four | 246 | 0.796, +0.013 [-0.002, +0.034] | 5.19, -0.45 [-0.88, -0.11]* | 0.800, -0.004 [-0.024, +0.013] | 0.130, +0.000 [-0.023, +0.025] |
+
+The judge, the tyre-life component rows and the order measures are unchanged (the judge does not
+read the switch; the belief's point edge is the same number). Predictive close-pair order 0.664 ->
+0.667; the plans' 90% interval coverage of the judge 0.991 -> 0.988.
+
+The decision-level check: the belief optimizer on the committed dev20 scenarios, re-scored with no
+model call (the `baselines` stage into a scratch directory, the references rebuilt at this code;
+with the switch off every baseline row is identical to the committed `baselines.csv`). Mean
+judge-regret, point minus draw, race-cluster 95% intervals; the rule baselines do not move (they
+plan on the point edge already):
+
+| split | scenarios | draw | point | change |
+|---|---|---|---|---|
+| all | 469 | 3.82 | 3.63 | -0.19 [-0.43, +0.01] |
+| laps 0 to a third | 167 | 7.72 | 7.24 | -0.48 [-1.12, +0.06] |
+| middle third | 153 | 2.58 | 2.54 | -0.04 [-0.34, +0.25] |
+| last third | 149 | 0.71 | 0.70 | -0.01 [-0.05, +0.00] |
+| earlier race at the circuit | 194 | 3.35 | 3.25 | -0.10 [-0.36, +0.07] |
+| none | 275 | 4.14 | 3.89 | -0.25 [-0.61, +0.07] |
+| the low-wear four | 100 | 6.07 | 5.54 | -0.52 [-0.57, -0.47] |
+
+At the low-wear four `run_to_flag` scores 3.22 s, so the rules still win there, by 2.3 s instead of
+2.9 s. The switch removes one cause of the over-stopping, not the main one: that is the pace and
+wear of the compounds early in the race (the table above), for which no as-of fix tested so far
+holds up (2026-11-22 notes, "sim gaps").
+
+**Decision.** An adopt-candidate by the scorecard rule (plan-ranking agreement and judge-regret
+improve with race-cluster intervals that exclude 0, pit-now agreement holds). It is a switch, off
+here; adopting it is `belief_cliff_edge: point` in `configs/sim/belief.yaml`.
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
@@ -1763,6 +1847,97 @@ with neither the status line nor repeat handling, 31 with the status line and re
 repeats, and 27 with the status line and cached repeats, while input
 tokens per episode went 53k, 63k, 85k. The decisions barely changed. The grace turns are
 what guarantee a submission.
+
+### Agent protocol v2
+
+`AGENT_PROTOCOL` = `v2` (the default since 2026-11-22) | `v1` (the prompt, tool surface, loop and
+submission handling before it, unchanged; rerun provenance records the protocol in effect). v2 is a
+development-side change made after the freeze: the held-out result above was run under v1 and
+stands as it is.
+
+- **Tools.** `rank_plans` (no arguments) runs the `belief_optimizer` policy's own search
+  (`optimize_batch` on the belief fit, `SEED`, the profile's samples and stop limit) and shows at
+  most four distinct plans: the best of each shape (immediate action and compounds), with the best
+  PIT-now and the best STAY_OUT plan always shown when both are legal. Plan 1 is the policy's plan.
+  Per plan: the stints, the first stop, the immediate action, `submit` (the submission fields that
+  keep it), `gap_s` to plan 1 with its 90% interval and `faster_share` over the paired draws,
+  `best_share` (fastest of those shown), `first_stop_range` (the stop laps within 1 s for that
+  shape) and flags. `decision` is plan 1's immediate action with the best PIT-now plan read against
+  the best STAY_OUT plan; `flags` names weak estimates (a compound with no race laps, a
+  prior-dominated compound, a safety car or VSC in progress; per plan, a stint past the estimated
+  tyre life or past the longest run seen when the life beyond it is a generic prior).
+  `evaluate_plan` takes a full plan, or `first_stop_lap` with an optional `compound`, and reads it
+  against plan 1. `estimate_tyre_degradation` and `estimate_pit_loss` stay. `evaluate_strategy`,
+  `compare_plans`, `get_model_report` and `get_race_snapshot` are v1 only.
+- **Submission.** v2 adds an optional `first_stop_lap` to `submit_recommendation`: with `compound`,
+  it names the first stop of the plan the submission keeps, and the scorer plays the belief's best
+  full plan with that first stop (`eval.decisions.kept_plan`: `optimize_batch` from the snapshot with
+  the first stint fixed, the same seed, samples and stop limit as `belief_optimum`). Without it a
+  decision is expanded as before. A PIT names the end of the next lap; a STAY_OUT of k laps a stop no
+  earlier than the end of lap `laps_completed + k + 1`; anything else is refused with the fix. Under
+  v1 the loop drops a `first_stop_lap` the model was never offered.
+- **Loop.** Under v2 an argument a tool's schema does not name is refused with the valid ones (v1
+  drops it silently), and an unknown tool name gets the tool list. A submission that does not keep
+  plan 1 of the model's latest `rank_plans` is held once when a turn is left: the model is shown plan
+  1's submit fields and the PIT/STAY_OUT reading, and its next accepted submission is final, changed
+  or not (`consistency_check` events in the trajectory; `check_fired`, `check_changed` in the stats).
+- **Prompt.** A decision protocol: rank_plans first, plan 1 is the default (copy its submit object),
+  a departure only for a plan close to it and only for a named uncertainty flag; one line of
+  evidence in the rationale; the 1,024-token reply cap and at most 3 calls per turn. If a named stop
+  is refused on the very last turn, the submission is scored without it (`kept_stop_dropped`).
+
+**Why.** The 469 dev20 trajectories at `eval-v2-dev2` (v1): agent minus `belief_optimizer` +0.143 s
+(cluster CI +0.025, +0.275), +67 s in all. 33 s came from 45 immediate actions other than the
+optimizer's; 35 s from 55 STAY_OUTs that agreed with it but whose `reassess_after_laps` was at
+least the laps to its first stop (STAY_OUT k forbids a stop before the end of lap
+`laps_completed + k + 1`, which nothing told the model); 8.5 s from 9 PITs onto another compound.
+348 episodes swept STAY_OUT k one value at a time, 116 hit the 24-call budget, 132 calls had
+invented arguments, 79 turns had no tool call (52 cut off at the reply cap), and in 386 the
+confidence was a probability some tool had returned. Mean result sizes: `get_model_report` 6.4k
+characters, `compare_plans` 2.9k, `evaluate_strategy` 2.5k (`rank_plans` 2.3k, `evaluate_plan`
+0.5k).
+
+**The format's ceiling.** Over all 469 dev20 scenarios (belief side, then the judge's times): the
+natural old-format submission for the optimizer's plan (PIT c, or STAY_OUT with k one less than
+the laps to its first stop, or to the flag) is scored on that plan in 228 (49%; green 44%, SC 94%,
+VSC 100%), and some old-format submission is in 341 (73%). Its judge time differs from the
+optimizer's by more than 0.1 s in 45% of scenarios (mean +0.087 s, mean absolute 0.46 s, p95 1.7 s,
+max 20.9 s). Naming the first stop scores the optimizer's plan in 469 of 469, judge gap 0.
+
+**Development samples** (seeded, disjoint; scratch lists, not committed). Design: 100 dev20
+scenarios, every one where the dev20 agent's immediate action differed from the optimizer's (45),
+every SC/VSC one (40), a lap-0 one per race, the rest spread over races. Check: 103 of the
+remaining green scenarios, stratified by race and lap. The design sample took four versions (v2a
+tools and prompt; v2b the named stop and plan-1 default; v2c the copy instruction and extrapolation
+as a note; v2d the last-turn fallback); the check sample ran once, v2c against `origin/main` (v1) as
+control, concurrently, `--jobs 8` each, on a loaded machine (load 28-36 on 16 threads), so latency
+is comparable between the two only.
+
+| check sample (103) | main (v1) | v2 |
+| --- | --- | --- |
+| valid / voluntary submissions | 103 / 100 | 102 / 103 (1 named stop never fixed; the fallback above came after) |
+| judge regret mean / median / p90 (s) | 3.92 / 0.87 / 13.53 | 3.65 / 0.50 / 12.61 |
+| agent minus belief_optimizer (s, cluster CI) | +0.258 (-0.004, +0.558) | 0.000 (0.000, 0.000) on 102 |
+| belief_optimizer's own regret (s) | 3.66 | 3.66 |
+| scored plan = optimizer's plan | 44 | 102 |
+| immediate action = optimizer's | 98 | 102 (+1 invalid) |
+| worst departure (s) | +9.98 | 0.00 |
+| tool calls / evidence calls per episode | 17.4 / 15.5 | 8.0 / 6.8 |
+| repeated calls per episode; budget hits | 3.69; 28 | 0.41; 2 |
+| turns with no tool call (cut off) | 17 (4) | 0 |
+| input / output tokens per episode | 81.8k / 877 | 23.6k / 364 |
+| latency mean / median (s) | 54.0 / 45.3 | 21.6 / 19.6 |
+
+v2 minus main, paired on 102: -0.249 s (cluster CI -0.547, +0.005), 33 better, 48 the same, 21
+worse. The invalid episode repeated a `first_stop_lap` without its compound until its turns ran
+out; the clearer refusal and the last-turn fallback came after the check run, and that one
+scenario rerun once with them (post hoc, not in the table) corrected the compound and scored the
+optimizer's plan. On the design sample v2b's model departed from plan 1 eleven times: 8 citing a
+flag (+0.016 s each against the optimizer), 3 not (+0.27 s); v2c, with the copy instruction,
+departed none of 100 times; v2d (the shipped code) 3 times, all citing a flag (-0.37, -0.37,
++0.45 s), with agent minus optimizer -0.003 s (-0.016, +0.010) and 8.4 calls and 25k input tokens
+per episode. So the language model now adds nothing to the look-ahead and takes nothing
+away: v2's regret is the optimizer's, and what remains is the predictive simulator's error.
 
 `src.grade.grade_decision(snapshot, submission)` grades one submission the same way (valid,
 regret against the optimizer from that snapshot) for `tests/test_case.py`, which reports

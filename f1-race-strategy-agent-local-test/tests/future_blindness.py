@@ -767,6 +767,14 @@ def _tools_surface(snap):
         out[f"evaluate_strategy/pit_{c}"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": c})
     for n in (1, 3):
         out[f"evaluate_strategy/stay_out_{n}"] = _shown(tools.evaluate_strategy, {"action": "stay_out", "laps": n})
+    # protocol v2 (src/agent.py AGENT_PROTOCOL): the ranked plans and one plan evaluated
+    out["rank_plans"] = _shown(tools.rank_plans)
+    first = snap.laps_completed + 1
+    for lap in (first, first + 3):
+        out[f"evaluate_plan/stop_{lap - snap.laps_completed}"] = _shown(tools.evaluate_plan, None, lap, None)
+    for k in script:
+        if k.startswith(("one_stop", "too_")):
+            out[f"evaluate_plan/{k}"] = _shown(tools.evaluate_plan, script[k])
     out["race_state"] = _call(agent_tools.race_state, snap)
     for k, p in script.items():
         if k.startswith(("too_", "single")):
@@ -779,6 +787,10 @@ def _decisions_surface(belief, snap):
                                                                      n_samples=N_SAMPLES).as_pairs())}
     subs = {f"PIT_{c}": {"decision": "PIT", "compound": c, "confidence": 0.6} for c in DRY}
     subs["STAY_OUT_3"] = {"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": 0.6}
+    # protocol v2's kept stop (decisions.kept_plan): a named first stop now and five laps on
+    subs.update({f"KEEP_{c}_{w}": {"decision": "PIT" if w == 1 else "STAY_OUT", "reassess_after_laps": max(1, w - 1),
+                                   "compound": c, "first_stop_lap": snap.laps_completed + w, "confidence": 0.6}
+                 for c in DRY for w in (1, 5)})
     for k, sub in subs.items():
         out[k] = _call(lambda s=sub: decisions.to_plan(snap, s, belief, MAX_STOPS, seed=0, n_samples=N_SAMPLES).as_pairs())
     return out

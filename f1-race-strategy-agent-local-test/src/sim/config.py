@@ -439,6 +439,12 @@ class SimConfig(_Cfg):
     # lap noise; events and pit-loss draws kept), Simulator.point_estimate. The tools' reported
     # intervals still come from the draws. Left out of config_hash at its default.
     plan_on: Literal["draws", "point"] = "draws"
+    # the belief's wear-cliff edge per sample (sim/cliff.py Cliff.sample_ages): "draw" (the
+    # default, as before) max(seen so far, prior + sd z); "point" max(seen so far, prior), the
+    # edge the judge's history_only prior uses. The cost past the edge is convex, so drawing the
+    # edge raises the expected cost of every long stint (docs/eval.md "Belief priors"). Left out
+    # of config_hash at its default.
+    belief_cliff_edge: Literal["draw", "point"] = "draw"
     # R8 stint limit, RETIRED (docs/rules.md R8): a stint could end at most this many laps past
     # the oldest tyre age any car ran on its compound in the whole race, a hindsight rule handed
     # to every policy. None (the default) is off. The legacy setting that reproduces the results
