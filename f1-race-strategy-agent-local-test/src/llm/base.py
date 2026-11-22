@@ -15,6 +15,8 @@ class ModelTurn:
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     raw: Any = None
+    parse_error: str | None = None   # why a text backend found no tool call in its reply, if it failed to parse
+    parse_repair: str | None = None  # what a text backend corrected in the reply's JSON before parsing it
 
 
 class ModelBackend:
