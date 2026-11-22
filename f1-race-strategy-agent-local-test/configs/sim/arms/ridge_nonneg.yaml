@@ -1,0 +1,9 @@
+# Learned-calibrator comparison arm "ridge_nonneg" (src/sim/learned_calibrator.py): the ridge
+# calibrator (degradation targets) under the belief's wear bound, trained per fold on the other
+# calibration races. Compared with wear_nonneg (shrinkage) by the per-factor adoption rule.
+degradation:
+  name: linear_fuel
+  params:
+    wear_lower_bound: 0.0
+calibrator:
+  name: ridge

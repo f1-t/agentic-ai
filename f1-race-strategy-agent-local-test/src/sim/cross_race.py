@@ -107,6 +107,11 @@ COVERAGE_ONLY = ("posterior",)
 # arm tables and in learned.csv (calibrators.selection_table), never chosen by the arm selection.
 LEARNED_ARMS = ("ridge", "ridge_all")
 LEARNED_ROLE = "learned (reported, not selected)"
+# the learned calibrator on real races (learned_calibrator.py): none, ridge and ridge_all on the
+# belief's wear bound (wear_nonneg is the shrinkage comparator), and the per-factor hybrid the
+# adoption rule writes. Run only by learned_calibrator.py; never part of a cross run's arms.
+CALIBRATOR_ARMS = ("none_nonneg", "ridge_nonneg", "ridge_all_nonneg", "ridge_hybrid")
+CALIBRATOR_ROLE = "calibrator comparison (learned_calibrator.py)"
 # simplest first: the tie-break among arms that pass
 SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air",
               "driver_effects", "driver_effects_nonneg", "hinge", "collinear_hold_hinge", "collinear_hold_nonneg_hinge",
@@ -127,8 +132,9 @@ def parse_arm(name: str) -> tuple[str, bool, tuple | None]:
     """(committed arm, prior-sd fix on, tau multipliers or None) of an arm name."""
     parts = name.split("__")
     base, s2, tau = parts[0], False, None
-    if base not in ARMS and base not in LEARNED_ARMS:
-        raise KeyError(f"unknown arm {base!r}; arms: {list(ARMS)}, learned: {list(LEARNED_ARMS)}")
+    if base not in ARMS and base not in LEARNED_ARMS and base not in CALIBRATOR_ARMS:
+        raise KeyError(f"unknown arm {base!r}; arms: {list(ARMS)}, learned: {list(LEARNED_ARMS)}, "
+                       f"calibrator comparison: {list(CALIBRATOR_ARMS)}")
     for p in parts[1:]:
         if p == S2:
             s2 = True
@@ -188,7 +194,8 @@ def arms_table(names=ARMS) -> pd.DataFrame:
                      "config_hash": calibration.config_hash(cfg), "degradation": cfg.degradation.name,
                      "calibrator": cfg.calibrator.name,
                      "role": "coverage only" if base in COVERAGE_ONLY else "baseline" if n == BASELINE
-                     else LEARNED_ROLE if base in LEARNED_ARMS else "candidate"})
+                     else LEARNED_ROLE if base in LEARNED_ARMS
+                     else CALIBRATOR_ROLE if base in CALIBRATOR_ARMS else "candidate"})
     return pd.DataFrame(rows)
 
 
