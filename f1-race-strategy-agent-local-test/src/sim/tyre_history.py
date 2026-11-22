@@ -61,6 +61,7 @@ on this code, its config and its tables move lap times.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -164,11 +165,34 @@ def load_scale(path=SCALE) -> dict[tuple[str, str], float]:
     return {(r.scale.strip(), r.compound.strip().upper()): float(r.common_index) for r in t.itertuples()}
 
 
+# Per process: the committed tables read once per file version (path, mtime, size), and life_ratio
+# once per history it is given. Pure functions of their inputs, so the values are the same; a
+# caller gets its own copy of a table.
+_TABLES: dict = {}
+_RATIOS: dict = {}
+_RATIOS_MAX = 4096
+
+
+def _file_key(path) -> tuple:
+    p = Path(path)
+    st = p.stat()
+    return str(p.resolve()), st.st_mtime_ns, st.st_size
+
+
 def load_nominations(path=NOMINATIONS, scale=None) -> pd.DataFrame:
     """The nomination table indexed by race_id, with hard_index, medium_index, soft_index added
     (NaN where the nomination or its scale mapping is missing)."""
     if not Path(path).is_file():
         return pd.DataFrame(columns=["season", "round", "circuit", "hard", "medium", "soft", "scale"]).rename_axis("race_id")
+    if scale is not None:
+        return _read_nominations(path, scale)
+    key = ("nominations", _file_key(path), _file_key(SCALE) if Path(SCALE).is_file() else None)
+    if key not in _TABLES:
+        _TABLES[key] = _read_nominations(path, None)
+    return _TABLES[key].copy()
+
+
+def _read_nominations(path, scale) -> pd.DataFrame:
     t = pd.read_csv(path, dtype={"hard": str, "medium": str, "soft": str, "scale": str, "date": str})
     t["race_id"] = t["race_id"].map(canonical_race_id)
     scale = load_scale() if scale is None else scale
@@ -183,7 +207,10 @@ def load_nominations(path=NOMINATIONS, scale=None) -> pd.DataFrame:
 def load_history(path=HISTORY) -> pd.DataFrame:
     if not Path(path).is_file():
         return pd.DataFrame(columns=HISTORY_COLUMNS)
-    return pd.read_csv(path, dtype={"compound": str, "scale": str, "date": str, "excluded": str})
+    key = ("history", _file_key(path))
+    if key not in _TABLES:
+        _TABLES[key] = pd.read_csv(path, dtype={"compound": str, "scale": str, "date": str, "excluded": str})
+    return _TABLES[key].copy()
 
 
 def _date_of(value) -> _date | None:
@@ -441,6 +468,17 @@ def life_ratio(history: pd.DataFrame, config=None) -> tuple[float, int]:
     compounds; the config's default under min_pairs pairs. Clipped to life_ratio.clip."""
     cfg = config or load_config()
     lr = cfg["life_ratio"]
+    cols = [c for c in ("race_id", "common_index", "edge_frac") if c in history]
+    key = (hashlib.sha256(pd.util.hash_pandas_object(history[cols], index=False).to_numpy().tobytes()).hexdigest(),
+           tuple(cols), json.dumps(lr, sort_keys=True, default=str))
+    if key not in _RATIOS:
+        if len(_RATIOS) >= _RATIOS_MAX:
+            _RATIOS.pop(next(iter(_RATIOS)))
+        _RATIOS[key] = _life_ratio(history, lr)
+    return _RATIOS[key]
+
+
+def _life_ratio(history: pd.DataFrame, lr: dict) -> tuple[float, int]:
     logs = []
     for _, g in history.groupby("race_id"):
         g = g[pd.to_numeric(g["common_index"], errors="coerce").notna()]

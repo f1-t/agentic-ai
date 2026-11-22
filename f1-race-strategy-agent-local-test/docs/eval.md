@@ -345,9 +345,11 @@ a fallback chain, as of R's date and never R itself:
 
 The pool is `configs/sim/pit_loss_prior.json` (the six calibration races, built by `python -m
 src.sim.pit_loss build-prior`) plus every race in the FastF1 cache at run time (`real_run.cached_races`),
-whose entry is built from its whole race on first use and kept per process (a circuit with no history
-loads every earlier cached race once, about a minute): more cached seasons widen the pool with no
-code change. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
+whose entry is read from `configs/sim/pit_loss_entries.json` (the same entries, precomputed for the
+cached races outside the table by `python -m src.sim.pit_loss build-entries`; rebuild it when the
+cache or the default fit changes) or else built from its whole race on first use and kept per
+process: more cached seasons widen the pool with no code change, and a process loads no race to
+price a prior unless the cache holds a race neither file has. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
 itself held out, and then only if earlier. A circuit used once (no earlier season cached) gets tier
 2, or 3, and the estimate exists from lap 0 either way: a policy never fails for want of history and
 never falls back to the whole-race value. The SC and VSC factors (the share of a green stop paid
