@@ -183,6 +183,10 @@ PIT_LOSS_STREAM = 5
 # (n, len(config.compound_classes)) normal matrix per batch call, column per compound in sorted
 # order, so turning it on leaves every other draw as it was
 CLIFF_STREAM = 6
+# lap_noise "persistent": per sample one offset per plan stint (column j stint j), an
+# (n, max stints) normal matrix per batch call; the lap-to-lap part still draws from
+# LAP_NOISE_STREAM
+LAP_OFFSET_STREAM = 7
 # never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
 # [seed, k, 1] key
 STREAM_KEY = 2 ** 32 - 1
@@ -251,6 +255,8 @@ class Simulator:
         self.calibration = None   # CalibrationState on a pre_race or to_snapshot instance
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
         self._race_id = None   # the snapshot race of a windowed instance (as-of cross-race tables)
+        self._race = None      # its RaceParams (the anchored practice fuel, config.fuel_anchor)
+        self._judge_anchor = None   # the full fit's fuel anchor (config.fuel_anchor.full_fit), once
         self._fits, self._cliffs = {}, {}
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
         self._windows = {}   # window_rows, shared with the windowed copies
@@ -293,8 +299,24 @@ class Simulator:
         kw = dict(min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
                   base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"],
                   hinge_knots=cfg.hinge_knots, hinge_knot_default=cfg.hinge_knot_default, **spec.params)
+        if cfg.fuel_anchor.full_fit and cfg.fit_window == "full" and "shrinkage" not in extra:
+            kw["fuel_anchor"] = self.judge_fuel_anchor()
         kw.update(extra)
         return DEGRADATION.get(spec.name).fit(frame, **kw)
+
+    def judge_fuel_anchor(self) -> tuple[float, float]:
+        """(mean, sd) the full fit's fuel slope is shrunk toward under config.fuel_anchor.full_fit:
+        the a priori physics prior (fuel_prior.physics_prediction) on the race's laps and this
+        weekend's practice lap (the race's median clean lap without practice; the judge may read
+        the whole race). No other race is read."""
+        if self._judge_anchor is None:
+            from . import fuel_prior
+            lap_s = fuel_prior.practice_lap_s(self.practice) if self._has_practice else float("nan")
+            if not np.isfinite(lap_s):
+                lap_s = fuel_prior.practice_lap_s(self.laps)
+            p = fuel_prior.physics_prediction(int(self.laps["lap"].max()), lap_s)
+            self._judge_anchor = (float(p["mean"]), float(p["sd"]))
+        return self._judge_anchor
 
     def _free_air(self, frame):
         """(rows the fit may use, clean rows dropped). Every row unless config.fit_free_air_only;
@@ -389,18 +411,40 @@ class Simulator:
             self._fits[key] = fit
         return self._fits[key]
 
+    def point_estimate(self) -> "Simulator":
+        """A shallow copy that simulates the point estimate: no posterior parameter draw and no
+        lap noise; events, pit-loss and calibrated factor draws are kept (SimConfig.plan_on
+        "point"). Call it on a fitted instance (fitted_for)."""
+        out = copy.copy(self)
+        out.config = self.config.model_copy(update={"lap_noise": "none"})
+        if getattr(self.degradation, "param_draw", "none") != "none":
+            m = copy.copy(self.degradation)
+            m.param_draw = "none"
+            out.degradation = m
+        return out
+
     def _keep(self, drop):
         def keep(f):
             return f[f["driver"] != drop] if drop is not None and "driver" in f else f
         return keep
 
-    def physics_prior(self, drop=None):
+    def physics_prior(self, drop=None, race=None):
         """The practice fit with no base delta (calibrators.prior_model adds the factors), None
-        without practice. Cached per excluded driver."""
-        if drop not in self._physics:
-            practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
-            self._physics[drop] = self._model(practice, base_delta=0.0) if practice is not None else None
-        return self._physics[drop]
+        without practice. Cached per excluded driver (and fuel). Under config.fuel_anchor.practice
+        "anchored" with a race (`race`, else the windowed instance's), the practice in-stint fuel
+        column is fixed at the race's anchored fuel prior (race_history.as_of_fuel "anchored")
+        instead of pre_race_fuel_slope_s_per_lap, so the practice wear is net of it."""
+        race = race if race is not None else self._race
+        practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
+        fuel = None
+        if self.config.fuel_anchor.practice == "anchored" and race is not None and practice is not None:
+            from .race_history import as_of_fuel
+            fuel = float(as_of_fuel(race, practice=practice, mode="anchored")["mean"])
+        key = drop if fuel is None else (drop, fuel)
+        if key not in self._physics:
+            extra = {} if fuel is None else {"fuel_prior": fuel}
+            self._physics[key] = self._model(practice, base_delta=0.0, **extra) if practice is not None else None
+        return self._physics[key]
 
     def cut_time(self, driver, k0: int) -> float | None:
         """The session time a windowed fit at calibration point k0 is cut at under
@@ -453,7 +497,7 @@ class Simulator:
             previous = pre
         race = self.window_rows(snapshot, k0, drop)
         practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
-        raw = self.physics_prior(drop)
+        raw = self.physics_prior(drop, snapshot.race)
         ctx = _cal.CalibrationContext(
             k=k0, config=cfg, race=snapshot.race, valid_until_lap=_cal.valid_until(k0, every, snapshot.race.total_laps),
             laps_so_far=race, practice=practice, practice_model=raw,
@@ -482,7 +526,7 @@ class Simulator:
         """
         cfg = self.config
         drop = snapshot.driver if cfg.exclude_snapshot_driver else None
-        self._race_id = snapshot.race.race_id
+        self._race_id, self._race = snapshot.race.race_id, snapshot.race
         keep = self._keep(drop)
         if cfg.fit_window == "full":
             return self._fit(keep(self.laps))
@@ -491,7 +535,7 @@ class Simulator:
         if practice is None and race.empty:
             raise ValueError("fit window needs practice laps")
         out = self._calibrate(snapshot, k0 if cfg.fit_window == "to_snapshot" else 0, drop)
-        raw = self.physics_prior(drop)
+        raw = self.physics_prior(drop, snapshot.race)
         prior, taus, fuel, held = _cal.degradation_prior(out, raw, cfg)
         if cfg.fit_window == "pre_race":
             self.calibration = _cal.CalibrationState(out, 0, True, raw)
@@ -638,6 +682,7 @@ class Simulator:
         ages = np.empty((len(valid), n_laps))
         age0 = np.empty((len(valid), n_laps))                  # the lap's stint starting age
         stint_start = np.empty((len(valid), n_laps), dtype=int)  # index of the stint's first lap
+        stint_no = np.empty((len(valid), n_laps), dtype=int)     # the lap's stint, 0 the current one
         stops = np.zeros((len(valid), n_laps))
         n_stints = np.array([len(p.stints) for p in valid])
         bounds = np.full((len(valid), n_stints.max() + 1), n_laps, dtype=int)
@@ -651,6 +696,7 @@ class Simulator:
                 ages[r, pos:pos + s.laps] = a0 + np.arange(1, s.laps + 1)
                 age0[r, pos:pos + s.laps] = a0
                 stint_start[r, pos:pos + s.laps] = pos
+                stint_no[r, pos:pos + s.laps] = j
                 pos += s.laps
                 if j < len(p.stints) - 1:
                     stops[r, pos - 1] = 1.0
@@ -674,6 +720,10 @@ class Simulator:
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         noise_sd = self._lap_noise_sd()
+        # "persistent": the offsets on top of the lap-to-lap noise (_lap_noise_offsets)
+        off_sd = self._lap_noise_offsets()
+        z_off = (batch_normals(seed, LAP_OFFSET_STREAM, n, int(n_stints.max()), off_sd)
+                 if off_sd is not None and off_sd > 0 else None)
         # parameter draws: the linear models take row k of one (n, n_params) normal matrix
         # (draw_z); another model's draw(rng) gets the per-sample substream [seed, k, 2]. A
         # model whose draw is "none" returns itself and draws nothing, so nothing is built.
@@ -752,6 +802,8 @@ class Simulator:
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
             if eps is not None:   # one vector per sample on the green laps, shared by every plan
                 lap_s += np.where(sc | vsc, 0.0, eps[k])
+            if z_off is not None:   # persistent: each plan stint's own offset, held over the stint
+                lap_s += np.where(sc | vsc, 0.0, z_off[k][stint_no])
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
             scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, pl["vsc_factor"], 1.0))
@@ -843,12 +895,28 @@ class Simulator:
 
     def _lap_noise_sd(self) -> float:
         """SimConfig.lap_noise: 0 for "none", else the fit's residual_s (0 when the fit
-        report has none, or it is NaN)."""
+        report has none, or it is NaN). Under "persistent" with the fit's residual_components,
+        their lap-to-lap part only (the offsets are _lap_noise_offsets')."""
         if self.config.lap_noise == "none":
             return 0.0
         rep = getattr(self.degradation, "fit_report", None) or {}
+        comp = rep.get("residual_components")
+        if self.config.lap_noise == "persistent" and comp:
+            return float(comp["lap_s"])
         s = float((rep.get("sd") or {}).get("residual_s", float("nan")))
         return 0.0 if np.isnan(s) else s
+
+    def _lap_noise_offsets(self) -> float | None:
+        """The stint-offset sd of lap_noise "persistent" (docs/eval.md "Honest uncertainty"): the
+        driver-stint offset sd of the fit's residual_components, sqrt(driver_s^2 + stint_s^2)
+        (degradation._residual_components on the rows the fit saw, so as of the snapshot under
+        to_snapshot; early in a race every car is on its first stint and the two cannot be told
+        apart). Each sample draws one offset per plan stint, held on that stint's green laps; the
+        lap-to-lap part is the iid noise. None otherwise (no offsets drawn)."""
+        if self.config.lap_noise != "persistent":
+            return None
+        comp = (getattr(self.degradation, "fit_report", None) or {}).get("residual_components")
+        return float(np.hypot(comp["driver_s"], comp["stint_s"])) if comp else None
 
     def _events_drawn(self, snapshot: Snapshot, scenario: Scenario | None) -> bool:
         """Whether the samples' SC and VSC laps may differ from the recorded race's: an event

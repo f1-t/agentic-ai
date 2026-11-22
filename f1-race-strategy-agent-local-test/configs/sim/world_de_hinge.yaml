@@ -1,0 +1,8 @@
+# Named world overlay for the fidelity scorecard's ablation: driver offsets plus a per-compound
+# hinge at tyre age 25 (linear_fuel_hinge), the tyre-life change's first world default. The
+# cross-race G rule on the calibration races does not separate it from world_de.yaml.
+fit_window: full
+degradation:
+  name: linear_fuel_hinge
+  params:
+    driver_effects: race

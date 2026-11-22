@@ -139,6 +139,7 @@ import copy
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from .config import HINGE_KNOT, HINGE_TAU_S_PER_LAP
 from .data import EVOLUTION_TAU_S_PER_MIN, evolution_columns, ridge_lstsq
@@ -522,7 +523,7 @@ def _hold_columns(X, y, prec, beta0, hold, fallback_s2, n_comps, bound=None):
 
 
 def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False, driver_effects=False):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects=False, sd_scale=None):
     """Penalised fit of the race rows toward `prior`. Returns (comps, beta, report).
     `wear_lower_bound` and `driver_effects`: see the module docstring.
 
@@ -549,6 +550,11 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
     beta holds the hinge coefficients after the fuel slope; report["hinge"] has every compound.
     With `driver_effects` the driver contrasts follow, last, shrunk toward 0 with tau
     shrinkage["driver_s"] (else shrinkage["base_s"]); report["driver_effects"] has the offsets.
+
+    report["residual_components"] (_residual_components): the race rows' residuals split into a
+    per-driver offset, a per-stint offset and the lap-to-lap part (the engine's "persistent" lap
+    noise reads it). `sd_scale` ({kind: factor}, SimConfig.degradation.params; None: off): see
+    _scale_sd.
     """
     race = data[data["clean"].to_numpy(dtype=bool) & ~np.isnan(_race_lap(data))]
     pc = dict(prior.coefs) if prior is not None else {}
@@ -652,7 +658,42 @@ def _shrunk(data, min_samples, prior, shrinkage, fuel_prior=None, knots=None, we
     if driver_effects:
         rep["driver_effects"] = _driver_report(drivers, Q, beta[n_fixed:], cov[n_fixed:, n_fixed:], tau_driver,
                                                driver_effects)
+    if cols and len(d):
+        rep["residual_components"] = _residual_components(d, y - X @ beta)
+    if sd_scale:
+        _scale_sd(rep, sd_scale)
     return comps, beta, rep
+
+
+def _residual_components(d, resid) -> dict:
+    """{driver_s, stint_s, lap_s, n_groups}: the residuals' per-driver offset sd, the further
+    per-stint offset sd within a driver, and the within-stint (lap-to-lap) sd, by moments on
+    the fit's rows (method of moments, each between-group variance less its sampling share
+    and floored at 0). Rows without driver or stint columns: all in lap_s."""
+    r = np.asarray(resid, dtype=float)
+    out = {"driver_s": 0.0, "stint_s": 0.0, "lap_s": float(np.std(r, ddof=1)) if len(r) > 1 else 0.0,
+           "n_groups": 0}
+    if "driver" not in d or "stint" not in d or len(r) < 3:
+        return out
+    f = pd.DataFrame({"driver": d["driver"].to_numpy(), "stint": d["stint"].to_numpy(), "r": r})
+    g = f.groupby(["driver", "stint"])["r"]
+    n_g, dev = g.transform("size").to_numpy(dtype=float), (f["r"] - g.transform("mean")).to_numpy()
+    dof = len(f) - g.ngroups
+    if dof <= 0:
+        return out
+    w2 = float(dev @ dev) / dof                              # within driver-stint
+    sm = f.groupby(["driver", "stint"])["r"].agg(["mean", "size"]).reset_index()
+    dm = f.groupby("driver")["r"].agg(["mean", "size"])
+    d2 = max(float(dm["mean"].var(ddof=1)) - w2 * float((1.0 / dm["size"]).mean()), 0.0) if len(dm) > 1 else 0.0
+    # a stint mean about its driver's (unweighted) mean of m stint means has variance
+    # (1 - 1/m)(stint var + lap var / n): undo both shares
+    sm["dev"] = sm["mean"] - sm["driver"].map(sm.groupby("driver")["mean"].mean())
+    m_st = sm.groupby("driver")["stint"].transform("size").astype(float)
+    multi = m_st > 1
+    s2 = (max(float((sm.loc[multi, "dev"] ** 2 / (1.0 - 1.0 / m_st[multi])).mean())
+              - w2 * float((1.0 / sm.loc[multi, "size"]).mean()), 0.0) if multi.any() else 0.0)
+    return {"driver_s": float(np.sqrt(d2)), "stint_s": float(np.sqrt(s2)), "lap_s": float(np.sqrt(w2)),
+            "n_groups": int(g.ngroups)}
 
 
 def _coefs(comps, beta):
@@ -676,6 +717,39 @@ def _split_name(name):
         p, _, c = name[:-1].partition("[")
         return p, c
     return name, None
+
+
+SD_SCALE_KINDS = ("base_s", "wear_s_per_lap", "fuel_s_per_lap", "hinge_s_per_lap")
+
+
+def _scale_sd(rep, scale):
+    """Widen a to_snapshot fit's stated uncertainty (SimConfig.degradation.params `sd_scale`,
+    {kind: factor} over SD_SCALE_KINDS, a missing kind 1): every sd of that kind times its factor
+    and fit_report["cov"] (and "unconstrained") S cov S with S the diagonal of factors, so the
+    correlations, the fuel-wear one included, are kept. The point estimate is unchanged. The
+    factors are chosen by interval coverage on the calibration races (docs/eval.md "Honest
+    uncertainty"); fit_report gains "sd_scale"."""
+    bad = set(scale) - set(SD_SCALE_KINDS)
+    if bad:
+        raise ValueError(f"sd_scale kinds must be among {SD_SCALE_KINDS}, got {sorted(bad)}")
+    f = {k: float(v) for k, v in scale.items()}
+    sd = rep.get("sd") or {}
+    for k, v in f.items():
+        if isinstance(sd.get(k), dict):
+            sd[k] = {c: x * v for c, x in sd[k].items()}
+        elif k in sd:
+            sd[k] = sd[k] * v
+    for c, e in (rep.get("hinge") or {}).items():
+        if e.get("sd") is not None:
+            e["sd"] = e["sd"] * f.get("hinge_s_per_lap", 1.0)
+    for key in ("cov", "unconstrained"):
+        entry = rep.get(key)
+        if not entry:
+            continue
+        svec = np.array([f.get(_split_name(n)[0], 1.0) for n in entry["names"]])
+        m = np.asarray(entry["matrix"], dtype=float) * np.outer(svec, svec)
+        entry["matrix"] = [[float(x) for x in row] for row in m]
+    rep["sd_scale"] = f
 
 
 class NaNCovarianceWarning(UserWarning):
@@ -914,16 +988,19 @@ class LinearFuelDegradation(_ParameterDraws):
     @classmethod
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, draw="none", clip_wear_at_zero=False, wear_lower_bound=None,
-            collinear_hold=None, divide_data_by_s2=False, driver_effects="off", **_):
+            collinear_hold=None, divide_data_by_s2=False, driver_effects="off", fuel_anchor=None, sd_scale=None,
+            **_):
         driver_effects = driver_effects_mode(driver_effects)
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior,
                                        wear_lower_bound=wear_lower_bound, collinear_hold=collinear_hold,
-                                       divide_data_by_s2=divide_data_by_s2, driver_effects=driver_effects)
+                                       divide_data_by_s2=divide_data_by_s2, driver_effects=driver_effects,
+                                       sd_scale=sd_scale)
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), rep).with_draw(draw, clip_wear_at_zero,
                                                                                        wear_lower_bound)
         coefs, fuel, _, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
-                                        wear_lower_bound=wear_lower_bound, driver_effects=driver_effects)
+                                        wear_lower_bound=wear_lower_bound, driver_effects=driver_effects,
+                                        fuel_anchor=fuel_anchor)
         return cls(coefs, fuel, rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
 
     @property
@@ -936,7 +1013,7 @@ class LinearFuelDegradation(_ParameterDraws):
 
 
 def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_knots=None, wear_lower_bound=None,
-              driver_effects=False):
+              driver_effects=False, fuel_anchor=None):
     """The unpenalised linear_fuel fit. Returns (coefs, fuel slope, hinges, report).
 
     With `hinge_knots` ({compound: knot}, linear_fuel_hinge) a hinge column follows the
@@ -945,6 +1022,11 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     knots hinges is None and the fit is exactly linear_fuel's. `wear_lower_bound` and
     `driver_effects` (unpenalised driver contrasts after the hinge columns, before the
     evolution slopes): see the module docstring.
+
+    `fuel_anchor` (mean, sd) (SimConfig.fuel_anchor.full_fit, the judge): a fitted fuel slope is
+    shrunk toward mean with prior sd `sd`: the fit is solved for the deviation from the anchor
+    with a penalty s2 / sd^2 on the fuel column, s2 the unpenalised fit's residual variance, so
+    `sd` is a prior sd in s/lap. fit_report gains "fuel_anchor": {mean, sd}. None: as before.
     """
     fixed_sd = float("nan") if fuel_prior_sd is None else float(fuel_prior_sd)
     comps = [c for c in sorted(data["compound"].unique()) if _usable(data, c, min_samples) is not None]
@@ -980,13 +1062,23 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
     X = (np.column_stack(cols + [lap] + hcols + dcols + evo) if fitted
          else np.column_stack(cols + hcols + dcols + evo))
     target = y if fitted else y - fuel_prior * lap
+    anchor = fitted and fuel_anchor is not None
+    if anchor:   # solve for the deviation from the anchor, penalised toward 0
+        target = target - float(fuel_anchor[0]) * lap
+    prec = _evolution_prec(X.shape[1], len(evo))
     beta = _evolution_fit(X, target, len(evo))
-    sd, res, cov = _posterior_sd(X, target, beta, _evolution_prec(X.shape[1], len(evo)))
+    sd, res, cov = _posterior_sd(X, target, beta, prec)
+    if anchor and np.isfinite(res) and res > 0:
+        prec[k] = res ** 2 / float(fuel_anchor[1]) ** 2
+        beta = ridge_lstsq(X, target, prec)
+        sd, res, cov = _posterior_sd(X, target, beta, prec)
     bound_fixed, unconstrained = np.zeros(len(beta), dtype=bool), None
     if wear_lower_bound is not None:
-        prec = _evolution_prec(X.shape[1], len(evo))
         beta, bound_fixed, (sd, res, cov), unconstrained = _bound_fit(
             X, target, prec, np.zeros(len(prec)), beta, (sd, res, cov), len(comps), wear_lower_bound, True)
+    if anchor:
+        beta = beta.copy()
+        beta[k] += float(fuel_anchor[0])   # the unconstrained shift (beta - b) is unchanged
     j0 = k + 1 + h if fitted else k + h   # the first driver contrast
     driver_rep = (_driver_report(drivers, Q, beta[j0:j0 + nd], cov[j0:j0 + nd, j0:j0 + nd], None, driver_effects)
                   if driver_effects else None)
@@ -1015,6 +1107,8 @@ def _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, hinge_kn
         hinges = {c: rep["hinge"][c]["value"] for c in comps}
     if driver_rep is not None:
         rep["driver_effects"] = driver_rep
+    if anchor:
+        rep["fuel_anchor"] = {"mean": float(fuel_anchor[0]), "sd": float(fuel_anchor[1])}
     return _apply_base_delta(_coefs(comps, beta), rep, base_delta), fuel, hinges, rep
 
 
@@ -1083,7 +1177,8 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
     def fit(cls, data, min_samples=5, fuel_prior=-0.045, prior=None, shrinkage=None, base_delta=0.0,
             fuel_prior_sd=None, hinge_knots=None, hinge_knot_default=HINGE_KNOT, draw="none",
             clip_wear_at_zero=False, wear_lower_bound=None, collinear_hold=None, divide_data_by_s2=False,
-            driver_effects="off", knot_life_fraction=None, hinge_lower_bound=None, **_):
+            driver_effects="off", knot_life_fraction=None, hinge_lower_bound=None, fuel_anchor=None,
+            sd_scale=None, **_):
         driver_effects = driver_effects_mode(driver_effects)
         candidates = set(data["compound"].dropna()) | (set(prior.coefs) if prior is not None else set())
         knots = _knots(sorted(candidates), hinge_knots, hinge_knot_default)
@@ -1091,12 +1186,12 @@ class LinearFuelHingeDegradation(LinearFuelDegradation):
             knots.update(_life_knots(data, knot_life_fraction))
         if shrinkage is not None:
             comps, beta, rep = _shrunk(data, min_samples, prior, shrinkage, fuel_prior, knots, wear_lower_bound,
-                                       collinear_hold, divide_data_by_s2, driver_effects)
+                                       collinear_hold, divide_data_by_s2, driver_effects, sd_scale)
             hinges = {c: rep["hinge"][c]["value"] for c in comps}
             return cls(_coefs(comps, beta), float(beta[2 * len(comps)]), hinges, {c: knots[c] for c in comps},
                        rep).with_draw(draw, clip_wear_at_zero, wear_lower_bound)
         coefs, fuel, hinges, rep = _fuel_fit(data, min_samples, fuel_prior, base_delta, fuel_prior_sd, knots,
-                                             wear_lower_bound, driver_effects)
+                                             wear_lower_bound, driver_effects, fuel_anchor)
         if hinge_lower_bound is not None:
             coefs, fuel, hinges, rep = _bounded_hinges(data, min_samples, fuel_prior, base_delta, fuel_prior_sd,
                                                        knots, wear_lower_bound, driver_effects, hinge_lower_bound,

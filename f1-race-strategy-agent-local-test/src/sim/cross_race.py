@@ -975,9 +975,10 @@ INCUMBENTS = {
     "to_snapshot": (BOUND_ARM, "a priori",
                     "configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the "
                     "stop-gain check)"),
-    "full": ("driver_effects_hinge", "selected",
-             "config.WORLD_DEGRADATION, the eval world (score.race_simulators); selected on the seven "
-             "calibration races in the tyre-life change"),
+    "full": ("driver_effects", "selected",
+             "config.WORLD_DEGRADATION, the eval world (score.race_simulators): driver effects, by the "
+             "fidelity scorecard's finishing-order measure (the G rule does not separate it from "
+             "driver_effects_hinge)"),
     "pre_race": (BASELINE, "default", "SimConfig defaults"),
 }
 

@@ -17,9 +17,16 @@ traffic:
     pass_mode: earned
 events:
   name: rate
+  params:
+    as_of: true
 degradation:
   name: linear_fuel
   params:
     draw: posterior
     wear_lower_bound: 0.0
-lap_noise: residual
+lap_noise: persistent
+calibrator:
+  name: as_of_history
+fuel_anchor:
+  prior: anchored
+  practice: anchored

@@ -18,8 +18,16 @@
 # (circuit history, else the a priori physics prior), the SC lap factor and the lap-1 extra from
 # configs/sim/race_history.csv, races strictly before this one (race_history.A_PRIORI with none);
 # the shrinkage calibrator ("shrinkage") is the earlier, Spain-derived belief.
+# Fuel anchoring (docs/eval.md "Fuel anchoring"): fuel_anchor.prior "anchored" takes the fuel prior
+# as the lap-scaled physics slope (0.03 s/kg at a 90 s lap, 110 kg over the scheduled laps, scaled
+# by this weekend's practice lap) times the ratio target / physics of the races before this one,
+# with that ratio's predictive sd; fuel_anchor.practice "anchored" fits the practice wear net of
+# the same fuel slope. prior "circuit_history" and practice "config" give the belief before it (#102).
 calibrator:
   name: as_of_history
+fuel_anchor:
+  prior: anchored
+  practice: anchored
 # Pit loss as of the snapshot (src/sim/pit_loss.py, docs/eval.md "Pit loss and track status"):
 # a prior from earlier races at the circuit, else across circuits, updated with this race's
 # green stops seen by then, drawn per sample with its sd; the SC and VSC factors likewise. The
@@ -38,4 +46,9 @@ degradation:
   params:
     draw: posterior
     wear_lower_bound: 0.0
-lap_noise: residual
+# Persistent lap noise (docs/eval.md "Honest uncertainty"): the residuals are autocorrelated, so
+# each sample draws one offset per plan stint (the as-of driver-stint residual sd) plus the
+# lap-to-lap part iid. "residual" (iid, residual_s) is the belief before it. The coverage-chosen
+# parameter widening (degradation.params.sd_scale, 1.75 per kind) is a switch, off: it worsened
+# the replay order measures.
+lap_noise: persistent

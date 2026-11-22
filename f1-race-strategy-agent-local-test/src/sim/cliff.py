@@ -30,11 +30,12 @@ the oldest age actually run is how the prior's prediction is scored, not an inpu
   "history" (b, the default until the fidelity scorecard chooses between (a) and (b)):
       E_c = max(the prior's point edge, the oldest tyre age any car ran on c in this race): the
       judge has measured laps up to that age, so it charges no extrapolation cost there. That
-      extension is the judge's one whole-race input here.
+      extension is the judge's one whole-race input here ("history:<tier> extended by this
+      race's ages to N").
   "race" (c, the earlier design): E_c = the oldest age raced in this race; for a compound no car
       raced the proxy's practice-age rule (proxy.unraced_limits).
-Cliff.source records the source per compound ("history:<tier>", "history:<tier> extended by race
-data to age N", "race", ...), and the world's fit_report["support_edge"] carries it
+Cliff.source records the source per compound ("history:<tier>", "history:<tier> extended by this
+race's ages to N", "race", ...), and the world's fit_report["support_edge"] carries it
 (world_ledger) for the fidelity tool's hindsight ledger.
 
 belief (any other fit window, what a policy plans on), as_of_cliffs: the same prior with its
@@ -131,7 +132,7 @@ def world_cliffs(laps, practice, race, wc, steps=None) -> dict[str, Cliff]:
             out[c] = Cliff(seen, wc.kappa, wc.cap_s_per_lap, "race (no history prior)")
         elif seen is not None and seen > p[0]:
             out[c] = Cliff(seen, wc.kappa, wc.cap_s_per_lap,
-                           f"history:{p[2]} extended by race data to age {seen:g}")
+                           f"history:{p[2]} extended by this race's ages to {seen:g}")
         else:
             out[c] = Cliff(p[0], wc.kappa, wc.cap_s_per_lap, f"history:{p[2]}")
     return out
@@ -141,7 +142,7 @@ def world_ledger(cliffs: dict) -> dict[str, dict]:
     """compound -> {edge, source, whole_race_input}: the judge's edges and whether each used this
     race's laps (a whole-race input), for the fidelity ledger."""
     def whole_race(src):
-        return not str(src).startswith("history:") or "extended by race data" in str(src)
+        return not str(src).startswith("history:") or "extended by this race's ages" in str(src)
     return {c: {"edge": cl.age, "source": cl.source, "whole_race_input": whole_race(cl.source)}
             for c, cl in cliffs.items()}
 
