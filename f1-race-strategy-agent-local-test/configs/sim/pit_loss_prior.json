@@ -1,0 +1,167 @@
+{
+ "note": "Whole-race pit loss (jobs.load_race) and the factor of every stop whose in-lap was under SC or VSC, per calibration race. Built by `python -m src.sim.pit_loss build-prior`; read by SimConfig.pit_loss.prior, so config_hash covers it. Never holds a held-out race.",
+ "races": {
+  "2019_10_united_kingdom": {
+   "circuit": "united_kingdom",
+   "n_green_stops": 20,
+   "pit_loss_s": 21.21,
+   "replay_mean_s": 24.61,
+   "sc": {
+    "factors": [
+     0.639,
+     0.856,
+     0.1519,
+     1.3471,
+     0.4796,
+     0.4832,
+     0.2075,
+     0.1003,
+     0.0096
+    ],
+    "stops": [
+     "HAM:20",
+     "KUB:20",
+     "KVY:21",
+     "LEC:21",
+     "RIC:20",
+     "RUS:21",
+     "SAI:20",
+     "VER:20",
+     "VET:20"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 52,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   }
+  },
+  "2021_04_spain": {
+   "circuit": "spain",
+   "n_green_stops": 34,
+   "pit_loss_s": 22.568,
+   "replay_mean_s": 23.85,
+   "sc": {
+    "factors": [
+     2.0772,
+     -0.6631,
+     -0.5381
+    ],
+    "stops": [
+     "GIO:8",
+     "LAT:9",
+     "RUS:9"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 66,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   }
+  },
+  "2022_02_saudi_arabia": {
+   "circuit": "saudi_arabia",
+   "n_green_stops": 5,
+   "pit_loss_s": 24.387,
+   "replay_mean_s": 15.05,
+   "sc": {
+    "factors": [
+     0.6096,
+     0.6403,
+     1.2801,
+     0.5302,
+     0.6244,
+     0.8758,
+     1.2481,
+     1.2272,
+     0.766
+    ],
+    "stops": [
+     "ALO:16",
+     "BOT:16",
+     "LEC:16",
+     "NOR:16",
+     "OCO:16",
+     "RUS:16",
+     "SAI:16",
+     "VER:16",
+     "ZHO:16"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 50,
+   "vsc": {
+    "factors": [
+     1.2435
+    ],
+    "stops": [
+     "HAM:40"
+    ]
+   }
+  },
+  "2023_01_bahrain": {
+   "circuit": "bahrain",
+   "n_green_stops": 44,
+   "pit_loss_s": 25.142,
+   "replay_mean_s": 26.59,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 57,
+   "vsc": {
+    "factors": [
+     0.0188,
+     -0.0045,
+     0.2228,
+     0.0788,
+     0.0399,
+     0.1101
+    ],
+    "stops": [
+     "ALB:40",
+     "GAS:40",
+     "HUL:40",
+     "MAG:40",
+     "SAR:40",
+     "TSU:40"
+    ]
+   }
+  },
+  "2023_07_spain": {
+   "circuit": "spain",
+   "n_green_stops": 42,
+   "pit_loss_s": 23.772,
+   "replay_mean_s": 24.94,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 66,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   }
+  },
+  "2024_07_emilia_romagna": {
+   "circuit": "emilia_romagna",
+   "n_green_stops": 27,
+   "pit_loss_s": 28.67,
+   "replay_mean_s": 28.46,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 63,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   }
+  }
+ }
+}

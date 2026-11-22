@@ -149,6 +149,8 @@ LAP_NOISE_STREAM = 3
 # its first (DEGRADATION_STREAM's row) is rejected, so an accepted first proposal is the
 # unbounded run's draw
 DEGRADATION_RETRY_STREAM = 4
+# the per-sample draw of an as-of pit loss (SimConfig.pit_loss.source "asof"); unused otherwise
+PIT_LOSS_STREAM = 5
 # never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
 # [seed, k, 1] key
 STREAM_KEY = 2 ** 32 - 1
@@ -189,8 +191,14 @@ class Simulator:
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
                  practice: pd.DataFrame | None = None, pace=None, *, weather: pd.DataFrame | None = None,
-                 race_features: dict | None = None, calibrator=None, qualifying: pd.DataFrame | None = None):
+                 race_features: dict | None = None, calibrator=None, qualifying: pd.DataFrame | None = None,
+                 pit_loss_s: float | None = None):
         self.config = config or SimConfig()
+        # the world's hindsight pit loss (eval.score.race_simulators): when set it replaces the
+        # snapshot's on every simulation; a belief never gets it (docs/eval.md "Pit loss")
+        self.race_pit_loss_s = pit_loss_s
+        self._pit_loss_cache = {}   # pit_loss.estimate per (driver, lap, window), shared with copies
+        self._pit_stops = {}        # pit_loss.stop_table of `laps`, built on first use
         self.laps, self.practice, self.pace = laps, practice, pace
         self.qualifying, self._quali_gaps = qualifying, None
         # R8, from the full race frame; shared by fitted_for copies
@@ -498,10 +506,15 @@ class Simulator:
 
         fx, hx = self.config.effects, self.config.hazard_effects
         cal = self.calibration.output if self.calibration is not None else None
+        pl = self.pit_loss_inputs(snapshot)
         factors = _cal.EventDraws(cal, {
-            "pit_loss_s": snapshot.race.pit_loss_s, "sc_lap_factor": fx.sc_lap_factor,
-            "vsc_lap_factor": fx.vsc_lap_factor, "sc_pit_loss_factor": fx.sc_pit_loss_factor,
+            "pit_loss_s": pl["pit_loss_s"], "sc_lap_factor": fx.sc_lap_factor,
+            "vsc_lap_factor": fx.vsc_lap_factor, "sc_pit_loss_factor": pl["sc_factor"],
             "lap1_extra_s": fx.lap1_extra_s})
+        # an as-of pit loss carries its sd: one draw per sample from its own stream, unless the
+        # calibrator already draws pit_loss_s
+        z_pit = (batch_normals(seed, PIT_LOSS_STREAM, n, 1, pl["sd_s"])[:, 0]
+                 if pl["sd_s"] > 0 and "pit_loss_s" not in factors.names else None)
         corr = (_cal.CorrectionLookup(cal.correction, names, codes, laps)
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
@@ -530,6 +543,8 @@ class Simulator:
             rng = np.random.default_rng([seed, k])
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
+            if z_pit is not None:
+                v = {**v, "pit_loss_s": max(0.0, v["pit_loss_s"] + z_pit[k])}
             z = rng.standard_normal() if corr is not None and corr.has_sd else 0.0
             if z_par is not None:
                 model = self.degradation.draw_z(z_par[k] if z_retry is None else np.concatenate([z_par[k], z_retry[k]]))
@@ -568,7 +583,7 @@ class Simulator:
                 lap_s += np.where(sc | vsc, 0.0, eps[k])
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
-            scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, fx.vsc_pit_loss_factor, 1.0))
+            scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, pl["vsc_factor"], 1.0))
             if self.hazard.draws:
                 if eff is ages:
                     if green_p is None:
@@ -609,6 +624,34 @@ class Simulator:
         for r, i in enumerate(idx):
             out.stint_seconds[i] = seg[r, :n_stints[r]]
         return out
+
+    def pit_loss_inputs(self, snapshot: Snapshot) -> dict:
+        """{pit_loss_s, sd_s, sc_factor, vsc_factor, source, ...} this simulation prices a stop
+        with. The world's hindsight value when the Simulator was given one (pit_loss_s=...,
+        source "race"); under config.pit_loss.source "asof" pit_loss.estimate at the snapshot
+        on this instance's fit (source "asof", with its sd, the SC/VSC factors and their
+        provenance); else snapshot.race.pit_loss_s and the effects' factors (source "snapshot")."""
+        fx, cfg = self.config.effects, self.config.pit_loss
+        if self.race_pit_loss_s is not None:
+            return {"pit_loss_s": float(self.race_pit_loss_s), "sd_s": 0.0, "sc_factor": fx.sc_pit_loss_factor,
+                    "vsc_factor": fx.vsc_pit_loss_factor, "source": "race"}
+        if cfg.source != "asof":
+            return {"pit_loss_s": float(snapshot.race.pit_loss_s), "sd_s": 0.0, "sc_factor": fx.sc_pit_loss_factor,
+                    "vsc_factor": fx.vsc_pit_loss_factor, "source": "snapshot"}
+        from . import pit_loss as _pl
+        # the information cut is the fit's: on a windowed instance its lap k0, so a continuation's
+        # advanced snapshot (laps_completed + n) never reads the stops of the laps it skips ahead
+        lap = (self.window[1] or 0) if self.window is not None else snapshot.laps_completed
+        key = (snapshot.race.race_id, snapshot.driver, lap, self.window)
+        if key not in self._pit_loss_cache:
+            if len(self._pit_loss_cache) >= FIT_CACHE_SIZE:
+                del self._pit_loss_cache[next(iter(self._pit_loss_cache))]
+            if "stops" not in self._pit_stops:
+                self._pit_stops["stops"] = _pl.stop_table(self.laps)
+            est = _pl.estimate(self.laps, snapshot.race.race_id, snapshot.driver, lap, self.degradation, cfg,
+                               self._pit_stops["stops"])
+            self._pit_loss_cache[key] = {**est, "source": "asof"}
+        return self._pit_loss_cache[key]
 
     def _lap_noise_sd(self) -> float:
         """SimConfig.lap_noise: 0 for "none", else the fit's residual_s (0 when the fit

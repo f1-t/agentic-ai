@@ -549,10 +549,11 @@ register(Leak(
     "src/sim/data.py:316 lap_frame -> robust_filter; read by the to_snapshot fit (src/sim/degradation.py:553) "
     "and ref_lap_s (src/sim/engine.py:277)", "scramble",
     data=_restore_frame_columns(["clean", "pace_resid_s", "driver_offset_s"])))
-register(Leak(
-    "pit_loss", "RaceParams.pit_loss_s is the observed pit loss of a full-race replay",
-    "src/sim/jobs.py:98 load_race -> src/sim/calibrate.py:137 _pit_loss (calibration.run observed_pit_loss_s) -> "
-    "snapshot.race; src/sim/engine.py:500, src/sim/agent_tools.py:383", "scramble", data=_restore_race("pit_loss_s")))
+# Fixed: "pit_loss" (RaceParams.pit_loss_s, the observed pit loss of a full-race replay). Snapshots
+# carry the pre-race prior (calibration.pre_race_pit_loss), the belief and the tools the as-of
+# estimate (src/sim/pit_loss.py); only the world gets the whole-race value. test_leak_pit_loss
+# keeps it as a regression test.
+FIXED_LEAKS = ("pit_loss",)
 register(Leak(
     "race_length", "the snapshot's race length is the laps the driver drove in the whole race, so a driver "
     "who will be lapped (or will retire) is told fewer laps remain",

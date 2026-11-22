@@ -168,10 +168,14 @@ def test_interval_without_sd_is_flagged():
 
 
 def test_pit_loss_config_band_and_calibrator_sd(syn, monkeypatch):
-    sim, snap = syn
+    # a belief that reads the snapshot's pit loss (the as-of one is tests/test_sim_pit_loss.py's)
+    _, snap = syn
+    sim = syn_sim(syn_frame(), BELIEF.model_copy(update={"pit_loss": BELIEF.pit_loss.model_copy(
+        update={"source": "snapshot"})}))
     out = agent_tools.pit_loss(snap, sim=sim, profile=PROFILE)
     assert out["source"] == "config" and out["sd_s"] is None
-    assert out["pit_loss_s"] == pytest.approx({"low": 18.0, "median": 20.0, "high": 22.0})
+    pl = snap.race.pit_loss_s   # the snapshot carries the pre-race prior (calibration.pre_race_pit_loss)
+    assert out["pit_loss_s"] == pytest.approx({"low": 0.9 * pl, "median": pl, "high": 1.1 * pl})
     assert (out["sc_pit_loss_factor"], out["vsc_pit_loss_factor"]) == (0.5, 0.6)
     assert out["track_status"] == "green"
     assert out["pit_loss_now_factor"] == 1.0 and out["pit_loss_now_s"] == out["pit_loss_s"]
@@ -324,8 +328,12 @@ def test_view_of_spain_takes_the_race_constants(spain):
     view = RaceSnapshot(season=2021, event="spain", lap=30, total_laps=60, driver="TST", position=4,
                         compound="SOFT", tyre_age_laps=22)
     assert agent_tools.race_id_for_view(view) == "2021_04_spain"
-    race = agent_tools.contract_of(view).race
-    assert (race.race_id, race.total_laps, race.pit_loss_s) == ("2021_04_spain", 60, spain.race.pit_loss_s)
+    snap = agent_tools.contract_of(view)
+    race = snap.race
+    assert (race.race_id, race.total_laps) == ("2021_04_spain", 60)
+    # the contract carries the belief's as-of pit loss, never the world's whole-race one
+    asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)["pit_loss_s"]
+    assert race.pit_loss_s == pytest.approx(asof, abs=1e-3) and race.pit_loss_s != spain.race.pit_loss_s
 
 
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
@@ -375,7 +383,9 @@ def test_run_agent_end_to_end_through_the_belief(spain):
     out = {t["tool"]: t["output"] for t in traj}
     assert out["get_race_snapshot"]["min_stint_laps"] == snap.race.min_stint_laps
     assert out["estimate_tyre_degradation"]["wear_at_bound"] is True
-    assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == snap.race.pit_loss_s
+    asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)
+    assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == pytest.approx(asof["pit_loss_s"])
+    assert out["estimate_pit_loss"]["source"] == "asof" and asof["pit_loss_s"] != spain.race.pit_loss_s
     assert out["compare_plans"]["valid"] == [True, True]
     ev = traj[-2]["output"]
     assert ev["action"] == {"action": "stay_out", "laps": 3} and ev["within_sim_error"] is True
