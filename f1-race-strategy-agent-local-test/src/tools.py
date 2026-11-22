@@ -70,10 +70,15 @@ def _field_codes(contract) -> set[str]:
     return codes
 
 
-def _schedule_names(season, rnd) -> set[str]:
+def _schedule_names(season, rnd, slug) -> set[str]:
     """The cached schedule's event name, country and location for (season, round); empty when
-    the schedule is not cached."""
+    the schedule is not cached. A synthetic race (cross_race.is_synthetic) is never looked up:
+    FastF1 would reach for a schedule that does not exist."""
+    from .sim.cross_race import is_synthetic
     from .sim.data import season_schedule
+    from .sim.race_ids import make_race_id
+    if is_synthetic(make_race_id(season, rnd, slug)):
+        return set()
     sched = season_schedule(season)
     if sched is None:
         return set()
@@ -92,7 +97,7 @@ def _scrub_rules(contract, view, labels) -> list:
     try:
         season, rnd, slug = parse_race_id(canonical_race_id(rid))
         words |= {slug, slug.replace("_", " ")}
-        words |= _schedule_names(season, rnd)
+        words |= _schedule_names(season, rnd, slug)
     except ValueError:
         pass
     if view.event:

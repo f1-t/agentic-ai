@@ -42,6 +42,7 @@ import sys
 import numpy as np
 import pandas as pd
 
+from .data import visible_rows
 from .race_ids import as_of, canonical_race_id, parse_race_id
 
 PRIOR_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "sim", "pit_loss_prior.json")
@@ -273,7 +274,7 @@ def estimate(frame: pd.DataFrame, race_id: str, driver: str, lap: int, model, cf
     stops = stop_table(frame) if stops is None else stops
     t = snapshot_time(frame, driver, lap)
     seen = stops[stops["known_s"] <= t] if t is not None else stops[stops["in_lap"] + 1 <= lap]
-    rows = frame[frame["end_s"] <= t] if t is not None else frame[frame["lap"] <= lap]
+    rows = visible_rows(frame, t) if t is not None else frame[frame["lap"] <= lap]   # data.visible_rows: the shared cut
     medians = _field_medians(rows)
     prior = pit_loss_prior(race_id, cfg)
     lo, hi = cfg.plausible
