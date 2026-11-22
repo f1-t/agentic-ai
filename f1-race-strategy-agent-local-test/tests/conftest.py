@@ -51,12 +51,22 @@ def _block_network(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
 
 
+def _drop_cached_belief():
+    """agent_tools.belief_config() reads belief.yaml once per process; a copy cached under the
+    other default (at collection, by a module-level BELIEF) would carry it into the test."""
+    import sys
+    tools = sys.modules.get("src.sim.agent_tools")
+    if tools is not None:
+        tools._BELIEF.pop("config", None)
+
+
 def _set_proxy_default(enabled):
     from src.sim.config import CompoundProxy
     field = CompoundProxy.model_fields["enabled"]
     if field.default != enabled:
         field.default = enabled
         CompoundProxy.model_rebuild(force=True)
+        _drop_cached_belief()
 
 
 def _set_cliff_default(enabled):
@@ -65,6 +75,7 @@ def _set_cliff_default(enabled):
     if field.default != enabled:
         field.default = enabled
         WearCliff.model_rebuild(force=True)
+        _drop_cached_belief()
 
 
 @pytest.hookimpl(tryfirst=True)
