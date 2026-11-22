@@ -1384,7 +1384,26 @@ any scenario of any race (the lap-0 same-race guard is gone):
   valid on its own, with only whitespace or bracket-free prose around them, as their calls
   in order (the per-turn and budget rules apply to them as to one envelope); and a bare
   JSON object whose keys are exactly a valid `submit_recommendation` argument set (every
-  required key, nothing undeclared) as that call.
+  required key, nothing undeclared) as that call. Since the turn-repeat change it also
+  applies the closer repair to the LAST of several envelopes (never an earlier one), and
+  reads a submission object that carries an empty `"tool_calls": []` beside an exact
+  argument set as that submission (the key dropped, said in the note).
+- `AGENT_TURN_REPEAT` (also `run_agent(turn_repeat=...)`) says what an evidence turn whose
+  calls are exactly the previous turn's (the same set of tool and arguments; a turn with a
+  submission never counts) gets. `end` (the default): none of it runs and no budget is
+  used; the model is told once that the turn repeats the previous one, with one line per
+  call of what it returned (its error whole, so a rule reply's legal alternative; its gap
+  reading; or a pointer to the result above) and that a different evidence call or
+  `submit_recommendation` moves things forward; a second repeat in a row gets the same in
+  other words and the warning that one more ends the evidence phase; the third ends it, and
+  the grace turns follow at once. `remind`: the same messages, never the early end. `run`:
+  the turn runs again like any other (the behaviour before; `AGENT_REPEAT_MODE` then applies
+  per call). The calls of an answered repeat are trajectory events with `repeat_of` and
+  `turn_repeat` (the count in the row) and count in `repeat_calls`; a submission after an
+  early end is `submitted_in_grace`. Rerun provenance records the mode. Why: in the live
+  check of 2026-11-22, two of 18 episodes re-sent their whole turn eight times with the
+  results in front of them; refusing repeated calls (#72) slowed the model and caching
+  them let it loop, since neither told it anything new.
 
 ### Plan gaps and rule replies
 
