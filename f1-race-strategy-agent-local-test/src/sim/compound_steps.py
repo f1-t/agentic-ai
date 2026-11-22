@@ -46,8 +46,15 @@ from . import proxy, rules
 ROOT = Path(__file__).resolve().parent.parent.parent
 STEPS_OUT = ROOT / "configs" / "sim" / "compound_steps.json"
 REPORT_DIR = ROOT / "reports" / "calibration" / "compound_proxy"
+# the seven calibration races the learned calibrator was trained on (its committed artifacts)
+SEVEN_CALIBRATION_RACES = ("2021_04_spain", "2023_07_spain", "2023_01_bahrain", "2019_10_united_kingdom",
+                           "2022_02_saudi_arabia", "2024_07_emilia_romagna", "2025_23_qatar")
 CALIBRATION_RACES = ("2021_04_spain", "2023_07_spain", "2023_01_bahrain", "2019_10_united_kingdom",
-                     "2022_02_saudi_arabia", "2024_07_emilia_romagna", "2025_23_qatar")
+                     "2022_02_saudi_arabia", "2024_07_emilia_romagna", "2025_23_qatar",
+                     # the 2021-22 weekends cached for calibration (#92), held-out races never
+                     "2021_01_bahrain", "2021_09_austrian", "2021_20_qatar", "2021_22_united_arab_emirates",
+                     "2022_01_bahrain", "2022_06_spain", "2022_11_austria", "2022_08_azerbaijan", "2022_09_canada",
+                     "2022_12_france", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates")
 LIFE_RATIO_EXCLUDED = {"2025_23_qatar": "mandated 25-lap maximum stint, so its tyre ages say nothing about tyre life"}
 STINT_LAPS = (15, 25)
 STEP_KEYS = ("pace_frac", "wear_ratio", "life_ratio")
@@ -113,21 +120,7 @@ def aggregate(per_race: pd.DataFrame, exclude=(), keep_thin=False) -> dict:
     """{pair: {key: {value, sd, n, races}}}: the median, the sample sd across races and the
     count, over the rows of races not in `exclude` with a finite value; a thin row (fewer than
     MIN_PAIR_ROWS clean race rows on either compound) is left out unless `keep_thin`."""
-    out = {}
-    rows = per_race[~per_race["race_id"].isin(exclude)] if len(per_race) else per_race
-    if len(rows) and not keep_thin and "thin" in rows:
-        rows = rows[~rows["thin"].astype(bool)]
-    for pair, g in rows.groupby("pair", sort=True) if len(rows) else []:
-        entry = {}
-        for key in STEP_KEYS:
-            v = g[["race_id", key]].dropna()
-            if not len(v):
-                continue
-            x = v[key].to_numpy(dtype=float)
-            entry[key] = {"value": float(np.median(x)), "sd": float(np.std(x, ddof=1)) if len(x) > 1 else float("nan"),
-                          "n": int(len(x)), "races": sorted(v["race_id"])}
-        out[pair] = entry
-    return out
+    return proxy.aggregate_steps(per_race if len(per_race) else [], exclude, keep_thin)   # the runtime's own
 
 
 def _json_num(x):
@@ -162,8 +155,22 @@ def write_table(per_race: pd.DataFrame, races, path=STEPS_OUT):
     return steps
 
 
+def loadable(races) -> list[str]:
+    """The races jobs.load_race can build; each other one is left out with its reason printed
+    (a race with laps of no recorded compound, say)."""
+    out = []
+    for rid in races:
+        try:
+            load(rid)
+        except Exception as exc:   # noqa: BLE001
+            print(f"{rid}: left out ({type(exc).__name__}: {exc})", flush=True)
+            continue
+        out.append(rid)
+    return out
+
+
 def per_race_table(races) -> pd.DataFrame:
-    rows = [r for rid in races for r in race_steps(rid)]
+    rows = [r for rid in loadable(races) for r in race_steps(rid)]
     return pd.DataFrame(rows)
 
 
@@ -175,7 +182,7 @@ def estimate_main(argv):
     from . import cross_race
     cross_race.guard_held_out(args.races)
     per_race = per_race_table(args.races)
-    steps = write_table(per_race, args.races, args.out)
+    steps = write_table(per_race, [r for r in args.races if r in set(per_race["race_id"])], args.out)
     print(per_race.round(4).to_string(index=False))
     for pair, entry in steps.items():
         for k, e in entry.items():
@@ -199,7 +206,7 @@ def _stint(model, compound, n, total):
     return float(np.sum(model.lap_times(compound, np.arange(1, n + 1, dtype=float), laps)))
 
 
-def _price_hidden(data, x, sources, steps, weights=None):
+def _price_hidden(data, x, sources, steps, weights=None, sd_floor=None):
     """(model with x priced through `sources` or None when they cannot, its proxy entry)."""
     from .engine import Simulator
     cfg = proxy_off(data.config)
@@ -208,6 +215,8 @@ def _price_hidden(data, x, sources, steps, weights=None):
     px = with_steps(data.config, steps).compound_proxy
     if weights is not None:
         px = px.model_copy(update={"weights": weights})
+    if sd_floor is not None:
+        px = px.model_copy(update={"sd_floor": sd_floor})
     m = proxy.apply(sim.degradation, px, min_samples=cfg.min_samples, practice=sim.physics_prior(),
                     quali=proxy.qualifying_gaps(data.qualifying), sources=sources,
                     knot=lambda c: cfg.hinge_knots.get(c, cfg.hinge_knot_default))
@@ -284,6 +293,50 @@ def blend_rows(race_id, per_race, sources_table) -> list[dict]:
         m, entry = _price_hidden(data, x, list(proxy.SOURCES_ALL), steps, weights)
         rows.append(_row(race_id, x, "blend", m, entry, true, data.race.total_laps))
     return rows
+
+
+def forward_rows(races, per_race: pd.DataFrame) -> pd.DataFrame:
+    """The forward-chained validation the runtime's as-of tier 5 reads (proxy.as_of_config):
+    races in date order; each race's raced compounds hidden and priced by each source alone with
+    the step table of the races strictly before it, then by the blend with that table, the
+    weights from the earlier races' single-source rows (proxy.validation_weights) and the sd
+    floor from their blend rows (proxy.validation_sd_floor). Never a later race, never the race
+    itself: the weights and floor any race R is priced with are a function of these rows."""
+    from .engine import Simulator
+    from .race_ids import as_of, parse_race_id
+    order = sorted(loadable(races), key=lambda r: parse_race_id(r)[:2])
+    rows = []
+    for rid in order:
+        earlier = set(as_of(rid, order))
+        steps = proxy.aggregate_steps(per_race[per_race["race_id"].isin(earlier)] if len(per_race) else [])
+        prev = [r for r in rows if r["race_id"] in earlier]
+        weights, floor = proxy.validation_weights(prev), proxy.validation_sd_floor(prev)
+        data = load(rid)
+        cfg = proxy_off(data.config)
+        true = Simulator(data.frame, cfg, data.practice).degradation
+        for x in tier1(true, cfg.min_samples):
+            for case, sources in SOURCE_CASES.items():
+                m, entry = _price_hidden(data, x, sources, steps)
+                rows.append(_row(rid, x, case, m, entry, true, data.race.total_laps))
+            m, entry = _price_hidden(data, x, list(proxy.SOURCES_ALL), steps, weights, floor)
+            rows.append(_row(rid, x, "blend", m, entry, true, data.race.total_laps))
+        print(f"forward validation: {rid} ({len(earlier)} earlier races)", flush=True)
+    return pd.DataFrame(rows)
+
+
+def write_validation_rows(rows: pd.DataFrame, path=STEPS_OUT):
+    """Put the forward-chained validation rows into the table ("validation_rows")."""
+    doc = json.loads(Path(path).read_text())
+    keep = ["race_id", "compound", "case", "available", "pace_err_s", "wear_err_s_per_lap"]
+    doc["validation_rows"] = [{k: (_json_num(float(v)) if k.endswith("_s") or k.endswith("_lap") else
+                                   bool(v) if k == "available" else v)
+                               for k, v in r.items() if k in keep}
+                              for r in rows.to_dict("records")]
+    doc["validation_provenance"] = (
+        "forward chaining (python -m src.sim.compound_steps validate --as-of): each race priced with the step "
+        "table, weights and sd floor of the races strictly before it; a policy pricing race R reads the rows "
+        "of the races before R only (proxy.as_of_config)")
+    Path(path).write_text(json.dumps(doc, indent=1, default=float) + "\n")
 
 
 ERROR_COLUMNS = ("pace_err_s", "wear_err_s_per_lap", "stint15_err_s", "stint25_err_s")
@@ -418,10 +471,20 @@ def validate_main(argv):
     ap.add_argument("--out-dir", default=str(REPORT_DIR))
     ap.add_argument("--no-decisions", action="store_true", help="parameter errors only")
     ap.add_argument("--no-write", action="store_true", help="leave the weights in the table as they are")
+    ap.add_argument("--as-of", action="store_true",
+                    help="forward chaining only: write the validation_rows the as-of tier 5 reads (forward_rows)")
     args = ap.parse_args(argv)
     from . import cross_race
     cross_race.guard_held_out(args.races)
     os.makedirs(args.out_dir, exist_ok=True)
+    if args.as_of:
+        per_race = pd.DataFrame(json.loads(STEPS_OUT.read_text()).get("per_race") or [])
+        rows = forward_rows(args.races, per_race)
+        rows.to_csv(os.path.join(args.out_dir, "validation_forward.csv"), index=False)
+        if not args.no_write:
+            write_validation_rows(rows)
+        print(summary(rows).round(3).to_string(index=False))
+        return
     per_race = per_race_table(args.races)
     src = pd.DataFrame([r for rid in args.races for r in source_rows(rid, per_race)])
     blend = pd.DataFrame([r for rid in args.races for r in blend_rows(rid, per_race, src)])

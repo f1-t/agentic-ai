@@ -9,7 +9,19 @@
   "2019_10_united_kingdom",
   "2022_02_saudi_arabia",
   "2024_07_emilia_romagna",
-  "2025_23_qatar"
+  "2025_23_qatar",
+  "2021_01_bahrain",
+  "2021_09_austrian",
+  "2021_20_qatar",
+  "2021_22_united_arab_emirates",
+  "2022_01_bahrain",
+  "2022_06_spain",
+  "2022_08_azerbaijan",
+  "2022_09_canada",
+  "2022_12_france",
+  "2022_20_mexico",
+  "2022_21_brazil",
+  "2022_22_united_arab_emirates"
  ],
  "life_ratio_excluded": {
   "2025_23_qatar": "mandated 25-lap maximum stint, so its tyre ages say nothing about tyre life"
@@ -19,35 +31,65 @@
   "MEDIUM-HARD": {
    "pace_frac": {
     "value": -0.0027204509078597727,
-    "sd": 0.003255466155654935,
-    "n": 5,
+    "sd": 0.005786465844881518,
+    "n": 15,
     "races": [
      "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
      "2022_02_saudi_arabia",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_22_united_arab_emirates",
      "2023_07_spain",
      "2024_07_emilia_romagna",
      "2025_23_qatar"
     ]
    },
    "wear_ratio": {
-    "value": 1.4014129060602705,
-    "sd": 0.6486790984275315,
-    "n": 5,
+    "value": 1.1813138010994475,
+    "sd": 0.9443739125760653,
+    "n": 15,
     "races": [
      "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
      "2022_02_saudi_arabia",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_22_united_arab_emirates",
      "2023_07_spain",
      "2024_07_emilia_romagna",
      "2025_23_qatar"
     ]
    },
    "life_ratio": {
-    "value": 0.6718518518518519,
-    "sd": 0.24021859683112554,
-    "n": 4,
+    "value": 0.7743055555555556,
+    "sd": 0.2635807757202885,
+    "n": 14,
     "races": [
      "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
      "2022_02_saudi_arabia",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_22_united_arab_emirates",
      "2023_07_spain",
      "2024_07_emilia_romagna"
     ]
@@ -55,32 +97,52 @@
   },
   "SOFT-MEDIUM": {
    "pace_frac": {
-    "value": 8.592299677578907e-05,
-    "sd": 0.002579915488869788,
-    "n": 3,
+    "value": -0.0002840886440131918,
+    "sd": 0.007437969962958475,
+    "n": 10,
     "races": [
      "2019_10_united_kingdom",
+     "2021_01_bahrain",
      "2021_04_spain",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_06_spain",
+     "2022_20_mexico",
+     "2022_21_brazil",
      "2023_07_spain"
     ]
    },
    "wear_ratio": {
     "value": 0.7224364783274126,
-    "sd": 0.32705419763892124,
-    "n": 3,
+    "sd": 0.7358570119784626,
+    "n": 9,
     "races": [
      "2019_10_united_kingdom",
+     "2021_01_bahrain",
      "2021_04_spain",
+     "2021_20_qatar",
+     "2022_01_bahrain",
+     "2022_06_spain",
+     "2022_20_mexico",
+     "2022_21_brazil",
      "2023_07_spain"
     ]
    },
    "life_ratio": {
-    "value": 0.7619047619047619,
-    "sd": 0.1436437849172394,
-    "n": 3,
+    "value": 0.7767857142857142,
+    "sd": 0.16546011332926835,
+    "n": 10,
     "races": [
      "2019_10_united_kingdom",
+     "2021_01_bahrain",
      "2021_04_spain",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_06_spain",
+     "2022_20_mexico",
+     "2022_21_brazil",
      "2023_07_spain"
     ]
    }
@@ -291,6 +353,380 @@
    "race_rows_soft": 561,
    "race_rows_hard": 264,
    "thin": false
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.009137330644097164,
+   "pace_step_s": 0.8918802852024896,
+   "wear_ratio": -0.040793636487907736,
+   "life_ratio": 0.6666666666666666,
+   "base_soft": 98.5002869349775,
+   "base_hard": 97.608406649775,
+   "wear_soft": -0.002487240247245519,
+   "wear_hard": 0.06097128036091609,
+   "limit_soft": 18.0,
+   "limit_hard": 27.0,
+   "race_rows_soft": 58,
+   "race_rows_hard": 361,
+   "thin": false
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.007217208185203772,
+   "pace_step_s": 0.6994123866159327,
+   "wear_ratio": 0.6141759441839878,
+   "life_ratio": 0.8709677419354839,
+   "base_soft": 97.608406649775,
+   "base_hard": 96.90899426315907,
+   "wear_soft": 0.06097128036091609,
+   "wear_hard": 0.09927331237618615,
+   "limit_soft": 27.0,
+   "limit_hard": 31.0,
+   "race_rows_soft": 361,
+   "race_rows_hard": 346,
+   "thin": false
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": -0.005721264098722201,
+   "pace_step_s": -0.40854553324994924,
+   "wear_ratio": null,
+   "life_ratio": 0.5405405405405406,
+   "base_soft": 70.99971778065506,
+   "base_hard": 71.40826331390501,
+   "wear_soft": 0.04760221457474736,
+   "wear_hard": -0.002666284514222055,
+   "limit_soft": 20.0,
+   "limit_hard": 37.0,
+   "race_rows_soft": 36,
+   "race_rows_hard": 346,
+   "thin": true
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.0032784276105033427,
+   "pace_step_s": 0.2333418277755328,
+   "wear_ratio": -0.14507239608813036,
+   "life_ratio": 0.7708333333333334,
+   "base_soft": 71.40826331390501,
+   "base_hard": 71.17492148612948,
+   "wear_soft": -0.002666284514222055,
+   "wear_hard": 0.018378992738234692,
+   "limit_soft": 37.0,
+   "limit_hard": 48.0,
+   "race_rows_soft": 346,
+   "race_rows_hard": 727,
+   "thin": false
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.015186759529949523,
+   "pace_step_s": 1.380626977132465,
+   "wear_ratio": -0.9338062945664466,
+   "life_ratio": 0.8055555555555556,
+   "base_soft": 92.29053928658536,
+   "base_hard": 90.90991230945289,
+   "wear_soft": -0.024150240939993493,
+   "wear_hard": 0.025862152654696033,
+   "limit_soft": 29.0,
+   "limit_hard": 36.0,
+   "race_rows_soft": 191,
+   "race_rows_hard": 372,
+   "thin": false
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.0036616880639448457,
+   "pace_step_s": 0.3316692713855929,
+   "wear_ratio": 0.6289201618178757,
+   "life_ratio": 1.0588235294117647,
+   "base_soft": 90.90991230945289,
+   "base_hard": 90.5782430380673,
+   "wear_soft": 0.025862152654696033,
+   "wear_hard": 0.0411215194309278,
+   "limit_soft": 36.0,
+   "limit_hard": 34.0,
+   "race_rows_soft": 372,
+   "race_rows_hard": 315,
+   "thin": false
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": -0.012682156145433332,
+   "pace_step_s": -1.1627527417217038,
+   "wear_ratio": null,
+   "life_ratio": 0.6857142857142857,
+   "base_soft": 90.52140004647683,
+   "base_hard": 91.68415278819853,
+   "wear_soft": 0.03149664429936756,
+   "wear_hard": -0.00786285727133202,
+   "limit_soft": 24.0,
+   "limit_hard": 35.0,
+   "race_rows_soft": 104,
+   "race_rows_hard": 201,
+   "thin": false
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.009780274652279264,
+   "pace_step_s": 0.8880112020794826,
+   "wear_ratio": -0.22954015908492817,
+   "life_ratio": 0.7777777777777778,
+   "base_soft": 91.68415278819853,
+   "base_hard": 90.79614158611905,
+   "wear_soft": -0.00786285727133202,
+   "wear_hard": 0.03425482191298308,
+   "limit_soft": 35.0,
+   "limit_hard": 45.0,
+   "race_rows_soft": 201,
+   "race_rows_hard": 410,
+   "thin": false
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": -0.002210772075244005,
+   "pace_step_s": -0.22145313711429537,
+   "wear_ratio": 0.8861491935225521,
+   "life_ratio": 1.0,
+   "base_soft": 99.94859134377081,
+   "base_hard": 100.17004448088511,
+   "wear_soft": 0.14580865409542637,
+   "wear_hard": 0.16454187981125282,
+   "limit_soft": 24.0,
+   "limit_hard": 24.0,
+   "race_rows_soft": 450,
+   "race_rows_hard": 287,
+   "thin": false
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.0027448637440135037,
+   "pace_step_s": -0.27570990946615836,
+   "wear_ratio": 1.3141678369005383,
+   "life_ratio": 1.263157894736842,
+   "base_soft": 100.17004448088511,
+   "base_hard": 100.44575439035127,
+   "wear_soft": 0.16454187981125282,
+   "wear_hard": 0.12520613820478552,
+   "limit_soft": 24.0,
+   "limit_hard": 19.0,
+   "race_rows_soft": 287,
+   "race_rows_hard": 84,
+   "thin": false
+  },
+  {
+   "race_id": "2022_06_spain",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": -0.002314990027061481,
+   "pace_step_s": -0.2066902514790172,
+   "wear_ratio": 1.1007083845841001,
+   "life_ratio": 0.6857142857142857,
+   "base_soft": 89.0767403736528,
+   "base_hard": 89.28343062513181,
+   "wear_soft": 0.11527824514657134,
+   "wear_hard": 0.10473095940858934,
+   "limit_soft": 24.0,
+   "limit_hard": 35.0,
+   "race_rows_soft": 527,
+   "race_rows_hard": 443,
+   "thin": false
+  },
+  {
+   "race_id": "2022_06_spain",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.003271135673144965,
+   "pace_step_s": 0.2911059678226309,
+   "wear_ratio": 0.6413001261554608,
+   "life_ratio": 1.0,
+   "base_soft": 89.28343062513181,
+   "base_hard": 88.99232465730918,
+   "wear_soft": 0.10473095940858934,
+   "wear_hard": 0.163310367700132,
+   "limit_soft": 35.0,
+   "limit_hard": 35.0,
+   "race_rows_soft": 443,
+   "race_rows_hard": 29,
+   "thin": true
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.001195344281661681,
+   "pace_step_s": 0.13148483980131687,
+   "wear_ratio": 0.855996608069828,
+   "life_ratio": 0.75,
+   "base_soft": 110.12894901684903,
+   "base_hard": 109.99746417704772,
+   "wear_soft": 0.13436661693160803,
+   "wear_hard": 0.15697096888571674,
+   "limit_soft": 15.0,
+   "limit_hard": 20.0,
+   "race_rows_soft": 10,
+   "race_rows_hard": 190,
+   "thin": true
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.00817821343237024,
+   "pace_step_s": -0.9070003817647034,
+   "wear_ratio": 2.844592627427064,
+   "life_ratio": 0.46511627906976744,
+   "base_soft": 109.99746417704772,
+   "base_hard": 110.90446455881242,
+   "wear_soft": 0.15697096888571674,
+   "wear_hard": 0.055182231498538716,
+   "limit_soft": 20.0,
+   "limit_hard": 43.0,
+   "race_rows_soft": 190,
+   "race_rows_hard": 494,
+   "thin": false
+  },
+  {
+   "race_id": "2022_09_canada",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": 0.0027156095560012528,
+   "pace_step_s": 0.21524343577355864,
+   "wear_ratio": 0.48456411233112995,
+   "life_ratio": 0.4603174603174603,
+   "base_soft": 79.47679828554459,
+   "base_hard": 79.26155484977103,
+   "wear_soft": 0.01819250050362649,
+   "wear_hard": 0.03754405256325407,
+   "limit_soft": 29.0,
+   "limit_hard": 63.0,
+   "race_rows_soft": 234,
+   "race_rows_hard": 702,
+   "thin": false
+  },
+  {
+   "race_id": "2022_12_france",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.010017414184112172,
+   "pace_step_s": -1.0112813931792033,
+   "wear_ratio": 2.242094126083218,
+   "life_ratio": 0.9459459459459459,
+   "base_soft": 99.9410576628534,
+   "base_hard": 100.9523390560326,
+   "wear_soft": 0.08404531694567889,
+   "wear_hard": 0.03748518671359271,
+   "limit_soft": 35.0,
+   "limit_hard": 37.0,
+   "race_rows_soft": 291,
+   "race_rows_hard": 448,
+   "thin": false
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": -0.0006541002848021726,
+   "pace_step_s": -0.05524675451400185,
+   "wear_ratio": 1.5015307190221279,
+   "life_ratio": 0.7916666666666666,
+   "base_soft": 84.40696156070052,
+   "base_hard": 84.46220831521453,
+   "wear_soft": 0.05059317983864878,
+   "wear_hard": 0.0336944021175921,
+   "limit_soft": 38.0,
+   "limit_hard": 48.0,
+   "race_rows_soft": 355,
+   "race_rows_hard": 615,
+   "thin": false
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.0046892281012297365,
+   "pace_step_s": -0.39792853840820896,
+   "wear_ratio": 1.1813138010994475,
+   "life_ratio": 1.1428571428571428,
+   "base_soft": 84.46220831521453,
+   "base_hard": 84.86013685362273,
+   "wear_soft": 0.0336944021175921,
+   "wear_hard": 0.028522821020318865,
+   "limit_soft": 48.0,
+   "limit_hard": 42.0,
+   "race_rows_soft": 615,
+   "race_rows_hard": 189,
+   "thin": false
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.0033293366169775407,
+   "pace_step_s": 0.2573964117947014,
+   "wear_ratio": 0.2484498580450069,
+   "life_ratio": 1.1333333333333333,
+   "base_soft": 77.56901773664005,
+   "base_hard": 77.31162132484535,
+   "wear_soft": 0.019487900681687167,
+   "wear_hard": 0.07843796263371951,
+   "limit_soft": 34.0,
+   "limit_hard": 30.0,
+   "race_rows_soft": 418,
+   "race_rows_hard": 445,
+   "thin": false
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.00924521866415573,
+   "pace_step_s": -0.7214326470015919,
+   "wear_ratio": 0.49663910884588686,
+   "life_ratio": 2.5,
+   "base_soft": 77.31162132484535,
+   "base_hard": 78.03305397184694,
+   "wear_soft": 0.07843796263371951,
+   "wear_hard": 0.1579375470771871,
+   "limit_soft": 30.0,
+   "limit_hard": 12.0,
+   "race_rows_soft": 445,
+   "race_rows_hard": 10,
+   "thin": true
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "pair": "SOFT-MEDIUM",
+   "pace_frac": 0.003310923813901079,
+   "pace_step_s": 0.30290872507615063,
+   "wear_ratio": 1.3176696688356229,
+   "life_ratio": 0.6896551724137931,
+   "base_soft": 91.79058470371504,
+   "base_hard": 91.48767597863889,
+   "wear_soft": 0.1732145074083102,
+   "wear_hard": 0.13145518296810582,
+   "limit_soft": 20.0,
+   "limit_hard": 29.0,
+   "race_rows_soft": 37,
+   "race_rows_hard": 361,
+   "thin": true
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "pair": "MEDIUM-HARD",
+   "pace_frac": -0.0058917392726021145,
+   "pace_step_s": -0.5422161295873735,
+   "wear_ratio": 2.3136364231016113,
+   "life_ratio": 0.6744186046511628,
+   "base_soft": 91.48767597863889,
+   "base_hard": 92.02989210822626,
+   "wear_soft": 0.13145518296810582,
+   "wear_hard": 0.05681756288737874,
+   "limit_soft": 29.0,
+   "limit_hard": 43.0,
+   "race_rows_soft": 361,
+   "race_rows_hard": 548,
+   "thin": false
   }
  ],
  "weights": {
@@ -338,5 +774,1707 @@
   },
   "sd_floor": "root mean squared error of the blend in the same validation, leave-one-race-out (the weights and the step table from the other races)",
   "command": "python -m src.sim.compound_steps validate"
+ },
+ "validation_rows": [
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.04737101568061064,
+   "wear_err_s_per_lap": 0.012944962489102813
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.04737101568061064,
+   "wear_err_s_per_lap": 0.012944962489102813
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.15707950820824124,
+   "wear_err_s_per_lap": 0.001695726819026801
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.15707950820824124,
+   "wear_err_s_per_lap": 0.001695726819026801
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 3.5510747635066053,
+   "wear_err_s_per_lap": -0.011543130347825566
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2019_10_united_kingdom",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 3.5510747635066053,
+   "wear_err_s_per_lap": -0.011543130347825566
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -1.5930457484726048,
+   "wear_err_s_per_lap": 0.10226300579380412
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": -1.6422644409069989,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -1.5930457484726048,
+   "wear_err_s_per_lap": 0.10226300579380412
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -1.5930457484726048,
+   "wear_err_s_per_lap": 0.10226300579380412
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.7342313428234633,
+   "wear_err_s_per_lap": 0.04828156992883277
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": 0.672467005828949,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.7342313428234633,
+   "wear_err_s_per_lap": 0.04828156992883277
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.06570240150996653,
+   "wear_err_s_per_lap": 0.04828156992883277
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 2.716637401564512,
+   "wear_err_s_per_lap": -0.09927331237618615
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 1.7427577478607787,
+   "wear_err_s_per_lap": -0.09927331237618615
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 1.7427577478607787,
+   "wear_err_s_per_lap": -0.09927331237618615
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.7781633314916689,
+   "wear_err_s_per_lap": 0.06433118409598532
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": -1.3621927258412114,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.42083538442098245,
+   "wear_err_s_per_lap": 0.04943523109442794
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.9237899314619824,
+   "wear_err_s_per_lap": 0.04943523109442794
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.6699461840451448,
+   "wear_err_s_per_lap": -0.05165558073092567
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": 1.2539755783946873,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.31261823697445834,
+   "wear_err_s_per_lap": -0.0367596277293683
+  },
+  {
+   "race_id": "2021_04_spain",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.8161094843385257,
+   "wear_err_s_per_lap": -0.037780662193775384
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.1998403790986174,
+   "wear_err_s_per_lap": 0.030434198316586676
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": 0.17520370547406117,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.17520370547406117,
+   "wear_err_s_per_lap": -0.02922322183650799
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.17520370547406117,
+   "wear_err_s_per_lap": -0.0023217999230821657
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.2396958579823547,
+   "wear_err_s_per_lap": 0.02316294523238235
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": -0.3559025281718391,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.2396958579823547,
+   "wear_err_s_per_lap": 0.02316294523238235
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.2396958579823547,
+   "wear_err_s_per_lap": 0.02316294523238235
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "HARD",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.38180332648886406,
+   "wear_err_s_per_lap": -0.018378992738234692
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.38180332648886406,
+   "wear_err_s_per_lap": -0.018378992738234692
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -1.7129228058686863,
+   "wear_err_s_per_lap": 0.06543497240912263
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": -1.7979075495948393,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -1.7129228058686863,
+   "wear_err_s_per_lap": 0.06543497240912263
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -1.7129228058686863,
+   "wear_err_s_per_lap": 0.06543497240912263
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.27869903766129767,
+   "wear_err_s_per_lap": 0.0014611409496679065
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": 1.7561176281542004,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.017073952620691557,
+   "wear_err_s_per_lap": -0.009080843007019494
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.37499763545574183,
+   "wear_err_s_per_lap": 0.0014611409496679065
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 2.462406628474241,
+   "wear_err_s_per_lap": -0.0411215194309278
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 1.607694314323922,
+   "wear_err_s_per_lap": -0.0411215194309278
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 1.607694314323922,
+   "wear_err_s_per_lap": -0.0411215194309278
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.2608843405746768,
+   "wear_err_s_per_lap": 0.00397363173092076
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": 0.2608843405746768,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.2608843405746768,
+   "wear_err_s_per_lap": 0.00397363173092076
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.2608843405746768,
+   "wear_err_s_per_lap": 0.00397363173092076
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -1.4025937909000845,
+   "wear_err_s_per_lap": 0.048612017383913235
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": -0.9620521189370805,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.9620521189370805,
+   "wear_err_s_per_lap": 0.04585153375161434
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.9620521189370805,
+   "wear_err_s_per_lap": 0.048612017383913235
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 1.0660231195405458,
+   "wear_err_s_per_lap": -0.03425482191298308
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 1.0660231195405458,
+   "wear_err_s_per_lap": -0.03425482191298308
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.14422016012014183,
+   "wear_err_s_per_lap": 0.03841909165192381
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.20063070706112285,
+   "wear_err_s_per_lap": 0.02089953703112546
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.20063070706112285,
+   "wear_err_s_per_lap": 0.02089953703112546
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.2448230523603172,
+   "wear_err_s_per_lap": -0.041879270430862384
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.10002781482094747,
+   "wear_err_s_per_lap": -0.029072256481514763
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.10002781482094747,
+   "wear_err_s_per_lap": -0.029072256481514763
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "HARD",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.2807499529843511,
+   "wear_err_s_per_lap": 0.025110904784547805
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.2807499529843511,
+   "wear_err_s_per_lap": 0.025110904784547805
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -3.0419678392126315,
+   "wear_err_s_per_lap": 0.2514924541278765
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.02835964593639062,
+   "wear_err_s_per_lap": -0.011809674242196082
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.6178617929396353,
+   "wear_err_s_per_lap": 0.104214064342935
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 3.144054305405703,
+   "wear_err_s_per_lap": -0.023548162783027515
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.07372682025668098,
+   "wear_err_s_per_lap": 0.020857044933784097
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.7231367219079488,
+   "wear_err_s_per_lap": -0.023548162783027515
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.09982601169907923,
+   "wear_err_s_per_lap": 0.05188469639237628
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.09982601169907923,
+   "wear_err_s_per_lap": 0.05188469639237628
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.09982601169907923,
+   "wear_err_s_per_lap": 0.05188469639237628
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.23360183344576058,
+   "wear_err_s_per_lap": 0.027378837906759046
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.25635914740612975,
+   "wear_err_s_per_lap": 0.05735297041431536
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.2516062309435654,
+   "wear_err_s_per_lap": 0.05735297041431536
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 2.0222387615720123,
+   "wear_err_s_per_lap": -0.09832325084660358
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.2911059678233272,
+   "wear_err_s_per_lap": -0.05857940829155818
+  },
+  {
+   "race_id": "2022_06_spain",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.4218374174729007,
+   "wear_err_s_per_lap": -0.05857940829155818
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.13148483979982473,
+   "wear_err_s_per_lap": 0.035054883156447114
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.3286370846094684,
+   "wear_err_s_per_lap": 0.022604351953994434
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.24118253900590503,
+   "wear_err_s_per_lap": 0.022604351953994434
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.38628044503472836,
+   "wear_err_s_per_lap": -0.00957532263319874
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.6864920697608312,
+   "wear_err_s_per_lap": -0.08229933740951963
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.6864920697608312,
+   "wear_err_s_per_lap": -0.08066477023823639
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "HARD",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.17760282039762387,
+   "wear_err_s_per_lap": 0.04106577508041379
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.17760282039762387,
+   "wear_err_s_per_lap": 0.04106577508041379
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.23828638673577984,
+   "wear_err_s_per_lap": 0.020783526181692723
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.23828638673577984,
+   "wear_err_s_per_lap": 0.020783526181692723
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.23828638673577984,
+   "wear_err_s_per_lap": 0.020783526181692723
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.32945026186587256,
+   "wear_err_s_per_lap": -0.027271797547670833
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.32945026186587256,
+   "wear_err_s_per_lap": -0.027271797547670833
+  },
+  {
+   "race_id": "2022_09_canada",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.32945026186587256,
+   "wear_err_s_per_lap": -0.027271797547670833
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.19241165272538296,
+   "wear_err_s_per_lap": 0.014572461227551278
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 1.0657866963294538,
+   "wear_err_s_per_lap": -0.05141589654401147
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 1.0331827942430323,
+   "wear_err_s_per_lap": -0.03857922196030536
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.21085322278243268,
+   "wear_err_s_per_lap": -0.01747435200428609
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -1.047345126272404,
+   "wear_err_s_per_lap": 0.04851400576727665
+  },
+  {
+   "race_id": "2022_12_france",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -1.0120775053238447,
+   "wear_err_s_per_lap": 0.04851400576727665
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.3227992952802481,
+   "wear_err_s_per_lap": -0.001448388236764589
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.4744145166889524,
+   "wear_err_s_per_lap": -0.001448388236764589
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.3227992952802481,
+   "wear_err_s_per_lap": -0.001448388236764589
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.08575740937446596,
+   "wear_err_s_per_lap": 0.009622929899112544
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.23695782013550115,
+   "wear_err_s_per_lap": 0.009622929899112544
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.08575740937446596,
+   "wear_err_s_per_lap": 0.009622929899112544
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 3.3529125948662113,
+   "wear_err_s_per_lap": -0.028522821020318865
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.38459472379109627,
+   "wear_err_s_per_lap": 0.004626640529168762
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.42625844718801886,
+   "wear_err_s_per_lap": -0.028522821020318865
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.27520295430466035,
+   "wear_err_s_per_lap": 0.13988955384465063
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.36981173725595795,
+   "wear_err_s_per_lap": 0.13988955384465063
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.27520295430466035,
+   "wear_err_s_per_lap": 0.13988955384465063
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.27321259569363576,
+   "wear_err_s_per_lap": 0.00652177968071449
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.3681903325783509,
+   "wear_err_s_per_lap": -0.057902609886019356
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.27321259569363576,
+   "wear_err_s_per_lap": -0.03623529456157619
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.38774262156275086,
+   "wear_err_s_per_lap": -0.14031020290133128
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.46403623520743054,
+   "wear_err_s_per_lap": -0.13844964639551205
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.46403623520743054,
+   "wear_err_s_per_lap": -0.13844964639551205
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -1.4443173727656102,
+   "wear_err_s_per_lap": 0.13776618405601618
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.35878613499708933,
+   "wear_err_s_per_lap": -0.042018924630507964
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.5784921056485643,
+   "wear_err_s_per_lap": 0.0026475051104969394
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.11719740451044913,
+   "wear_err_s_per_lap": 0.02521394815256764
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.11719740451044913,
+   "wear_err_s_per_lap": -0.03756366946574202
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.11719740451044913,
+   "wear_err_s_per_lap": -0.013146085917184233
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.985914265679682,
+   "wear_err_s_per_lap": -0.0166730855266147
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.09230190657726212,
+   "wear_err_s_per_lap": 0.04367651146462667
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.12592353222704844,
+   "wear_err_s_per_lap": 0.020203315402697083
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -2.8754390842686064,
+   "wear_err_s_per_lap": 0.32319191910701073
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -1.0072537455476152,
+   "wear_err_s_per_lap": 0.2191547478147036
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -1.375799079268461,
+   "wear_err_s_per_lap": 0.2191547478147036
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.9292625377002537,
+   "wear_err_s_per_lap": -0.21032510837638468
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.8639904825375453,
+   "wear_err_s_per_lap": -0.20594221882714667
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.9125610878680845,
+   "wear_err_s_per_lap": -0.21032510837638468
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.1572504219390254,
+   "wear_err_s_per_lap": -0.0029107256150335686
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.1572504219390254,
+   "wear_err_s_per_lap": -0.0029107256150335686
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.1572504219390254,
+   "wear_err_s_per_lap": -0.0029107256150335686
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.06367538758448177,
+   "wear_err_s_per_lap": 0.00889392470909027
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.01055292603389546,
+   "wear_err_s_per_lap": 0.00889392470909027
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.04855816725881823,
+   "wear_err_s_per_lap": 0.00889392470909027
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.06665769708654068,
+   "wear_err_s_per_lap": -0.011929154728493034
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.00438089468735825,
+   "wear_err_s_per_lap": -0.011929154728493034
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.04415835658063827,
+   "wear_err_s_per_lap": -0.011929154728493034
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "HARD",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.03634755217697716,
+   "wear_err_s_per_lap": 0.0012113633417459163
+  },
+  {
+   "race_id": "2023_07_spain",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.03634755217697716,
+   "wear_err_s_per_lap": 0.0012113633417459163
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": -1.542363950872499,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -1.1392494792123102,
+   "wear_err_s_per_lap": 0.09473362101410171
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -1.2394133756777705,
+   "wear_err_s_per_lap": 0.09473362101410171
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.24044200720015851,
+   "wear_err_s_per_lap": -0.0068768334630130296
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": true,
+   "pace_err_s": 0.8544267599370414,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.24044200720015851,
+   "wear_err_s_per_lap": -0.0068768334630130296
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.24044200720015851,
+   "wear_err_s_per_lap": -0.0068768334630130296
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.7268344853123239,
+   "wear_err_s_per_lap": -0.04272789471668145
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.7268344853123239,
+   "wear_err_s_per_lap": -0.028976758480005412
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.7268344853123239,
+   "wear_err_s_per_lap": -0.028976758480005412
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "SOFT",
+   "case": "practice",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "SOFT",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "SOFT",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.21133054800699824,
+   "wear_err_s_per_lap": -0.044411951355178336
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "SOFT",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.21133054800699824,
+   "wear_err_s_per_lap": -0.044411951355178336
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "MEDIUM",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": -0.11489883187583416,
+   "wear_err_s_per_lap": 0.02950072142600209
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "MEDIUM",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "MEDIUM",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": -0.32109940319061536,
+   "wear_err_s_per_lap": 0.039800056489654095
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "MEDIUM",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": -0.2812081979322869,
+   "wear_err_s_per_lap": 0.035954081220637146
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "HARD",
+   "case": "practice",
+   "available": true,
+   "pace_err_s": 0.3740595290050095,
+   "wear_err_s_per_lap": -0.012484085709167085
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "HARD",
+   "case": "qualifying",
+   "available": false,
+   "pace_err_s": null,
+   "wear_err_s_per_lap": null
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "HARD",
+   "case": "cross_race_step",
+   "available": true,
+   "pace_err_s": 0.6160761585412615,
+   "wear_err_s_per_lap": -0.012378998097694282
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "compound": "HARD",
+   "case": "blend",
+   "available": true,
+   "pace_err_s": 0.5390958446315182,
+   "wear_err_s_per_lap": -0.012418239888771727
+  }
+ ],
+ "validation_provenance": "forward chaining (python -m src.sim.compound_steps validate --as-of): each race priced with the step table, weights and sd floor of the races strictly before it; a policy pricing race R reads the rows of the races before R only (proxy.as_of_config)",
+ "left_out": {
+  "2022_11_austria": "jobs.load_race fails on it: laps with no recorded compound"
  }
 }

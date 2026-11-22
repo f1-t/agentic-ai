@@ -295,16 +295,25 @@ def event_rates(snapshot: Snapshot, config: SimConfig | None = None) -> dict:
     for key in ("p_sc_lap1", "p_vsc_lap1"):
         if getattr(model.params, key) is not None:
             out[key] = getattr(model.params, key)
-    return {**out, "source": EVENT_RATES_CIRCUIT if circuit else EVENT_RATES_PROVISIONAL}
+    if circuit:
+        source = EVENT_RATES_CIRCUIT
+    elif model.as_of:   # race_history.as_of_event_rates: the races before this one, else a priori
+        from .race_history import as_of_event_rates
+        source = as_of_event_rates(race.race_id)["source"]
+    else:
+        source = EVENT_RATES_PROVISIONAL
+    return {**out, "source": source}
 
 
 def calibration_error_s(sim: Simulator, snapshot: Snapshot) -> float:
     """The tools' tolerance for a gap between plans: the offset-adjusted mean absolute error
     of the remaining race time for the belief's fit window at the snapshot's horizon bucket,
-    from reports/calibration/midrace_summary.csv (ModelReport.calibration_error_s). It is a
-    conservative tolerance for a gap, since the fuel error cancels between plans; SPEC 0016
-    adds a gap-specific one. NaN without a row."""
-    return _report.calibration_error(sim.config.fit_window, snapshot.remaining_laps)
+    from reports/calibration/midrace_summary.csv (ModelReport.calibration_error_s), as of the
+    race (model_report.calibration_error: NaN when the summary's races are not all before it,
+    unless SimConfig.cross_race_as_of is off). It is a conservative tolerance for a gap, since
+    the fuel error cancels between plans; SPEC 0016 adds a gap-specific one. NaN without a row."""
+    race_id = snapshot.race.race_id if sim.config.cross_race_as_of and sim.config.fit_window != "full" else None
+    return _report.calibration_error(sim.config.fit_window, snapshot.remaining_laps, race_id=race_id)
 
 
 # --- the functions --------------------------------------------------------------------------

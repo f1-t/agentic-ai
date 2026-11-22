@@ -91,6 +91,103 @@ def pair_key(soft, hard) -> str:
     return f"{soft}-{hard}"
 
 
+# --- the tier-5 table as of a race (docs/eval.md "Information contract") ---------------------
+# A policy pricing race R reads the step table, the blend weights and the sd floor computed from
+# the calibration races strictly before R (race_ids.as_of) only: compound_steps.json stores the
+# per-race step rows ("per_race") and the forward-chained validation rows ("validation_rows":
+# each race's hidden-compound errors priced with the table of the races before it), and
+# as_of_config recomputes the three from them. With no earlier race the step is unavailable,
+# every source weighs the same, and the sd floor is PRIOR_SD_FLOOR. The world (the judge) keeps
+# the whole-set table.
+STEP_KEYS = ("pace_frac", "wear_ratio", "life_ratio")
+MIN_PAIR_ROWS = 50       # clean race rows on both compounds of a pair before a race's step counts
+# a priori, not fitted: the blend's prior sd where no earlier race validates it, wider than the
+# whole-set validation errors (pace 0.59 s, wear 0.079 s/lap)
+PRIOR_SD_FLOOR = {"pace": 1.0, "wear": 0.1}
+MIN_VALIDATION_ROWS = 3  # a source's weight (or the floor) needs this many earlier validation rows
+WEIGHT_ERRORS = {"pace": "pace_err_s", "wear": "wear_err_s_per_lap"}
+WEIGHT_SOURCES = {"pace": ("practice", "qualifying", "cross_race_step"), "wear": ("practice", "cross_race_step")}
+
+
+def _finite(x) -> bool:
+    try:
+        return x is not None and np.isfinite(float(x))
+    except (TypeError, ValueError):
+        return False
+
+
+def aggregate_steps(rows, exclude=(), keep_thin=False) -> dict:
+    """{pair: {key: {value, sd, n, races}}} over per-race step rows (dicts or a frame's records):
+    the median, the sample sd across races (NaN with one) and the count of the rows of races not
+    in `exclude` with a finite value; a thin row (fewer than MIN_PAIR_ROWS clean race rows on
+    either compound) is left out unless `keep_thin`."""
+    rows = rows.to_dict("records") if hasattr(rows, "to_dict") else list(rows)
+    rows = [r for r in rows if r["race_id"] not in set(exclude) and (keep_thin or not r.get("thin"))]
+    out = {}
+    for pair in sorted({r["pair"] for r in rows}):
+        entry = {}
+        for key in STEP_KEYS:
+            v = sorted((r["race_id"], float(r[key])) for r in rows if r["pair"] == pair and _finite(r.get(key)))
+            if not v:
+                continue
+            x = np.array([b for _, b in v])
+            entry[key] = {"value": float(np.median(x)), "sd": float(np.std(x, ddof=1)) if len(x) > 1 else float("nan"),
+                          "n": int(len(x)), "races": sorted(r for r, _ in v)}
+        out[pair] = entry
+    return out
+
+
+def validation_weights(rows) -> dict:
+    """{kind: {source: 1 / mean squared error}} of the single-source validation rows (case = the
+    source) with at least MIN_VALIDATION_ROWS errors; a source without enough is left out, so
+    the blend gives it 1.0 (proxy._blend), as every source has with no history at all."""
+    out = {"pace": {}, "wear": {}}
+    for kind, col in WEIGHT_ERRORS.items():
+        for source in WEIGHT_SOURCES[kind]:
+            e = [float(r[col]) for r in rows if r.get("case") == source and r.get("available") and _finite(r.get(col))]
+            if len(e) >= MIN_VALIDATION_ROWS:
+                out[kind][source] = 1.0 / float(np.mean(np.square(e)))
+    return out
+
+
+def validation_sd_floor(rows) -> dict:
+    """{kind: the blend's root mean squared error} over the blend validation rows, PRIOR_SD_FLOOR
+    for a kind with fewer than MIN_VALIDATION_ROWS of them."""
+    out = {}
+    for kind, col in WEIGHT_ERRORS.items():
+        e = [float(r[col]) for r in rows if r.get("case") == "blend" and r.get("available") and _finite(r.get(col))]
+        out[kind] = float(np.sqrt(np.mean(np.square(e)))) if len(e) >= MIN_VALIDATION_ROWS else PRIOR_SD_FLOOR[kind]
+    return out
+
+
+def history_races(cfg) -> list[str]:
+    """Every race the as-of tier-5 inputs record (the step rows and the validation rows)."""
+    return sorted({r["race_id"] for r in (cfg.per_race or [])} | {r["race_id"] for r in (cfg.validation or [])})
+
+
+_AS_OF: dict = {}
+
+
+def as_of_config(cfg, race_id):
+    """`cfg` (SimConfig.compound_proxy) with steps, weights and sd_floor recomputed from the
+    races strictly before `race_id` (race_ids.as_of) in its per_race and validation rows; a race
+    id with no date (a synthetic "syn", say) has no earlier race. Cached per set of races."""
+    from .race_ids import as_of, canonical_race_id
+    try:
+        earlier = tuple(as_of(canonical_race_id(race_id), history_races(cfg)))
+    except ValueError:
+        earlier = ()
+    key = (repr(cfg.per_race), repr(cfg.validation), earlier)
+    if key not in _AS_OF:
+        keep = set(earlier)
+        val = [r for r in (cfg.validation or []) if r["race_id"] in keep]
+        _AS_OF[key] = {"steps": aggregate_steps([r for r in (cfg.per_race or []) if r["race_id"] in keep]),
+                       "weights": validation_weights(val), "sd_floor": validation_sd_floor(val),
+                       "races": list(earlier)}
+    got = _AS_OF[key]
+    return cfg.model_copy(update={k: got[k] for k in ("steps", "weights", "sd_floor")})
+
+
 def _idx(c):
     return SOFTNESS.index(c)
 

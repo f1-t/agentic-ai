@@ -184,7 +184,7 @@ def test_evaluate_action_pit_against_staying_out(syn):
     assert "traffic_probability" not in out and "not modelled" in out["traffic"]
     assert out["dominated"] == c["dominated"][0] and out["support_warnings"] == c["support_warnings"][0]
     cal = agent_tools.calibration_error_s(sim, snap)   # the midrace summary's to_snapshot row
-    assert out["calibration_error_s"] == cal
+    assert out["calibration_error_s"] == (None if np.isnan(cal) else cal)   # NaN as of a dateless race
     assert out["within_sim_error"] == (abs(out["gap_mean_s"]) < max(2 * out["gap_std_s"], cal))
 
 
@@ -294,9 +294,17 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
     snap = calibration.snapshot_at(spain.frame, spain.race, "HAM", 20)
     # without the wear cliff: its uncertain age (as R8's limit did before it) spreads the gap
     # of the two continuations past the claim this test is about
+    # and with the cross-race tables read whatever the race (the legacy switches: the midrace
+    # summary, measured on 2021 Spain itself, the Spain-derived shrinkage priors and event rates);
+    # as of 2021 Spain there is no calibration error (docs/eval.md "Cross-race tables, as of the race")
     cfg = agent_tools.belief_config()
     sim = agent_tools.belief_simulator(
-        snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False})}))
+        snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False}),
+                                            "cross_race_as_of": False, "calibrator": ComponentSpec(name="shrinkage"),
+                                            "events": ComponentSpec(name="rate"),
+                                            "compound_proxy": cfg.compound_proxy.model_copy(update={"as_of": False})}))
+    assert agent_tools.calibration_error_s(agent_tools.belief_simulator(snap), snap) != \
+        agent_tools.calibration_error_s(agent_tools.belief_simulator(snap), snap)   # NaN
     out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1}, sim=sim)
     assert abs(out["gap_mean_s"]) > 2 * out["gap_std_s"]
     assert out["within_sim_error"] is True and out["confidence_basis"] == "model error"
@@ -426,8 +434,10 @@ def test_eval_rows_unchanged_with_world_events_off(monkeypatch):
 def test_event_rates_block_and_its_source(syn):
     sim, snap = syn
     kw = {"sim": sim, "profile": PROFILE}
-    want = {"p_sc": 0.015, "d_sc": 3.0, "p_vsc": 0.02, "d_vsc": 2.0,
-            "source": "provisional: SC from 2021 Spain, VSC placeholder"}
+    # the belief's rates as of the race: a synthetic race has no earlier race, so the a priori prior
+    from src.sim.race_history import EVENT_PRIOR
+    want = {"p_sc": EVENT_PRIOR.p_sc, "d_sc": EVENT_PRIOR.d_sc, "p_vsc": EVENT_PRIOR.p_vsc, "d_vsc": EVENT_PRIOR.d_vsc,
+            "source": "a priori (no earlier race)"}
     assert agent_tools.race_state(snap, config=sim.config)["event_rates"] == want
     assert agent_tools.model_report(snap, **kw)["event_rates"] == want
     act = {"action": "pit", "compound": "MEDIUM"}

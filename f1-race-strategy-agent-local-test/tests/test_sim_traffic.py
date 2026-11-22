@@ -121,10 +121,12 @@ def test_traffic_is_part_of_the_config_hash():
     # SimConfig.stint_limit_margin_laps and stint_limit_rank) off 07dc9587709d, and the compound
     # proxy (SimConfig.compound_proxy, with the step table, weights and sd floor in it) off 09c60db53ac9,
     # the as-of pit loss (SimConfig.pit_loss, with its prior table) off ccb08edf391b, and the
-    # tyre-life change (R8 off by default, SimConfig.wear_cliff, min_race_rows_to_fit) off f4ffd7f05fad
+    # tyre-life change (R8 off by default, SimConfig.wear_cliff, min_race_rows_to_fit) off f4ffd7f05fad, and the
+    # as-of cross-race tables (compound_proxy.as_of, per_race and validation rows, twenty races) off e4eba32e56c6
     default, ghost_on = calibration.config_hash(SimConfig()), calibration.config_hash(SimConfig(traffic={"name": "ghost"}))
-    assert default == "e4eba32e56c6" and ghost_on == "771ad1ecb57a"
-    assert default not in ("0778d5ef02f6", "eccb59070c14", "07dc9587709d", "09c60db53ac9", "ccb08edf391b", "f4ffd7f05fad")
+    assert default == "bc364c4e7aad" and ghost_on == "e43ff9f7fe9b"
+    assert default not in ("0778d5ef02f6", "eccb59070c14", "07dc9587709d", "09c60db53ac9", "ccb08edf391b", "f4ffd7f05fad",
+                           "e4eba32e56c6")
 
 
 @pytest.fixture(scope="module")

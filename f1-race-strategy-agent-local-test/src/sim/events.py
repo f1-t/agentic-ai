@@ -109,18 +109,30 @@ class RateEvents:
     lap 1 like every lap.
     """
 
-    def __init__(self, **params):
+    def __init__(self, as_of: bool = False, **params):
+        self.as_of = bool(as_of)
         self.params = EventModel(**params)
+
+    def defaults(self, race) -> tuple:
+        """(p_sc, d_sc, p_vsc, d_vsc) where the race carries no circuit rates: the params, or
+        with `as_of` (configs/sim/belief.yaml) the rates fitted on the races before this one
+        (race_history.as_of_event_rates, an a priori prior with none): what a policy may know."""
+        if self.as_of:
+            from .race_history import as_of_event_rates
+            r = as_of_event_rates(race.race_id)
+            return r["p_sc"], r["d_sc"], r["p_vsc"], r["d_vsc"]
+        cfg = self.params
+        return cfg.p_sc, cfg.d_sc, cfg.p_vsc, cfg.d_vsc
 
     def rates(self, race):
         """(p_sc, d_sc, p_vsc, d_vsc) for this race."""
-        cfg = self.params
+        p_sc, d_sc, p_vsc, d_vsc = self.defaults(race)
 
         def pick(override, default):
             return default if override is None else override
 
-        out = (pick(race.sc_rate_per_lap, cfg.p_sc), pick(race.sc_mean_laps, cfg.d_sc),
-               pick(race.vsc_rate_per_lap, cfg.p_vsc), pick(race.vsc_mean_laps, cfg.d_vsc))
+        out = (pick(race.sc_rate_per_lap, p_sc), pick(race.sc_mean_laps, d_sc),
+               pick(race.vsc_rate_per_lap, p_vsc), pick(race.vsc_mean_laps, d_vsc))
         # RaceParams checks each field alone, not the sum, so check it after the overrides
         if out[0] + out[2] > 1:
             raise ValueError(f"race {race.race_id}: p_sc + p_vsc = {out[0] + out[2]} exceeds 1")

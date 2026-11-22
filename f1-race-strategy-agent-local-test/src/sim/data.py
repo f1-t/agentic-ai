@@ -457,9 +457,14 @@ def qualifying_frame(laps):
 
 
 def race_stints(frame, driver):
-    """Actual stints for a driver as (compound, laps, start_age, first_lap)."""
+    """Actual stints for a driver as (compound, laps, start_age, first_lap). A stint whose first
+    row has no tyre age (TyreLife missing in the timing data) takes it from its first row with
+    one, less the laps between; a new set when none has one."""
     g = frame[frame["driver"] == driver].sort_values("lap")
     out = []
     for _, s in g.groupby("stint", sort=True):
-        out.append((s["compound"].iloc[0], len(s), int(s["tyre_age"].iloc[0]) - 1, int(s["lap"].iloc[0])))
+        ages = pd.to_numeric(s["tyre_age"], errors="coerce").to_numpy(dtype=float)
+        known = np.flatnonzero(np.isfinite(ages))
+        start = int(ages[known[0]]) - 1 - int(known[0]) if len(known) else 0
+        out.append((s["compound"].iloc[0], len(s), max(0, start), int(s["lap"].iloc[0])))
     return out
