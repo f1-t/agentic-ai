@@ -713,7 +713,10 @@ def _apply_queue(rows, trajs, frame, cfg, lap_ref_s):
     periods = sc_queue.sc_periods(frame)
     q = sc_queue.apply({d: t[0] for d, t in trajs.items()}, {d: t[1] for d, t in trajs.items()},
                        periods, cfg.sc_queue.spacing_s, lap_ref_s, sc_queue.durations(frame, periods),
-                       lapped={d for d, t in trajs.items() if len(t[0]) < max(len(x[0]) for x in trajs.values())})
+                       lapped={d for d, t in trajs.items() if len(t[0]) < max(len(x[0]) for x in trajs.values())},
+                       held_laps=cfg.sc_queue.held_behind_laps,
+                       behind=({p: sc_queue.deployment_behind(frame, p[0], lap_ref_s) for p in periods}
+                               if cfg.sc_queue.held_behind_laps is not None else None))
     for row in rows:
         d = row["driver"]
         if d not in q:

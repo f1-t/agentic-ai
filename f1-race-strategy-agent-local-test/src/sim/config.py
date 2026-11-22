@@ -321,6 +321,14 @@ class ScQueue(_Cfg):
     # replays queue every replayed car together (sc_queue.apply) and the engine does nothing
     mode: Literal["single", "field"] = "single"
     spacing_s: float = Field(default=0.5, ge=0)
+    # the near-lapped rule (sc_queue.deployment_behind): a car more than this many laps behind the
+    # leader when the safety car came out is held: not a car in the queue, it keeps its gap at the
+    # deployment to the train's last car ahead of it (it was lapped on the road, and the wave-by came
+    # too late for it to reach the back of the train).
+    # None (the default): every car that finished on the lead lap joins, as before. 1.25: the cut
+    # that best separates the cars that joined from those that did not on the recorded end-of-period
+    # gaps of the calibration races' SC periods (fitted on the race data, not on a scorecard result)
+    held_behind_laps: float | None = Field(default=None, gt=0)
 
 
 class WearCliff(_Cfg):
