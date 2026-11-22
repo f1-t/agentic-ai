@@ -1,0 +1,89 @@
+{
+  "label": "main",
+  "races": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna"
+  ],
+  "failed": [
+    {
+      "label": "main",
+      "race_id": "2022_11_austria",
+      "error": "ValueError: cannot convert float NaN to integer"
+    }
+  ],
+  "code_version": "3ed6e2af6d0b-64df2bb5099f",
+  "world": "race default (jobs.load_race)",
+  "world_overlay": {},
+  "belief_overlay": {},
+  "world_race": {},
+  "world_config_hash": "af6c10d29af6",
+  "belief_config_hash": "99d87e6a4aef",
+  "options": {
+    "b_drivers": 6,
+    "b_every": 5,
+    "samples": 20,
+    "n_one": 4,
+    "n_two": 3,
+    "lodo": true,
+    "loso": true,
+    "grid_references": true,
+    "hindsight_variants": true,
+    "components": true,
+    "field_replay": false,
+    "seed": 0,
+    "max_stops": 2
+  },
+  "headline": {
+    "A_close_pair_acc": 0.6821917808219178,
+    "A_spearman": 0.9445742939550988,
+    "A_rel_gap_mae_s": 15.548080479897408,
+    "B2_rank_rho": 0.8096515399345001,
+    "B2_regret_s": 6.198334469789542,
+    "B2_pit_now_agree": 0.7692307692307693,
+    "P_close_pair_acc": 0.6443835616438356,
+    "P_spearman": 0.8792034886039921,
+    "A_abs_mae_s": 32.23130019416133,
+    "A_abs_bias_s": -4.895784964289266,
+    "A_stop_gain_bias_s": -0.18813150256594532,
+    "B1_mae_s": 94.21045429934183,
+    "B1_bias_s": 93.9519791996063,
+    "B1_green_mae_s": 23.51111265759401,
+    "B2_rank_rho_green": 0.8185584859014802,
+    "B3_cov_90": 0.48083799284874373,
+    "B3_factor_cov_90": 0.5203470609800807,
+    "B4_mae_offset_s": 36.669016499652386
+  },
+  "future_blindness": {
+    "status": "pass",
+    "new_leak_differences": 0,
+    "differences_with_known_leaks": 0,
+    "known_leaks": [],
+    "fixed_leaks": [
+      "compound_list",
+      "frame_filter",
+      "gap_behind",
+      "lap_window",
+      "pit_loss",
+      "race_length",
+      "stint_limit"
+    ],
+    "detail": ""
+  },
+  "run_seconds": 206.60437440872192
+}

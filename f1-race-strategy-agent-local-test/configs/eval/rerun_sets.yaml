@@ -1,0 +1,40 @@
+# The scenario sets the corrected-protocol rerun builds (src/eval/rerun.py, docs/eval.md
+# "Rerunning the evaluation"). Each: races (or races_from, a json with a "races" list), the
+# scenarios sampled per race, the seed, and development (true: a development set; false: a report
+# set, which the scenarios stage builds only with --final). eras: split the tables by era.
+dev20:
+  description: >-
+    the calibration races, nineteen: the six development races and thirteen 2021-22 weekends cached for
+    calibration (2025 Qatar, the twentieth calibration race, is calibration only and never sampled)
+  races:
+    - 2019_10_united_kingdom
+    - 2021_01_bahrain
+    - 2021_04_spain
+    - 2021_09_austrian
+    - 2021_20_qatar
+    - 2021_22_united_arab_emirates
+    - 2022_01_bahrain
+    - 2022_02_saudi_arabia
+    - 2022_06_spain
+    - 2022_08_azerbaijan
+    - 2022_09_canada
+    - 2022_11_austria
+    - 2022_12_france
+    - 2022_20_mexico
+    - 2022_21_brazil
+    - 2022_22_united_arab_emirates
+    - 2023_01_bahrain
+    - 2023_07_spain
+    - 2024_07_emilia_romagna
+  per_race: 25
+  seed: 0
+  development: true
+  eras: false
+test9:
+  description: >-
+    the nine held-out races of data/eval_set.json; built once, on the owner's word, with --final
+  races_from: data/eval_set.json
+  per_race: 25
+  seed: 0
+  development: false
+  eras: true

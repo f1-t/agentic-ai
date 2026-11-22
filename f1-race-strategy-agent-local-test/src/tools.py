@@ -231,13 +231,13 @@ def evaluate_strategy(action):
 TOOL_SPECS = [
     {
         "name": "get_race_snapshot",
-        "description": "Read the current decision-time race snapshot: lap, position, tyre state, gaps, weather, nearby cars and recent context.",
+        "description": "Read the current decision-time race snapshot: lap, laps remaining, position, tyre state, track status (GREEN, SC or VSC), gaps, weather, nearby cars and your recent lap times. The race is not named and cars are labelled: yours is Car A, the cars around you Car B, Car C, ...",
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
         "fn": get_race_snapshot,
     },
     {
         "name": "estimate_tyre_degradation",
-        "description": "Return the simulator's low/median/high degradation per lap for a compound, fitted only on what is known up to now, with its flags. A compound nobody has raced is priced by proxy: pace_source and wear_source say whether a number comes from race laps, practice long runs, qualifying or the typical step from a neighbouring compound, and a proxied number has no race laps behind it. It is evidence, not truth.",
+        "description": "Return the simulator's low/median/high degradation per lap for a compound, fitted only on what is known up to now, with its flags. A compound nobody has raced is priced by proxy: pace_source and wear_source say whether a number comes from race laps, practice long runs, qualifying or the typical step from a neighbouring compound in earlier races, and a proxied number has no race laps behind it. It is evidence, not truth.",
         "input_schema": {"type": "object", "properties": {"compound": {"type": "string"}}, "required": ["compound"], "additionalProperties": False},
         "fn": estimate_tyre_degradation,
     },
@@ -249,7 +249,7 @@ TOOL_SPECS = [
     },
     {
         "name": "get_model_report",
-        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the cross-race step for a compound nobody raced), flags such as extrapolation or wear_at_bound, and the model's calibration error. traffic: whether other cars are modelled; when they are (projected from what is known now), cars_within_pit_loss_behind_now (a stop now drops behind them), dirty_air_s and own_pace_s.",
+        "description": "Report what the simulator's tyre model knows: per compound base pace and degradation ranges, data support, where each compound's pace and wear come from (pace_source, wear_source: race laps, or a proxy from practice, qualifying or the step seen in earlier races for a compound nobody raced), flags such as extrapolation or wear_at_bound, per compound tyre_life (the longest run seen so far and a pre-race tyre-life estimate with its sd from earlier races; a set run past its life loses time quickly, there is no hard stint limit), and the model's calibration error (None when no earlier race measured it). traffic: whether other cars are modelled; when they are (projected from what is known now), cars_within_pit_loss_behind_now (a stop now drops behind them), dirty_air_s and own_pace_s.",
         "input_schema": {
             "type": "object",
             "properties": {"ages": {"type": "object", "description": "Optional {compound: tyre age} to check for extrapolation.",
@@ -271,7 +271,7 @@ TOOL_SPECS = [
     },
     {
         "name": "evaluate_strategy",
-        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; within_sim_error is true when the gap is smaller than max(2 x its sd, the model's calibration error), and confidence_basis says which of the two decided. When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
+        "description": "Evaluate an immediate PIT or STAY_OUT decision probabilistically against its alternative. Returns ranges, probabilities, assumptions and uncertainty; never an oracle score. probability_improves_outcome covers parameter and lap-noise uncertainty under this model, not model error; within_sim_error is true when the gap is smaller than max(2 x its sd, the model's calibration error; its sd alone when that error is None), and confidence_basis says which decided. When traffic is modelled, traffic gives for the action and its alternative the expected rejoin position (with a band), cars in the pit-loss window behind, time lost in traffic (included in the times) and final position, from other cars projected from what is known now (they do not react to us); otherwise it says traffic is not modelled.",
         "input_schema": {
             "type": "object",
             "properties": {

@@ -67,7 +67,7 @@ Z90 = 1.64              # a 90 percent normal band, mean -+ Z90 sd
 PIT_LOSS_BAND = 0.10    # the band around a pit loss with no calibrated sd, source "config"
 PROBABILITY_COVERS = "parameter and lap-noise uncertainty under this model; does not include model error"
 # event_rates source: the EventModel defaults, or the race's own (circuit) rates
-EVENT_RATES_PROVISIONAL = "provisional: SC from 2021 Spain, VSC placeholder"
+EVENT_RATES_PROVISIONAL = "provisional: fixed config rates, not fitted to earlier races"   # events as_of off (legacy)
 EVENT_RATES_CIRCUIT = "circuit"
 TRAFFIC_NOTE = "traffic is not modelled belief-side: the gaps and probabilities ignore cars on track"
 # belief traffic (traffic.py, source "projected"): how the numbers were made, in words
