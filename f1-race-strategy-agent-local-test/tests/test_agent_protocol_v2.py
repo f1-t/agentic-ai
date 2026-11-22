@@ -416,5 +416,28 @@ def test_what_v2free_accepts_the_scorer_scores(snaps):
 
 
 @pytest.mark.agent_protocol_v2free
+@pytest.mark.parametrize("share,held", [(0.0, True), (0.4, False)])
+def test_v2free_holds_a_named_plan_read_as_slower_in_most_draws(snaps, monkeypatch, share, held):
+    """A live design episode named plan 2 (read slower than plan 1 in 100% of draws) while stating
+    the reading of plan 1; a near-tie departure is not held."""
+    done = snaps["mid"].laps_completed
+    plan2 = {"decision": "STAY_OUT", "reassess_after_laps": 2, "compound": "MEDIUM", "first_stop_lap": done + 3}
+    out = {"plans": [EVIDENCE["plans"][0],
+                     {"rank": 2, "plan": "X 3 > MEDIUM 13", "stops": 1, "immediate": "STAY_OUT", "submit": plan2,
+                      "gap_s": 14.7, "faster_share": share}],
+           "decision": EVIDENCE["decision"]}
+    real = agent._dispatch
+    monkeypatch.setattr(agent, "_dispatch", lambda name, args, proto="v1": out if name == "rank_plans"
+                        else real(name, args, proto))
+    backend = Recording([ModelTurn(tool_calls=[ToolCall("1", "rank_plans", {}), submit(**plan2)]),
+                         ModelTurn(tool_calls=[submit(**plan2)])])
+    stats = {}
+    rec, traj = run_agent(snaps["mid"], verbose=False, backend=backend, max_steps=3, stats=stats)
+    assert stats["check_fired"] is held and rec["first_stop_lap"] == done + 3
+    if held:
+        assert "slower than plan 1 in 100% of draws" in traj[1]["output"]["held"]
+
+
+@pytest.mark.agent_protocol_v2free
 def test_v2free_keeps_the_named_stop_refusal_and_the_last_turn_fallback(snaps):
     test_a_broken_named_stop_says_how_to_fix_it_and_on_the_last_turn_is_dropped(snaps, None)

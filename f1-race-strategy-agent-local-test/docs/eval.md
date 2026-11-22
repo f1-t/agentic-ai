@@ -1603,9 +1603,43 @@ repeats, and 27 with the status line and cached repeats, while input
 tokens per episode went 53k, 63k, 85k. The decisions barely changed. The grace turns are
 what guarantee a submission.
 
+### Agent free choice (v2free, the default)
+
+`AGENT_PROTOCOL` = `v2free` (the default since 2026-11-22) | `v2` (copy plan 1, below) | `v1`.
+The agent gets the simulator's look-ahead and the full picture and makes the call; the ranking is
+presented as the simulator's best estimate, not the answer.
+
+- **Tools.** v2's (`rank_plans`, `evaluate_plan`, `estimate_tyre_degradation`, `estimate_pit_loss`)
+  plus `race_picture` (`agent_tools.race_picture`): position, gaps, laps left, track status and how
+  long a neutralisation has lasted, the pit window, the stints so far, the current set and its last
+  lap times; the set's observed wear (fuel-corrected lap time on tyre age over its clean laps)
+  against the model's value and sd; the cars around (position, gap, compound, tyre age, stops so
+  far); the cars within the pit loss behind and the rejoin position a stop now implies, from the
+  gaps; per compound the race laps behind the fit, the longest run seen, the field's observed wear
+  against the model's, the base pace sd, how a compound with no race laps is priced, and the
+  tyre-life estimate with its sd and source. Everything comes from the snapshot and the laps
+  visible at its moment (`Simulator.window_rows`, cut by session time), the belief fit and its
+  report; the cars are the snapshot's labels. It is a compared surface of the future-blindness
+  harness.
+- **Any plan.** A submission may name its whole plan (`plan`, [[compound, laps], ...]), which the
+  scorer plays exactly (`eval.decisions.named_plan`, its later sets drawn from the inventory as any
+  baseline plan's); it must agree with the decision (a PIT's first stint is 1 lap, a STAY_OUT k's at
+  least k + 1) and with `compound` and `first_stop_lap` when given, use at most the stop limit and
+  modelled compounds, and pass the rules; anything else is refused with the cause. `first_stop_lap`
+  and the bare decision work as under v2. v1 and v2 drop a `plan` they were never offered.
+- **Prompt.** What the judge scores (the car's race time over the remaining laps); the look-ahead
+  can be wrong where it flags a weak estimate or where the race so far contradicts it; the choice is
+  any plan; one line of evidence, and when the plan is not plan 1, what in the picture made the
+  departure.
+- **Checks.** The scorer's own (a submission is accepted only if it can be scored), the named-stop
+  and named-plan refusals with the fix and the last-turn fallback, and one contradiction check: a
+  submission whose immediate action's best plan the latest `rank_plans` reading puts behind the
+  other action's in more than 80% of draws is shown that reading once, and the next submission is
+  final. Leaving plan 1 is never held.
+
 ### Agent protocol v2
 
-`AGENT_PROTOCOL` = `v2` (the default since 2026-11-22) | `v1` (the prompt, tool surface, loop and
+`AGENT_PROTOCOL` = `v2` (the default from #130 until v2free) | `v1` (the prompt, tool surface, loop and
 submission handling before it, unchanged; rerun provenance records the protocol in effect). v2 is a
 development-side change made after the freeze: the held-out result above was run under v1 and
 stands as it is.

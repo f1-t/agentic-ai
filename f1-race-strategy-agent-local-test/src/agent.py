@@ -229,6 +229,42 @@ def _evidence_of(name, out):
     return {"decision": out.get("decision"), "best": plans[0] if plans else None}
 
 
+def _plan_key(sub):
+    """The plan a submission (or a tool's submit fields) names, as the readings are keyed: its whole plan
+    ("plan", the stints in words), else its first stop (lap, compound); None when it names neither."""
+    if sub.get(NAMED_PLAN):
+        try:
+            return ("plan", " > ".join(f"{str(c).upper()} {int(n)}" for c, n in sub[NAMED_PLAN]))
+        except (TypeError, ValueError):
+            return None
+    if sub.get(KEPT_STOP) is not None and sub.get("compound"):
+        return ("stop", int(sub[KEPT_STOP]), str(sub["compound"]).upper())
+    return None
+
+
+def _readings_of(name, out):
+    """v2free: {plan key: (plan in words, gap to plan 1 s, share of draws faster than plan 1)} from a
+    rank_plans or evaluate_plan result, for each plan it read against plan 1."""
+    if not isinstance(out, dict) or out.get("error"):
+        return {}
+    if name == "rank_plans":
+        items = [(p, p.get("gap_s"), p.get("faster_share")) for p in out.get("plans") or [] if p.get("rank") != 1]
+    elif name == "evaluate_plan":
+        vs = out.get("vs_best") or {}
+        items = [(out, vs.get("gap_s"), vs.get("faster_share"))]
+    else:
+        return {}
+    found = {}
+    for p, gap, share in items:
+        if not isinstance(gap, (int, float)) or not isinstance(share, (int, float)):
+            continue
+        text = p.get("plan")
+        for key in (_plan_key(p.get("submit") or {}), ("plan", text) if text else None):
+            if key:
+                found[key] = (text, gap, share)
+    return found
+
+
 def _keeps(rec, sub):
     """Whether submission `rec` is plan 1's submit fields `sub` (the fields that decide the scored plan)."""
     def same(f):
@@ -237,23 +273,32 @@ def _keeps(rec, sub):
     return all(same(f) for f in fields)
 
 
-def _contradiction_note(rec, evidence):
-    """v2free: what the harness says once when the submitted immediate action contradicts the reading
-    the model received for it, the latest rank_plans decision (its best PIT-now plan against its best
-    STAY_OUT plan): the other action faster in more than CONTRADICTION_SHARE of the draws. Leaving plan 1
-    is not a contradiction. None when nothing contradicts it or no reading was received."""
+def _contradiction_note(rec, evidence, readings=None):
+    """v2free: what the harness says once when the submission contradicts the reading the model received
+    for what it names: (a) its immediate action, against the latest rank_plans decision (its best PIT-now
+    plan against its best STAY_OUT plan), the other action faster in more than CONTRADICTION_SHARE of the
+    draws; (b) the plan it names (first stop or whole plan), read by rank_plans or evaluate_plan as slower
+    than plan 1 in more than CONTRADICTION_SHARE of the draws. Leaving plan 1 is not by itself a
+    contradiction: the model is shown the reading and its next submission is final. None otherwise."""
+    lines = []
     dec = (evidence or {}).get("decision") or {}
     favoured, share = str(dec.get("favoured") or ""), dec.get("share")
-    if not favoured or not isinstance(share, (int, float)) or "best plan" not in str(dec.get("reading") or ""):
+    if favoured and isinstance(share, (int, float)) and "best plan" in str(dec.get("reading") or ""):
+        kind = "PIT" if favoured.startswith("PIT") else "STAY_OUT"
+        # the share of draws in which the submitted action's best plan is faster than the other action's best
+        mine = share if kind == rec["decision"] else 1 - share
+        if mine < 1 - CONTRADICTION_SHARE:
+            lines.append(f"you submitted {rec['decision']}, but the reading you received says otherwise: {dec.get('reading')}.")
+    key = _plan_key(rec)
+    seen = (readings or {}).get(key) if key else None
+    if seen and seen[2] < 1 - CONTRADICTION_SHARE and seen[1] > 0:
+        lines.append(f"the plan you name ({seen[0]}) was read as slower than plan 1 in {1 - seen[2]:.0%} of draws "
+                     f"(gap {seen[1]:+.1f} s).")
+    if not lines:
         return None
-    kind = "PIT" if favoured.startswith("PIT") else "STAY_OUT"
-    # the share of draws in which the submitted action's best plan is faster than the other action's best
-    mine = share if kind == rec["decision"] else 1 - share
-    if mine >= 1 - CONTRADICTION_SHARE:
-        return None
-    return (f"Not final yet: you submitted {rec['decision']}, but the reading you received says otherwise: "
-            f"{dec.get('reading')}. Call submit_recommendation again: the same submission to confirm it, with the "
-            f"evidence it rests on in the rationale, or a revised one. The next submission is final.")
+    return ("Not final yet: " + " Also, ".join(lines) + " Call submit_recommendation again: the same submission to "
+            "confirm it, with the evidence in the picture it rests on in the rationale, or a revised one. The next "
+            "submission is final.")
 
 
 def _consistency_note(rec, evidence, laps_completed):
@@ -469,6 +514,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     system_prompt = (base_prompt if tools.agent_tools.gap_yardstick() == "paired"
                      else base_prompt.replace(GAP_SENTENCE, ""))
     evidence = None   # v2: the latest rank_plans evidence (_evidence_of)
+    readings = {}     # v2free: what each plan read against plan 1 was shown as (_readings_of)
     held = None       # v2: the submission the consistency check held, until the final one
     prompt = question or "Decide the best immediate strategy action from this snapshot."
     # the view plus the pit window (whether pitting now is legal, the earliest and latest legal stop)
@@ -624,12 +670,14 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                 run_calls.setdefault(key, (len(trajectory) + 1, out))
                 if proto != "v1" and (seen := _evidence_of(call.name, out)):
                     evidence = seen
+                if proto == "v2free":
+                    readings.update(_readings_of(call.name, out))
 
             note_held = None
             if (proto != "v1" and rec is not None and held is None
                     and step < evidence_end + submit_grace_steps
                     and (note_held := (_consistency_note(rec, evidence, snapshot.lap) if proto == "v2"
-                                       else _contradiction_note(rec, evidence)))):
+                                       else _contradiction_note(rec, evidence, readings)))):
                 # one look at its own evidence before the submission is final; the model keeps the say
                 held, rec = dict(rec), None
                 stats["check_fired"] = True
