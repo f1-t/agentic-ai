@@ -21,7 +21,7 @@ import pandas as pd
 
 from ..contracts import FieldState, NearbyCar, Plan, RaceParams, Snapshot, StintRecord
 from .config import SimConfig
-from .data import race_stints, visible_rows
+from .data import UNKNOWN_COMPOUND, race_stints, visible_rows
 from . import traffic
 from .engine import Simulator
 from .events import Scenario
@@ -63,9 +63,12 @@ def _lap_kind(g):
 
 
 def _finisher_ids(frame, min_laps_frac):
-    """Drivers who completed enough laps to compare, retirements are not comparable."""
+    """Drivers who completed enough laps to compare, retirements are not comparable. A driver
+    with a lap of no recorded compound (data.UNKNOWN_COMPOUND) cannot be replayed and is left out."""
+    from .data import UNKNOWN_COMPOUND
     last = frame.groupby("driver")["lap"].max()
-    return sorted(last.index[last >= min_laps_frac * last.max()])
+    unknown = set(frame.loc[frame["compound"] == UNKNOWN_COMPOUND, "driver"]) if "compound" in frame else set()
+    return sorted(d for d in last.index[last >= min_laps_frac * last.max()] if d not in unknown)
 
 
 def run(sim: Simulator, frame: pd.DataFrame, race: RaceParams, min_laps_frac=0.9, pace=None):
@@ -679,6 +682,8 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
         if not len(first):
             raise ValueError(f"{driver} has no lap 1")
         row = first.iloc[0]
+        if row["compound"] == UNKNOWN_COMPOUND:
+            raise ValueError(f"{driver}'s starting set has no recorded compound")
         age = int(row["tyre_age"]) - 1 if pd.notna(row["tyre_age"]) else 0
         return Snapshot(
             race=race.model_copy(update={"pit_loss_s": pre_race_pit_loss(race.race_id)}), driver=driver,
@@ -694,8 +699,11 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
     g = seen[seen["driver"] == driver].sort_values("lap")
     stints = race_stints(g, driver)   # on an in-lap the set going on is not recorded yet
     comp, n, start_age, first_lap = stints[-1]
+    if comp == UNKNOWN_COMPOUND:
+        raise ValueError(f"{driver}'s set at lap {k} has no recorded compound")
     done = k + 1 - first_lap
-    compounds = sorted(set(race.compounds) | set(seen["compound"].dropna().astype(str)) | {str(comp)})
+    compounds = sorted((set(race.compounds) | set(seen["compound"].dropna().astype(str)) | {str(comp)})
+                       - {UNKNOWN_COMPOUND})
     gaps, nearby = _gaps_as_of(seen, driver, k, t)
     last = g[g["lap"] > k - RECENT_LAPS]["lap_time_s"]
     hist = _scenario(g)

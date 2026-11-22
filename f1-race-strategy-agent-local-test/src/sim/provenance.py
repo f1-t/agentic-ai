@@ -26,6 +26,7 @@ class Artifact:
     kind: str                                  # "as_of", "a_priori" or "not_as_of"
     recorded: Callable[[], list]               # every race it records
     races_for: Callable[[str], list]           # the races pricing race_id reads
+    files: tuple = ()                          # the committed files it is read from, relative to the project
 
 
 def _none():
@@ -105,7 +106,7 @@ def _learned_recorded():
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent.parent
     out = set()
-    for m in root.glob("**/learned*/**/manifest.json"):
+    for m in (root / "models" / "calibrators").glob("*/manifest.json"):
         try:
             out |= set(json.loads(m.read_text()).get("races", []))
         except (OSError, ValueError):
@@ -117,42 +118,55 @@ POLICY_SIDE = {
     "compound_steps": Artifact(
         "configs/sim/compound_steps.json per_race and validation_rows: the proxy's tier-5 step, blend weights and sd "
         "floor, recomputed as of the race (proxy.as_of_config); no earlier race: no step, equal weights, "
-        "proxy.PRIOR_SD_FLOOR", "as_of", _proxy_recorded, _proxy_races),
+        "proxy.PRIOR_SD_FLOOR", "as_of", _proxy_recorded, _proxy_races, ("configs/sim/compound_steps.json",)),
     "calibration_summary": Artifact(
         "reports/calibration/midrace_summary.csv (2021 Spain): calibration_error_s in the model report and "
         "evaluate_strategy, NaN for a race not after every summary race (model_report.calibration_error)",
-        "as_of", _summary_recorded, _summary_for),
+        "as_of", _summary_recorded, _summary_for, ("reports/calibration/midrace_summary.csv",)),
     "event_rates": Artifact(
         "configs/sim/neutralised_history.csv: the belief's SC/VSC rates (events.RateEvents as_of, "
         "race_history.as_of_event_rates) shrunk toward the a priori race_history.EVENT_PRIOR",
-        "as_of", _periods_recorded, _periods_for),
+        "as_of", _periods_recorded, _periods_for, ("configs/sim/neutralised_history.csv",)),
     "pre_race_base_delta": Artifact(
         "configs/sim/race_history.csv base_delta_s: the practice-to-race base level (as_of_history calibrator), "
-        "a priori race_history.A_PRIORI with no earlier race", "as_of", _history_recorded, _history_for),
+        "a priori race_history.A_PRIORI with no earlier race", "as_of", _history_recorded, _history_for, ("configs/sim/race_history.csv",)),
     "fuel_prior": Artifact(
         "configs/sim/race_history.csv target: the circuit-history fuel prior (fuel_prior.circuit_history_prediction "
         "as of the race), the a priori physics prior (fuel_prior.practice_longrun_prediction) with fewer than two "
-        "earlier races", "as_of", _history_recorded, _history_for),
+        "earlier races", "as_of", _history_recorded, _history_for, ("configs/sim/race_history.csv",)),
     "event_effects": Artifact(
         "configs/sim/race_history.csv sc_lap_factor, lap1_extra_s: the belief's SC lap factor and lap-1 extra "
         "(as_of_history calibrator), a priori race_history.A_PRIORI with no earlier race",
-        "as_of", _history_recorded, _history_for),
+        "as_of", _history_recorded, _history_for, ("configs/sim/race_history.csv",)),
     "shrinkage": Artifact(
         "SimConfig.shrinkage base_s 0.5 and wear_s_per_lap 0.03 (and the hinge tau): engineering priors set in "
         "a8d9d3a; under as_of_history the base and fuel taus are the as-of sds instead",
-        "a_priori", _none, _none_for),
+        "a_priori", _none, _none_for, ("src/sim/config.py",)),
     "pit_loss_prior": Artifact(
         "configs/sim/pit_loss_prior.json and the cached races: the as-of pit loss prior (pit_loss.pit_loss_prior)",
-        "as_of", _pit_loss_recorded, _pit_loss_for),
+        "as_of", _pit_loss_recorded, _pit_loss_for, ("configs/sim/pit_loss_prior.json",)),
     "tyre_history": Artifact(
         "configs/sim/tyre_life_history.json and data/derived/tyre_history*.csv: the tyre-life prior "
         "(cliff.life_prior, tyre_history.tyre_life_prior), races strictly before the race",
-        "as_of", _tyre_recorded, _tyre_for),
+        "as_of", _tyre_recorded, _tyre_for, ("configs/sim/tyre_life_history.json", "data/derived/tyre_history.csv")),
     "learned_calibrator": Artifact(
         "reports/calibration/learned artifacts (calibrator 'trained', configs/sim/belief_learned.yaml): fitted on a "
         "fixed race set, off by default; refused for a race not after all its training races unless "
-        "force_not_as_of", "not_as_of", _learned_recorded, _none_for),
+        "force_not_as_of", "not_as_of", _learned_recorded, _none_for, ("models/calibrators/ridge_hybrid/manifest.json",)),
 }
+
+
+def file_hashes(name: str) -> dict:
+    """{file: the first 12 hex digits of its sha256} of the artifact's committed files (None for
+    one that is absent)."""
+    import hashlib
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent.parent
+    out = {}
+    for f in POLICY_SIDE[name].files:
+        path = root / f
+        out[f] = hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.is_file() else None
+    return out
 
 
 def recorded(name: str) -> list:
