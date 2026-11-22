@@ -194,6 +194,12 @@ def _entry(race_id: str, cfg) -> dict | None:
     return _ENTRIES[key]
 
 
+def _usable(entry) -> bool:
+    """A pool entry the prior may use: loaded, with a pit loss, and a dry race (a wet race's
+    stops mix tyre changes for the weather with slow laps; 2022 Imola's median green stop is 38 s)."""
+    return bool(entry) and entry.get("pit_loss_s") is not None and not entry.get("wet", False)
+
+
 def pit_loss_prior(race_id: str, cfg, cached=None, held=None) -> dict:
     """{mean_s, sd_s, source, races}: the green pit loss prior for `race_id`, the first tier of
     the fallback chain above that has data. Never fails: a race id with no time order (a
@@ -205,11 +211,11 @@ def pit_loss_prior(race_id: str, cfg, cached=None, held=None) -> dict:
     except ValueError:   # a synthetic or unparseable id: no time order, no circuit
         earlier, here = [], None
     same = [r for r in earlier if circuit_key(r) == here]
-    vals = {r: e["pit_loss_s"] for r in same if (e := _entry(r, cfg)) and e.get("pit_loss_s") is not None}
+    vals = {r: e["pit_loss_s"] for r in same if _usable(e := _entry(r, cfg))}
     if vals:
         return {"mean_s": float(np.mean(list(vals.values()))), "sd_s": float(cfg.same_circuit_sd_s),
                 "source": "same_circuit_asof", "races": sorted(vals)}
-    vals = {r: e["pit_loss_s"] for r in earlier if (e := _entry(r, cfg)) and e.get("pit_loss_s") is not None}
+    vals = {r: e["pit_loss_s"] for r in earlier if _usable(e := _entry(r, cfg))}
     if len(vals) >= MIN_PRIOR_RACES:
         v = np.array(list(vals.values()), dtype=float)
         return {"mean_s": float(v.mean()), "sd_s": max(float(v.std(ddof=1)), float(cfg.min_cross_sd_s)),
@@ -330,7 +336,8 @@ def race_entry(data, model, cfg=None) -> dict:
     pl = float(world["pit_loss_s"])
     out = {"pit_loss_s": round(pl, 3), "source": world["source"], "replay_mean_s": float(data.race.pit_loss_s),
            "circuit": circuit_key(data.race_id), "total_laps": int(data.race.total_laps),
-           "n_green_stops": world["n_green_stops"]}
+           "n_green_stops": world["n_green_stops"],
+           "wet": bool(f["compound"].astype(str).isin(["INTERMEDIATE", "WET"]).any())}
     for kind in KINDS:
         k = stops[stops["kind"] == kind]
         x = (stop_losses(k, model, medians) / pl).dropna() if len(k) else pd.Series(dtype=float)

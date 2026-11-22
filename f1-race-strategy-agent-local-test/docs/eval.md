@@ -68,8 +68,9 @@ a fallback chain, as of R's date and never R itself:
 
 The pool is `configs/sim/pit_loss_prior.json` (the six calibration races, built by `python -m
 src.sim.pit_loss build-prior`) plus every race in the FastF1 cache at run time (`real_run.cached_races`),
-whose entry is built from its whole race on first use: more cached seasons widen the pool with no
-code change. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
+whose entry is built from its whole race on first use and kept per process (a circuit with no history
+loads every earlier cached race once, about a minute): more cached seasons widen the pool with no
+code change. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
 itself held out, and then only if earlier. A circuit used once (no earlier season cached) gets tier
 2, or 3, and the estimate exists from lap 0 either way: a policy never fails for want of history and
 never falls back to the whole-race value. The SC and VSC factors (the share of a green stop paid
@@ -98,16 +99,19 @@ to the median green stop, which a few slow stops or a mostly neutralised race ca
 | race | prior tier (prior s) | laps 0-9 | 10-19 | 20-29 | 30-39 | 40+ | MAE | 90% interval covers |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2019_10_united_kingdom | constant (22.00) | +0.79 | -0.10 | -1.09 | -0.74 | -0.71 | 0.84 | 1.00 |
-| 2021_04_spain | constant (22.00) | -0.57 | -0.57 | +1.32 | -0.16 | +0.03 | 0.50 | 1.00 |
-| 2022_02_saudi_arabia | cross_circuit_asof (21.89) | -2.50 | -2.18 | -1.22 | -1.78 | -1.79 | 1.90 | 1.00 |
-| 2023_01_bahrain | cross_circuit_asof (22.72) | -2.42 | -1.54 | -0.23 | -0.11 | -0.43 | 0.93 | 1.00 |
-| 2023_07_spain | same_circuit_asof (22.57) | -1.20 | -0.37 | -0.12 | -0.03 | +0.05 | 0.30 | 1.00 |
-| 2024_07_emilia_romagna | cross_circuit_asof (23.42) | -5.25 | -1.78 | -1.67 | -1.28 | -0.95 | 1.98 | 0.83 |
+| 2021_04_spain | cross_circuit_asof (22.36) | -0.21 | -0.21 | +0.51 | -0.16 | +0.02 | 0.26 | 1.00 |
+| 2022_02_saudi_arabia | same_circuit_asof (23.00) | -1.38 | -1.54 | -0.96 | -1.38 | -1.38 | 1.33 | 1.00 |
+| 2023_01_bahrain | same_circuit_asof (24.13) | -1.01 | -0.71 | -0.04 | +0.01 | -0.35 | 0.47 | 1.00 |
+| 2023_07_spain | same_circuit_asof (22.90) | -0.87 | -0.23 | -0.07 | +0.01 | +0.07 | 0.22 | 1.00 |
+| 2024_07_emilia_romagna | cross_circuit_asof (23.24) | -5.43 | -1.68 | -1.60 | -1.25 | -0.92 | 1.97 | 0.83 |
 
-Over all 63 snapshots the MAE is 1.04 s (0.71 s from lap 20), and the 90% interval covers the
-world's value at 97% of them. The error is the prior's until the first green stops (Imola's prior,
-23.4 s, is 5 s short of a long pit lane), then a second or less. Saudi Arabia keeps a -1.8 s bias:
-by lap 45 only 4 green stops are in.
+Over all 63 snapshots the MAE is 0.82 s (0.60 s from lap 20), and the 90% interval covers the
+world's value at 97% of them. The pool here is the committed table plus the cache as of main
+3cf9649 (the 2021-22 weekends of #92 included; wet races are left out of the pool: 2022 Imola, run
+partly on intermediates, has a 38 s median green stop, and 2021 Imola does not load). The error is
+the prior's until the first green stops (Imola 2024's cross-circuit prior is 5 s short of a long pit
+lane), then about a second or less. Saudi Arabia keeps a -1.4 s bias: by lap 45 only 4 green stops
+are in.
 
 **Test.** `tests/test_sim_pit_loss.py`: altering every stop after the snapshot (moved, added,
 slowed, an SC added) leaves the belief's pit loss, `estimate_pit_loss`, `simulate_plan`,
