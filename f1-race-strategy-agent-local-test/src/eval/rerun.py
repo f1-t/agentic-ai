@@ -60,6 +60,18 @@ TAIL_S = (10.0, 20.0, 30.0)
 MODEL_ENV = ("LLM_BACKEND", "ANTHROPIC_MODEL", "HF_MODEL", "VOYAGER_MODEL", "VOYAGER_MAX_TOKENS", "VOYAGER_TEMPERATURE")
 LOOP_ENV = ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS", "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",
             "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK", "AGENT_TURN_REPEAT")
+
+
+def _loop_env() -> dict:
+    """LOOP_ENV as set, except AGENT_TURN_REPEAT, recorded as the mode in effect (the agent's
+    default when unset): the default moved from "end" to "run" on 2026-11-22, so an unset value
+    would not say which mode a pass ran with."""
+    from ..agent import DEFAULT_TURN_REPEAT
+    env = {k: os.environ.get(k) for k in LOOP_ENV}
+    env["AGENT_TURN_REPEAT"] = env["AGENT_TURN_REPEAT"] or DEFAULT_TURN_REPEAT
+    return env
+
+
 ERAS = (("2019-20", 2019, 2020), ("2021", 2021, 2021), ("2022", 2022, 2022), ("2023", 2023, 2023),
         ("2024-25", 2024, 2025))
 
@@ -329,7 +341,7 @@ def stage_agent(args) -> Path:
 
     def record(p):
         # the model id and loop switches each pass ran with (provenance.json reads them later, at tables)
-        p["env"] = {k: os.environ.get(k) for k in (*MODEL_ENV, *LOOP_ENV)}
+        p["env"] = {**{k: os.environ.get(k) for k in MODEL_ENV}, **_loop_env()}
         run["passes"].append(p)
         save_run()
 
@@ -626,7 +638,7 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
            # the backend and model id only: never a key, a token or an endpoint
            "model": {k: os.environ.get(k) for k in MODEL_ENV},
            "loop": {"max_steps": prof.agent.max_steps,
-                    **{k: os.environ.get(k) for k in LOOP_ENV}},
+                    **_loop_env()},
            "row_stamps": stamps,
            "builder": s.builder if s else None,
            "future_blindness": future_blindness(run=getattr(args, "harness", False)),

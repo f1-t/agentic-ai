@@ -847,7 +847,8 @@ def test_a_repeated_turn_is_not_run_and_is_told_what_it_returned(monkeypatch, tm
     stats = {}
     swapped = ModelTurn(tool_calls=[tc("evaluate_strategy", PIT_NOW), tc("estimate_pit_loss")])
     backend = RecordingBackend([same_turn(), swapped, submit_turn()])
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, log_path=tmp_path / "t.jsonl")
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, log_path=tmp_path / "t.jsonl",
+                          turn_repeat="end")
     assert rec is not None and ran == ["estimate_pit_loss", "evaluate_strategy"]   # run once
     assert [(t["step"], t.get("turn_repeat"), t.get("repeat_of")) for t in traj] == [
         (1, None, None), (1, None, None), (2, 1, 2), (2, 1, 1), (3, None, None)]
@@ -865,7 +866,7 @@ def test_the_third_repeat_ends_the_evidence_phase(monkeypatch):
     ran = rule_dispatch(monkeypatch)
     stats = {}
     backend = RecordingBackend([same_turn() for _ in range(4)] + [submit_turn()])
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, turn_repeat="end")
     assert rec is not None and len(ran) == 2
     assert (stats["turn_repeats"], stats["repeat_calls"], stats["evidence_ended_at"], stats["evidence_calls"]) == (3, 6, 4, 2)
     second, third = backend.seen[3][-1]["content"], backend.seen[4][-1]["content"]
@@ -881,7 +882,7 @@ def test_no_submission_after_an_early_end_still_stops_after_the_grace(monkeypatc
     rule_dispatch(monkeypatch)
     stats = {}
     backend = RecordingBackend([same_turn() for _ in range(4)] + [evidence_turn(1), evidence_turn(1)])
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, turn_repeat="end")
     assert rec is None and stats["steps"] == 6
     assert all(t["phase"] == "grace" and "Evidence turns are spent" in t["error"] for t in traj[-2:])
 
@@ -907,12 +908,21 @@ def test_run_mode_runs_a_repeated_turn_again(monkeypatch):
     assert not any("turn_repeat" in t for t in traj)
 
 
+def test_run_is_the_default_turn_repeat(monkeypatch):
+    # unset (the fixture clears AGENT_TURN_REPEAT): a repeated turn runs again (docs/eval.md, 2026-11-22)
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    rec, _ = run_agent(snap(), backend=RecordingBackend([same_turn(), same_turn(), submit_turn()]),
+                       verbose=False, stats=stats)
+    assert rec is not None and len(ran) == 4 and stats["turn_repeats"] == 0
+
+
 def test_a_different_turn_resets_the_count_and_a_submission_is_never_a_repeat(monkeypatch):
     ran = rule_dispatch(monkeypatch)
     stats = {}
     turns = [same_turn(), same_turn(), same_turn(), evidence_turn(1), same_turn(), same_turn(), same_turn(),
              submit_turn()]
-    rec, traj = run_agent(snap(), backend=RecordingBackend(turns), verbose=False, stats=stats)
+    rec, traj = run_agent(snap(), backend=RecordingBackend(turns), verbose=False, stats=stats, turn_repeat="end")
     assert rec is not None and stats["evidence_ended_at"] is None and stats["turn_repeats"] == 4
     assert len(ran) == 2 + 1 + 2   # the turn after a different one runs again
     rec, traj = run_agent(snap(), backend=RecordingBackend([submit_turn({**SUBMIT, "confidence": 2}),
@@ -926,7 +936,7 @@ def test_a_repeated_turn_uses_no_budget(monkeypatch):
     stats = {}
     rec, traj = run_agent(snap(), backend=RecordingBackend([same_turn(), same_turn(), evidence_turn(1),
                                                             submit_turn()]),
-                          verbose=False, stats=stats, max_tool_calls=3)
+                          verbose=False, stats=stats, max_tool_calls=3, turn_repeat="end")
     assert rec is not None and stats["evidence_calls"] == 3 and traj[4]["error"] is None   # the third call ran
 
 
@@ -939,7 +949,7 @@ def test_a_repeated_turn_on_the_anthropic_path(monkeypatch):
     submit = ModelTurn(tool_calls=[ToolCall("s", "submit_recommendation", SUBMIT)],
                        raw=SimpleNamespace(content=[{"type": "tool_use", "id": "s"}]))
     backend = RecordingBackend([turn(["a1", "a2"]), turn(["b1", "b2"]), submit], name="anthropic")
-    rec, _ = run_agent(snap(), backend=backend, verbose=False)
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, turn_repeat="end")
     assert rec is not None
     content = backend.seen[2][-1]["content"]
     assert [(b["type"], b.get("tool_use_id")) for b in content] == [("tool_result", "b1"), ("tool_result", "b2"),
