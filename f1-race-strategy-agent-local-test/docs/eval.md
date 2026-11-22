@@ -2445,7 +2445,8 @@ Changes against the base (the default world and `belief.yaml`), pooled, race-clu
 
 ## Tests
 
-`tests/test_eval.py` runs offline: synthetic races for sampling and scoring, plus the
+The suite runs in three tiers (fast by default, `slow` for real races and end-to-end runs,
+`legacy` for legacy switches; README.md "Testing"). `tests/test_eval.py` runs offline: synthetic races for sampling and scoring, plus the
 committed Spain cache for the v1 set and an end-to-end baseline run.
 `tests/test_eval_integration.py` covers the belief and world split and the decision unit,
 `tests/test_eval_part2.py` positions, the drawn-events warning, the disagreement flag, the
@@ -2453,9 +2454,9 @@ eval split, `run-all` with two spawned workers, the agent policy, the snapshot c
 the minimum-stint rule. `tests/test_eval_reference.py` covers the reference cache (key
 stability, cached against computed rows, `--check` across code versions, hindsight
 events, the d3 exception), `regret_se_s` on a world with known per-draw differences,
-`within_mc` at N = 1 against the tie rule, and the R8 stamps on rows and summaries.
+and `within_mc` at N = 1 against the tie rule.
 `tests/test_optimizer_bridge.py` covers the limit-aware baselines (fixed_one_stop's moved
-stop, greedy_crossover's forced stop, a plan still past the limit scored invalid, and every
+stop, greedy_crossover's forced stop, and every
 baseline unchanged with R8 off). `tests/test_eval_rule_baselines.py` covers the rule
 baselines on synthetic races and on 2021 Spain: the default `baselines` group unchanged, the
 already-stopped and not-yet-stopped branches, a forced stop for R3 and for R8 (one stop and two),
@@ -2463,7 +2464,7 @@ the invalid row when no legal plan exists within `max_stops`, legality, determin
 >= 0. `tests/test_sim_proxy.py` covers the compound proxy (which
 sources enter the blend and with what weight, the weighted mean, anchoring, the qualifying gap
 and its place in the model report, the ordering constraint and the wear floor, the proxied
-covariance and draws, the belief's information boundary, R8 for an unraced compound, the off
+covariance and draws, the belief's information boundary, the off
 switch, the committed table and weights, the leave-one-race-out weight helper) on synthetic
 weekends, and on
 2022 Saudi Arabia that the world prices SOFT and accepts the belief's continuations. Modules

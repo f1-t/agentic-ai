@@ -84,6 +84,7 @@ def test_drivers_are_the_eval_samplers_a_gap_or_three_laps_down_is_out(syn):
     assert e["drivers"] == eligible_drivers(f, syn.race.total_laps)
 
 
+@pytest.mark.slow
 def test_spain_is_eligible_with_v1s_drivers():
     data = cross_race.load_race("2021_04_spain", load_profile("local"))
     messages, note = cross_race.race_messages("2021_04_spain")
@@ -356,13 +357,14 @@ def test_the_belief_is_incumbent_first_the_bound_stays_unless_removing_it_passes
 
 def test_current_defaults_name_each_windows_incumbent_and_match_the_config():
     t = cross_race.current_defaults().set_index("window")
-    assert t.loc["to_snapshot", "incumbent"] == "wear_nonneg" and t.loc["to_snapshot", "source"] == "a priori"
+    # belief.yaml's arm since #102: the bound plus the as_of_history calibrator, fuel anchoring, as-of pit loss
+    assert t.loc["to_snapshot", "incumbent"] == "as_of_history" and t.loc["to_snapshot", "source"] == "a priori"
     assert "belief.yaml" in t.loc["to_snapshot", "set by"]
     assert t.loc["pre_race", "incumbent"] == BASELINE and t.loc["pre_race", "source"] == "default"
     # the world's wear fit, selected in the tyre-life change (config.WORLD_DEGRADATION)
     assert t.loc["full", "incumbent"] == "driver_effects" and t.loc["full", "source"] == "selected"
     assert t["matches the config"].all()
-    assert t.loc["to_snapshot", "config_hash"] == calibration.config_hash(cross_race.arm_config("wear_nonneg"))
+    assert t.loc["to_snapshot", "config_hash"] == calibration.config_hash(cross_race.arm_config("as_of_history"))
 
 
 def test_calibrator_arms_are_na_in_the_full_window():
@@ -435,6 +437,7 @@ def test_stop_mode_takes_the_smaller_count_on_a_tie():
     assert cross_race.stop_mode([]) is None and cross_race._counts([2, 1, 2]) == "1:1 2:2"
 
 
+@pytest.mark.slow
 def test_the_reference_stop_count_from_lap_0(syn):
     ref = cross_race.reference_stops(syn, syn.config, max_stops=2)
     assert list(ref.columns) == cross_race.REFERENCE_STOP_COLUMNS
@@ -606,25 +609,36 @@ def run_eval_set(out: Path) -> Path:
     return path
 
 
+# The arms the end-to-end assertions read, one of each kind: the baseline, none (same by
+# construction in the full window; the rerun check) and the bound arm, which the selection needs;
+# the belief incumbent; the world incumbent (driver_effects); a coverage-only arm. The other
+# committed arms are overlays checked by test_committed_arms_load_and_are_distinct. The lap-0
+# stop-count check is off here (half the run's cost): its search runs on Spain in
+# test_the_reference_stop_count_on_spain and its tables on synthetic rows above.
+RUN_ARMS = [a for a in ARMS if a in {"baseline", "none", "posterior", "wear_nonneg", "driver_effects",
+                                     "as_of_history"}]
+
+
 @pytest.fixture(scope="module")
 def run_dir(tmp_path_factory):
     out = tmp_path_factory.mktemp("cross")
     log = []
     record = cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append,
-                            eval_set=run_eval_set(out))
+                            eval_set=run_eval_set(out), arms=RUN_ARMS, stop_check=False)
     cross_race.report(out, small_profile(), n_boot=50)
     return out, record, log
 
 
+@pytest.mark.slow
 def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     out, record, log = run_dir
-    assert record["eligible"] == RUN_RACES and record["belief_choice"] in ARMS
+    assert record["eligible"] == RUN_RACES and record["belief_choice"] in RUN_ARMS
     assert record["held_out"]["listed"] == RUN_HELD_OUT and record["held_out"]["included"] == []   # none is run
     assert f"Excluded from this run for that reason: {RUN_HELD_OUT[0]}" in (out / "summary.md").read_text()
     assert record["s2_arm"] == f"{record['belief_choice']}__s2" and len(record["grid"]) == 1
     for r in RUN_RACES:
         assert (out / "races" / r / f"{r}.parquet").is_file()
-        for a in ARMS:
+        for a in RUN_ARMS:
             assert (out / "h" / "arms" / a / f"{r}.parquet").is_file()
     tables = cross_race.unpack(pd.read_parquet(out / "races" / "2021_04_spain" / "2021_04_spain.parquet"))
     assert {"replay", "summary", "by_kind", "periods", "gate", "g", "hindsight", "wear_check",
@@ -644,29 +658,25 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     sel = pd.read_csv(out / "selection.csv")
     assert sel["provisional"].all()
     for w in ("full", "pre_race"):
-        assert set(sel.loc[(sel["stage"] == "arms") & (sel["window"] == w), "arm"]) == set(ARMS)
+        assert set(sel.loc[(sel["stage"] == "arms") & (sel["window"] == w), "arm"]) == set(RUN_ARMS)
     s1 = sel[sel["stage"] == "bound"]
     assert list(s1["arm"]) == ["wear_nonneg", BASELINE] and (s1["window"] == "to_snapshot").all()
     s2 = sel[sel["stage"] == "candidates"]
-    assert len(s2) == len(ARMS) - 1 and (s2["comparator"] == record["belief_bound"]).all()
+    assert len(s2) == len(RUN_ARMS) - 1 and (s2["comparator"] == record["belief_bound"]).all()
     # the full window compares against its incumbent; none and collinear_hold are the baseline
     # by construction there (same_by_construction), whatever the comparator
     full = sel[(sel["stage"] == "arms") & (sel["window"] == "full")]
     assert set(full["comparator"]) == {cross_race.incumbent("full")}
     na = full.loc[full["arm"].isin(["none", "collinear_hold"]), "role"]
+    assert len(na)
     assert set(na) == ({cross_race.NA_ROLE} if cross_race.incumbent("full") == BASELINE else {"candidate"})
     assert set(sel.loc[sel["stage"] == "prior-sd fix", "arm"]) == {record["s2_arm"]}
     grid = pd.read_csv(out / "tau_grid.csv")
     assert len(grid) == 1 and grid["sg_n"].iloc[0] > 0 and {"non_inferior", "passes", "g_diff_hi"} <= set(grid)
     gfold = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / record["grid"][0] / "2021_04_spain.parquet"))
     assert set(gfold["stop_gain"]["window"]) == {"to_snapshot"} and set(gfold["g"]["window"]) == {"to_snapshot"}
-    assert "reference_stops" not in gfold   # a derived arm changes to_snapshot only: no lap-0 reference
-    assert "reference_stops" not in fold     # nor a coverage-only one
-    ref = cross_race.unpack(pd.read_parquet(out / "h" / "arms" / "driver_effects" / "2021_04_spain.parquet"))
-    assert ref["reference_stops"]["ref_stops"].isin([1, 2]).all()
-    counts = pd.read_csv(out / "stop_counts.csv")
-    assert set(counts["race_id"]) == set(RUN_RACES) and set(counts["arm"]) == set(ARMS) - {"posterior"}
-    assert {"field_mode", "ref_mode", "mode_match", "two_less_one_s_median"} <= set(counts)
+    assert "stop_check off: no lap-0 reference_stops (pipeline test)" in record["notes"]
+    assert "reference_stops" not in fold and "reference_stops" not in gfold
     by_race = pd.read_csv(out / "stop_gain_by_race.csv")
     assert list(by_race.columns) == cross_race.STOP_GAIN_RACE_COLUMNS
     assert set(by_race["race_id"]) == set(RUN_RACES) and {"to_snapshot", "full"} <= set(by_race["window"])
@@ -682,25 +692,27 @@ def test_end_to_end_on_spain_and_two_synthetic_races(run_dir):
     assert "Synthetic races in this run" in md and "No race features file" in md
 
 
+@pytest.mark.slow
 def test_rerun_skips_everything_and_a_missing_unit_reruns_alone(run_dir):
     out, record, _ = run_dir
-    path = out / "h" / "arms" / "hinge" / "2099_01_synthetic.parquet"
+    path = out / "h" / "arms" / "none" / "2099_01_synthetic.parquet"
     before, table = path.read_bytes(), pd.read_parquet(path)
     log = []
     again = cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append,
-                           eval_set=run_eval_set(out))
+                           eval_set=run_eval_set(out), arms=RUN_ARMS, stop_check=False)
     status = [x for x in log if x.startswith("  ")]
     assert status and all(x.endswith(": skipped") for x in status)
     assert again == record and path.read_bytes() == before
     jobs._meta_path(path).unlink()   # an interrupted task: the output without its meta
     log = []
     cross_race.run(RUN_RACES, small_profile(), out, tau_multipliers=(1.0,), log=log.append,
-                   eval_set=run_eval_set(out))
+                   eval_set=run_eval_set(out), arms=RUN_ARMS, stop_check=False)
     done = [x for x in log if x.endswith(": done")]
-    assert done == ["  h_fold/hinge 2099_01_synthetic: done"]
+    assert done == ["  h_fold/none 2099_01_synthetic: done"]
     pd.testing.assert_frame_equal(pd.read_parquet(path), table)   # the rerun gives the same rows
 
 
+@pytest.mark.slow
 def test_race_features_join_when_present(run_dir, tmp_path):
     out, _, _ = run_dir
     feats = tmp_path / "race_features.csv"
@@ -712,21 +724,36 @@ def test_race_features_join_when_present(run_dir, tmp_path):
     assert "feature:track_length_km" not in cross_race.factors_table(outputs, tmp_path / "missing.csv")
 
 
+@pytest.mark.slow
 def test_report_writes_stop_gain_and_coverage_summaries(run_dir):
     out, _, _ = run_dir
     sg = pd.read_csv(out / "stop_gain_summary.csv")
     assert {"window", "arm", "k_bucket", "n", "bias_s", "mae_s", "mae_ci_lo", "mae_ci_hi",
             *calibration.STOP_GAIN_TERMS} <= set(sg)
-    assert set(sg["arm"]) == set(ARMS) - {"posterior"} and sg["n"].min() > 0
+    assert set(sg["arm"]) == set(RUN_ARMS) - {"posterior"} and sg["n"].min() > 0
     cov = pd.read_csv(out / "coverage_summary.csv")
     assert {"coverage_68", "coverage_90", "coverage_raw_68", "coverage_raw_90", "mean_width_90_s"} <= set(cov)
     assert "posterior" in set(cov["arm"])
 
 
+@pytest.mark.slow
 def test_eligibility_json_lists_every_race(run_dir):
     out, _, _ = run_dir
     elig = json.loads((out / "eligibility.json").read_text())
     assert [e["race_id"] for e in elig] == RUN_RACES and all(e["eligible"] for e in elig)
+
+
+@pytest.mark.slow
+def test_the_reference_stop_count_on_spain():
+    """The lap-0 stop-count check's search on a real race, under the world incumbent's arm: one
+    reference per field car, one or two stops, the quicker of the best one- and two-stop plans."""
+    data = cross_race.load_race("2021_04_spain", small_profile())
+    ref = cross_race.reference_stops(data, cross_race.arm_config(cross_race.incumbent("full"), data.config),
+                                     max_stops=2)
+    assert sorted(ref["driver"]) == cross_race.field_drivers(data.frame, data.race.total_laps)
+    assert ref["ref_stops"].isin([1, 2]).all()
+    gap = ref["best_2stop_s"] - ref["best_1stop_s"]
+    assert ((ref["ref_stops"] == 1) == (gap >= 0)).all()
 
 
 def test_wear_check_reads_within_stint_wear_net_of_fuel():

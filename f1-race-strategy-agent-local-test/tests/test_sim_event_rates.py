@@ -321,6 +321,7 @@ def test_selection_rule():
         er.selection(nll, n_boot=200)
 
 
+@pytest.mark.slow
 def test_forward_folds_select_circuit_effects_on_the_rich_world(rich):
     t, chosen, fw, lo = er.both_schemes(rich)
     dry = rich[~rich["wet"]]
@@ -332,6 +333,7 @@ def test_forward_folds_select_circuit_effects_on_the_rich_world(rich):
     assert t.loc[("forward", "circuit_lap1"), "chosen"]
 
 
+@pytest.mark.slow
 def test_forward_folds_fit_on_earlier_races_only(rich):
     dry = rich[~rich["wet"]].reset_index(drop=True)
     fw = er.forward(rich).set_index(["race_id", "candidate"])["nll"]
