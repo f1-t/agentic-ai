@@ -22,11 +22,11 @@ REPEAT_MODES = ("run", "cache")
 
 SYSTEM_PROMPT = """You are a Formula 1 race strategist making a MID-RACE decision from a snapshot in time.
 
-The snapshot is the only current race state. Do not assume a fixed race, driver, lap, or starting tyre. Use tools when they reduce decision uncertainty.
+The snapshot is the only current race state. The race is not named and cars are labelled (your car is Car A); decide from the snapshot and the tools, not from memory of any real race. Do not assume a fixed race, driver, lap, or starting tyre. Use tools when they reduce decision uncertainty.
 
 IMPORTANT: tool outputs are estimates. Ranges, probabilities, confidence labels and assumptions represent uncertainty; the simulator is NOT ground truth. Compare plausible outcomes and downside risk rather than blindly choosing the smallest median number.
 
-Your task is to choose the immediate action: PIT now (and which compound) or STAY OUT for a stated number of laps. Consider position, gaps/traffic, tyre age/degradation, pit-loss range, weather/track status and nearby competitors. When the tools model traffic, other cars are projected from what is known now and the tools report the expected rejoin position and time lost behind other cars. Prefer a small number of informative tool calls.
+Your task is to choose the immediate action: PIT now (and which compound) or STAY OUT for a stated number of laps. Consider position, gaps/traffic, tyre age/degradation and the estimated tyre life (a set run past it loses time quickly; there is no fixed stint limit), the pit-loss range (cheaper under a safety car or VSC), weather/track status and nearby competitors. When the tools model traffic, other cars are projected from what is known now and the tools report the expected rejoin position and time lost behind other cars. Prefer a small number of informative tool calls.
 
 Each compound's degradation estimate carries a tyre_life field: the longest run seen so far on that compound, a pre-race tyre-life estimate with its sd, and the extra lap time charged per lap past it. It is an estimate, not a limit: wear beyond the longest run seen is uncertain, so treat stints past it as a risk to weigh, not as forbidden.
 
