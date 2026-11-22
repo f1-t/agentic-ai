@@ -57,6 +57,12 @@ def _api_tools():
 
 
 def _dispatch(name, args):
+    """The tool's output (or error) as the model is shown it: tools.present maps the real race
+    and driver names to the active snapshot's pseudonyms unless AGENT_SHOW_IDENTITY is on."""
+    return tools.present(_call(name, args))
+
+
+def _call(name, args):
     for spec in tools.TOOL_SPECS:
         if spec["name"] != name:
             continue
@@ -142,7 +148,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     that ran: no submissions, no refused calls, no cached repeats; a re-run repeat counts),
     ``repeat_calls`` (the repeats that were re-run or served from the cache) and, if the
     backend reports usage, the summed ``input_tokens`` and ``output_tokens`` (None when it
-    does not).
+    does not), and ``identity`` (tools.identity(): the real race id and the driver labels the
+    model saw in their place; the model is shown pseudonyms unless AGENT_SHOW_IDENTITY is on).
     """
     if turn_status is None:
         turn_status = os.environ.get("AGENT_TURN_STATUS", "").strip().lower() in {"1", "true", "on"}
@@ -152,7 +159,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                          f"got {repeat_mode!r}")
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
-    stats.update(steps=0, evidence_calls=0, repeat_calls=0, input_tokens=None, output_tokens=None)
+    stats.update(steps=0, evidence_calls=0, repeat_calls=0, input_tokens=None, output_tokens=None,
+                 identity=tools.identity())
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))

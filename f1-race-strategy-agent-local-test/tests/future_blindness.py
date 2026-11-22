@@ -37,12 +37,12 @@ rest is not. Alterations keep every past row as it is, bit for bit and in order:
 test_snapshot_builds_from_the_past_alone checks the stricter cut, every row after T gone
 (no lap in progress either), on which the snapshot builder must still work.
   aggregates  the race frame is untouched; the whole-race constants passed beside it are
-              shifted: RaceParams.pit_loss_s + 6.5 s, the compound list with HARD toggled, the
+              shifted: RaceParams.pit_loss_s + 6.5 s (the compound list is the nominated three since its fix), the
               classification reversed.
 
 Policy-visible surfaces (observe), per snapshot:
 
-  snapshot    the scenario's contracts.Snapshot (calibration.snapshot_at, the scenario
+  snapshot    the scenario's contracts.Snapshot (BUILDER, calibration.snapshot_as_of, the scenario
               builder), the agent's RaceSnapshot view (what run_agent shows the model) and
               agent_tools.contract_of(view)
   belief      the belief simulator's fit at the snapshot (score.race_simulators, belief.yaml):
@@ -122,6 +122,9 @@ REL_TOL, ABS_TOL = 1e-9, 1e-9
 ALTERATIONS = ("truncate", "scramble", "aggregates")
 SURFACES = ("snapshot", "belief", "rules", "tools", "decisions", "baselines")
 OBSERVED_BASELINES = ("fixed_one_stop", "fixed_two_stop", "greedy_crossover", "run_to_flag", "one_stop_total")
+# the scenario builder new sets use (src/eval/scenarios.py, rule as_of); calibration.snapshot_at
+# is the legacy one (the race_length and gap_behind leaks, and it needs a lap L + 1 row)
+BUILDER = calibration.snapshot_as_of
 
 
 # --- race input ---------------------------------------------------------------------------
@@ -443,9 +446,10 @@ def past_rows(laps: pd.DataFrame, driver: str, lap: int) -> pd.DataFrame:
 
 
 def shift_aggregates(data: jobs.RaceData) -> jobs.RaceData:
-    """`data` with the whole-race constants passed beside the frame shifted (module docstring)."""
-    compounds = sorted(set(data.race.compounds) ^ {"HARD"})
-    race = data.race.model_copy(update={"pit_loss_s": data.race.pit_loss_s + 6.5, "compounds": compounds})
+    """`data` with the whole-race constants passed beside the frame shifted (module docstring).
+    RaceParams.compounds is no longer one: since the compound_list fix it is the weekend's
+    nominated dry compounds (calibrate.race_compounds), a regulation constant."""
+    race = data.race.model_copy(update={"pit_loss_s": data.race.pit_loss_s + 6.5})
     results = data.results.copy()
     results["classified"] = results["classified"].to_numpy()[::-1]
     return dataclasses.replace(data, race=race, results=results)
@@ -521,10 +525,12 @@ def _restore_total_laps(orig_snap, alt_snap):
 
 
 KNOWN_LEAKS: dict[str, Leak] = {}
+# leaks whose fix has landed: never neutralised; test_leak_<name> stays as the regression check
+FIXED_LEAKS: dict[str, Leak] = {}
 
 
-def register(leak: Leak):
-    KNOWN_LEAKS[leak.name] = leak
+def register(leak: Leak, fixed: bool = False):
+    (FIXED_LEAKS if fixed else KNOWN_LEAKS)[leak.name] = leak
     return leak
 
 
@@ -534,35 +540,45 @@ register(Leak(
     "pace fit over every lap of the race, so which laps before the snapshot count as clean depends on later laps",
     "src/sim/data.py:316 lap_frame -> robust_filter; read by the to_snapshot fit (src/sim/degradation.py:553) "
     "and ref_lap_s (src/sim/engine.py:277)", "scramble",
-    data=_restore_frame_columns(["clean", "pace_resid_s", "driver_offset_s"])))
+    data=_restore_frame_columns(["clean", "pace_resid_s", "driver_offset_s"])),
+    fixed=True)   # data.as_of_columns on the visible rows (SimConfig.policy_view.clean)
 # Fixed: "pit_loss" (RaceParams.pit_loss_s, the observed pit loss of a full-race replay). Snapshots
 # carry the pre-race prior (calibration.pre_race_pit_loss), the belief and the tools the as-of
 # estimate (src/sim/pit_loss.py); only the world gets the whole-race value. test_leak_pit_loss
 # keeps it as a regression test.
-# Fixed: "stint_limit" (R8's whole-race stint limit) is retired (docs/rules.md R8); tyre life is the
-# wear cliff, the belief's edge placed from what is known at the snapshot (src/sim/cliff.py).
-# test_leak_stint_limit keeps it as a regression test.
-FIXED_LEAKS = ("pit_loss", "stint_limit")
+register(Leak(
+    "pit_loss", "RaceParams.pit_loss_s is the observed pit loss of a full-race replay",
+    "src/sim/jobs.py:98 load_race -> src/sim/calibrate.py:137 _pit_loss (calibration.run observed_pit_loss_s) -> "
+    "snapshot.race; src/sim/engine.py:500, src/sim/agent_tools.py:383", "scramble", data=_restore_race("pit_loss_s")),
+    fixed=True)
+register(Leak(
+    "stint_limit", "R8's stint limit was the oldest tyre age any car ran on the compound in the whole race "
+    "(and, under the compound proxy, whether a compound counts as raced at all)",
+    "retired (docs/rules.md R8): src/sim/rules.py stint_limits and proxy.unraced_limits run only under the "
+    "legacy setting; tyre life is the wear cliff, the belief's edge from what is visible at the snapshot "
+    "(src/sim/cliff.py as_of_cliffs, Simulator.cliffs_for)", "scramble"),
+    fixed=True)
 register(Leak(
     "race_length", "the snapshot's race length is the laps the driver drove in the whole race, so a driver "
     "who will be lapped (or will retire) is told fewer laps remain",
     "src/sim/calibration.py:591 snapshot_at: race.model_copy(update={'total_laps': len(g)})", "scramble",
-    snapshot=_restore_total_laps))
+    snapshot=_restore_total_laps), fixed=True)   # calibration.snapshot_as_of: the scheduled distance
 register(Leak(
     "lap_window", "the belief's to_snapshot window (and the calibrator's laps so far) takes race laps by lap "
     "number, lap <= L, so a slower car's lap L that ends after the snapshot moment is in the fit",
     "src/sim/engine.py:374 _fit_window race[race['lap'] <= k0]; src/sim/engine.py:340 _calibrate", "scramble",
-    data=_restore_lap_window))
+    data=_restore_lap_window), fixed=True)   # Simulator.window_rows: cut by time (policy_view.window_cut)
 register(Leak(
     "gap_behind", "the snapshot's gap to the car behind (and that car in field.nearby) is the car behind's line "
     "crossing, which happens after the snapshot moment",
     "src/sim/calibration.py:585 snapshot_at _gaps(g, k + 1) gap_behind_s; :611 _nearby car behind", "scramble",
-    snapshot=_restore_gap_behind))
+    snapshot=_restore_gap_behind), fixed=True)   # snapshot_as_of: the car behind at the previous crossing
 register(Leak(
     "compound_list", "RaceParams.compounds is every compound in the whole race frame",
     "src/sim/calibrate.py:123 _race_setup compounds=sorted(frame['compound'].unique()) -> src/snapshot.py:84 "
     "(view available_compounds), src/sim/agent_tools.py:255 legal_compounds, src/tools.py:101, "
-    "src/sim/model_report.py:98", "scramble", data=_restore_race("compounds")))
+    "src/sim/model_report.py:98", "scramble", data=_restore_race("compounds")),
+    fixed=True)   # calibrate.race_compounds: the nominated dry three
 
 
 # --- one altered race, with known leaks neutralised ---------------------------------------------
@@ -713,23 +729,37 @@ def _belief_surface(belief, snap):
     }
 
 
+def _shown(fn, *a):
+    """A src/tools.py output (or the error it raised) as the model is shown it: through
+    tools.present, as agent._dispatch passes every tool output and error string."""
+    try:
+        return plain(tools.present(plain(fn(*a))))
+    except Exception as exc:   # noqa: BLE001  an error is an output like any other
+        return plain(tools.present(_err(exc)))
+
+
+# entries of the tools surface that are agent_tools internals, not a tool the model calls
+MODEL_UNSEEN_TOOLS = ("race_state", "simulate_plan/")
+
+
 def _tools_surface(snap):
-    """src/tools.py as the agent calls it, then agent_tools' race_state and simulate_plan."""
+    """src/tools.py as the agent calls it (and is shown it, _shown), then agent_tools' race_state
+    and simulate_plan, which no model sees (MODEL_UNSEEN_TOOLS)."""
     tools.set_snapshot(snap)
     cur, rest = snap.compound, snap.remaining_laps
     script = plan_script(snap)
-    out = {"get_race_snapshot": _call(tools.get_race_snapshot),
-           "estimate_pit_loss": _call(tools.estimate_pit_loss),
-           "get_model_report": _call(tools.get_model_report, {c: 40 for c in DRY})}
+    out = {"get_race_snapshot": _shown(tools.get_race_snapshot),
+           "estimate_pit_loss": _shown(tools.estimate_pit_loss),
+           "get_model_report": _shown(tools.get_model_report, {c: 40 for c in DRY})}
     for c in (*DRY, "INTERMEDIATE"):
-        out[f"estimate_tyre_degradation/{c}"] = _call(tools.estimate_tyre_degradation, c)
+        out[f"estimate_tyre_degradation/{c}"] = _shown(tools.estimate_tyre_degradation, c)
     cands = [script[k] for k in script if not k.startswith("two_stop")]
     cands += [{"action": "pit", "compound": c} for c in DRY] + [{"action": "stay_out", "laps": 3}]
-    out["compare_plans"] = _call(tools.compare_plans, cands)
+    out["compare_plans"] = _shown(tools.compare_plans, cands)
     for c in DRY:
-        out[f"evaluate_strategy/pit_{c}"] = _call(tools.evaluate_strategy, {"action": "pit", "compound": c})
+        out[f"evaluate_strategy/pit_{c}"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": c})
     for n in (1, 3):
-        out[f"evaluate_strategy/stay_out_{n}"] = _call(tools.evaluate_strategy, {"action": "stay_out", "laps": n})
+        out[f"evaluate_strategy/stay_out_{n}"] = _shown(tools.evaluate_strategy, {"action": "stay_out", "laps": n})
     out["race_state"] = _call(agent_tools.race_state, snap)
     for k, p in script.items():
         if k.startswith(("too_", "single")):
@@ -778,15 +808,16 @@ def serving(data: jobs.RaceData, extra=()):
 def observe(data: jobs.RaceData, driver: str, lap: int, *, snapshot_fix=None, patches=()) -> dict:
     """Every policy-visible surface (SURFACES) at (driver, lap) of `data`. `snapshot_fix`
     rewrites the built snapshot first (a known leak's neutraliser)."""
-    snap = calibration.snapshot_at(data.frame, data.race, driver, lap)
+    snap = BUILDER(data.frame, data.race, driver, lap)
     if snapshot_fix is not None:
         snap = snapshot_fix(snap)
     view = RaceSnapshot.from_contract(snap)
+    shown = tools.set_snapshot(snap)   # what the model is shown (anonymised unless AGENT_SHOW_IDENTITY)
     scenario = Scenario(scenario_id=f"{data.race_id}:{driver}:{lap:02d}", race_id=data.race_id, driver=driver,
                         lap=lap, snapshot=snap, actual_stints=[])
     with serving(data, patches):
         belief = score.race_simulators(PROFILE)(data.race_id, "belief")
-        out = {"snapshot": {"contract": plain(snap), "view": plain(view.to_dict()),
+        out = {"snapshot": {"contract": plain(snap), "view": plain(shown.to_dict()),
                             "contract_of_view": _call(agent_tools.contract_of, view)}}
         out["belief"] = _belief_surface(belief, snap)
         out["rules"] = _rules_surface(belief, snap)
@@ -987,7 +1018,7 @@ def check(inp: RaceInput, orig: jobs.RaceData, points, alteration: str, neutrali
         data, snapshot_fix, patches = altered(inp, orig, alteration, driver, lap, neutralise)
         if (driver, lap) not in recorded:
             recorded[driver, lap] = observe(orig, driver, lap)
-        snap = calibration.snapshot_at(orig.frame, orig.race, driver, lap)
+        snap = BUILDER(orig.frame, orig.race, driver, lap)
         alt = observe(data, driver, lap, snapshot_fix=snapshot_fix(snap), patches=patches)
         out += compare(recorded[driver, lap], alt, f"{orig.race_id}:{driver}:{lap} [{alteration}]")
     return out

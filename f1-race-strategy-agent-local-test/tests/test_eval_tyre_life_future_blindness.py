@@ -24,7 +24,26 @@ from src.sim.data import CACHE_DIR
 from src.sim.optimizer_bridge import optimize_batch
 from test_sim import RACE as SYN_RACE
 from test_sim import synthetic_practice
-from test_sim_agent_tools import PROFILE, outputs, syn_frame
+from test_sim_agent_tools import PROFILE, syn_frame
+
+
+def outputs(sim, snap):
+    """Every agent tool's output for one snapshot, as JSON text."""
+    kw = {"sim": sim, "profile": PROFILE}
+    rest = snap.remaining_laps
+    out = {
+        "race_state": agent_tools.race_state(snap, config=sim.config),
+        "model_report": agent_tools.model_report(snap, ages={"MEDIUM": 30}, **kw),
+        "pit_loss": agent_tools.pit_loss(snap, **kw),
+        "simulate_plan": agent_tools.simulate_plan(snap, [["SOFT", 5], ["MEDIUM", rest - 5]], **kw),
+        "compare_plans": agent_tools.compare_plans(
+            snap, [[["SOFT", 5], ["MEDIUM", rest - 5]], {"action": "stay_out", "laps": 2},
+                   {"action": "pit", "compound": "MEDIUM"}], **kw),
+        "evaluate_pit": agent_tools.evaluate_action(snap, {"action": "pit", "compound": "MEDIUM"}, **kw),
+        "evaluate_stay": agent_tools.evaluate_action(snap, {"action": "stay", "laps": 3}, **kw),
+        "evaluate_long_stay": agent_tools.evaluate_action(snap, {"action": "stay", "laps": 25}, **kw),
+    }
+    return {name: json.dumps(v, sort_keys=True, allow_nan=False, default=str) for name, v in out.items()}
 
 BELIEF = agent_tools.belief_config()
 LEGACY = {"stint_limit_margin_laps": 3, "wear_cliff": {"enabled": False}}
@@ -123,7 +142,8 @@ def test_belief_cliff_never_below_what_was_seen_and_grows_with_the_race():
     for k in (5, 15, 30, 45):
         snap = calibration.snapshot_at(df, SYN_RACE, DRIVER, k)
         cl = sim.cliffs_for(snap)
-        seen = df[df["lap"] <= k].groupby("compound")["tyre_age"].max()
+        # the rows visible when the driver completes lap k (the fit window's time cut)
+        seen = sim.fitted_for(snap).window_rows(snap, k).groupby("compound")["tyre_age"].max()
         for c, a in seen.items():
             assert cl[c].lower >= a and cl[c].age >= a
         ages.append(cl["MEDIUM"].lower)
@@ -136,7 +156,9 @@ def test_tools_report_tyre_life_as_an_estimate():
     rep = agent_tools.model_report(snap, sim=_sim(df, BELIEF), profile=PROFILE)
     life = rep["compounds"]["SOFT"]["tyre_life"]
     assert "longest run seen so far on this compound" in life["note"] and "uncertain" in life["note"]
-    assert life["longest_run_seen_laps"] == df[(df["lap"] <= k) & (df["compound"] == "SOFT")]["tyre_age"].max()
+    sim = _sim(df, BELIEF)
+    rows = sim.fitted_for(snap).window_rows(snap, k)
+    assert life["longest_run_seen_laps"] == rows.loc[rows["compound"] == "SOFT", "tyre_age"].max()
 
 
 @pytest.mark.slow

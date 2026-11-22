@@ -138,7 +138,7 @@ def test_the_past_ends_at_the_snapshot_moment_not_at_a_lap_number(race_id):
 def test_aggregates_shift_every_whole_race_constant():
     _, orig, _ = race(SYNTHETIC)
     alt = fb.shift_aggregates(orig)
-    assert alt.race.pit_loss_s != orig.race.pit_loss_s and alt.race.compounds != orig.race.compounds
+    assert alt.race.pit_loss_s != orig.race.pit_loss_s   # compounds: the nominated three, not a race aggregate
     assert not alt.results["classified"].equals(orig.results["classified"])
     pd.testing.assert_frame_equal(alt.frame, orig.frame)
 
@@ -177,6 +177,8 @@ def test_future_blind_small_real_race():
 # --- the known leaks, one test each: expected failures until fixed ------------------------------
 def _leak_params(name, leaking):
     """Races for test_leak_<name>, xfail (strict) on those where the leak shows today."""
+    if name in fb.FIXED_LEAKS:   # fixed: a plain regression check
+        return [_race(r) for r in POINTS]
     lk = fb.KNOWN_LEAKS[name]
     reason = f"known leak {name}: {lk.what} ({lk.where})"
     return [_race(r, *([pytest.mark.xfail(strict=True, reason=reason)] if r in leaking else [])) for r in POINTS]
@@ -184,7 +186,8 @@ def _leak_params(name, leaking):
 
 def _leak(name, race_id):
     """The leak's alteration with every other known leak neutralised: no difference once it is fixed."""
-    diffs = differences(race_id, fb.KNOWN_LEAKS[name].alteration, [n for n in fb.KNOWN_LEAKS if n != name])
+    lk = fb.KNOWN_LEAKS.get(name) or fb.FIXED_LEAKS[name]
+    diffs = differences(race_id, lk.alteration, [n for n in fb.KNOWN_LEAKS if n != name])
     assert not diffs, report(diffs)
 
 
@@ -241,8 +244,8 @@ SNAPSHOT_NEXT_ROW = ("calibration.snapshot_at needs rows from after the snapshot
                      "gaps off the lap k + 1 row (:585 _gaps) and the car behind off lap k + 1 rows (:602 _nearby)")
 
 
-@pytest.mark.parametrize("race_id", [_race(r, pytest.mark.xfail(strict=True, reason=SNAPSHOT_NEXT_ROW))
-                                     for r in POINTS])
+# fixed: fb.BUILDER (calibration.snapshot_as_of) reads rows completed by the moment only
+@pytest.mark.parametrize("race_id", [_race(r) for r in POINTS])
 def test_snapshot_builds_from_the_past_alone(race_id):
     """The snapshot built from a race cut at the snapshot moment (every row that ends after it
     gone, the lap in progress too) is the recorded snapshot, the known leaks neutralised. Lap 0
@@ -250,11 +253,11 @@ def test_snapshot_builds_from_the_past_alone(race_id):
     inp, orig, _ = race(race_id)
     failures = []
     for driver, lap in [p for p in POINTS[race_id] if p[1] > 0]:
-        want = fb.plain(fb.calibration.snapshot_at(orig.frame, orig.race, driver, lap))
+        want = fb.plain(fb.BUILDER(orig.frame, orig.race, driver, lap))
         try:
             data, fix, _ = fb.altered(inp, orig, "cut", driver, lap, list(fb.KNOWN_LEAKS))
-            snap = fb.calibration.snapshot_at(data.frame, data.race, driver, lap)
-            fixer = fix(fb.calibration.snapshot_at(orig.frame, orig.race, driver, lap))
+            snap = fb.BUILDER(data.frame, data.race, driver, lap)
+            fixer = fix(fb.BUILDER(orig.frame, orig.race, driver, lap))
             got = fb.plain(fixer(snap) if fixer else snap)
         except Exception as exc:   # noqa: BLE001  a failure to build is the finding
             failures.append(f"{driver}:{lap}: {type(exc).__name__}: {exc}")
@@ -271,7 +274,8 @@ SELECTION = ("the scenario sampler picks with the whole race: eligible drivers a
              "before the driver's last lap (src/eval/scenarios.py:137 decision_laps)")
 
 
-@pytest.mark.parametrize("race_id", [_race(r, pytest.mark.xfail(strict=True, reason=SELECTION)) for r in POINTS])
+# fixed: sample_race's default rule "as_of" (src/eval/scenarios.py decision_laps_as_of)
+@pytest.mark.parametrize("race_id", [_race(r) for r in POINTS])
 def test_scenario_selection_up_to_the_moment(race_id):
     """The scenarios the sampler picks with a decision lap <= L are the same in the recorded
     and the scrambled race."""
@@ -290,16 +294,19 @@ IDENTITY = ("no switch hides the real race: the agent's view carries season, eve
             "race id reaches the tool outputs (src/snapshot.py:71 from_contract; src/sim/agent_tools.py race_state)")
 
 
-@pytest.mark.parametrize("race_id", [_race(r, pytest.mark.xfail(strict=True, reason=IDENTITY)) for r in REAL])
-def test_no_real_identity_reaches_the_agent(race_id):
+# fixed: the model sees pseudonyms (src/snapshot.py anonymised, src/tools.py present), AGENT_SHOW_IDENTITY off
+@pytest.mark.parametrize("race_id", [_race(r) for r in REAL])
+def test_no_real_identity_reaches_the_agent(race_id, monkeypatch):
     """The view shown to the agent and every tool output and error string (the recorded
     observation at the race's first point) name no season, event, circuit or real driver code."""
+    monkeypatch.delenv("AGENT_SHOW_IDENTITY", raising=False)
     inp, orig, recorded = race(race_id)
     driver, lap = POINTS[race_id][0]
     if (driver, lap) not in recorded:
         recorded[driver, lap] = fb.observe(orig, driver, lap)
     obs = recorded[driver, lap]
-    hits = fb.identity_hits({"snapshot": obs["snapshot"]["view"], "tools": obs["tools"]}, race_id, orig.frame)
+    shown = {k: v for k, v in obs["tools"].items() if not k.startswith(fb.MODEL_UNSEEN_TOOLS)}
+    hits = fb.identity_hits({"snapshot": obs["snapshot"]["view"], "tools": shown}, race_id, orig.frame)
     assert not hits, "\n".join(f"{p}: {t!r}" for p, t in hits[:20])
 
 

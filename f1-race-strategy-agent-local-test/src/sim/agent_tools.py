@@ -427,7 +427,8 @@ def _tyre_life(life) -> dict:
     seen_src = life.seen_source if life.prior is not None else life.source
     return {"longest_run_seen_laps": seen if seen_src is not None else None, "seen_source": seen_src,
             "prior_life_laps": life.prior, "prior_sd_laps": life.prior_sd if life.prior is not None else None,
-            "prior_source": life.source if life.prior is not None else None,
+            # the tier only: a source never names an earlier race (the agent's view is anonymous)
+            "prior_source": str(life.source).split(":")[0] if life.prior is not None else None,
             "cost_past_life_s_per_lap": f"min({life.kappa:g} x laps_past^2, {life.cap:g})",
             "note": _cliff.describe(life)}
 

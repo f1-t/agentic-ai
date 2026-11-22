@@ -295,19 +295,19 @@ def life_prior(race_id, total_laps, wc) -> dict[str, tuple[float, float, str]]:
     return out
 
 
-def as_of_cliffs(laps, practice, race, horizon: int, wc) -> dict[str, Cliff]:
-    """The belief's cliffs for `race` (RaceParams) known at lap `horizon` (module docstring,
-    belief): nothing after lap `horizon` is read. The horizon is the fit's calibration point,
-    never an advanced snapshot's lap, whose laps are a plan's hypothetical future. Per compound
-    the age observed so far (practice and race laps up to the horizon, every car) is a lower
-    bound, the pre-race prior (life_prior) a wide estimate: the cliff age of a sample is
+def as_of_cliffs(rows, practice, race, wc) -> dict[str, Cliff]:
+    """The belief's cliffs for `race` (RaceParams) from `rows`, the race rows visible at the fit's
+    calibration point (Simulator.window_rows: cut by session time, the same cut as the fit;
+    never an advanced snapshot's laps, which are a plan's hypothetical future), and this weekend's
+    practice (module docstring, belief). Per compound the age observed so far is a lower bound,
+    the historical prior (history_prior) a wide estimate: a sample's edge is
     max(lower, prior + sd z)."""
     seen: dict[str, tuple[float, str]] = {}
 
     def offer(c, a, src):
         if c not in seen or a > seen[c][0]:
             seen[c] = (float(a), src)
-    so_far = oldest_ages(laps, upto_lap=horizon)
+    so_far = oldest_ages(rows)
     for c, a in so_far.items():
         offer(c, a, "race_so_far")
     for c, a in oldest_ages(practice).items():
@@ -334,7 +334,7 @@ def describe(cliff: Cliff) -> str:
             if src in where else "no run seen on this compound yet; ")
     if cliff.prior is not None:
         text += (f"pre-race tyre-life estimate {cliff.prior:.0f} laps (sd {cliff.prior_sd:.0f}, "
-                 f"{cliff.source}); ")
+                 f"{str(cliff.source).split(':')[0]}); ")
     return text + "wear beyond that is uncertain"
 
 
