@@ -2231,7 +2231,7 @@ scheduled distance. Options: `--drivers` (B drivers per
 race, 6), `--every` (B snapshot spacing, 5 laps), `--samples` (draws, 20), `--coverage` (100
 draws), `--n-one` / `--n-two` (panel density), `--no-lodo`, `--no-loso`,
 `--no-grid-references`, `--no-hindsight-variants`, `--no-components`, `--no-future-blindness`,
-`--jobs`, `--cache` (default `<out>/.cache`, keyed by race, section, config hash, code version
+`--jobs`, `--only` (ablate: run only the named factors beside the base, `all_on` to keep it), `--cache` (default `<out>/.cache`, keyed by race, section, config hash, code version
 and options, so an ablation reuses the base and a belief-only change reuses the judge's
 Section A). Every race in `data/eval_set.json` is refused before anything is loaded, with no
 override. A race or configuration that fails is reported and left out, never fatal. Races run

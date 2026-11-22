@@ -1,5 +1,7 @@
 # Simulator fidelity ablation
 
+STALE: computed on main 42abdb5, before the wear cliff, the retired R8 and traffic. The f7be251 ablation replaces it.
+
 There are two simulators. The JUDGE (the eval's "world") scores every plan and builds the
 reference: it should be as close as possible to what really happened while using as little
 hindsight as it can. The PREDICTIVE simulator (the "belief") is what the agent, its tools and the

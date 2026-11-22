@@ -279,3 +279,12 @@ def test_ledger_follows_the_wear_cliff_edge():
     belief = _by_id(fidelity.ledger(SimConfig.from_file(fidelity.BELIEF_FILE), "predictive"))
     assert belief["cliff_edge"]["tag"] == "this race, to snapshot"
     assert "stint_limit" not in belief   # R8 retired
+
+
+def test_only_runs_the_named_factors():
+    ab = {"factors": {"a": {"both": {"degradation": {"name": "linear_fuel_hinge"}}},
+                      "b": {"world": {"wear_cliff": {"world_edge": "race"}}}}, "all_on": ["a", "b"]}
+    assert [s.label for s in fidelity.ablation_specs(_spec(), ab, only=["b"])] == ["base", "b"]
+    assert [s.label for s in fidelity.ablation_specs(_spec(), ab, only=["b", "all_on"])] == ["base", "b", "all_on"]
+    with pytest.raises(ValueError, match="unknown"):
+        fidelity.ablation_specs(_spec(), ab, only=["c"])

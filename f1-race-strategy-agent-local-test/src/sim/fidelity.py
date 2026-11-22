@@ -2199,17 +2199,26 @@ def factor_absent(f: dict) -> str | None:
     return None
 
 
-def ablation_specs(base: Spec, ab: dict, skipped=None) -> list[Spec]:
+def ablation_specs(base: Spec, ab: dict, skipped=None, only=None) -> list[Spec]:
     """The base, each factor present on this branch alone, and all_on (its present factors). A
-    factor whose switch is absent (factor_absent) is skipped and listed in `skipped`."""
+    factor whose switch is absent (factor_absent) is skipped and listed in `skipped`. `only`
+    (factor names, "all_on" among them to keep it) runs those alone beside the base; an unknown
+    name is an error."""
     specs = [replace(base, label="base")]
-    factors = ab.get("factors") or {}
-    absent = {n: why for n, f in factors.items() if (why := factor_absent(f))}
+    factors = every = ab.get("factors") or {}
+    if only:
+        unknown = sorted(set(only) - set(factors) - {"all_on"})
+        if unknown:
+            raise ValueError(f"--only: unknown factors {unknown}; the spec has {sorted(factors)} and all_on")
+        if "all_on" not in only:
+            ab = {**ab, "all_on": []}
+        factors = {n: f for n, f in factors.items() if n in only}
+    absent = {n: why for n, f in every.items() if (why := factor_absent(f))}
     if skipped is not None:
         skipped.extend({"factor": n, "reason": why} for n, why in absent.items())
 
     def apply(spec, name):
-        f = factors[name]
+        f = every[name]
         w, b = _factor_overlays(f)
         return spec.with_factor(spec.label, world=w, belief=b, world_race=f.get("world_race"))
     for name in factors:
@@ -2350,6 +2359,8 @@ def main(argv=None):
     a = sub.add_parser("ablate", help="base, each factor alone, all on: one table")
     _common(a)
     a.add_argument("--spec", default=str(ABLATION_SPEC))
+    a.add_argument("--only", nargs="+", default=None,
+                   help="run only these factors of the spec beside the base (add all_on to keep it)")
     a.add_argument("--n-boot", type=int, default=N_BOOT)
     lg = sub.add_parser("ledger", help="print the hindsight ledger of a configuration")
     lg.add_argument("--world", default=DEFAULT_WORLD)
@@ -2385,7 +2396,7 @@ def main(argv=None):
         return 0
     ab = load_ablation(args.spec)
     skipped, failures = [], []
-    specs = ablation_specs(replace(spec, label="base"), ab, skipped)
+    specs = ablation_specs(replace(spec, label="base"), ab, skipped, only=args.only)
     for sk in skipped:
         print(f"  factor {sk['factor']} skipped: {sk['reason']}")
     print(f"fidelity ablate: {len(specs)} configurations x {len(races)} races")
