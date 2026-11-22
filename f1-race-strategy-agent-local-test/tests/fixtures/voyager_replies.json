@@ -12,5 +12,11 @@
  "malformed": [
   "{\"tool_calls\": [{\"name\": \"evaluate_strategy\", \"arguments\": {\"action\": {\"action\": \"pit\", \"compound\": \"MEDIUM\"}}}, {\"name\": \"evaluate_strategy\", \"arguments\": {\"action\": {\"action\": \"stay_out\", \"laps\": 3}}}, {\"name\": \"compare_plans\", \"arguments\": {\"candidates\": [[{\"compound\": \"MEDIUM\", \"laps\": 3}, {\"compound\": \"SOFT\", \"laps\": 52}], [{\"compound\": \"SOFT\", \"laps\": 3}, {\"compound\": \"MEDIUM\", \"laps\": 52}]]}}}]}",
   "{\"tool_calls\": [{\"name\": \"compare_plans\", \"arguments\": {\"candidates\": [{\"action\": \"pit\", \"compound\": \"MEDIUM\"}, {\"action\": \"stay_out\", \"laps\": 3}, {\"action\": \"stay_out\", \"laps\": 5}]}]}}]}"
+ ],
+ "several_envelopes_last_misclosed": [
+  "{\"tool_calls\": [{\"name\": \"evaluate_strategy\", \"arguments\": {\"action\": {\"action\": \"stay_out\", \"laps\": 3}}}]}\n\n{\"tool_calls\": [{\"name\": \"submit_recommendation\", \"arguments\": {\"decision\": \"STAY_OUT\", \"compound\": null, \"reassess_after_laps\": 3, \"confidence\": 0.95, \"rationale\": \"The current MEDIUM tyre has low degradation (median 0.007 s/lap) and is within its life (age 19, max seen 35). The 3-lap minimum stint rule prevents any pit stop now. STAY_OUT for the final 3 laps is the only legal option and avoids pit-loss (median 23.5s) and risk of a slow stop under SC. The model shows no significant time gain from pitting, and the current tyre is still performing well.\", \"key_risks\": [\"Tyre degradation accelerates beyond modelled rate\", \"Unexpected SC/VSC during final laps\", \"Car B or C gains significant time on fresh tyres\"]}}}"
+ ],
+ "bare_submission_empty_envelope": [
+  "{\"decision\": \"STAY_OUT\", \"compound\": null, \"reassess_after_laps\": 7, \"confidence\": 0.94, \"rationale\": \"STAY_OUT 7 laps is faster than PIT SOFT in 94% of draws (gap: -15.8 s, 90%: -36.7 to +1.0 s). The alternative of PIT now is dominated. The model shows no significant performance difference between staying out for 7 or 10 laps, but 7 laps is sufficient to avoid degradation on HARD tyres while maintaining a strong position. No traffic or safety car risk is currently projected.\", \"key_risks\": [\"Unexpected safety car or VSC in next 5 laps\"], \"tool_calls\": []}"
  ]
 }

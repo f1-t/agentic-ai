@@ -107,6 +107,7 @@ def test_score_set_stamps_both_hashes_and_the_belief_window(world, belief):
     assert "config_hash" not in rows
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_race_simulators_default_roles():
     from src.eval.score import race_simulators

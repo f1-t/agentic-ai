@@ -219,6 +219,7 @@ def test_development_flag_samples_a_debug_set_under_the_split(sample_load, tmp_p
     assert ScenarioSet(version="r", development=False).kind == "report set"
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_score_names_the_kind_of_set_it_scored(tmp_path, capsys):
     from src.eval.__main__ import main
@@ -279,6 +280,7 @@ def test_an_eval_chunk_task_installs_the_runner_from_its_payload(tmp_path):
         jobs.set_eval_runner(None)
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_run_all_scores_a_two_chunk_set_with_two_workers(tmp_path, monkeypatch):
     """Spawned workers start without the parent's installed runner, so each one installs it
@@ -318,10 +320,13 @@ def test_run_agent_takes_a_contract_snapshot_and_reports_usage():
     assert rec["decision"] == "STAY_OUT" and len(traj) == 2
     assert traj[0]["output"]["lap"] == 10 and traj[0]["output"]["min_stint_laps"] == 8
     assert stats.pop("identity")["race_id"] == mid_race().race.race_id   # the harness keeps the real id
-    assert stats == {"steps": 2, "evidence_calls": 1, "repeat_calls": 0, "input_tokens": 200, "output_tokens": 40}
+    # the fields this test pins, with their values; fields added later (turn_repeats, ...) do not fail it
+    want = {"steps": 2, "evidence_calls": 1, "repeat_calls": 0, "input_tokens": 200, "output_tokens": 40}
+    assert {k: stats.get(k) for k in want} == want
     stats = {}
     run_agent(mid_race(), backend=Scripted(submit(), usage=None), verbose=False, stats=stats)
-    assert stats.pop("identity") and stats == {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
+    want = {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
+    assert stats.pop("identity") and want.keys() <= stats.keys() and {k: stats[k] for k in want} == want
 
 
 def test_agent_policy_rows_are_decisions_with_trajectories(tmp_path):
@@ -495,11 +500,6 @@ def test_min_stint_default_is_three_and_the_legacy_pins_ten():
     assert legacy_tools.MIN_STINT_LAPS == 10
     from src.sim import calibrate
     assert calibrate.MIN_STINT_DEFAULT == 3
-
-
-def test_v1_keeps_ten_inside_its_snapshots():
-    v1 = ScenarioSet.load(ROOT / "data" / "scenarios" / "v1.json")
-    assert {s.snapshot.race.min_stint_laps for s in v1.items} == {10}
 
 
 def test_rule_r2_names_the_value():

@@ -153,7 +153,15 @@ def read_config_file(path) -> tuple[dict, list]:
 
 
 def merge(base: dict, overlay: dict) -> dict:
-    return cross_race._merge(copy.deepcopy(base), copy.deepcopy(overlay or {}))
+    """`overlay` deep-merged onto `base`, except that an overlay naming another events model replaces
+    the events block: event params belong to their model (hybrid's lap_times is no RateEvents
+    field), so switching the default hybrid world to "rate" or "none" must not carry them over."""
+    out = cross_race._merge(copy.deepcopy(base), copy.deepcopy(overlay or {}))
+    ev, was = (overlay or {}).get("events"), (base or {}).get("events")
+    if isinstance(ev, dict) and isinstance(was, dict) and ev.get("name", was.get("name")) != was.get("name"):
+        out["events"] = {**{k: v for k, v in out["events"].items() if k not in ("name", "params")},
+                         "name": ev["name"], "params": copy.deepcopy(ev.get("params") or {})}
+    return out
 
 
 @dataclass
@@ -1028,7 +1036,10 @@ def section_b(data, spec: Spec, opts: Options, belief=None, world=None, pool=())
         for k in range(opts.b_every, nlaps - data.race.min_stint_laps, opts.b_every):
             if not (g["lap"] == k).any():
                 continue
-            snap = build(data.frame, data.race, d, k)
+            try:
+                snap = build(data.frame, data.race, d, k)
+            except ValueError:   # no snapshot here (a set with no recorded compound): skipped, as sample_race does
+                continue
             # the judge scores the policy's snapshot (its pit loss comes from race_pit_loss_s), with any
             # other RaceParams the spec overrides
             other = {k: v for k, v in spec.world_race.items() if k != "pit_loss_s"}

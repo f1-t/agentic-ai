@@ -468,11 +468,18 @@ class SimConfig(_Cfg):
 # overlays for the scorecard's ablation: configs/sim/world_de.yaml and world_de_hinge.yaml. The
 # SimConfig default stays linear_fuel, the comparator the cross-race arms are overlays on.
 WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}}
+# The eval world's tyre-life edge (WearCliff.world_edge): "history_only", the historical prior both
+# simulators share and nothing from this race. Chosen by the fidelity scorecard (docs/eval.md "What
+# the ablation says"): close-pair order +0.025 [+0.000, +0.060] against "history" on 18 races, and
+# no hindsight. The SimConfig default stays "history"; the eval world sets it here. The earlier
+# world (edge "history") is configs/sim/legacy/world_pre_scorecard.yaml.
+WORLD_EDGE = "history_only"
 
 
 def world_default(config: "SimConfig") -> "SimConfig":
-    """`config` with the eval world's wear fit (WORLD_DEGRADATION)."""
-    return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION)})
+    """`config` with the eval world's wear fit (WORLD_DEGRADATION) and tyre-life edge (WORLD_EDGE)."""
+    return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION),
+                                     "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE})})
 
 
 def compound_class(config, compound) -> str:

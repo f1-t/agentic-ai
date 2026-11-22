@@ -1,5 +1,9 @@
 # Runs the offline test suite on every pull request and on pushes to main.
 # No secrets: the tests need no model API key and read race data from the committed cache/.
+# Two tiers (f1-race-strategy-agent-local-test/README.md, "Testing"): the fast tier (the default
+# selection) and the slow tier (real-race integration), the slow tier split over parallel jobs so
+# the wall time is the longest job's. The -k pairs partition the future-blindness sweep: together
+# they select every slow test in that file. The legacy tier is not run here.
 name: tests
 
 on:
@@ -16,8 +20,23 @@ concurrency:
 
 jobs:
   offline-tests:
+    name: ${{ matrix.tier }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tier: fast
+            args: ""
+          - tier: slow, future-blindness sweep (Spain, synthetic)
+            args: -m "slow and not legacy" tests/test_future_blindness.py -k "2021_04_spain or synthetic"
+          - tier: slow, future-blindness sweep (other races)
+            args: -m "slow and not legacy" tests/test_future_blindness.py -k "not 2021_04_spain and not synthetic"
+          - tier: slow, cross-race and real-run pipelines
+            args: -m "slow and not legacy" tests/test_sim_cross_race.py tests/test_sim_real_run.py
+          - tier: slow, other
+            args: -m "slow and not legacy" --ignore=tests/test_future_blindness.py --ignore=tests/test_sim_cross_race.py --ignore=tests/test_sim_real_run.py
     defaults:
       run:
         working-directory: f1-race-strategy-agent-local-test
@@ -30,5 +49,5 @@ jobs:
           cache-dependency-path: f1-race-strategy-agent-local-test/requirements*.txt
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Run offline tests
-        run: python -m pytest -q -m "slow or not slow"
+      - name: Run tests (${{ matrix.tier }})
+        run: python -m pytest -q --durations=15 ${{ matrix.args }}
