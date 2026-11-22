@@ -70,6 +70,17 @@ def _field_codes(contract) -> set[str]:
     return codes
 
 
+def _schedule_names(season, rnd) -> set[str]:
+    """The cached schedule's event name, country and location for (season, round); empty when
+    the schedule is not cached."""
+    from .sim.data import season_schedule
+    sched = season_schedule(season)
+    if sched is None:
+        return set()
+    row = sched[sched["RoundNumber"] == int(rnd)]
+    return {str(row.iloc[0][c]) for c in ("EventName", "Country", "Location")} if len(row) else set()
+
+
 def _scrub_rules(contract, view, labels) -> list:
     """present()'s replacements: the race id, its season and event slug (and any year), each
     labelled driver code by its label, every other code of the field by OTHER_LABEL."""
@@ -79,8 +90,9 @@ def _scrub_rules(contract, view, labels) -> list:
     names = {rid, canonical_race_id(rid)}
     words = set()
     try:
-        _, _, slug = parse_race_id(canonical_race_id(rid))
+        season, rnd, slug = parse_race_id(canonical_race_id(rid))
         words |= {slug, slug.replace("_", " ")}
+        words |= _schedule_names(season, rnd)
     except ValueError:
         pass
     if view.event:

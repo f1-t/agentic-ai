@@ -320,10 +320,18 @@ def test_race_compounds_sources():
         calibrate.race_compounds(f, "practice")
 
 
-def test_snapshot_as_of_skips_in_laps_and_cars_not_running():
+def test_snapshot_as_of_on_an_in_lap_and_for_a_car_not_running():
     f = derive_columns(raw_race())
-    with pytest.raises(ValueError, match="in-lap"):
-        calibration.snapshot_as_of(f, race_for(f), "AAA", 14)
+    snap = calibration.snapshot_as_of(f, race_for(f), "AAA", 14)   # AAA's in-lap: MEDIUM goes on
+    old = calibration.snapshot_at(f, race_for(f), "AAA", 14)
+    assert (snap.compound, snap.tyre_age, snap.stints) == (old.compound, old.tyre_age, old.stints)
+    assert snap.compound == "MEDIUM" and [s.compound for s in snap.stints] == ["SOFT"]
+    # the stop is visible, the out-lap's time is not: the snapshot is the same without that row's end
+    cut = f.copy()
+    cut.loc[(cut["driver"] == "AAA") & (cut["lap"] == 15), ["lap_time_s", "end_s"]] = np.nan
+    assert calibration.snapshot_as_of(cut, race_for(f), "AAA", 14) == snap
+    with pytest.raises(ValueError, match="no set"):
+        calibration.snapshot_as_of(f[~((f["driver"] == "AAA") & (f["lap"] > 14))], race_for(f), "AAA", 14)
     with pytest.raises(ValueError, match="not running"):
         calibration.snapshot_as_of(f[f["lap"] <= 20], race_for(f), "AAA", 25)
 
@@ -387,11 +395,11 @@ def test_as_of_decision_laps_read_nothing_after_each_lap(race_frames):
         return out
     assert known(full) == known(scr)
     assert {k for c, k in known(full) if c == D} == {0, 5, 10}
-    # SC laps and the first green lap after them, from the driver's own record
-    assert {30, 31, 32, 33} <= set(decision_laps_as_of(full, race, D))
+    # with `neutralised`: SC laps and the first green lap after them, from the driver's own record
+    assert {30, 31, 32, 33} <= set(decision_laps_as_of(full, race, D, neutralised=True))
     # the legacy rule drops the car that retires and the lap before the SC
     assert "BBB" not in eligible_drivers(scr, TOTAL) and "BBB" in eligible_drivers(full, TOTAL)
-    assert 29 in calibration.default_laps_k(full, TOTAL) and 29 not in decision_laps_as_of(full, race, D)
+    assert 29 in calibration.default_laps_k(full, TOTAL) and 29 not in decision_laps_as_of(full, race, D, neutralised=True)
 
 
 def test_sample_race_as_of_keeps_a_car_that_later_retires(race_frames):

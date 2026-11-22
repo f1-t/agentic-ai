@@ -10,7 +10,7 @@ sampling, the builder or the race list changes; never edit a published file.
 Sampling, per race, under sampling["rule"] (docs/eval.md "Information contract"):
 
   as_of   (the default for new sets) every driver still running at the decision lap, at
-          decision_laps_as_of (every 5th lap plus the laps a neutralisation is in progress or
+          decision_laps_as_of (every 5th lap; optionally the laps a neutralisation is in progress or
           has just ended, read off the driver's own record up to that lap), snapshots by
           calibration.snapshot_as_of (scheduled distance, nominated compounds, records
           completed by the decision moment only). A driver who later retired or was lapped
@@ -163,18 +163,23 @@ def _neutralised(status) -> bool:
     return "4" in s or "6" in s or "7" in s
 
 
-def decision_laps_as_of(frame: pd.DataFrame, race: RaceParams, driver: str) -> list[int]:
+def decision_laps_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, neutralised: bool = False) -> list[int]:
     """The as_of rule's decision laps for one driver; each lap L reads nothing completed after
     the driver's lap L. A fixed grid (every GRID_EVERY laps from 0 to the scheduled distance
-    less GRID_END_MARGIN), plus every lap whose own record shows a neutralisation in progress
-    (SC or VSC in the driver's lap-L track status) and the first green lap after one (lap L - 1
-    neutralised, lap L not). A lap L is kept while the driver was still running at it (laps
-    1..L recorded without a gap; lap 0 always) and it leaves at least one minimum stint of the
-    scheduled distance to run. Whether the car later retired or was lapped is not read."""
+    less GRID_END_MARGIN); with `neutralised`, also every lap whose own record shows a
+    neutralisation in progress (SC or VSC in the driver's lap-L track status) and the first green
+    lap after one (lap L - 1 neutralised, lap L not). Off by default: such a lap is chosen at the
+    driver's own moment, which for a car behind comes after other cars' moments at the same lap
+    number, so the set of points up to a lap would depend on later records. A lap L is kept
+    while the driver was still running at it (laps 1..L recorded without a gap; lap 0 always)
+    and it leaves at least one minimum stint of the scheduled distance to run. Whether the car
+    later retired or was lapped is not read."""
     g = frame[frame["driver"] == driver]
     status = {int(lap): st for lap, st in zip(g["lap"], g["track_status"])}
     laps = set(range(0, race.total_laps - GRID_END_MARGIN + 1, GRID_EVERY))
     for lap, st in status.items():
+        if not neutralised:
+            break
         if _neutralised(st) or (lap > 1 and _neutralised(status.get(lap - 1, "")) and not _neutralised(st)):
             laps.add(lap)
     recorded = sorted(status)
@@ -190,7 +195,7 @@ SAMPLING_RULES = ("as_of", "legacy")
 def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuilder | None = None,
                 drivers: list[str] | None = None, max_laps_down: int = 2,
                 max_per_race: int | None = None, seed: int = 0,
-                rule: str = "as_of") -> tuple[list[Scenario], list[dict]]:
+                rule: str = "as_of", neutralised: bool = False) -> tuple[list[Scenario], list[dict]]:
     """(scenarios, skipped) for one race, in (driver, lap) order.
 
     rule "as_of" (the default for new sets): every driver on the grid, at
@@ -213,7 +218,7 @@ def sample_race(frame: pd.DataFrame, race: RaceParams, *, builder: SnapshotBuild
     points = []
     for driver in pool:
         if rule == "as_of":
-            points += [(driver, k) for k in decision_laps_as_of(frame, race, driver)]
+            points += [(driver, k) for k in decision_laps_as_of(frame, race, driver, neutralised)]
         else:
             n = int((frame["driver"] == driver).sum())
             points += [(driver, k) for k in decision_laps(frame, race, n)]

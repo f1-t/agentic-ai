@@ -623,9 +623,10 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
                        lap k. Each nearby car's position is its last lap completed by t.
       stints           from the driver's laps up to k only.
     k = 0 reads the lap-1 row for the starting compound and tyre age only (the grid is public).
-    Raises ValueError (sample_race skips the point) when the driver has no lap-k row with an
-    end time, or lap k is an in-lap: the stop is already under way, so there is no decision
-    left, and the new set is on a lap that ends after t."""
+    On an in-lap the stop is under way: the set going on is the lap k + 1 row's start-of-lap
+    compound and tyre age (known when lap k ends), as snapshot_at shows it; nothing else of that
+    row is read. Raises ValueError (sample_race skips the point) when the driver has no lap-k
+    row with an end time, or an in-lap with no set recorded going on (a retirement in the pits)."""
     g_all = frame[frame["driver"] == driver].sort_values("lap")
     if k == 0:
         first = g_all[g_all["lap"] == 1]
@@ -641,15 +642,22 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
     if not len(at) or not np.isfinite(float(at["end_s"].iloc[0])):
         raise ValueError(f"{driver} has no lap {k} with an end time: not running at the decision lap")
     row = at.iloc[0]
-    if bool(row["pit_in"]):
-        raise ValueError(f"lap {k} is {driver}'s in-lap: the stop is under way")
     t = float(row["end_s"])
     seen = visible_rows(frame, t)
     g = seen[seen["driver"] == driver].sort_values("lap")
     stints = race_stints(g, driver)
+    if bool(row["pit_in"]):
+        # an in-lap: the stop is under way, and the set going on is the lap k + 1 row's
+        # start-of-lap state (compound, tyre age), known when lap k ends; nothing else of that row
+        nxt = g_all[g_all["lap"] == k + 1]
+        if not len(nxt) or pd.isna(nxt["compound"].iloc[0]):
+            raise ValueError(f"lap {k} is {driver}'s in-lap and no set is recorded going on")
+        age = nxt["tyre_age"].iloc[0]
+        start_age = int(age) - 1 if pd.notna(age) else 0
+        stints = [*stints, (str(nxt["compound"].iloc[0]), 0, start_age, k + 1)]
     comp, n, start_age, first_lap = stints[-1]
     done = k + 1 - first_lap
-    compounds = sorted(set(race.compounds) | set(seen["compound"].dropna().astype(str)))
+    compounds = sorted(set(race.compounds) | set(seen["compound"].dropna().astype(str)) | {str(comp)})
     gaps, nearby = _gaps_as_of(seen, driver, k, t)
     last = g[g["lap"] > k - RECENT_LAPS]["lap_time_s"]
     hist = _scenario(g)
