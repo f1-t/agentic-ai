@@ -1,0 +1,15 @@
+# Belief arm "as_of_history": the belief configs/sim/belief.yaml carries since #102, the wear bound 0
+# (wear_nonneg, SPEC 0017b) plus every number estimated from other races read as of the race: the
+# as_of_history calibrator (race_history.csv, races strictly before), fuel anchoring and the as-of
+# pit loss. The to_snapshot incumbent (cross_race.INCUMBENTS); wear_nonneg stays the bound arm.
+degradation:
+  name: linear_fuel
+  params:
+    wear_lower_bound: 0.0
+calibrator:
+  name: as_of_history
+fuel_anchor:
+  prior: anchored
+  practice: anchored
+pit_loss:
+  source: asof
