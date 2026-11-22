@@ -305,6 +305,18 @@ def _continuation(fit, n_samples, max_stops):
             return (pit if just_pitted else stay)(after)
         except NoFeasiblePlan:
             return to_flag
+
+    def stay_plan(snapshot: Snapshot, laps: int):
+        """A stay under SC or VSC (Simulator.expand_action): the whole plan from the decision
+        snapshot, the current set to the flag on the same terms as above."""
+        to_flag = Plan.of([[snapshot.compound, snapshot.remaining_laps]])
+        if snapshot.compound not in fit.modelled:
+            return to_flag
+        try:
+            return stay.stay_plan(snapshot, laps)
+        except NoFeasiblePlan:
+            return to_flag
+    continuation.stay_plan = stay_plan
     return continuation
 
 

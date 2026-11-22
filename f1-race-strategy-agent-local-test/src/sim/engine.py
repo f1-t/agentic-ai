@@ -1094,13 +1094,29 @@ class Simulator:
         `raw` is {"action": "stay", "laps": n} (n defaults to 1) or {"action": "pit",
         "compound": c} with optional set_id and start_age. `continuation(snapshot_after)`
         returns the plan for the laps after the action: n laps on after a stay, one lap on
-        after a pit. A stay must leave at least one lap for the continuation."""
+        after a pit. A stay must leave at least one lap for the continuation.
+
+        A stay taken under SC or VSC is not advanced: _advance would keep the period on at the
+        reassess lap with certainty. When the continuation has `stay_plan(snapshot, n)`
+        (optimizer_bridge.as_continuation) the plan is that, the best full plan from this
+        snapshot with no stop before the end of lap laps_completed + n + 1, on which the period
+        in progress runs on as the event model draws it per sample. A green stay, and a plain
+        continuation callable, advance the snapshot as before."""
         try:
             act = _Action.model_validate(raw)
         except ValidationError as exc:
             return None, _messages(exc)
         if continuation is None:
             return None, ["continuation required for action candidates"]
+        stay_plan = getattr(continuation, "stay_plan", None)
+        if act.action == "stay" and snapshot.track_status != "green" and stay_plan is not None:
+            try:
+                plan = Plan.of(stay_plan(snapshot, act.laps))
+            except ValidationError as exc:
+                return None, _messages(exc)
+            if plan.stints[0].compound != snapshot.compound or plan.stints[0].laps <= act.laps:
+                return None, ["a stay's plan must run the current set past the stay"]
+            return plan, []
         chosen = None
         try:
             if act.action == "stay":

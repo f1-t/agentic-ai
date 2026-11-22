@@ -127,11 +127,14 @@ def score_batch(snapshot: Snapshot, plans, sim, *, seed=0, n_samples=None, scena
 
 
 def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops=2,
-                   scenario=None, return_times=False) -> BatchOptimizationResult:
+                   scenario=None, return_times=False, min_first_laps=1) -> BatchOptimizationResult:
     """The baseline optimizer with every candidate scored in one simulate_batch call.
 
     Candidates come from baselines.candidate_plans; plans with a zero-lap first stint are
-    filtered out (R1) until candidate_plans takes a first-stint minimum. Rows the
+    filtered out (R1) until candidate_plans takes a first-stint minimum. `min_first_laps`
+    (default 1, no constraint beyond R1) keeps only plans whose first stint runs at least that
+    many laps: a STAY_OUT k's continuation planned from the decision snapshot (k + 1, no stop
+    before the end of lap laps_completed + k + 1; as_continuation's stay_plan). Rows the
     simulator rejects are dropped and counted in `invalid`. Plans breaking the R8 stint limit
     are filtered out before scoring and counted in diagnostics["stint_limit_dropped"]
     (_stint_limit_filter). The best plan follows the baseline optimizer's tie-break.
@@ -151,7 +154,8 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     state = from_contract(snapshot, sim)
     candidates = list(candidate_plans(state, max_stops))
     nonzero = [p for p in candidates if p.stints[0].laps > 0]
-    plans, limit = _stint_limit_filter(snapshot, sim, nonzero)
+    allowed = nonzero if min_first_laps <= 1 else [p for p in nonzero if p.stints[0].laps >= min_first_laps]
+    plans, limit = _stint_limit_filter(snapshot, sim, allowed)
     evals, contract_plans, assignments, batch = score_batch(
         snapshot, plans, sim, seed=seed, n_samples=n_samples, scenario=scenario, state=state)
     scored = [i for i, e in enumerate(evals) if e is not None]
@@ -202,13 +206,23 @@ def as_continuation(sim, **kw):
 
     The first stint continues the fitted set: start_age 0 after a stay, the set's
     laps_run (the advanced tyre_age) after a pit, which is the snapshot whose current
-    stint has no laps yet. `kw` goes to optimize_batch."""
+    stint has no laps yet. `kw` goes to optimize_batch.
+
+    `continuation.stay_plan(snapshot, laps)` is the whole plan of a stay of `laps` from the
+    decision snapshot itself: the optimum over full plans from `snapshot` that make no stop
+    before the end of lap laps_completed + laps + 1 (min_first_laps laps + 1), the same draws
+    and rules as any plan from that snapshot. Simulator.expand_action uses it for a stay taken
+    under SC or VSC, whose period then runs on as the belief's event model draws it per sample."""
     def continuation(snapshot_after: Snapshot) -> Plan:
         plan = optimize_batch(snapshot_after, sim, **kw).plan
         just_pitted = snapshot_after.laps_completed - sum(s.laps for s in snapshot_after.stints) == 0
         first = plan.stints[0].model_copy(
             update={"start_age": snapshot_after.tyre_age if just_pitted else 0})
         return plan.model_copy(update={"stints": [first, *plan.stints[1:]]})
+
+    def stay_plan(snapshot: Snapshot, laps: int) -> Plan:
+        return optimize_batch(snapshot, sim, min_first_laps=laps + 1, **kw).plan
+    continuation.stay_plan = stay_plan
     return continuation
 
 
