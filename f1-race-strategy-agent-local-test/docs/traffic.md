@@ -8,9 +8,9 @@ one is held behind it or pays to pass it. The ghosts do not react to us.
 
 The recorded ghosts' remaining laps are the future of the race, so source `recorded` (the
 default) belongs to the world model only (ground truth, calibration, replay, the eval's
-scorer, `configs/sim/world.yaml`). The belief side runs source `projected`
-(`configs/sim/belief.yaml`): the other cars projected forward from the laps up to the
-snapshot, with the frame cut to `lap <= laps_completed` before anything is read
+scorer's traffic switch `configs/sim/world.yaml`). The belief side runs source `projected`
+(the belief's switch `configs/sim/belief_traffic.yaml`): the other cars projected forward from what was
+visible at the snapshot, the frame cut by `data.visible_rows` at that moment before anything is read
 (`GhostTraffic.reads_future` is False for it, and `agent_tools.belief_simulator` refuses the
 recorded source). docs/eval.md "Traffic" has what each side may know, the projection's
 assumptions, the no-future-information test and the accuracy table. `SimConfig.traffic`
@@ -22,11 +22,11 @@ defaults to the earlier rule.
 
 | param | default | what |
 | --- | --- | --- |
-| `source` | `recorded` | `projected`: the belief's field. Each other car with a lap-k row laps at the belief's fit for its compound and age plus its median residual over its last `pace_laps` green laps; it stops once more at the field's typical tyre life so far (median age at the stops so far, per compound; `stretch` x that life for a car that has stopped), the out-lap carrying the pit loss; `n_variants` jittered copies (stop lap sd `stop_sd_laps`, pace by its standard error, at least `pace_sd_floor_s`) are cycled over the samples. A projected field always takes the sample's SC/VSC laps (neutral alignment). None at lap 0 |
+| `source` | `recorded` | `projected`: the belief's field. Each other car still running at the cut starts from its last visible crossing and laps at the belief's fit for its compound and age plus its median residual over its last `pace_laps` green laps; it stops once more at the field's typical tyre life so far (median age at the stops so far, per compound; `stretch` x that life for a car that has stopped), the out-lap carrying the pit loss; `n_variants` jittered copies (stop lap sd `stop_sd_laps`, pace by its standard error, at least `pace_sd_floor_s`) are cycled over the samples. A projected field always takes the sample's SC/VSC laps (neutral alignment). None at lap 0 |
 | `align_neutral` | false | a lap neutral in the sample but green in the record (or the reverse) shifts the ghosts' common clock by our lap less the field's median lap (or a green field lap less it), so the gaps are kept; never on bunched SC laps; a no-op under the recorded events |
-| `own_pace` | false | our clock among the ghosts runs at the model's lap plus the driver's median residual over the model (free-air green laps when there are 5; recorded: the whole race; projected: up to the snapshot). It moves who we catch and our positions only; the lap times returned stay the model's plus the traffic increments |
+| `own_pace` | false | our clock among the ghosts runs at the model's lap plus the driver's median residual over the model (free-air green laps when there are 5; recorded: the whole race; projected: the visible rows). It moves who we catch and our positions only; the lap times returned stay the model's plus the traffic increments |
 | `pass_mode` | `swap` | `earned`: a pass completes only when the arrival with every pass cost is `pass_gap_s` ahead of the car; until then the car attacks from behind in dirty air. No lap ends earlier than the car's own arrival, so a pass never conjures time |
-| `dirty_air_auto` | false | `dirty_air_s` from the data: mean residual of green laps within `dirty_air_range_s` of the car ahead less that of free-air green laps, clipped to [0, 1.5], from at least 20 laps a side (recorded: whole race; projected: up to the snapshot) |
+| `dirty_air_auto` | false | `dirty_air_s` from the data: mean residual of green laps within `dirty_air_range_s` of the car ahead less that of free-air green laps, clipped to [0, 1.5], from at least 20 laps a side (recorded: whole race; projected: the visible rows) |
 
 Positions: `apply` records per plan the position after the first out-lap, the cars within
 the first stop's pit loss behind at the in-lap's line, and the position at the flag

@@ -1,8 +1,44 @@
 """The traffic params the eval turns on (traffic.py): earned passes, neutral alignment, own
-pace, positions. Synthetic frames from test_sim_traffic, no cache."""
+pace, positions; the traffic switch's configs; the flag classification. Synthetic frames from
+test_sim_traffic, no cache."""
 import numpy as np
 
-from test_sim_traffic import F, apply, frame, ghost, prepare
+from src.contracts import Snapshot
+from src.eval import score
+from src.sim import SimConfig
+from src.sim.config import ComponentSpec, world_default
+from src.sim.traffic import flag_classification
+from test_sim_traffic import F, RACE, apply, car, frame, ghost, prepare
+
+
+def test_the_traffic_switch_is_the_default_plus_traffic_only():
+    belief = SimConfig.from_file(score.BELIEF_CONFIG)
+    belief_on = SimConfig.from_file(score.BELIEF_TRAFFIC_CONFIG)
+    assert belief.traffic.name == "none" and belief_on.traffic.params["source"] == "projected"
+    assert belief_on.model_copy(update={"traffic": ComponentSpec(name="none")}) == belief
+    world = score.default_world_config(world_default(SimConfig()))
+    world_on = SimConfig.from_file(score.WORLD_TRAFFIC_CONFIG)
+    assert world.traffic.name == "none" and world_on.traffic.params.get("source", "recorded") == "recorded"
+    assert world_on.model_copy(update={"traffic": ComponentSpec(name="none")}) == world
+
+
+def test_a_lapped_finisher_is_classified_and_a_retirement_is_not():
+    # laps 1-3 of the table; the leader crosses lap 3 at 300, a lapped car ends lap 2 at 310
+    # (after the flag), a retirement ends lap 2 at 150
+    G = np.array([[100.0, 200.0, 300.0], [110.0, 310.0, np.nan], [100.0, 150.0, np.nan]])
+    assert flag_classification(G, 10.0).tolist() == [2, 1, -1]
+
+
+def test_finishing_positions_rank_a_lapped_finisher_by_its_own_last_lap():
+    # BBB a lap down finishes on lap 19 at 1620; our car finishes lap 20 at 400 + 1200 = 1600,
+    # so it crossed lap 19 at about 1540: ahead of BBB. AAA finishes lap 20 at 1580: ahead of us
+    df = frame(car("AAA", 79.0), car("BBB", 85.0, n=19))
+    s = Snapshot(race=RACE, driver="XXX", laps_completed=5, compound="SOFT", tyre_age=5, elapsed_s=400.0,
+                 standing_start=False)
+    pos = score.finishing_positions(df, s, np.array([1200.0, 1100.0]), np.array([np.nan, np.nan]))
+    assert pos.tolist() == [2, 1]
+    dnf = score.finishing_positions(df, s, np.array([1200.0]), np.array([10.0]))
+    assert dnf.tolist() == [3]   # behind both classified cars, BBB included
 
 
 def test_earned_passes_never_gain_time_and_swap_does():

@@ -1,0 +1,14 @@
+# Fuel identification arm "fuel_physics" (belief): the incumbent wear_nonneg with the to_snapshot
+# fuel prior from physics (calibrator fuel_practice_longrun, src/sim/fuel_prior.py: -0.03 s/kg x
+# 110 kg / race laps plus practice track evolution per lap; it reads no race lap and no other
+# race) and the fuel tau set by interval coverage on the calibration races: 0.03 s/lap, the
+# 68th percentile of |prior - hindsight fuel slope| over the seven races (docs/eval.md "Fuel
+# identification"). Fixed before the cross-race run that tests it.
+degradation:
+  name: linear_fuel
+  params:
+    wear_lower_bound: 0.0
+calibrator:
+  name: fuel_practice_longrun
+  params:
+    sd_s_per_lap: 0.03

@@ -168,7 +168,8 @@ def test_rows_and_summaries_carry_the_stint_limit_stamps(scenario_set, flat):
     each summary row, so tables scored at two settings can be told apart; R8 off is None on
     the rows and NaN in the summary."""
     probe = {"probe": _fixed([["SOFT", 20], ["MEDIUM", 20]])}
-    rows = score_set(scenario_set, lambda race_id, role: flat, probe, n_samples=1)
+    legacy = Simulator(flat.laps, flat.config.model_copy(update={"stint_limit_margin_laps": 3}))   # R8 retired
+    rows = score_set(scenario_set, lambda race_id, role: legacy, probe, n_samples=1)
     assert (rows["stint_limit_rank"] == 1).all() and (rows["stint_limit_margin_laps"] == 3).all()
     table = summarize(rows)
     assert (table["stint_limit_rank"] == 1).all() and (table["stint_limit_margin_laps"] == 3).all()
@@ -391,8 +392,11 @@ def test_the_default_world_is_decisive_with_one_plan_sets_and_the_same_tables():
     part = ScenarioSet(version="tv1", items=v1.items[::12])
     part.digest = part.compute_digest()
     from src.eval.score import BELIEF_CONFIG
-    belief = SimConfig.from_file(BELIEF_CONFIG).model_copy(update={"stint_limit_margin_laps": None})
-    sims = race_simulators(profile, belief, SimConfig(stint_limit_margin_laps=None))
+    # R8 off and the wear cliff off: the old deterministic linear world, whose ties this pins
+    no_cliff = SimConfig().wear_cliff.model_copy(update={"enabled": False})
+    belief = SimConfig.from_file(BELIEF_CONFIG).model_copy(update={"stint_limit_margin_laps": None,
+                                                                   "wear_cliff": no_cliff})
+    sims = race_simulators(profile, belief, SimConfig(stint_limit_margin_laps=None, wear_cliff=no_cliff))
     rows, old = _deterministic_world_rows(part, sims, resolve(["baselines"]),
                                           profile.sim.n_samples)
     assert (rows["opt_set_size"] == 1).all()

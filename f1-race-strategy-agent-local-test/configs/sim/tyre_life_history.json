@@ -1,0 +1,82 @@
+{
+ "command": "python -m src.sim.cliff history --races 2019_10_united_kingdom 2021_04_spain 2022_02_saudi_arabia 2023_01_bahrain 2023_07_spain 2024_07_emilia_romagna 2025_23_qatar",
+ "description": "Per cached race, the oldest tyre age any car ran on each compound in the race (every lap). The belief's wear cliff (src/sim/cliff.py) reads the races at the same circuit strictly before the race it plans for; compound names are the weekend's labels (SOFT/MEDIUM/HARD), not Pirelli's C-numbers.",
+ "held_out_never_loaded": "data/eval_set.json",
+ "races": {
+  "2019_10_united_kingdom": {
+   "circuit": "silverstone",
+   "oldest_age": {
+    "HARD": 40.0,
+    "MEDIUM": 39.0,
+    "SOFT": 23.0
+   },
+   "round": 10,
+   "season": 2019,
+   "total_laps": 52
+  },
+  "2021_04_spain": {
+   "circuit": "catalunya",
+   "oldest_age": {
+    "MEDIUM": 42.0,
+    "SOFT": 32.0
+   },
+   "round": 4,
+   "season": 2021,
+   "total_laps": 66
+  },
+  "2022_02_saudi_arabia": {
+   "circuit": "jeddah",
+   "oldest_age": {
+    "HARD": 41.0,
+    "MEDIUM": 16.0
+   },
+   "round": 2,
+   "season": 2022,
+   "total_laps": 50
+  },
+  "2023_01_bahrain": {
+   "circuit": "sakhir",
+   "oldest_age": {
+    "HARD": 29.0,
+    "MEDIUM": 10.0,
+    "SOFT": 25.0
+   },
+   "round": 1,
+   "season": 2023,
+   "total_laps": 57
+  },
+  "2023_07_spain": {
+   "circuit": "catalunya",
+   "oldest_age": {
+    "HARD": 50.0,
+    "MEDIUM": 32.0,
+    "SOFT": 28.0
+   },
+   "round": 7,
+   "season": 2023,
+   "total_laps": 66
+  },
+  "2024_07_emilia_romagna": {
+   "circuit": "imola",
+   "oldest_age": {
+    "HARD": 54.0,
+    "MEDIUM": 38.0,
+    "SOFT": 8.0
+   },
+   "round": 7,
+   "season": 2024,
+   "total_laps": 63
+  },
+  "2025_23_qatar": {
+   "circuit": "lusail",
+   "oldest_age": {
+    "HARD": 25.0,
+    "MEDIUM": 25.0,
+    "SOFT": 25.0
+   },
+   "round": 23,
+   "season": 2025,
+   "total_laps": 57
+  }
+ }
+}

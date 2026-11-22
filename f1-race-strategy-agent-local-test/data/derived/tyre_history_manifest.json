@@ -1,0 +1,181 @@
+{
+ "command": "python -m src.sim.tyre_history build",
+ "description": "Per-race tyre-life observations (src/sim/tyre_history.py observed_tyre_life) of the races below; read at run time by tyre_life_prior, which uses only those strictly earlier than its race.",
+ "races": [
+  {
+   "race_id": "2019_10_united_kingdom",
+   "date": "2019-07-14",
+   "circuit": "silverstone"
+  },
+  {
+   "race_id": "2021_01_bahrain",
+   "date": "2021-03-28",
+   "circuit": "sakhir"
+  },
+  {
+   "race_id": "2021_02_emilia_romagna",
+   "date": "2021-04-18",
+   "circuit": "imola"
+  },
+  {
+   "race_id": "2021_04_spain",
+   "date": "2021-05-09",
+   "circuit": "catalunya"
+  },
+  {
+   "race_id": "2021_09_austrian",
+   "date": "2021-07-04",
+   "circuit": "red_bull_ring"
+  },
+  {
+   "race_id": "2021_12_belgium",
+   "date": "2021-08-29",
+   "circuit": "spa"
+  },
+  {
+   "race_id": "2021_20_qatar",
+   "date": "2021-11-21",
+   "circuit": "lusail"
+  },
+  {
+   "race_id": "2021_21_saudi_arabia",
+   "date": "2021-12-05",
+   "circuit": "jeddah"
+  },
+  {
+   "race_id": "2021_22_united_arab_emirates",
+   "date": "2021-12-12",
+   "circuit": "yas_marina"
+  },
+  {
+   "race_id": "2022_01_bahrain",
+   "date": "2022-03-20",
+   "circuit": "sakhir"
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "date": "2022-03-27",
+   "circuit": "jeddah"
+  },
+  {
+   "race_id": "2022_04_emilia_romagna",
+   "date": "2022-04-24",
+   "circuit": "imola"
+  },
+  {
+   "race_id": "2022_06_spain",
+   "date": "2022-05-22",
+   "circuit": "catalunya"
+  },
+  {
+   "race_id": "2022_07_monaco",
+   "date": "2022-05-29",
+   "circuit": "monaco"
+  },
+  {
+   "race_id": "2022_08_azerbaijan",
+   "date": "2022-06-12",
+   "circuit": "baku"
+  },
+  {
+   "race_id": "2022_09_canada",
+   "date": "2022-06-19",
+   "circuit": "villeneuve"
+  },
+  {
+   "race_id": "2022_11_austria",
+   "date": "2022-07-10",
+   "circuit": "red_bull_ring"
+  },
+  {
+   "race_id": "2022_12_france",
+   "date": "2022-07-24",
+   "circuit": "paul_ricard"
+  },
+  {
+   "race_id": "2022_17_singapore",
+   "date": "2022-10-02",
+   "circuit": "marina_bay"
+  },
+  {
+   "race_id": "2022_20_mexico",
+   "date": "2022-10-30",
+   "circuit": "rodriguez"
+  },
+  {
+   "race_id": "2022_21_brazil",
+   "date": "2022-11-13",
+   "circuit": "interlagos"
+  },
+  {
+   "race_id": "2022_22_united_arab_emirates",
+   "date": "2022-11-20",
+   "circuit": "yas_marina"
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "date": "2023-03-05",
+   "circuit": "sakhir"
+  },
+  {
+   "race_id": "2023_07_spain",
+   "date": "2023-06-04",
+   "circuit": "catalunya"
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "date": "2024-05-19",
+   "circuit": "imola"
+  },
+  {
+   "race_id": "2024_08_monaco",
+   "date": "2024-05-26",
+   "circuit": "monaco"
+  },
+  {
+   "race_id": "2024_12_united_kingdom",
+   "date": "2024-07-07",
+   "circuit": "silverstone"
+  },
+  {
+   "race_id": "2024_21_brazil",
+   "date": "2024-11-03",
+   "circuit": "interlagos"
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "date": "2025-11-30",
+   "circuit": "lusail"
+  }
+ ],
+ "held_out_never_loaded": [
+  "2019_06_monaco",
+  "2020_16_sakhir",
+  "2021_07_france",
+  "2021_18_mexico",
+  "2022_03_australia",
+  "2022_05_miami",
+  "2022_14_belgium",
+  "2024_11_austria",
+  "2025_11_austria"
+ ],
+ "excluded_observations": {
+  "2025_23_qatar": "mandated 25-lap maximum stint (Pirelli safety limit), so its stint ends say nothing about tyre life"
+ },
+ "observation": {
+  "quantile": 0.9,
+  "min_stints": 3,
+  "neutralised_codes": [
+   "4",
+   "5",
+   "6",
+   "7"
+  ],
+  "wet_lap_share": 0.1,
+  "damp_lap_share": 0.02,
+  "pace_min_green_laps": 10,
+  "pace_fit_share": 0.6,
+  "pace_late_laps": 3,
+  "pace_falloff_s": 0.5
+ }
+}

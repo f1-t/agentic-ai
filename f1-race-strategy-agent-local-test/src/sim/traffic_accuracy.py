@@ -36,7 +36,7 @@ import pandas as pd
 
 from . import calibration, jobs, traffic
 from .compute import load_profile
-from .config import ComponentSpec, SimConfig
+from .config import ComponentSpec, SimConfig, world_default
 from .engine import Simulator
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,7 +60,8 @@ def _no_dirty(spec):
 
 
 def _world(**update):
-    return SimConfig.model_validate({**SimConfig().model_dump(mode="json"), **update})
+    """The eval's default world (config.world_default: its wear fit) with `update`."""
+    return SimConfig.model_validate({**world_default(SimConfig()).model_dump(mode="json"), **update})
 
 
 def _belief(**update):

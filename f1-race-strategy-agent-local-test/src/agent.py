@@ -26,7 +26,7 @@ The snapshot is the only current race state. Do not assume a fixed race, driver,
 
 IMPORTANT: tool outputs are estimates. Ranges, probabilities, confidence labels and assumptions represent uncertainty; the simulator is NOT ground truth. Compare plausible outcomes and downside risk rather than blindly choosing the smallest median number.
 
-Your task is to choose the immediate action: PIT now (and which compound) or STAY OUT for a stated number of laps. Consider position, gaps/traffic, tyre age/degradation, pit-loss range, weather/track status and nearby competitors. The simulator's times include traffic: other cars are projected from what is known now, and the tools report the expected rejoin position and time lost behind other cars. Prefer a small number of informative tool calls.
+Your task is to choose the immediate action: PIT now (and which compound) or STAY OUT for a stated number of laps. Consider position, gaps/traffic, tyre age/degradation, pit-loss range, weather/track status and nearby competitors. When the tools model traffic, other cars are projected from what is known now and the tools report the expected rejoin position and time lost behind other cars. Prefer a small number of informative tool calls.
 
 If a tool reports an invalid plan or arguments, use its error/hint to correct the call. Do not repeat the same invalid call. You have a finite step/tool budget, so submit once the evidence is sufficient.
 
@@ -57,6 +57,12 @@ def _api_tools():
 
 
 def _dispatch(name, args):
+    """The tool's output (or error) as the model is shown it: tools.present maps the real race
+    and driver names to the active snapshot's pseudonyms unless AGENT_SHOW_IDENTITY is on."""
+    return tools.present(_call(name, args))
+
+
+def _call(name, args):
     for spec in tools.TOOL_SPECS:
         if spec["name"] != name:
             continue
@@ -142,7 +148,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     that ran: no submissions, no refused calls, no cached repeats; a re-run repeat counts),
     ``repeat_calls`` (the repeats that were re-run or served from the cache) and, if the
     backend reports usage, the summed ``input_tokens`` and ``output_tokens`` (None when it
-    does not).
+    does not), and ``identity`` (tools.identity(): the real race id and the driver labels the
+    model saw in their place; the model is shown pseudonyms unless AGENT_SHOW_IDENTITY is on).
     """
     if turn_status is None:
         turn_status = os.environ.get("AGENT_TURN_STATUS", "").strip().lower() in {"1", "true", "on"}
@@ -152,7 +159,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                          f"got {repeat_mode!r}")
     snapshot = tools.set_snapshot(snapshot)
     stats = {} if stats is None else stats
-    stats.update(steps=0, evidence_calls=0, repeat_calls=0, input_tokens=None, output_tokens=None)
+    stats.update(steps=0, evidence_calls=0, repeat_calls=0, input_tokens=None, output_tokens=None,
+                 identity=tools.identity())
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))

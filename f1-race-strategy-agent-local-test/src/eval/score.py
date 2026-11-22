@@ -82,7 +82,9 @@ REGRET_TOL_S = 1e-6
 REF_AGREE_LAPS = 2   # E: first pit laps this close count as the same reference call
 ROLES = ("belief", "world")
 BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
-WORLD_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "world.yaml"
+# the traffic switch (docs/eval.md "Traffic"): opt-in world and belief configs with traffic on
+WORLD_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "world.yaml"
+BELIEF_TRAFFIC_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief_traffic.yaml"
 
 
 def _first_pit_error(pits, ref_pits):
@@ -95,28 +97,43 @@ def _first_pit_error(pits, ref_pits):
 
 
 def finishing_positions(frame: pd.DataFrame, snapshot, times, dnf_lap, at_flag=None) -> np.ndarray:
-    """(n_samples,) finishing position per sample of one plan: 1 + the ghosts (every other
-    driver in `frame`) that finished lap race.total_laps before our session time, anchor +
-    remaining time (traffic.place, vectorised over the samples). `at_flag` (the engine's
-    BatchResult.final_pos row) gives those positions as the traffic model placed them, on its
-    own clock (the driver's own pace and the neutral-lap alignment, traffic.py), and replaces
-    the ranking of `times`. A DNF sample (finite dnf_lap) is behind every finisher and behind
-    the ghosts that retired no earlier than its dnf_lap; its penalised time is not used."""
-    last = snapshot.race.total_laps
-    G = traffic.ghost_table(frame, snapshot.driver, [last]).G[:, 0]
-    finished = G[np.isfinite(G)]
+    """(n_samples,) finishing position per sample of one plan. The other drivers in `frame` are
+    classified at the flag (traffic.flag_classification): a car whose last crossing is on the
+    leader's last lap or later took the flag, a lapped one a lap or more short; one that stopped
+    crossing earlier retired. A finisher is ahead when it crossed its own final lap's line
+    before we did: our crossing of that lap is our session time (anchor + remaining time) less
+    the laps we still had to run, at our mean remaining lap. `at_flag` (the engine's
+    BatchResult.final_pos row) gives the same count on the traffic model's own lap-by-lap clock
+    (the driver's own pace and the neutral-lap alignment, traffic.py) and replaces it. The last
+    lap is snapshot.race.total_laps (the scheduled distance under snapshot_as_of), and a lapped
+    finisher is no longer taken for a retirement. A DNF sample (finite dnf_lap) is behind every
+    finisher and behind the cars that retired no earlier than its dnf_lap; its penalised time is
+    not used."""
+    k, last = snapshot.laps_completed, snapshot.race.total_laps
+    laps = np.arange(k + 1, last + 1)
+    table = traffic.ghost_table(frame, snapshot.driver, laps)
+    G = table.G
+    fin = traffic.flag_classification(G, None)
+    classified = fin >= 0
     if at_flag is not None:
         pos = np.asarray(at_flag, dtype=float).astype(int)
     else:
-        t = traffic.anchor(frame, snapshot) + np.asarray(times, dtype=float)
-        pos = 1 + (finished[None, :] < t[:, None]).sum(axis=1)
+        rem = np.asarray(times, dtype=float)
+        t = traffic.anchor(frame, snapshot) + rem
+        per_lap = rem / max(len(laps), 1)
+        idx = np.flatnonzero(classified)
+        g_end = G[idx, fin[idx]]                            # each finisher's final crossing
+        short = (len(laps) - 1 - fin[idx]).astype(float)    # laps it finished short of our last
+        ours = t[:, None] - short[None, :] * per_lap[:, None]
+        pos = 1 + (g_end[None, :] < ours).sum(axis=1)
     dnf_lap = np.asarray(dnf_lap, dtype=float)
     dnf = np.isfinite(dnf_lap)
     if dnf.any():
         ghosts = frame[(frame["driver"] != snapshot.driver) & np.isfinite(frame["end_s"].astype(float))]
         reached = ghosts.groupby("driver")["lap"].max()
-        retired = reached[reached < last].to_numpy(dtype=float)   # lap count of each non-finisher
-        pos[dnf] = 1 + len(finished) + (retired[None, :] >= dnf_lap[dnf][:, None]).sum(axis=1)
+        out = [d for d, c in zip(table.ghosts, classified) if not c]
+        retired = reached.reindex(out).dropna().to_numpy(dtype=float)   # lap count of each non-finisher
+        pos[dnf] = 1 + int(classified.sum()) + (retired[None, :] >= dnf_lap[dnf][:, None]).sum(axis=1)
     return pos
 
 
@@ -151,6 +168,32 @@ def _on_proxy(plan, borrowed) -> str:
     return ";".join(sorted({s.compound for s in plan.stints} & set(borrowed)))
 
 
+class HindsightPitLossWarning(UserWarning):
+    """Policies are handed a frozen scenario's whole-race pit loss (a belief without the as-of one)."""
+
+
+def policy_scenario(scenario, belief):
+    """The scenario a policy is handed: its snapshot's race.pit_loss_s replaced by the pit loss
+    the belief prices stops with at that snapshot (Simulator.pit_loss_inputs: the as-of
+    estimate under SimConfig.pit_loss.source "asof"). A frozen scenario set carries the
+    whole-race value, which no policy may read (docs/eval.md "Pit loss and track status").
+    Unchanged when the belief reads the snapshot's own value."""
+    if getattr(scenario, "stratum", None) is not None or getattr(scenario, "weight", None) is not None:
+        # a stratified set's stratum and weight are scorer-side (scenarios.sample_stratified)
+        scenario = scenario.model_copy(update={"stratum": None, "weight": None})
+    if not hasattr(belief, "pit_loss_inputs"):
+        return scenario
+    snap = scenario.snapshot
+    pl = belief.fitted_for(snap).pit_loss_inputs(snap) if hasattr(belief, "fitted_for") else belief.pit_loss_inputs(snap)
+    if pl.get("source") == "snapshot":
+        warnings.warn("the belief reads the snapshot's pit loss (SimConfig.pit_loss.source 'snapshot'): a frozen "
+                      "scenario carries the whole-race value, so policies see hindsight", HindsightPitLossWarning,
+                      stacklevel=2)
+        return scenario
+    race = snap.race.model_copy(update={"pit_loss_s": round(float(pl["pit_loss_s"]), 3)})
+    return scenario.model_copy(update={"snapshot": snap.model_copy(update={"race": race})})
+
+
 def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 0,
                    n_samples: int | None = None, max_stops: int = 2, ref_worlds=(),
                    reference: Reference | None = None) -> list[dict]:
@@ -165,6 +208,8 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
     base = {"scenario_id": scenario.scenario_id, "race_id": scenario.race_id, "driver": scenario.driver,
             "lap": scenario.lap, "compound": snap.compound, "tyre_age": snap.tyre_age,
             "remaining_laps": snap.remaining_laps, "seed": seed, "max_stops": max_stops}
+    if getattr(scenario, "stratum", None) is not None:   # a stratified set: for weighted summaries
+        base.update(stratum=scenario.stratum, weight=scenario.weight)
     opt = reference if reference is not None else compute_reference(scenario, world, seed=seed,
                                                                     n_samples=n_samples, max_stops=max_stops)
     if opt.status == "no_reference":
@@ -195,11 +240,15 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
                 opt_final_position_mean=float(ref_pos.mean()) if ref_pos is not None else np.nan,
                 **near_ties(opt, snap))
     rows = []
+    # what the policies see: the scenario with the belief's as-of pit loss in its snapshot
+    # (policy_scenario); the world and the reference keep the frozen scenario
+    seen = policy_scenario(scenario, belief)
+    psnap = seen.snapshot
     for name, policy in policies.items():
         row = {**base, "policy": name}
         started = perf_counter()
         try:
-            decision = policy(scenario, belief, max_stops)
+            decision = policy(seen, belief, max_stops)
         except PolicyUnavailable as exc:
             rows.append({**row, "status": "unavailable", "reason": str(exc)})
             continue
@@ -217,13 +266,13 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
             row.update(decision=str(sub.get("decision", "")).strip().upper() or None,
                        p_pit=decisions.p_pit(sub))
             try:
-                plan = decisions.to_plan(snap, sub, belief, max_stops, seed=seed, n_samples=n)
+                plan = decisions.to_plan(psnap, sub, belief, max_stops, seed=seed, n_samples=n)
             except decisions.InvalidDecision as exc:
                 rows.append({**row, "status": "invalid", "reason": str(exc)})
                 continue
         if plan is None and decision.belief_optimum:
             try:
-                plan = decisions.belief_optimum(snap, belief, max_stops, seed=seed, n_samples=n)
+                plan = decisions.belief_optimum(psnap, belief, max_stops, seed=seed, n_samples=n)
             except decisions.InvalidDecision as exc:
                 rows.append({**row, "status": "invalid", "reason": str(exc)})
                 continue
@@ -309,21 +358,57 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
     return pd.DataFrame(rows)
 
 
+# The scoring world's SC and VSC (docs/eval.md "Pit loss and track status"): the period in
+# progress at the snapshot ends where it really ended, with the field's recorded lap times on
+# it; later periods are drawn at the rate model's rates, the same draws for every plan and the
+# reference (common random numbers). The replay accuracy that chose the recorded lap times over
+# the lap factors is in reports/calibration/neutralised (src/sim/neutral_report.py).
+WORLD_EVENTS = {"name": "hybrid", "params": {"lap_times": "recorded"}}
+# OFF until the integration decides it (the fidelity scorecard, PR #93): the default world draws no
+# neutralisations, as before. Opt in with `--world-config configs/sim/world_hybrid.yaml`.
+WORLD_EVENTS_DEFAULT = False
+
+
+def default_world_config(config, on: bool | None = None):
+    """The world when no world config is given: `config` (the profile's SimConfig), with
+    WORLD_EVENTS when `on` (default WORLD_EVENTS_DEFAULT, off). A config whose events are not
+    "none" is returned as it is."""
+    on = WORLD_EVENTS_DEFAULT if on is None else on
+    if not on or config.events.name != "none":
+        return config
+    return config.model_copy(update={"events": config.events.model_copy(
+        update={"name": WORLD_EVENTS["name"], "params": dict(WORLD_EVENTS["params"])})})
+
+
+def world_pit_loss(data, world) -> float:
+    """The world's whole-race pit loss, read from the loaded race, never from a snapshot:
+    under world.config.pit_loss.world "median" (the default) sim.pit_loss.whole_race on the
+    world's full-window fit, else the race's replay mean (data.race.pit_loss_s)."""
+    from ..sim import pit_loss
+    cfg = world.config.pit_loss
+    if cfg.world == "replay_mean":
+        return float(data.race.pit_loss_s)
+    # the world's root fit: every race lap under its (full) window
+    return round(pit_loss.whole_race(data.frame, world.degradation, data.race_id, cfg)["pit_loss_s"], 3)
+
+
 def race_simulators(profile=None, belief_config=None, world_config=None):
     """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
-    by default configs/sim/belief.yaml (to_snapshot window, the projected field's traffic,
-    posterior draws and residual lap noise on); the world runs `world_config`, by default the
-    profile's SimConfig with configs/sim/world.yaml's fit window and traffic (full window,
-    recorded ghost traffic; docs/eval.md "Traffic"). A world config with traffic "none" is
-    the clean-air world of earlier runs. Cached per race and role."""
+    by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
+    residual lap noise on); the world runs
+    `world_config`, by default the profile's SimConfig (full window, traffic off; the wear fit
+    config.WORLD_DEGRADATION; default_world_config, WORLD_EVENTS off by default). The world alone
+    gets the race's whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
+    estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
+    and role."""
     from ..sim import SimConfig, jobs
+    from ..sim.config import world_default
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
 
     profile = profile or load_profile()
     belief_config = belief_config or SimConfig.from_file(BELIEF_CONFIG)
-    world_default = SimConfig.from_file(WORLD_CONFIG) if world_config is None else None
     races, cache = {}, {}
 
     def sim_for(race_id, role):
@@ -333,14 +418,12 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
             if race_id not in races:
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
-            if role == "belief":
-                config = belief_config
-            elif world_config is not None:
-                config = world_config
-            else:   # the profile's config with world.yaml's window and traffic
-                config = data.config.model_copy(update={"fit_window": world_default.fit_window,
-                                                        "traffic": world_default.traffic})
-            cache[race_id, role] = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
+            config = (belief_config if role == "belief"
+                      else world_config or default_world_config(world_default(data.config)))
+            sim = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
+            if role == "world":
+                sim.race_pit_loss_s = world_pit_loss(data, sim)
+            cache[race_id, role] = sim
         return cache[race_id, role]
     return sim_for
 

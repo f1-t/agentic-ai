@@ -1,15 +1,21 @@
-# The eval's world simulator (src/eval/score.py race_simulators, docs/eval.md "Who sees
-# what" and "Traffic"): the scorer. The default SimConfig, full fit window, with ghost-car
-# traffic on (src/sim/traffic.py, docs/traffic.md): every other car's recorded laps as ghosts,
-# which the scorer may read (it is not a policy). Chosen by the calibration-race accuracy
-# measures (docs/eval.md "Traffic: accuracy"):
+# The world with traffic ON (the scorer's switch; docs/eval.md "Traffic"): pass it with
+# `score --world-config configs/sim/world.yaml`. The eval's default world (score.race_simulators:
+# the full fit window, config.WORLD_DEGRADATION's wear fit, the wear cliff on) with ghost-car
+# traffic: every other car's recorded laps as ghosts, which the scorer may read (it is never a
+# policy). Without --world-config the world is that default with traffic OFF. Opt-in until the
+# fidelity scorecard (src/sim/fidelity.py) decides by the finishing-order measures.
 #   align_neutral   the ghosts keep their gaps on a lap the world runs green but the record
-#                   ran under SC/VSC (the world draws no events), and the reverse
+#                   ran under SC/VSC, and the reverse
 #   own_pace        our clock among the ghosts runs at the driver's own whole-race pace
 #   pass_mode       earned: no pass grants time (the old swap rule conjured it); a faster
 #                   car attacks from behind in dirty air until its own pace takes it past
 #   dirty_air_auto  dirty_air_s from the race's laps within 1.5 s of the car ahead
+# tests/test_traffic_eval_params.py checks this is the default world plus traffic only.
 fit_window: full
+degradation:
+  name: linear_fuel_hinge
+  params:
+    driver_effects: race
 traffic:
   name: ghost
   params:

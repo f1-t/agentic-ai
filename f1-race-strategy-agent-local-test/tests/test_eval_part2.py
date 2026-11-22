@@ -247,12 +247,14 @@ def test_default_eval_set_path_and_v1_is_a_development_set():
     assert ScenarioSet.load(ROOT / "data" / "scenarios" / "v1.json").development
 
 
-def test_the_registered_split_holds_out_four_races_and_d2_d3_still_load():
-    # docs/eval.md "The registered split". Reads the split file and the committed set files
-    # only: no held-out race is loaded.
+def test_the_registered_split_holds_out_nine_races_and_d2_d3_d4_still_load():
+    # docs/eval.md "The registered split": the four of the d4 split, then the season-stratified
+    # 2021-22 draw (seed 2027). Reads the split file and the committed set files only: no
+    # held-out race is loaded.
     races, digest = scen_mod.load_eval_set()
-    assert races == ["2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria"]
-    for name in ("d2", "d3"):   # records of the earlier splits: they load and keep their own digest
+    assert races == ["2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria",
+                     "2021_07_france", "2021_18_mexico", "2022_05_miami", "2022_03_australia", "2022_14_belgium"]
+    for name in ("d2", "d3", "d4"):   # records of the earlier splits: they load and keep their own digest
         s = ScenarioSet.load(ROOT / "data" / "scenarios" / f"{name}.json")
         assert not s.development and s.sampling["eval_set_digest"] != digest
 
@@ -315,10 +317,11 @@ def test_run_agent_takes_a_contract_snapshot_and_reports_usage():
                           stats=stats)
     assert rec["decision"] == "STAY_OUT" and len(traj) == 2
     assert traj[0]["output"]["lap"] == 10 and traj[0]["output"]["min_stint_laps"] == 8
+    assert stats.pop("identity")["race_id"] == mid_race().race.race_id   # the harness keeps the real id
     assert stats == {"steps": 2, "evidence_calls": 1, "repeat_calls": 0, "input_tokens": 200, "output_tokens": 40}
     stats = {}
     run_agent(mid_race(), backend=Scripted(submit(), usage=None), verbose=False, stats=stats)
-    assert stats == {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
+    assert stats.pop("identity") and stats == {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
 
 
 def test_agent_policy_rows_are_decisions_with_trajectories(tmp_path):

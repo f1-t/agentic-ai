@@ -91,7 +91,8 @@ def test_in_lap_at_k_pays_its_pit_loss_once(frame):
     """k = 10 is BBB's in lap: the real in lap, pit loss and all, is in elapsed_s and the
     remaining plan has only the lap 35 stop."""
     sim = factory(frame)("full")
-    snap = calibration.snapshot_at(frame, RACE, "BBB", 10)
+    # a replay prices stops at the race's value (a snapshot carries only the pre-race prior)
+    snap = calibration.with_race(calibration.snapshot_at(frame, RACE, "BBB", 10), RACE)
     res = sim.simulate(snap, calibration.remaining_plan(frame, "BBB", 10), rules=calibration.REPLAY_RULES)
     assert res.pit_laps == [35]
     assert res.pit_loss_total_s == pytest.approx(RACE.pit_loss_s)
@@ -136,6 +137,7 @@ def test_k0_full_rows_equal_run_on_the_spain_shape():
 # exact only on the synthetic compounds' own fits: with the proxy on, a compound short of race
 # laps at k is re-priced by a blend that includes the cross-race step from real races
 @pytest.mark.compound_proxy_off
+@pytest.mark.wear_cliff_off   # exact on the fit alone: the belief's cliff prices the synthetic stints
 def test_pred_remaining_exact_on_noise_free_data_at_every_k(frame):
     rows = calibration.midrace(factory(frame), frame, RACE, laps_k=list(range(0, 50)), windows=WINDOWS)
     assert len(rows) == 3 * 2 * 50
@@ -148,6 +150,7 @@ def test_pred_remaining_exact_on_noise_free_data_at_every_k(frame):
     assert (rows["pred_pos_sim"] == rows["pred_pos_real"]).all()
 
 
+@pytest.mark.wear_cliff_off   # the world's and the belief's cliffs differ by design (sim/cliff.py)
 def test_to_snapshot_at_last_lap_equals_full(frame):
     rows = calibration.midrace(factory(frame), frame, RACE, laps_k=[RACE.total_laps - 1],
                                windows=["full", "to_snapshot"]).set_index(["window", "driver"])
@@ -216,6 +219,7 @@ def test_positions_in_both_modes():
     assert rows.loc[(45, "BBB"), "pred_pos_sim"] == 1
 
 
+@pytest.mark.wear_cliff_off   # exact predicted totals of the synthetic plans, fit alone
 def test_simulated_order_cancels_a_common_bias():
     """Every driver 1 s a lap slower than the model: against real totals each is predicted to win,
     while the order of the predicted totals is the real order."""

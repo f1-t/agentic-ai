@@ -63,48 +63,38 @@ compound tuple (Quan's key). The additive model scores stint orders identically 
 Spain, S28/S28/M10 and S28/M10/S28 tie exactly), so this is the convention that makes the
 optimizer return one plan.
 
-**R8 Stint limit.** Per compound, a stint ends at most at the oldest tyre age any car ran on
-that compound in this race plus `SimConfig.stint_limit_margin_laps` laps (default 3; `null`
-turns R8 off). `SimConfig.stint_limit_rank` (default 1) picks which car sets the age: the
-limit is the age at least that many cars reached, the rank-th largest of the per-car maximum
-ages on the compound, so 1 is the oldest tyre any car ran and 3 the age three cars reached
-(2023 Spain: HARD 50 at rank 1, 32 at rank 3). A compound fewer cars ran than the rank takes
-its smallest per-car maximum; a rank above 1 needs the frame's driver column. The end age is `tyre_age + laps` for the current set and `start_age + laps`
-for a later one. The limits are computed once per race from the full race lap frame
-(`rules.stint_limits`, `Simulator.stint_limits`, every lap counted, clean or not), which the
-belief and the world simulators are both built on, so both apply the same limits whatever
-their fit window. A compound no car ran in the race has no limit when the compound proxy is
-off (`SimConfig.compound_proxy.enabled: false`). With it on (the default; `src/sim/proxy.py`,
-docs/eval.md "Proxied compounds"), each of HARD, MEDIUM and SOFT that no car ran gets one,
-so the optimizer cannot plan an absurdly long stint on a compound priced by a straight line
-it has no race laps for: the oldest tyre age run on it in practice this weekend (every
-practice lap, the Sprint included on a sprint weekend), plus the margin; if it was never
-run in practice, the limit of the nearest raced compound times the cross-race tyre-life ratio
-(`configs/sim/compound_steps.json`, rounded down), plus the margin. `proxy.unraced_limits`
-computes them once, beside `rules.stint_limits`, and `Simulator.stint_limit_sources` says
-where each came from; the error message names it ("no SOFT raced: the oldest SOFT tyre run
-in practice, 18, + 3"). On the calibration races this applies to 2021 Spain HARD (18 in FP1,
-cap 21) and 2022 Saudi Arabia SOFT (18 in FP1, cap 21). There is no exemption for
-a degradation model with a hinge: past the last observed age a hinge is still a straight
-line. If the current set cannot keep inside its limit (it cannot reach its soonest legal
-stop, R1 and R2, inside the limit, or no legal stop fits in the laps left and the flag is
-past the limit), the first stint may run to that soonest stop, or to the flag when no legal
-stop fits; `optimize_batch` records this
-as `diagnostics["stint_limit_fallback"]`. The limit is a hindsight race constant, in the
-same class as the observed pit loss: it reads the whole race, including laps after the
-snapshot. An as-of source (earlier seasons at the circuit, Pirelli guidance) can replace
-it later without changing where the rule is enforced.
+**R8 Stint limit: RETIRED.** R8 said a stint may end at most at the oldest tyre age any car ran
+on its compound in the whole race plus 3 laps. That number is computed from laps after the
+decision snapshot, and it was handed to every policy: the reference and the belief optimizer
+searched inside it, the continuation of an agent decision, the limit-aware baselines and the
+forced stops of `run_to_flag` / `one_stop_total` planned around it, `simulate_batch` rejected a
+plan past it, and the agent's tools returned an error stating it. It was a hindsight leak, and
+it is no longer a rule: no rule a policy sees may depend on a lap after the snapshot
+(docs/eval.md "Information contract").
 
-The baseline policies in `src/baselines` do not know R8 and are unchanged. The eval wrapper
-(`src/eval/policies.py`, `_bridged`) makes two of them limit-aware when their plan breaks
-it: `fixed_one_stop` keeps its compounds and moves the first stop earlier, to the last lap at
-which the whole plan passes every rule; `greedy_crossover` takes a forced stop on the lap its
-set would pass the limit (it reads a prohibitive lap time past the limit, so its own
-crossover test fires there whenever a stop is allowed). `actual_strategy` and
-`fixed_two_stop` are not adjusted. Every baseline plan is then scored by the world, which
-checks every rule, so one that still breaks R8 is an `invalid` row, the status an agent's
-plan past the limit gets. With `stint_limit_margin_laps: null` the baselines are their own
-plans, as before R8.
+What replaced it is physics, not a rule: **the wear cliff** (docs/eval.md "The wear cliff",
+`src/sim/cliff.py`). Past a compound's cliff age every lap costs `penalty_s_per_lap2 x (age -
+cliff age)` more, so an over-long stint is slow rather than forbidden. The scorer (the world
+simulator and the hindsight reference) places the cliff from the whole race; a policy's belief
+places it only from what is known at the snapshot, as an estimate with uncertainty, and the
+agent's tools report it as such ("longest run seen so far on this compound: N laps; ... wear
+beyond that is uncertain"). A plan is `invalid` only for a published-regulation violation (R1-R4,
+the laps, the future-stop limit), never for exceeding a tyre life.
+
+The legacy setting reproduces the results produced under R8 exactly:
+`SimConfig.stint_limit_margin_laps: 3` with `wear_cliff.enabled: false`
+(`configs/sim/legacy/world_r8.yaml` and `configs/sim/legacy/belief_r8.yaml`; default `null`, off).
+With it the old machinery runs unchanged: `rules.stint_limits` (rank `stint_limit_rank`, from the
+full race frame), `proxy.unraced_limits` for an unraced compound, the `stint_limit` validity rule,
+`optimize_batch`'s candidate filter (`diagnostics["stint_limit_dropped"]`,
+`["stint_limit_fallback"]`) and the limit-aware baseline wrappers in `src/eval/policies.py`
+(`fixed_one_stop` moves its first stop earlier, `greedy_crossover` reads a prohibitive lap time
+past the limit). `tests/test_tyre_life_future_blindness.py` shows that this setting is the leak:
+with it, scrambling the laps after the snapshot changes what a policy sees.
+
+Not modelled: a race's own mandated maximum stint (2023 and 2025 Qatar: 25 laps per set), a
+published regulation that would be a legitimate rule; R8 happened to stand in for it at 2025
+Qatar, a calibration race that no scenario set holds.
 
 ## Where each rule lives
 
@@ -117,7 +107,7 @@ plans, as before R8.
 | R5 | `Simulator`, `SimConfig` | `Snapshot.pit_loss_s` is a legacy field | `optimize_batch` scores with the simulator only |
 | R6 | `simulate_batch` | `optimize(seeds=...)` | `optimize_batch` reports `seeds = (0, ..., n-1)`, batch seed in `diagnostics["seed"]` |
 | R7 | `compare` ranks by mean only (`best` is the lowest mean) | `optimize`'s tie-break key | `optimize_batch` uses the same key (`_key`) |
-| R8 | `stint_limit` (a validity rule, as R1-R4: a plan past a limit is invalid, with an error the agent's tools return) | not modelled (`src/baselines` unchanged); the eval wrapper (`eval.policies`) makes `fixed_one_stop` and `greedy_crossover` limit-aware, and a baseline plan still past a limit is invalid | `optimize_batch` filters the candidates, counted in `diagnostics["stint_limit_dropped"]` |
+| R8 (retired; legacy setting only) | `stint_limit`, a no-op unless `stint_limit_margin_laps` is set; tyre life is priced by the wear cliff (`cliff.py`, `Simulator.cliffs_for`) | not modelled; the eval wrapper's limit-aware adjustments run only under the legacy setting | `optimize_batch`'s candidate filter, legacy setting only |
 
 `laps_on_set` is the laps since the last recorded stop, capped by the set's age when the
 stint history does not add up.

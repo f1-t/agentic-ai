@@ -3,12 +3,13 @@
 Every function takes a contracts.Snapshot and returns a JSON-ready dict: NaN and infinite
 values come back as None, and every number carries an interval, a source or a flag. They
 run on the belief simulator, configs/sim/belief.yaml as it stands (to_snapshot window,
-the projected field's traffic, SC and VSC periods from the rate model, the config's
-calibrator, posterior parameter draws, residual lap noise, the wear lower bound). The tools
-never build their own config. Traffic: the other cars are projected from the laps up to the
-snapshot only (traffic.py, source "projected"; belief_simulator refuses the recorded
-source), and compare_plans, evaluate_action and model_report carry it compactly
-(traffic_view, traffic_report).
+traffic off, SC and VSC periods from the rate model, the config's calibrator, posterior
+parameter draws, residual lap noise, the wear lower bound), or the yaml AGENT_BELIEF_CONFIG
+names. The tools never build their own config. Traffic is a switch (docs/eval.md
+"Traffic"): with configs/sim/belief_traffic.yaml the other cars are projected from what was
+visible at the snapshot (traffic.py, source "projected"; belief_simulator refuses the
+recorded source), and compare_plans, evaluate_action and model_report carry it compactly
+(traffic_view, traffic_report); with it off they say traffic is not modelled.
 
     race_state(snapshot)                       the snapshot, legal_compounds, remaining_laps, event_rates
     model_report(snapshot, ages)               the fit's coefficients with intervals and flags
@@ -40,12 +41,14 @@ from __future__ import annotations
 
 import copy
 import math
+import os
 from pathlib import Path
 
 import numpy as np
 
 from ..contracts import Plan, Snapshot
 from . import calibrators, jobs
+from . import cliff as _cliff
 from . import model_report as _report
 from . import proxy as _proxy
 from .compute import load_profile
@@ -55,6 +58,7 @@ from .optimizer_bridge import as_continuation
 from .race_ids import RACE_ID_ALIASES, canonical_race_id, parse_race_id, slug
 
 BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
+BELIEF_CONFIG_ENV = "AGENT_BELIEF_CONFIG"   # a belief yaml for the tools in place of BELIEF_CONFIG
 # added to the seed of every belief-side simulation, so the belief's samples are never the
 # world's (a prime, far from any seed a run uses)
 BELIEF_SEED_OFFSET = 1_000_003
@@ -80,9 +84,10 @@ _BELIEF: dict = {}
 
 # --- the belief simulator ---------------------------------------------------------------
 def belief_config() -> SimConfig:
-    """configs/sim/belief.yaml, read once."""
+    """configs/sim/belief.yaml, read once; the yaml AGENT_BELIEF_CONFIG names instead when set
+    (the agent's traffic switch: configs/sim/belief_traffic.yaml, docs/eval.md "Traffic")."""
     if "config" not in _BELIEF:
-        _BELIEF["config"] = SimConfig.from_file(BELIEF_CONFIG)
+        _BELIEF["config"] = SimConfig.from_file(os.environ.get(BELIEF_CONFIG_ENV) or BELIEF_CONFIG)
     return _BELIEF["config"]
 
 
@@ -144,11 +149,15 @@ def contract_of(view, profile=None) -> Snapshot:
     race_id = race_id_for_view(view)
     if race_id is None:
         return view.to_contract()
-    race = _race_data(race_id, profile or load_profile()).race
+    profile = profile or load_profile()
+    race = _race_data(race_id, profile).race
     update = {"total_laps": view.total_laps}
     if view.min_stint_laps is not None:
         update["min_stint_laps"] = view.min_stint_laps
-    return view.to_contract(race=race.model_copy(update=update))
+    snap = view.to_contract(race=race.model_copy(update=update))
+    # the race's whole-race pit loss is the world's; the contract carries the belief's as-of one
+    pl = belief_simulator(snap, profile).fitted_for(snap).pit_loss_inputs(snap)
+    return snap.model_copy(update={"race": snap.race.model_copy(update={"pit_loss_s": round(pl["pit_loss_s"], 3)})})
 
 
 # --- helpers ------------------------------------------------------------------------------
@@ -332,6 +341,14 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
       price_basis               all of it in words, e.g. "SOFT: pace from practice long runs
                                 40%, qualifying 35%, the cross-race step 25% (anchor MEDIUM);
                                 ...". A proxied compound's price has no race laps behind it.
+      tyre_life                 with the wear cliff on (sim/cliff.py): the belief's estimate of
+                                the compound's tyre life at the snapshot, {longest_run_seen_laps
+                                (practice and this race so far, None when nothing was seen),
+                                seen_source, prior_life_laps and prior_sd_laps (the pre-race
+                                estimate from earlier races, None when the runs seen already
+                                exceed it), prior_source, cost_past_life_s_per_lap (the extra lap time
+                                past it, in words), note}. An estimate with uncertainty, never a
+                                limit: it reads nothing after the snapshot.
 
     and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis and
     fuel_point_estimate) for models with a
@@ -344,6 +361,7 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
     fit_report = getattr(deg, "fit_report", None) or {}
     draws = _wear_draws(deg, n_samples or profile.sim.n_samples)
     bounded = fit_report.get("bounded") or {}
+    cliffs = sim.cliffs_for(snapshot)
     out = rep.model_dump()
     for c, r in rep.compounds.items():
         if not r.modelled:
@@ -364,6 +382,9 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
                      interval_basis={name: basis for name, (_, basis) in pairs.items()},
                      wear_at_bound=bool(bounded.get(c, False)),
                      fuel_wear_corr=(rep.fuel_wear_corr or {}).get(c), flags=flags)
+        life = cliffs.get(c)
+        if life is not None:   # SimConfig.wear_cliff: the as-of tyre-life estimate, never a limit
+            entry["tyre_life"] = _tyre_life(life)
         tiers = (fit_report.get("proxy") or {}).get(c)
         if tiers is not None:   # SimConfig.compound_proxy: where this compound's pace and wear come from
             entry.update(pace_source=tiers["pace_source"], wear_source=tiers["wear_source"],
@@ -430,30 +451,89 @@ def traffic_report(snapshot: Snapshot, sim) -> dict:
             "own_pace_s": round(float(state.own_offset_s), 2)}
 
 
+NEUTRAL_HORIZONS = (5, 10)   # laps ahead for the chance of a new SC / VSC (pit_loss)
+RATE_BAND = 2.0              # the rate's uncertainty: a factor of 2 either way (provisional rates)
+
+
+def _neutralised_for(snapshot: Snapshot) -> int:
+    """Consecutive laps up to the snapshot under its current status (0 when green)."""
+    laps = set(snapshot.sc_laps if snapshot.track_status == "sc" else
+               snapshot.vsc_laps if snapshot.track_status == "vsc" else [])
+    n, lap = 0, snapshot.laps_completed
+    while lap in laps:
+        n, lap = n + 1, lap - 1
+    return n
+
+
+def neutralisation_outlook(snapshot: Snapshot, config: SimConfig | None = None) -> dict:
+    """The chance a new SC or VSC period starts within each of NEUTRAL_HORIZONS laps (capped at
+    the laps left), from the rates the belief draws with (event_rates): 1 - (1 - p)^n, with a
+    low / high band from the rate divided and multiplied by RATE_BAND. Only the rates as of the
+    race start and the status so far enter; nothing about later neutralisations."""
+    r = event_rates(snapshot, config)
+    if r["p_sc"] is None:
+        return {"source": r["source"]}
+    left = snapshot.remaining_laps
+
+    def chance(p, n):
+        return {"low": round(1 - (1 - p / RATE_BAND) ** n, 3), "median": round(1 - (1 - p) ** n, 3),
+                "high": round(1 - (1 - min(1.0, p * RATE_BAND)) ** n, 3)}
+    out = {f"next_{h}_laps": {"sc": chance(r["p_sc"], min(h, left)), "vsc": chance(r["p_vsc"], min(h, left))}
+           for h in NEUTRAL_HORIZONS}
+    return {**out, "mean_period_laps": {"sc": r["d_sc"], "vsc": r["d_vsc"]}, "rates_source": r["source"],
+            "band": f"rate / {RATE_BAND:g} to rate x {RATE_BAND:g}"}
+
+
+def _tyre_life(life) -> dict:
+    """model_report's tyre_life entry of one compound's belief cliff (cliff.Cliff)."""
+    seen = life.lower if life.prior is not None else life.age
+    seen_src = life.seen_source if life.prior is not None else life.source
+    return {"longest_run_seen_laps": seen if seen_src is not None else None, "seen_source": seen_src,
+            "prior_life_laps": life.prior, "prior_sd_laps": life.prior_sd if life.prior is not None else None,
+            # the tier only: a source never names an earlier race (the agent's view is anonymous)
+            "prior_source": str(life.source).split(":")[0] if life.prior is not None else None,
+            "cost_past_life_s_per_lap": f"min({life.kappa:g} x laps_past^2, {life.cap:g})",
+            "note": _cliff.describe(life)}
+
+
 def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
-    """pit_loss_s {low, median, high}: race.pit_loss_s, or the calibrator's value, with the
-    calibrator's sd (calibrators.effective_factors) as -+ 1.64 sd, source "calibrator";
-    when the calibrator gives no sd, the value with a fixed 10 percent band, source
-    "config". pit_loss_now_s is that interval times pit_loss_now_factor, the factor for the
-    current track status: sc_pit_loss_factor under SC, vsc_pit_loss_factor under VSC, 1 when
-    green. The SC and VSC factors are config.effects'. estimate_pit_loss's body."""
+    """pit_loss_s {low, median, high}: the pit loss the belief prices a green stop with at this
+    snapshot (Simulator.pit_loss_inputs). Under the as-of belief (SimConfig.pit_loss.source
+    "asof", configs/sim/belief.yaml) it is pit_loss.estimate: a prior from earlier races
+    updated with this race's green stops seen so far, -+ 1.64 sd, source "asof", with `basis`
+    (prior, its source, stops seen). A calibrator's sd (calibrators.effective_factors), when it
+    gives one, takes over (source "calibrator"); with no sd at all a fixed 10 percent band,
+    source "config". pit_loss_now_s is that interval times pit_loss_now_factor, the factor for
+    the current track status (the as-of SC / VSC factor under SC / VSC, 1 when green), and
+    neutralised_for_laps how long the current SC / VSC has lasted. `outlook` is the chance of a
+    new SC or VSC in the coming laps (neutralisation_outlook). Never the whole-race value the
+    world scores with. estimate_pit_loss's body."""
     sim, _ = _setup(snapshot, sim, profile)
     fit = sim.fitted_for(snapshot)
-    mean, sd = float(snapshot.race.pit_loss_s), 0.0
-    if fit.calibration is not None:
+    pl = fit.pit_loss_inputs(snapshot)
+    mean, sd = float(pl["pit_loss_s"]), float(pl["sd_s"])
+    source = "asof" if pl["source"] == "asof" else None
+    if fit.calibration is not None and pl["source"] != "asof":
         mean, sd = calibrators.effective_factors(fit, snapshot.race)["pit_loss_s"]
     if not _nan(sd) and sd > 0:
-        band, source = Z90 * sd, "calibrator"
+        band, source = Z90 * sd, source or "calibrator"
     else:
         band, source, sd = PIT_LOSS_BAND * mean, "config", None
-    fx = sim.config.effects
     green = {"low": mean - band, "median": mean, "high": mean + band}
-    factor = {"sc": fx.sc_pit_loss_factor, "vsc": fx.vsc_pit_loss_factor}.get(snapshot.track_status, 1.0)
-    return _jsonable({
-        "pit_loss_s": green, "source": source, "sd_s": sd,
-        "pit_loss_now_s": {k: v * factor for k, v in green.items()}, "pit_loss_now_factor": factor,
-        "sc_pit_loss_factor": fx.sc_pit_loss_factor, "vsc_pit_loss_factor": fx.vsc_pit_loss_factor,
-        "factor_source": "config", "track_status": snapshot.track_status})
+    sc, vsc = pl["sc_factor"], pl["vsc_factor"]
+    factor = {"sc": sc, "vsc": vsc}.get(snapshot.track_status, 1.0)
+    out = {"pit_loss_s": green, "source": source, "sd_s": sd,
+           "pit_loss_now_s": {k: v * factor for k, v in green.items()}, "pit_loss_now_factor": factor,
+           "sc_pit_loss_factor": sc, "vsc_pit_loss_factor": vsc,
+           "factor_source": "asof" if pl["source"] == "asof" else "config",
+           "track_status": snapshot.track_status, "neutralised_for_laps": _neutralised_for(snapshot),
+           "outlook": neutralisation_outlook(snapshot, sim.config)}
+    if pl["source"] == "asof":
+        out["basis"] = {"prior_s": pl["prior_s"], "prior_source": pl["prior_source"],
+                        "green_stops_seen": pl["n_green_stops"], "sc_stops_seen": pl["n_sc_stops"],
+                        "vsc_stops_seen": pl["n_vsc_stops"],
+                        "sc_factor_sd": round(pl["sc_factor_sd"], 3), "vsc_factor_sd": round(pl["vsc_factor_sd"], 3)}
+    return _jsonable(out)
 
 
 def simulate_plan(snapshot: Snapshot, stints, n_samples=None, *, sim=None, profile=None) -> dict:

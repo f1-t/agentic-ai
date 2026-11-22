@@ -46,7 +46,7 @@ import pandas as pd
 
 from . import calibration, jobs, pace, traffic
 from .compute import load_profile
-from .config import ComponentSpec, SimConfig
+from .config import ComponentSpec, SimConfig, world_default
 from .engine import Simulator
 
 KS = (0, 10, 20, 30, 40)
@@ -211,7 +211,7 @@ def race_job(item):
     race_id, config_path, fit, pace_kinds, ks, n_iter = item
     profile = load_profile()
     data = jobs.load_race(race_id, profile)
-    cfg = SimConfig.from_file(config_path) if config_path else SimConfig()
+    cfg = SimConfig.from_file(config_path) if config_path else world_default(SimConfig())   # the eval's default world
     off = Simulator(data.frame, cfg.model_copy(update={"traffic": ComponentSpec(name="none")}), data.practice)
     all_paces, _ = pace.offsets(off, data.frame, data.race, data.practice)
     paces = {"practice": all_paces.get("practice"), "asof": all_paces.get("practice"),

@@ -1,0 +1,11 @@
+# Wear identification arm "driver_effects_hinge_life": driver_effects on linear_fuel_hinge with
+# per-compound knots at 75 percent of the oldest tyre age the fit's rows reach on the compound
+# (a prior on where fall-off starts: teams stop at its onset, so it sits inside the longest life
+# seen) and every hinge below 0 dropped (a flattening of long stints is not extrapolated into free
+# pace). Fixed a priori before the cross-race run of the tyre-life change.
+degradation:
+  name: linear_fuel_hinge
+  params:
+    driver_effects: race
+    knot_life_fraction: 0.75
+    hinge_lower_bound: 0.0

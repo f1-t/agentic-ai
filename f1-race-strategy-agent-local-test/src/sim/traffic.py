@@ -28,12 +28,14 @@ belongs to ground truth, calibration, replay and the eval's scorer, never to the
 side (reads_future True).
 
 Projected ghosts (source "projected", the belief's traffic; reads_future False). prepare
-cuts the frame to lap <= k = snapshot.laps_completed before it reads anything, then
-project_field projects every other car with a lap-k row: it laps at `model` (the engine's
+cuts the frame with visible_field (data.visible_rows at the moment the snapshot driver ended
+lap k, the belief window's clock; gap columns recomputed on those rows) before it reads
+anything, then project_field projects every other car still running at that moment from its
+last visible crossing (a lap in progress ends after the cut): it laps at `model` (the engine's
 degradation fit) for its compound and age plus its median residual over its last pace_laps
 green laps (its median lap where the model lacks the compound); a car that has not stopped
 stops once when its set reaches the field's typical life so far (typical_life: the median
-tyre age at the stops made up to k, per compound, else over every compound, else half the
+tyre age at the stops seen by the cut, per compound, else over every compound, else half the
 race), at the latest min_stint_laps before the flag; a car that has stopped stops again
 only when age + remaining laps > stretch x that life. A projected stop adds the race's pit
 loss to the out-lap and fits next_compound (the compound most used at the stops so far). A
@@ -55,7 +57,7 @@ the sample's neutral laps are the record's nothing moves.
 
 own_pace: our clock among the ghosts runs at f + own_offset_s on green laps (pace_offset:
 the driver's median residual over the model, free-air green laps when there are
-OWN_PACE_MIN_LAPS of them; recorded: the whole race, projected: up to k). It decides whom we
+OWN_PACE_MIN_LAPS of them; recorded: the whole race, projected: the visible rows). It decides whom we
 catch and our positions; the returned lap times are f plus the traffic increments, so a
 pace-corrected replay (calibration.midrace's err_offset_s) adds the driver term once.
 
@@ -64,7 +66,7 @@ pass_mode "earned": of the cars `passing` would pass, a pass completes only when
 dirty air (when dirty_air_s > 0), and end = max(clamp, arrive + extra): no swap, so no lap
 ends earlier than our own arrival and no time is conjured. A car only a little faster sits
 in dirty air for more laps than a much faster one. dirty_air_auto sets dirty_air_s from the
-data (dirty_air_estimate; recorded: the whole race, projected: up to k).
+data (dirty_air_estimate; recorded: the whole race, projected: the visible rows).
 
 Positions (state.positions after each apply, BatchResult.final_pos / rejoin_pos /
 pit_window_cars): 1 + the ghosts whose (shifted) G crossed the line before us at the end of
@@ -188,7 +190,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import FREE_AIR_GAP_S
-from .data import line_crossings
+from .data import gap_columns, line_crossings, visible_rows
 from .registry import Registry
 
 TRAFFIC = Registry("traffic model")
@@ -405,7 +407,39 @@ class GhostState:
     own_offset_s: float = 0.0   # our pace over the model on the track (own_pace), 0 when off
     # the last apply call's positions per plan: final_pos, rejoin_pos, pit_window_cars
     positions: dict = None
+    # (n_ghosts,) the lap index each classified ghost took the flag on, -1 for a car that retired
+    # (_classify)
+    final_idx: np.ndarray = None
     dirty_air_s: float = 0.0    # the params' dirty_air_s, or dirty_air_auto's estimate
+
+
+def flag_classification(G, half_lap_s):
+    """(n_ghosts,) per ghost the index of its last crossing in G (n_ghosts, n_laps) when it was
+    classified, -1 when it retired. The flag falls at the earliest crossing of the last lap
+    (the leader's finish); a ghost whose last crossing is not earlier than that, less half a
+    lap, took the flag (a lapped finisher crosses after the leader, a lap or more short), and
+    one that stopped crossing earlier retired. A ghost that crossed the last lap took it."""
+    n, n_laps = G.shape
+    if not n_laps:
+        return np.full(n, -1, dtype=int)
+    ok = np.isfinite(G)
+    has = ok.any(axis=1)
+    last = np.where(has, n_laps - 1 - np.argmax(ok[:, ::-1], axis=1), -1)
+    full = ok[:, -1]
+    if not full.any():   # nobody reached the last lap (a shortened race): every car is classified
+        return last
+    flag = float(G[full, -1].min())
+    end = np.where(has, G[np.arange(n), np.maximum(last, 0)], -np.inf)
+    if half_lap_s is None or not np.isfinite(half_lap_s):   # half the field's median lap in G
+        steps = np.diff(G, axis=1)
+        steps = steps[np.isfinite(steps)]
+        half_lap_s = 0.5 * float(np.median(steps)) if steps.size else 0.0
+    margin = half_lap_s
+    return np.where(full | (has & (end >= flag - margin)), last, -1)
+
+
+def _classify(state: GhostState):
+    state.final_idx = flag_classification(state.table.G, state.half_lap_s)
 
 
 def _fill(state: GhostState, table: GhostTable, p: GhostParams) -> GhostState:
@@ -527,51 +561,94 @@ def next_compound(past, current, model):
     return others[0] if others else current
 
 
+RETIRED_LAPS = 2.0   # a car with no crossing for this many field laps before the cut is out of the race
+
+
+def snapshot_cut(frame, snapshot):
+    """The session time a projection is cut at: the end_s of the snapshot driver's lap k (the
+    belief window's clock, engine.Simulator.cut_time), else the anchor (race start plus
+    elapsed_s); None without end_s, where the cut falls back to lap <= k."""
+    if "end_s" not in frame:
+        return None
+    k = snapshot.laps_completed
+    row = frame[(frame["driver"] == snapshot.driver) & (frame["lap"] == k)]
+    end = pd.to_numeric(row["end_s"], errors="coerce").dropna()
+    if len(end):
+        return float(end.iloc[0])
+    return anchor(frame, snapshot)
+
+
+def visible_field(frame, snapshot):
+    """(rows, cut): the rows a projection may read, data.visible_rows at snapshot_cut (every
+    row ended by the moment the snapshot driver ended lap k), with the gap columns recomputed
+    from those rows alone (data.gap_columns); the rows with lap <= k, and cut None, where the
+    frame has no clock."""
+    t = snapshot_cut(frame, snapshot)
+    if t is None:
+        return frame[frame["lap"] <= snapshot.laps_completed], None
+    rows = visible_rows(frame, t)
+    if "gap_ahead_s" in rows and len(rows):
+        rows = gap_columns(rows.copy())
+    return rows, t
+
+
 @dataclass
 class GhostProjection:
     """One other car's projection at the snapshot, before a variant's jitter."""
     driver: str
-    start_s: float          # its crossing at the end of lap k
+    last_lap: int           # its last lap ended by the cut
+    start_s: float          # that lap's end (its crossing at the start of last_lap + 1)
+    crossings: dict         # lap L -> its crossing at the start of L, for every L <= last_lap + 1 it showed
     compound: str
-    age: float              # tyre age after lap k
+    age: float              # tyre age after last_lap
     offset_s: float         # its pace over the model, the median residual of its recent green laps
     offset_sd_s: float      # that median's standard error (NaN below two laps)
     const_s: float          # its median recent green lap, the pace on a compound the model lacks
-    stop_lap: int | None    # projected in-lap (> k), None for no further stop
-    pitted_now: bool        # its lap k is an in-lap: the out-lap is k + 1
+    stop_lap: int | None    # projected in-lap (> last_lap), None for no further stop
+    pitted_now: bool        # its last_lap is an in-lap: the out-lap is last_lap + 1
     out_extra_s: float      # time its out-lap adds over its pace
     next_compound: str
 
 
 def project_field(snapshot, frame, driver, model=None, ref_lap_s=None, params: GhostParams | None = None):
-    """GhostProjection per other car with a lap-k row and an end_s on it, from the rows of
-    `frame` with lap <= k = snapshot.laps_completed only (nothing later is read). The stop rule
-    (module docstring, "Projected ghosts"): a car that has not stopped stops when its set
-    reaches the field's typical life so far (the median tyre age at the stops made so far, per
-    compound), at the latest min_stint_laps before the flag; a car that has stopped stops again
-    only when its set would pass `stretch` times that life before the flag."""
+    """GhostProjection per other car still running at the cut, from visible_field(frame) only:
+    the rows ended by the moment the snapshot driver ended lap k (data.visible_rows, the belief
+    window's clock), so a car behind has not shown its lap k yet and a car a lap ahead has
+    shown its lap k + 1; nothing later is read. A car is still running when its last visible
+    crossing is within RETIRED_LAPS field laps of the cut. The stop rule (module docstring,
+    "Projected ghosts"): a car that has not stopped stops when its set reaches the field's
+    typical life so far (the median tyre age at the stops seen so far, per compound), at the
+    latest min_stint_laps before the flag; a car that has stopped stops again only when its
+    set would pass `stretch` times that life before the flag."""
     p = params or GhostParams(source="projected")
     k, total = snapshot.laps_completed, snapshot.race.total_laps
-    frame = frame[frame["lap"] <= k]
+    seen, t = visible_field(frame, snapshot)
     min_stint = int(getattr(snapshot.race, "min_stint_laps", 3) or 3)
     pit = float(snapshot.race.pit_loss_s or 0.0)
-    past = frame[frame["driver"] != driver]
-    now = past[(past["lap"] == k) & np.isfinite(past["end_s"].to_numpy(dtype=float))]
-    life_by, life_all = typical_life(frame)
+    past = seen[seen["driver"] != driver]
+    life_by, life_all = typical_life(seen)
     green_all = _green_rows(past[past["lap"] > k - p.pace_laps])
     field_lap = (float(green_all["lap_time_s"].median()) if len(green_all)
                  else float(ref_lap_s) if ref_lap_s is not None and np.isfinite(ref_lap_s) else np.nan)
     out = []
-    for d in sorted(now["driver"].unique()):
+    for d in sorted(past["driver"].unique()):
         rows = past[past["driver"] == d].sort_values("lap")
+        rows = rows[np.isfinite(rows["end_s"].to_numpy(dtype=float))]
+        if rows.empty:
+            continue
         last = rows.iloc[-1]
+        m = int(last["lap"])
+        if t is None and m < k:
+            continue
+        if t is not None and np.isfinite(field_lap) and t - float(last["end_s"]) > RETIRED_LAPS * field_lap:
+            continue   # no crossing for too long: out of the race
         comp = str(last["compound"])
         age = float(pd.to_numeric(pd.Series([last.get("tyre_age")]), errors="coerce").iloc[0])
         if not np.isfinite(age):
             outs = rows.loc[rows["pit_out"].astype(bool), "lap"]
-            age = float(k - (outs.max() - 1 if len(outs) else 0))
+            age = float(m - (outs.max() - 1 if len(outs) else 0))
         green = _green_rows(rows)
-        recent = green[green["lap"] > k - p.pace_laps]
+        recent = green[green["lap"] > m - p.pace_laps]
         use = recent if len(recent) >= 3 else green
         const = float(use["lap_time_s"].median()) if len(use) else field_lap
         resid = []
@@ -590,27 +667,30 @@ def project_field(snapshot, frame, driver, model=None, ref_lap_s=None, params: G
         if life is None:
             life = float(np.ceil(total / 2))
         stop = None
-        if not pitted_now:
+        if not pitted_now and m < total:
             must = n_stops == 0 and comp in DRY_STOP_RULE
-            if must or age + (total - k) > p.stretch * life:
-                stop = int(min(k + max(1, round(life - age)), total - min_stint))
-                if stop <= k:
-                    stop = k + 1 if total - (k + 1) >= 1 else None
+            if must or age + (total - m) > p.stretch * life:
+                stop = int(min(m + max(1, round(life - age)), total - min_stint))
+                if stop <= m:
+                    stop = m + 1 if total - (m + 1) >= 1 else None
         extra = pit
         if pitted_now:
-            pred = _model_times(model, comp, [age], [k])
+            pred = _model_times(model, comp, [age], [m])
             expected = (pred[0] + offset) if pred is not None else const
             lt = float(last["lap_time_s"])
             extra = max(0.3 * pit, pit - max(0.0, lt - expected)) if np.isfinite(lt) and np.isfinite(expected) else pit
-        out.append(GhostProjection(d, float(last["end_s"]), comp, age, offset, offset_sd, const, stop,
-                                   pitted_now, extra, next_compound(past, comp, model)))
+        crossings = dict(zip((rows["lap"].astype(int) + 1).tolist(), rows["end_s"].astype(float).tolist()))
+        out.append(GhostProjection(d, m, float(last["end_s"]), crossings, comp, age, offset, offset_sd, const,
+                                   stop, pitted_now, extra, next_compound(past, comp, model)))
     return out
 
 
-def projected_table(projections, laps, total, model, pit, variant=None, min_stint=3) -> GhostTable:
-    """The GhostTable of `projections` over the remaining `laps`. `variant` is [(stop shift in
-    laps, pace shift in s)] per car for a jittered variant, None for the central projection.
-    A projected stop adds the pit loss to the out-lap; its in-lap is never caught."""
+def projected_table(projections, laps, total, model, pit, variant=None, min_stint=3, cut_s=None) -> GhostTable:
+    """The GhostTable of `projections` over the remaining `laps`: each car's crossings it had
+    shown by the cut, then its projected laps from last_lap + 1 to the flag. `variant` is [(stop
+    shift in laps, pace shift in s)] per car for a jittered variant, None for the central
+    projection. A projected stop adds the pit loss to the out-lap; its in-lap is never caught.
+    A lap in progress at the cut (`cut_s`) ends after it."""
     laps = np.asarray(laps, dtype=int)
     ghosts = [g.driver for g in projections]
     n, n_l = len(ghosts), len(laps)
@@ -620,35 +700,47 @@ def projected_table(projections, laps, total, model, pit, variant=None, min_stin
     out_lap = np.zeros((n, n_l), dtype=bool)
     if not n_l:
         return GhostTable(ghosts, laps, G, G_prev, G - G_prev, in_lap, out_lap)
-    k = int(laps[0]) - 1
+    top = int(max(laps[-1], total)) + 2
     for j, gp in enumerate(projections):
+        m = gp.last_lap
         stop, offset = gp.stop_lap, gp.offset_s
         if variant is not None:
             ds, do = variant[j]
             offset = offset + do
             if stop is not None:
-                stop = int(np.clip(stop + ds, k + 1, max(k + 1, total - min_stint)))
-        times = np.empty(n_l)
-        if gp.pitted_now:
-            segs = [(0, n_l, gp.next_compound, 1.0)]
-        elif stop is None or stop >= laps[-1]:
-            segs = [(0, n_l, gp.compound, gp.age + 1)]
-        else:
-            s = int(stop - laps[0]) + 1   # index of the out-lap
-            segs = [(0, s, gp.compound, gp.age + 1), (s, n_l, gp.next_compound, 1.0)]
-        for a, b, comp, age0 in segs:
-            pred = _model_times(model, comp, age0 + np.arange(b - a), laps[a:b])
-            times[a:b] = pred + offset if pred is not None else gp.const_s
-        if gp.pitted_now:
-            out_lap[j, 0] = True
-            times[0] += gp.out_extra_s
-        elif stop is not None and stop < laps[-1]:
-            i = int(stop - laps[0])
-            in_lap[j, i] = True
-            out_lap[j, i + 1] = True
-            times[i + 1] += pit
-        start = gp.start_s + np.concatenate([[0.0], np.cumsum(times)])
-        G_prev[j], G[j] = start[:-1], start[1:]
+                stop = int(np.clip(stop + ds, m + 1, max(m + 1, total - min_stint)))
+        future = np.arange(m + 1, total + 1)   # the laps it has still to run
+        n_f = len(future)
+        start = np.full(top + 1, np.nan)
+        for L, x in gp.crossings.items():
+            if 0 <= L <= top:
+                start[L] = x
+        flags_in, flags_out = np.zeros(top + 1, dtype=bool), np.zeros(top + 1, dtype=bool)
+        if n_f:
+            times = np.empty(n_f)
+            if gp.pitted_now:
+                segs = [(0, n_f, gp.next_compound, 1.0)]
+            elif stop is None or stop >= future[-1]:
+                segs = [(0, n_f, gp.compound, gp.age + 1)]
+            else:
+                s = int(stop - future[0]) + 1   # index of the out-lap
+                segs = [(0, s, gp.compound, gp.age + 1), (s, n_f, gp.next_compound, 1.0)]
+            for a, b, comp, age0 in segs:
+                pred = _model_times(model, comp, age0 + np.arange(b - a), future[a:b])
+                times[a:b] = pred + offset if pred is not None else gp.const_s
+            if gp.pitted_now:
+                flags_out[m + 1] = True
+                times[0] += gp.out_extra_s
+            elif stop is not None and stop < future[-1]:
+                i = int(stop - future[0])
+                flags_in[m + 1 + i], flags_out[m + 2 + i] = True, True
+                times[i + 1] += pit
+            ends = gp.start_s + np.cumsum(times)
+            if cut_s is not None and ends[0] <= cut_s:   # its lap in progress had not ended by the cut
+                ends = ends + (cut_s - ends[0] + 1e-3)
+            start[m + 2:m + 2 + n_f] = ends
+        G_prev[j], G[j] = start[laps], start[laps + 1]
+        in_lap[j], out_lap[j] = flags_in[laps], flags_out[laps]
     return GhostTable(ghosts, laps, G, G_prev, G - G_prev, in_lap, out_lap)
 
 
@@ -680,18 +772,19 @@ class GhostTraffic:
         return self._finish(state, snapshot, ref_lap_s)
 
     def _prepare_projected(self, snapshot, laps, frame, driver, ref_lap_s, model):
-        """The other cars projected from the laps up to the snapshot. The frame is cut to
-        lap <= laps_completed before anything is read, so no later lap reaches the state.
+        """The other cars projected from what was visible at the snapshot. The frame is cut to
+        visible_field (data.visible_rows at the moment the snapshot driver ended lap k, the
+        belief window's clock) before anything is read, so no later row reaches the state.
         None at the start (no lap yet) or without elapsed_s."""
         p, k = self.params, snapshot.laps_completed
         if snapshot.elapsed_s is None or k < 1:
             return None
-        past = frame[frame["lap"] <= k]
+        past, cut = visible_field(frame, snapshot)
         t0 = anchor(past, snapshot)
         proj = project_field(snapshot, past, driver, model, ref_lap_s, p)
         total, pit = snapshot.race.total_laps, float(snapshot.race.pit_loss_s or 0.0)
         min_stint = int(getattr(snapshot.race, "min_stint_laps", 3) or 3)
-        table = projected_table(proj, laps, total, model, pit, min_stint=min_stint)
+        table = projected_table(proj, laps, total, model, pit, min_stint=min_stint, cut_s=cut)
         state = _fill(GhostState(table=table, anchor=t0, sc_history=list(snapshot.sc_laps)), table, p)
         state.rec_neutral = np.zeros(len(table.laps), dtype=bool)
         if p.own_pace:
@@ -706,10 +799,11 @@ class GhostTraffic:
                        float(rng.normal(0.0, p.pace_sd_floor_s if np.isnan(g.offset_sd_s)
                                         else max(p.pace_sd_floor_s, g.offset_sd_s))))
                       for g in proj]
-            vt = projected_table(proj, laps, total, model, pit, variant=jitter, min_stint=min_stint)
+            vt = projected_table(proj, laps, total, model, pit, variant=jitter, min_stint=min_stint, cut_s=cut)
             v = _fill(GhostState(table=vt, anchor=t0, sc_history=state.sc_history), vt, p)
             v.rec_neutral, v.half_lap_s = state.rec_neutral, state.half_lap_s
             v.green_ref = _green_ref(v.g_med, v.rec_neutral, 2 * state.half_lap_s)
+            _classify(v)
             state.variants.append(v)
         return state
 
@@ -721,6 +815,7 @@ class GhostTraffic:
             ref_lap_s = float(np.median(laps_g)) if laps_g.size else np.inf
         state.half_lap_s = 0.5 * float(ref_lap_s)
         state.green_ref = _green_ref(state.g_med, state.rec_neutral, ref_lap_s)
+        _classify(state)
         if (snapshot.car_ahead is not None and snapshot.gap_ahead_s is not None
                 and snapshot.car_ahead in table.ghosts and len(table.laps)):
             implied = state.anchor - table.G_prev[table.ghosts.index(snapshot.car_ahead), 0]
@@ -784,7 +879,7 @@ class GhostTraffic:
         first_in = np.where(stop.any(axis=1), stop.argmax(axis=1), -2)
         rejoin_pos = np.full(n_plans, np.nan)
         window_cars = np.full(n_plans, np.nan)
-        final_pos = np.full(n_plans, np.nan)
+        final_ahead = np.zeros(n_plans)
         dirty = state.dirty_air_s
         dirty_on = dirty > 0
         earned = p.pass_mode == "earned"
@@ -881,11 +976,14 @@ class GhostTraffic:
                 c = cross[w, None]
                 window_cars[w] = ((G[None, :] > c) & (G[None, :] <= c + pit_s_lap[w, i, None])).sum(axis=1)
             r = first_in + 1 == i
-            if r.any() or i == n_laps - 1:
-                ahead = 1 + (G[None, :] < cross[:, None]).sum(axis=1)
-                rejoin_pos[r] = ahead[r]
-                if i == n_laps - 1:
-                    final_pos = ahead.astype(float)
+            if r.any():
+                rejoin_pos[r] = 1 + (G[None, :] < cross[r, None]).sum(axis=1)
+            # at the flag: each classified ghost on its own final lap (a lapped finisher took the
+            # flag a lap or more short), ahead when it crossed that lap's line before we did
+            fin = st.final_idx == i
+            if fin.any():
+                final_ahead += (G[None, fin] < cross[:, None]).sum(axis=1)
+        final_pos = 1.0 + final_ahead
         # this call's positions, read by the engine after the call (the extra tuple keeps its shape)
         state.positions = {"final_pos": final_pos, "rejoin_pos": rejoin_pos, "pit_window_cars": window_cars}
         return lap_s, (traffic_s, passes, bunching_s, field_delta)

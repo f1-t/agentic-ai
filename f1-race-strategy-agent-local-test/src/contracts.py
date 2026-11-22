@@ -372,6 +372,9 @@ class ModelReport(_Contract):
     # {compound: correlation of the fuel slope with its wear slope} from fit_report["cov"];
     # NaN where either variance is 0 or NaN, None for models without a fuel term
     fuel_wear_corr: dict[str, float] | None = None
+    # where each prior factor came from, {factor: "ridge" | "shrinkage"}, for a calibrator that
+    # says (the learned ridge and its per-factor hybrid, calibrators.py); None for the others
+    prior_sources: dict[str, str] | None = None
 
     @property
     def modelled(self) -> list[str]:

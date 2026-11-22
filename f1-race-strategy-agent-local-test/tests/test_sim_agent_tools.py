@@ -38,17 +38,6 @@ def syn_frame():
     return gap_columns(df)
 
 
-def perturb_after(df, k):
-    """Every car's laps after k changed: lap times, the session clock, positions and gaps."""
-    df = df.copy()
-    late = df["lap"] > k
-    df.loc[late, "lap_time_s"] += 1.3
-    df.loc[late, ["start_s", "end_s"]] += 37.0
-    df.loc[late, "position"] = 99.0
-    df.loc[late, ["gap_ahead_s", "gap_behind_s"]] += 0.7
-    return df
-
-
 def syn_sim(df, config=BELIEF):
     return Simulator(df, config, synthetic_practice())
 
@@ -57,46 +46,10 @@ def syn_snap(df=None, k=K):
     return calibration.snapshot_at(syn_frame() if df is None else df, SYN_RACE, DRIVER, k)
 
 
-def outputs(sim, snap):
-    """Every function's output for one snapshot, as JSON text."""
-    kw = {"sim": sim, "profile": PROFILE}
-    rest = snap.remaining_laps
-    out = {
-        "race_state": agent_tools.race_state(snap, config=sim.config),
-        "model_report": agent_tools.model_report(snap, ages={"MEDIUM": 30}, **kw),
-        "pit_loss": agent_tools.pit_loss(snap, **kw),
-        "simulate_plan": agent_tools.simulate_plan(snap, [["SOFT", 5], ["MEDIUM", rest - 5]], **kw),
-        "compare_plans": agent_tools.compare_plans(
-            snap, [[["SOFT", 5], ["MEDIUM", rest - 5]], {"action": "stay_out", "laps": 2},
-                   {"action": "pit", "compound": "MEDIUM"}], **kw),
-        "evaluate_pit": agent_tools.evaluate_action(snap, {"action": "pit", "compound": "MEDIUM"}, **kw),
-        "evaluate_stay": agent_tools.evaluate_action(snap, {"action": "stay", "laps": 3}, **kw),
-        "recommendation_fields": agent_tools.recommendation_fields(snap, {"decision": "PIT", "confidence": 0.7}),
-    }
-    return {name: json.dumps(v, sort_keys=True, allow_nan=False) for name, v in out.items()}
-
-
-# --- the information-boundary canary -----------------------------------------------------
-def test_canary_outputs_ignore_every_lap_after_the_snapshot():
-    df = syn_frame()
-    snap = syn_snap(df)
-    a = outputs(syn_sim(df), snap)
-    b = outputs(syn_sim(perturb_after(df, K)), snap)
-    assert a == b
-    got = {name: json.loads(v) for name, v in a.items()}
-    assert got["simulate_plan"]["valid"] and got["compare_plans"]["valid"] == [True, True, True]
-    assert all(got[e]["gap_mean_s"] is not None and got[e]["alternative"]["valid"]
-               for e in ("evaluate_pit", "evaluate_stay"))
-
-
-def test_canary_bites_with_the_full_window():
-    df = syn_frame()
-    snap = syn_snap(df)
-    full = BELIEF.model_copy(update={"fit_window": "full"})
-    a = outputs(syn_sim(df, full), snap)
-    b = outputs(syn_sim(perturb_after(df, K), full), snap)
-    for name in ("model_report", "simulate_plan", "compare_plans", "evaluate_pit", "evaluate_stay"):
-        assert a[name] != b[name], name
+# The information-boundary canary that lived here (perturb_after: lap times, clock, positions
+# and gaps after K, with fixed race constants) could not see a leak through a race constant or
+# a precomputed frame column. tests/test_eval_information_contract.py replaces it: truncated and
+# scrambled races, every policy-visible output, and the legacy switches shown to fail.
 
 
 # --- per function ------------------------------------------------------------------------
@@ -168,10 +121,14 @@ def test_interval_without_sd_is_flagged():
 
 
 def test_pit_loss_config_band_and_calibrator_sd(syn, monkeypatch):
-    sim, snap = syn
+    # a belief that reads the snapshot's pit loss (the as-of one is tests/test_sim_pit_loss.py's)
+    _, snap = syn
+    sim = syn_sim(syn_frame(), BELIEF.model_copy(update={"pit_loss": BELIEF.pit_loss.model_copy(
+        update={"source": "snapshot"})}))
     out = agent_tools.pit_loss(snap, sim=sim, profile=PROFILE)
     assert out["source"] == "config" and out["sd_s"] is None
-    assert out["pit_loss_s"] == pytest.approx({"low": 18.0, "median": 20.0, "high": 22.0})
+    pl = snap.race.pit_loss_s   # the snapshot carries the pre-race prior (calibration.pre_race_pit_loss)
+    assert out["pit_loss_s"] == pytest.approx({"low": 0.9 * pl, "median": pl, "high": 1.1 * pl})
     assert (out["sc_pit_loss_factor"], out["vsc_pit_loss_factor"]) == (0.5, 0.6)
     assert out["track_status"] == "green"
     assert out["pit_loss_now_factor"] == 1.0 and out["pit_loss_now_s"] == out["pit_loss_s"]
@@ -224,9 +181,7 @@ def test_evaluate_action_pit_against_staying_out(syn):
     assert out["gap_std_s"] == pytest.approx(c["gap_std_s"][0][1])
     assert out["probability_improves_outcome"] == c["p_beats"][0][1]
     assert out["probability_covers"] == agent_tools.PROBABILITY_COVERS
-    assert "traffic_probability" not in out and out["traffic"]["basis"] == agent_tools.TRAFFIC_BASIS
-    assert set(out["traffic"]["action"]) == {"expected_rejoin_position", "rejoin_position_band", "cars_in_pit_window",
-                                             "time_lost_s", "final_position"}
+    assert "traffic_probability" not in out and "not modelled" in out["traffic"]
     assert out["dominated"] == c["dominated"][0] and out["support_warnings"] == c["support_warnings"][0]
     cal = agent_tools.calibration_error_s(sim, snap)   # the midrace summary's to_snapshot row
     assert out["calibration_error_s"] == cal
@@ -274,13 +229,11 @@ def test_evaluate_action_errors_and_edges(syn):
         StintRecord(compound="SOFT", laps=K, start_lap=1)]})
     flag = agent_tools.evaluate_action(later, {"action": "stay_out", "laps": 99}, sim=sim, profile=PROFILE)
     assert flag["plan"] == [["MEDIUM", snap.remaining_laps]] and "error" not in flag
-    # R8: AAA..CCC ran SOFT to age 25, so the SOFT set (20 laps old) may end at age 28; a stay
-    # of 10 laps cannot, and the error says by how much (a rule error the agent can correct)
-    assert sim.stint_limits["SOFT"] == 25.0
+    # R8 is retired (docs/rules.md): AAA..CCC ran SOFT to age 25 in the whole race, but no limit
+    # follows from it; a long stay is priced by the belief's wear cliff, never an error
+    assert sim.stint_limits == {}
     long = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 10}, sim=sim, profile=PROFILE)
-    assert long["valid"] is False and "past the stint limit of 28" in long["error"]
-    ok = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 5}, sim=sim, profile=PROFILE)
-    assert "error" not in ok
+    assert "error" not in long and long["gap_mean_s"] is not None
 
 
 def test_recommendation_fields_give_p_pit(syn):
@@ -299,7 +252,7 @@ def test_tools_keep_the_contract_and_read_min_stint_from_it():
     assert {"get_model_report", "compare_plans"} <= set(names)
     snap = syn_snap()
     view = tools.set_snapshot(snap)
-    assert tools._contract() is snap and view == RaceSnapshot.from_contract(snap)
+    assert tools._contract() is snap and view == RaceSnapshot.from_contract(snap).anonymised()   # what the model is shown
     assert view.min_stint_laps == SYN_RACE.min_stint_laps
     # the synthetic race is not in the cache: the tools say so instead of failing
     out = tools.estimate_pit_loss()
@@ -326,8 +279,12 @@ def test_view_of_spain_takes_the_race_constants(spain):
     view = RaceSnapshot(season=2021, event="spain", lap=30, total_laps=60, driver="TST", position=4,
                         compound="SOFT", tyre_age_laps=22)
     assert agent_tools.race_id_for_view(view) == "2021_04_spain"
-    race = agent_tools.contract_of(view).race
-    assert (race.race_id, race.total_laps, race.pit_loss_s) == ("2021_04_spain", 60, spain.race.pit_loss_s)
+    snap = agent_tools.contract_of(view)
+    race = snap.race
+    assert (race.race_id, race.total_laps) == ("2021_04_spain", 60)
+    # the contract carries the belief's as-of pit loss, never the world's whole-race one
+    asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)["pit_loss_s"]
+    assert race.pit_loss_s == pytest.approx(asof, abs=1e-3) and race.pit_loss_s != spain.race.pit_loss_s
 
 
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
@@ -335,10 +292,11 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
     """At HAM lap 20 the sampling spread alone would claim certainty (|gap| > 2 sd); the
     calibration error says the gap is inside the model's error."""
     snap = calibration.snapshot_at(spain.frame, spain.race, "HAM", 20)
-    # without the R8 stint limit: it bounds the continuations of both actions (SOFT to age 35),
-    # which spreads the gap (sd 6.4 s against |gap| 2.2 s) past the claim this test is about
+    # without the wear cliff: its uncertain age (as R8's limit did before it) spreads the gap
+    # of the two continuations past the claim this test is about
+    cfg = agent_tools.belief_config()
     sim = agent_tools.belief_simulator(
-        snap, config=agent_tools.belief_config().model_copy(update={"stint_limit_margin_laps": None}))
+        snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False})}))
     out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1}, sim=sim)
     assert abs(out["gap_mean_s"]) > 2 * out["gap_std_s"]
     assert out["within_sim_error"] is True and out["confidence_basis"] == "model error"
@@ -377,7 +335,9 @@ def test_run_agent_end_to_end_through_the_belief(spain):
     out = {t["tool"]: t["output"] for t in traj}
     assert out["get_race_snapshot"]["min_stint_laps"] == snap.race.min_stint_laps
     assert out["estimate_tyre_degradation"]["wear_at_bound"] is True
-    assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == snap.race.pit_loss_s
+    asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)
+    assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == pytest.approx(asof["pit_loss_s"])
+    assert out["estimate_pit_loss"]["source"] == "asof" and asof["pit_loss_s"] != spain.race.pit_loss_s
     assert out["compare_plans"]["valid"] == [True, True]
     ev = traj[-2]["output"]
     assert ev["action"] == {"action": "stay_out", "laps": 3} and ev["within_sim_error"] is True
