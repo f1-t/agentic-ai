@@ -7,6 +7,7 @@
     python -m src.eval.rerun agent      --set dev20 --world-config default --belief-config default [--jobs 6]
                                         [--timing-sample 24] [--resume] [--force] [--only ids.txt]
     python -m src.eval.rerun tables     --set dev20
+    python -m src.eval.rerun smoke      [--n 8] [--jobs 4]      # a live check after a merge (src/eval/smoke.py)
 
 Every stage reads and writes under one directory, --out-dir (default reports/eval/rerun/<set>):
 
@@ -588,10 +589,7 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
            # the backend and model id only: never a key, a token or an endpoint
            "model": {k: os.environ.get(k) for k in MODEL_ENV},
            "loop": {"max_steps": prof.agent.max_steps,
-                    **{k: os.environ.get(k) for k in ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS",
-                                                       "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",
-                                                       "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK",
-                                                       "AGENT_TURN_REPEAT")}},
+                    **{k: os.environ.get(k) for k in LOOP_ENV}},
            "row_stamps": stamps,
            "builder": s.builder if s else None,
            "future_blindness": future_blindness(run=getattr(args, "harness", False)),
@@ -604,16 +602,72 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
     return path
 
 
+# --- smoke: a handful of scenarios through every stage, then the lint ------------------------------------
+SMOKE_SET = "smoke"
+
+
+def stage_smoke(args) -> Path:
+    """The smoke run (src/eval/smoke.py): the `smoke` set's races (development only, checked against
+    data/eval_set.json; --final is refused), sampled by the leak-free builder, --n scenarios picked
+    (lap 0, under SC, late, mid-race, the rest spread over races), then references, baselines, the
+    agent with --jobs workers and the tables for just those; then the lint. Prints the summary and one
+    line per finding (also smoke.txt) and exits 1 on any finding."""
+    from types import SimpleNamespace
+    from . import smoke
+    from .scenarios import build_set
+    if args.final:
+        raise SystemExit("smoke never builds a report set: --final is refused")
+    spec = set_spec(SMOKE_SET, args.sets)
+    smoke.check_development(spec, spec["races"])
+    d = out_dir(args)
+    if (d / "scenarios.json").exists():
+        raise SystemExit(f"{d} has a smoke run already; each run takes a new --out-dir (the default is new each time)")
+    sub = SimpleNamespace(**{**vars(args), "set": SMOKE_SET, "out_dir": str(d), "final": False, "resume": False,
+                             "force": False, "only": None, "timing_sample": 0, "harness": False,
+                             "progress_every": max(args.n // 2, 1)})
+    timings = {}
+
+    def timed(name, fn, *a):
+        t = time.perf_counter()
+        out = fn(*a)
+        timings[name] = time.perf_counter() - t
+        return out
+
+    def scenarios():
+        prof = _profile_for(args.profile)
+        pool = build_set(spec["races"], "smoke_pool", profile=prof, rule="as_of", seed=spec["seed"],
+                         development=True, max_per_race=spec["per_race"])
+        chosen = smoke.pick(pool.items, args.n, seed=spec["seed"])
+        s = pool.model_copy(update={"version": SMOKE_SET, "items": chosen, "skipped": []})
+        s.save(d / "scenarios.json")
+        print(f"smoke: {len(chosen)} of {len(pool.items)} sampled scenarios: "
+              + ", ".join(f"{x.scenario_id} ({x.snapshot.track_status}, {x.snapshot.race.total_laps - x.lap} left)"
+                          for x in chosen), flush=True)
+    timed("scenarios", scenarios)
+    timed("references", stage_references, sub)
+    timed("baselines", stage_baselines, sub)
+    timed("agent", stage_agent, sub)
+    timed("tables", stage_tables, sub)
+    findings = timed("lint", smoke.lint, d, _profile_for(args.profile))
+    lines = smoke.summary(d, findings, timings, sub.jobs) + [f"FINDING {f}" for f in findings]
+    (d / "smoke.txt").write_text("\n".join(lines) + "\n")
+    print("\n".join(lines), flush=True)
+    if findings:
+        raise SystemExit(1)
+    return d
+
+
 # --- command line ------------------------------------------------------------------------------------------
 STAGES = {"scenarios": stage_scenarios, "references": stage_references, "baselines": stage_baselines,
-          "agent": stage_agent, "tables": stage_tables}
+          "agent": stage_agent, "tables": stage_tables, "smoke": stage_smoke}
 
 
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="python -m src.eval.rerun", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("stage", choices=list(STAGES))
-    ap.add_argument("--set", required=True, help=f"a set of {SETS_FILE.relative_to(ROOT)}: dev20, test9")
+    ap.add_argument("--set", help=f"a set of {SETS_FILE.relative_to(ROOT)}: dev20, test9 (every stage but smoke, "
+                                  "which runs set smoke)")
     ap.add_argument("--sets", default=str(SETS_FILE), help="the set definitions file")
     ap.add_argument("--out-dir", help="default reports/eval/rerun/<set>")
     ap.add_argument("--world-config", default="default", help="SimConfig file for the reference and the scoring, or "
@@ -624,7 +678,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--final", action="store_true",
                     help="scenarios: required to build a report set (development false, e.g. test9), which loads the "
                          "held-out races; pass it once, on the owner's word")
-    ap.add_argument("--jobs", type=int, default=1, help="references, baselines: worker processes (at most 4 on a "
+    ap.add_argument("--jobs", type=int, default=None, help="default 1 (smoke: 4). references, baselines: worker processes (at most 4 on a "
                                                          "shared machine), one race each, BLAS at one thread; agent: "
                                                          "worker processes running episodes concurrently, one "
                                                          "scenario at a time each")
@@ -640,6 +694,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--timing-seed", type=int, default=0, help="agent: the timing sample's seed")
     ap.add_argument("--only", help="agent: only these scenario ids (a file, one per line, or comma-separated)")
     ap.add_argument("--progress-every", type=int, default=10, help="agent: a progress line every N scenarios")
+    ap.add_argument("--n", type=int, default=8, help="smoke: the number of scenarios")
+    ap.add_argument("--backend", help=argparse.SUPPRESS)   # agent: a "module:function" backend factory (tests)
     ap.add_argument("--profile", help="compute profile (default $SIM_PROFILE or local)")
     ap.add_argument("--harness", action="store_true",
                     help="tables: also run the future-blindness harness's default part (about 16 s) and record its "
@@ -649,7 +705,15 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
-    args = parser().parse_args(argv)
+    ap = parser()
+    args = ap.parse_args(argv)
+    if args.stage == "smoke":
+        args.set = SMOKE_SET
+        args.out_dir = args.out_dir or str(OUT_ROOT / SMOKE_SET / time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
+    elif not args.set:
+        ap.error("--set is required")
+    if args.jobs is None:
+        args.jobs = 4 if args.stage == "smoke" else 1
     _log_command(out_dir(args), argv)
     started = time.perf_counter()
     STAGES[args.stage](args)

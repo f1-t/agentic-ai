@@ -332,10 +332,11 @@ def _fmt_eta(done, total, elapsed):
 
 
 def run_pass(items, *, cfg: dict, jobs: int, traj_dir: Path, parts: Path, label: str, rerun_errors: bool = False,
-             progress_every: int = 10, log=print) -> dict:
+             progress_every: int = 10, log=None) -> dict:
     """Run every scenario of `items` that is not finished (is_done) with `jobs` workers (in this
     process when jobs is 1); returns {jobs, started, ended, wall_s, ran, skipped, errors, retries,
     retry_events, crashed}. Raises PassStopped on an auth error, or when workers keep dying."""
+    log = log or (lambda msg: print(msg, flush=True))   # flushed: a log file shows progress as it happens
     traj_dir, parts = Path(traj_dir), Path(parts)
     traj_dir.mkdir(parents=True, exist_ok=True)
     parts.mkdir(parents=True, exist_ok=True)
