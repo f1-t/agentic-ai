@@ -13,8 +13,9 @@ the `scheduled_laps` of the race, the circuit key (`event_rates.CIRCUITS`), and 
 This is regulation information Pirelli publishes before each race weekend; it says nothing about
 what happened in any race. Held-out races (data/eval_set.json) have a row, since the nomination
 is public pre-race information, but their race data never feeds the history. The same holds for
-the five 2021-22 draws listed in `held_out_extra` (configs/tyre_history.yaml): 2021_07_france,
-2021_18_mexico, 2022_03_australia, 2022_05_miami, 2022_14_belgium.
+the five 2021-22 draws, which are registered in data/eval_set.json now (#94 listed them in
+`held_out_extra`): 2021_07_france, 2021_18_mexico, 2022_03_australia, 2022_05_miami,
+2022_14_belgium.
 
 Sources, fetched 2026-11-21 with a generic web client, no personal details:
 - `source_url`: Pirelli's pre-race preview or compound announcement (press.pirelli.com,

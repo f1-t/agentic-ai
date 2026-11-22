@@ -28,7 +28,7 @@ Each race has two simulators over the same lap frame and practice
 | role | default config | fit | used by |
 | --- | --- | --- | --- |
 | belief | `configs/sim/belief.yaml` | `to_snapshot`: race laps up to the snapshot, shrunk toward the practice prior; traffic off; SC and VSC periods from the rate model (EventModel defaults, provisional, Spain-derived); samples carry posterior parameter draws and residual lap noise, drawn from seed + `agent_tools.BELIEF_SEED_OFFSET` so the belief never plans on the world's samples (docs/rules.md R6) | every policy: the baselines plan on it through the bridge (`from_contract(snapshot, belief)`, `pace_for_crossover(belief, snapshot)`), and agent decisions are expanded on it |
-| world | the profile's SimConfig with `score.WORLD_EVENTS` (the SC/VSC in progress as recorded, later ones drawn) | `full`: every race lap (hindsight); traffic off; the whole-race pit loss ("Pit loss and track status") | the reference `optimize_batch` and every scoring call |
+| world | the profile's SimConfig (no SC/VSC by default; `configs/sim/world_hybrid.yaml` adds them, "Safety cars and VSC in the scoring world") | `full`: every race lap (hindsight); traffic off; the whole-race pit loss ("Pit loss and track status") | the reference `optimize_batch` and every scoring call |
 
 A policy is called as `policy(scenario, belief, max_stops)` and never sees the world. The
 regret definition is unchanged: the policy's plan and the world optimizer's plan, both
@@ -188,7 +188,13 @@ Before, the world drew no SC or VSC: a snapshot taken under a safety car was sco
 race went green at once, and a stop there cost a full green pit loss, so "pit now, it is cheap"
 could never be right in the scorer, while the belief priced it at half.
 
-**What the world models now** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
+**Default: off.** The default world still draws no SC or VSC (`score.WORLD_EVENTS_DEFAULT` False);
+the world below is opt-in with `--world-config configs/sim/world_hybrid.yaml`. Whether it becomes the
+default is decided at integration by the fidelity scorecard (PR #93, `python -m src.sim.fidelity`):
+the replay accuracy below supports recorded neutralised laps, but drawing the later periods is a
+scoring-design choice that no accuracy measure here validates.
+
+**What the opt-in world models** (`score.WORLD_EVENTS`, events `hybrid`, src/sim/events.py):
 
 - the SC or VSC in progress at the snapshot ends where it really ended: the driver's own recorded
   laps of that kind from the next lap on (the scorer may know them; the policy knows only that it
@@ -668,7 +674,7 @@ target's or an earlier race's) compares compounds by role and never counts as th
 **Validation** (`python -m src.sim.tyre_history validate`, `reports/calibration/tyre_history/`).
 As of, hence leave-one-race-out, on the 63 usable (race, role) observations of the 27 cached races
 with a dry observation that are not held out (29 races built: 2021 Belgium and 2024 Brazil have
-no dry observation; 2025 Qatar is excluded; the five held-out 2021-22 draws of `held_out_extra`
+no dry observation; 2025 Qatar is excluded; the five held-out 2021-22 draws, now in `data/eval_set.json`,
 are never loaded). Error = prior edge - observed edge, in laps; coverage of the stated 68% / 90%
 intervals; *beyond* = share of the race's usable stints on that role ending later than prior
 edge + 3 laps (*floor*: the same against the race's own observed edge, what a perfect prior would
@@ -843,22 +849,27 @@ prints one line naming which kind of set it scored.
 The cache holds 2021 Spain plus a 2018-25 sample (dataset 3): the 2023 and 2024 races already
 there and eight drawn with `random.seed(2026)` from the 173 races of 2018-25, 14 race weekends
 in all. (24 weekends of 2021-22 were added later, 38 in all; see "More cached weekends" below.
-They do not change this split.) Of these, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
+Five of them joined this split on 2026-11-21; see "The fresh 2021-22 draw" below.) Of the 14, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
 red flag) are not eligible.
 
-`data/eval_set.json` holds out four races: **2019 Monaco, 2020 Sakhir, 2025 Austria and 2024
-Austria**. Nothing loads them until the final run: no exploratory commands, no fits, no test
-that asserts on their content. The eligibility record for 2024 Austria below is the one
-exception.
+`data/eval_set.json` holds out nine races. The first four are the d4 split: **2019 Monaco,
+2020 Sakhir, 2025 Austria and 2024 Austria**. Five 2021-22 races were registered on
+2026-11-21: **2021 France, 2021 Mexico, 2022 Miami, 2022 Australia and 2022 Belgium** ("The
+fresh 2021-22 draw" below). Nothing loads them until the final run: no exploratory commands,
+no fits, and no test that asserts on their content. Their eligibility records are the one
+exception (2024 Austria below, the five in "More cached weekends").
 
 | race id | role |
 |---|---|
-| 2019_06_monaco, 2020_16_sakhir, 2025_11_austria, 2024_11_austria | held out (`data/eval_set.json`) |
+| 2019_06_monaco, 2020_16_sakhir, 2025_11_austria, 2024_11_austria | held out (`data/eval_set.json`, the d4 split) |
+| 2021_07_france, 2021_18_mexico, 2022_05_miami, 2022_03_australia, 2022_14_belgium | held out (`data/eval_set.json`, the fresh 2021-22 draw) |
 | 2021_04_spain | development and calibration: the simulator was tuned on it |
 | 2023_07_spain | calibration (held out under the previous split, see below) |
 | 2023_01_bahrain, 2019_10_united_kingdom, 2022_02_saudi_arabia, 2024_07_emilia_romagna | calibration |
 | 2025_23_qatar | calibration only, never sampled into an eval scenario set |
 | 2024_08_monaco, 2024_12_united_kingdom, 2024_21_brazil | not eligible |
+| the 13 other eligible 2021-22 races ("More cached weekends") | calibration and history |
+| 2021_02_emilia_romagna, 2021_21_saudi_arabia, 2022_04_emilia_romagna, 2021_12_belgium, 2022_07_monaco, 2022_17_singapore | not eligible (practice and history only) |
 
 How the four were chosen:
 
@@ -893,6 +904,32 @@ Disclosure: what each held-out race has been exposed to.
 - **2024 Austria:** nothing at all. Eligibility facts only.
 - **All four:** the agent has never been run on any of them.
 
+The fresh 2021-22 draw (registered 2026-11-21). The final test set is the four races above plus
+a season-stratified draw from the 2021-22 weekends the more-races cache added. Results can then
+be shown across regulation eras: 2021 is the previous car generation, 2022 the first
+ground-effect season, and 2024-25 later ground-effect seasons. The pools are the eligible
+group-B races (the seeded pool, not the circuit-history group A), in season and round order.
+The draw uses one seed, with 3 races per season, or 2 when a season has fewer than 5 eligible
+races. 2021 has 3, so it gives 2:
+
+```python
+pool_2021 = ["2021_07_france", "2021_18_mexico", "2021_22_united_arab_emirates"]
+pool_2022 = ["2022_03_australia", "2022_05_miami", "2022_08_azerbaijan", "2022_09_canada", "2022_12_france",
+             "2022_14_belgium", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+random.seed(2027)
+random.sample(pool_2021, 2)   # ['2021_07_france', '2021_18_mexico']
+random.sample(pool_2022, 3)   # ['2022_05_miami', '2022_03_australia', '2022_14_belgium']
+```
+
+All five are conventional weekends. Exposure: nothing beyond the eligibility facts in "More
+cached weekends". They were cached and checked offline: the race id resolves, the sessions
+load, and `calibration.eligibility` ran on the race session. There was no fit, calibration,
+cross-race pass, scenario, reference, baseline or agent run, and neither the tyre-history
+table nor the pit-loss prior holds them. From 2026-11-21 every held-out guard, `--races
+auto` and the tyre-history build leave them out, and `build_set` accepts them for a report set.
+The file's sha256 is
+now `4f96f7f3c37a...`, where it was `98edff4380e1...`.
+
 Scenario sets under the split:
 
 - **d2** (`data/scenarios/d2.json`, 25 scenarios of 2023 Spain) and **d3**
@@ -907,7 +944,10 @@ Scenario sets under the split:
   `development: false`. Its scenario file is built only after sprint-weekend support lands
   (2024 Austria is a sprint weekend), and no references, baselines or agent runs are made on
   it until the final run. d4's Monaco scenarios may coincide with d3's, since both sample 25
-  per race at seed 0; the final run will state whether they do.
+  per race at seed 0; the final run will state whether they do. `data/scenarios/d4.json`
+  records the four-race split's `eval_set_digest` (`98edff4380e1...`), not the nine-race file's.
+  Like d2 and d3, it is a record of the split it was sampled under, and it still loads. It is
+  not regenerated.
 - **dev6** (`data/scenarios/dev6.json`, 150 scenarios, digest `8823b7b73c87`) is a
   **development set on calibration races, not a held-out result**: 25 scenarios each of the six
   non-sprint calibration races 2021_04_spain, 2023_07_spain, 2023_01_bahrain,
@@ -1044,11 +1084,11 @@ pass, scenario, reference, baseline or agent run.
 Of the 24 races, 18 are eligible: 6 in group A and 12 in group B. The ineligible ones still
 give practice and partial history.
 
-**Proposed fresh held-out draw (a proposal: `data/eval_set.json` is unchanged).** The final
-test set would combine a fresh sample of these races with the later-season held-out races
-already registered (2024 and 2025 Austria). Results could then be shown across regulation
-eras: 2021 is the previous car generation, 2022 the first ground-effect season, and 2024-25
-later ground-effect seasons. The draw is stratified by season, from the eligible group-B
+**Fresh held-out draw (proposed here, registered in `data/eval_set.json` on 2026-11-21; see
+"The registered split").** The final test set combines a fresh sample of these races with the
+held-out races already registered. Results can then be shown across regulation eras: 2021 is
+the previous car generation, 2022 the first ground-effect season, and 2024-25 later
+ground-effect seasons. The draw is stratified by season, from the eligible group-B
 races only (group A stays calibration and history), in season and round order within each
 season, with one seed. A season with fewer than 5 eligible group-B races gives 2 instead of
 3. 2021 has 3, so it gives 2:
@@ -1065,13 +1105,11 @@ random.sample(pool_2022, 3)   # ['2022_05_miami', '2022_03_australia', '2022_14_
 All five drawn races are conventional weekends. The only eligible sprint weekend in the pools
 was 2022 Brazil, and it was not drawn.
 
-The other 13 new eligible races are proposed as additional calibration data. From group A:
-2021_01_bahrain, 2021_09_austrian, 2021_20_qatar, 2022_01_bahrain, 2022_06_spain and
-2022_11_austria. From group B: 2021_22_united_arab_emirates, 2022_08_azerbaijan,
-2022_09_canada, 2022_12_france, 2022_20_mexico, 2022_21_brazil and
-2022_22_united_arab_emirates. Until the owner adopts or rejects the draw, run calibration with
-explicit `--races`. `--races auto` takes every cached race outside `data/eval_set.json`, so
-it would load the five proposed races.
+The other 13 new eligible races are calibration data. From group A: 2021_01_bahrain,
+2021_09_austrian, 2021_20_qatar, 2022_01_bahrain, 2022_06_spain and 2022_11_austria. From
+group B: 2021_22_united_arab_emirates, 2022_08_azerbaijan, 2022_09_canada, 2022_12_france,
+2022_20_mexico, 2022_21_brazil and 2022_22_united_arab_emirates. Now that the five are in
+`data/eval_set.json`, `--races auto` leaves them out.
 
 ## Metrics
 
@@ -1636,9 +1674,10 @@ the arm, the artifacts, `belief_learned.yaml` and the report.
   `stint_limit_margin_laps` so both can be shown; the committed tables are rank 1.
 - **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
   actual_strategy unavailable on 65 scenarios.
-- **The SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml), and the
-  scoring world draws later periods with the same rates ("Pit loss and track status"). Position
-  regret has the traffic limits of docs/traffic.md.
+- **The SC and VSC rates are provisional** and Spain-derived (configs/sim/belief.yaml). The
+  default world draws no events; the opt-in hybrid world (configs/sim/world_hybrid.yaml) draws later
+  periods with the same rates ("Safety cars and VSC in the scoring world"). Position regret has the
+  traffic limits of docs/traffic.md.
 - **d3 is rebuilt at the final evaluation**; its committed reference and baselines predate R8
   ("Reference cache").
 

@@ -1,0 +1,10 @@
+# The world with safety cars and VSC (docs/eval.md "Safety cars and VSC in the scoring world"):
+# the default SimConfig, full fit window, traffic off, and eval.score.WORLD_EVENTS: the SC/VSC in
+# progress at the snapshot as recorded (with the field's recorded lap times), later ones drawn at
+# the rate model's rates. Opt-in (`score --world-config configs/sim/world_hybrid.yaml`) until the
+# integration's fidelity scorecard decides the default.
+fit_window: full
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
