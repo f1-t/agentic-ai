@@ -114,8 +114,11 @@ def test_race_simulators_default_roles():
 
     sim_for = race_simulators(load_profile("local"))
     b, w = sim_for("2021_04_spain", "belief"), sim_for("2021_04_spain", "world")
-    assert (b.config.fit_window, b.config.traffic.name) == ("to_snapshot", "none")
-    assert (w.config.fit_window, w.config.traffic.name) == ("full", "none")
+    # traffic in both (docs/eval.md "Traffic"): the belief projects the field, the world replays it
+    assert (b.config.fit_window, b.config.traffic.name, b.config.traffic.params["source"]) == (
+        "to_snapshot", "ghost", "projected")
+    assert (w.config.fit_window, w.config.traffic.name) == ("full", "ghost")
+    assert w.config.traffic.params.get("source", "recorded") == "recorded"
     assert sim_for("2021_04_spain", "belief") is b and b.laps is w.laps
     with pytest.raises(ValueError, match="role"):
         sim_for("2021_04_spain", "oracle")

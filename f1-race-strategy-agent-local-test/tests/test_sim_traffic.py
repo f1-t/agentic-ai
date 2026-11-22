@@ -162,8 +162,7 @@ def test_registry_and_none_model():
     assert {"none", "ghost"} <= set(TRAFFIC.keys())
     none = TRAFFIC.get("none")()
     assert none.prepare(snap(), np.arange(6, N + 1), frame(), OUR) is None
-    with pytest.raises(NotImplementedError):
-        GhostTraffic(source="projected")
+    assert GhostTraffic().reads_future and not GhostTraffic(source="projected").reads_future
 
 
 def test_ghost_table_arrays():

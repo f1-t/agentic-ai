@@ -224,7 +224,9 @@ def test_evaluate_action_pit_against_staying_out(syn):
     assert out["gap_std_s"] == pytest.approx(c["gap_std_s"][0][1])
     assert out["probability_improves_outcome"] == c["p_beats"][0][1]
     assert out["probability_covers"] == agent_tools.PROBABILITY_COVERS
-    assert "traffic_probability" not in out and "not modelled" in out["traffic"]
+    assert "traffic_probability" not in out and out["traffic"]["basis"] == agent_tools.TRAFFIC_BASIS
+    assert set(out["traffic"]["action"]) == {"expected_rejoin_position", "rejoin_position_band", "cars_in_pit_window",
+                                             "time_lost_s", "final_position"}
     assert out["dominated"] == c["dominated"][0] and out["support_warnings"] == c["support_warnings"][0]
     cal = agent_tools.calibration_error_s(sim, snap)   # the midrace summary's to_snapshot row
     assert out["calibration_error_s"] == cal

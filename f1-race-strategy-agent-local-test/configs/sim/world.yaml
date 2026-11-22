@@ -1,7 +1,19 @@
-# An eval world simulator with traffic: pass it with `score --world-config`
-# (docs/eval.md "Who sees what"). The default SimConfig, full fit window, with ghost-car
-# traffic on (src/sim/traffic.py, docs/traffic.md) for position regret (SPEC 0014 D).
-# Without --world-config the world is the profile's config, with traffic off.
+# The eval's world simulator (src/eval/score.py race_simulators, docs/eval.md "Who sees
+# what" and "Traffic"): the scorer. The default SimConfig, full fit window, with ghost-car
+# traffic on (src/sim/traffic.py, docs/traffic.md): every other car's recorded laps as ghosts,
+# which the scorer may read (it is not a policy). Chosen by the calibration-race accuracy
+# measures (docs/eval.md "Traffic: accuracy"):
+#   align_neutral   the ghosts keep their gaps on a lap the world runs green but the record
+#                   ran under SC/VSC (the world draws no events), and the reverse
+#   own_pace        our clock among the ghosts runs at the driver's own whole-race pace
+#   pass_mode       earned: no pass grants time (the old swap rule conjured it); a faster
+#                   car attacks from behind in dirty air until its own pace takes it past
+#   dirty_air_auto  dirty_air_s from the race's laps within 1.5 s of the car ahead
 fit_window: full
 traffic:
   name: ghost
+  params:
+    align_neutral: true
+    own_pace: true
+    pass_mode: earned
+    dirty_air_auto: true

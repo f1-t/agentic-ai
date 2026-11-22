@@ -82,6 +82,7 @@ REGRET_TOL_S = 1e-6
 REF_AGREE_LAPS = 2   # E: first pit laps this close count as the same reference call
 ROLES = ("belief", "world")
 BELIEF_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "belief.yaml"
+WORLD_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sim" / "world.yaml"
 
 
 def _first_pit_error(pits, ref_pits):
@@ -93,17 +94,22 @@ def _first_pit_error(pits, ref_pits):
     return abs(pits[0] - ref_pits[0])
 
 
-def finishing_positions(frame: pd.DataFrame, snapshot, times, dnf_lap) -> np.ndarray:
+def finishing_positions(frame: pd.DataFrame, snapshot, times, dnf_lap, at_flag=None) -> np.ndarray:
     """(n_samples,) finishing position per sample of one plan: 1 + the ghosts (every other
     driver in `frame`) that finished lap race.total_laps before our session time, anchor +
-    remaining time (traffic.place, vectorised over the samples). A DNF sample (finite
-    dnf_lap) is behind every finisher and behind the ghosts that retired no earlier than its
-    dnf_lap; its penalised time is not used."""
+    remaining time (traffic.place, vectorised over the samples). `at_flag` (the engine's
+    BatchResult.final_pos row) gives those positions as the traffic model placed them, on its
+    own clock (the driver's own pace and the neutral-lap alignment, traffic.py), and replaces
+    the ranking of `times`. A DNF sample (finite dnf_lap) is behind every finisher and behind
+    the ghosts that retired no earlier than its dnf_lap; its penalised time is not used."""
     last = snapshot.race.total_laps
-    t = traffic.anchor(frame, snapshot) + np.asarray(times, dtype=float)
     G = traffic.ghost_table(frame, snapshot.driver, [last]).G[:, 0]
     finished = G[np.isfinite(G)]
-    pos = 1 + (finished[None, :] < t[:, None]).sum(axis=1)
+    if at_flag is not None:
+        pos = np.asarray(at_flag, dtype=float).astype(int)
+    else:
+        t = traffic.anchor(frame, snapshot) + np.asarray(times, dtype=float)
+        pos = 1 + (finished[None, :] < t[:, None]).sum(axis=1)
     dnf_lap = np.asarray(dnf_lap, dtype=float)
     dnf = np.isfinite(dnf_lap)
     if dnf.any():
@@ -118,7 +124,8 @@ def _positions(world, snap, batch, i):
     """finishing_positions of plan i of a world batch, None when traffic was not placed."""
     if not batch.traffic_on:
         return None
-    return finishing_positions(world.laps, snap, batch.times[i], batch.dnf_lap[i])
+    at_flag = batch.final_pos[i] if batch.final_pos is not None else None
+    return finishing_positions(world.laps, snap, batch.times[i], batch.dnf_lap[i], at_flag=at_flag)
 
 
 def references_agree(plan, other, snapshot, within: int = REF_AGREE_LAPS) -> bool:
@@ -305,16 +312,18 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
 def race_simulators(profile=None, belief_config=None, world_config=None):
     """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
-    by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
-    residual lap noise on); the world runs
-    `world_config`, by default the profile's SimConfig (full window, traffic off, as before
-    the split). Cached per race and role."""
+    by default configs/sim/belief.yaml (to_snapshot window, the projected field's traffic,
+    posterior draws and residual lap noise on); the world runs `world_config`, by default the
+    profile's SimConfig with configs/sim/world.yaml's fit window and traffic (full window,
+    recorded ghost traffic; docs/eval.md "Traffic"). A world config with traffic "none" is
+    the clean-air world of earlier runs. Cached per race and role."""
     from ..sim import SimConfig, jobs
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
 
     profile = profile or load_profile()
     belief_config = belief_config or SimConfig.from_file(BELIEF_CONFIG)
+    world_default = SimConfig.from_file(WORLD_CONFIG) if world_config is None else None
     races, cache = {}, {}
 
     def sim_for(race_id, role):
@@ -324,7 +333,13 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
             if race_id not in races:
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
-            config = belief_config if role == "belief" else world_config or data.config
+            if role == "belief":
+                config = belief_config
+            elif world_config is not None:
+                config = world_config
+            else:   # the profile's config with world.yaml's window and traffic
+                config = data.config.model_copy(update={"fit_window": world_default.fit_window,
+                                                        "traffic": world_default.traffic})
             cache[race_id, role] = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
         return cache[race_id, role]
     return sim_for
