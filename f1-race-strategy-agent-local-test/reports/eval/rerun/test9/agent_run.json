@@ -1,0 +1,113 @@
+{
+ "passes": [
+  {
+   "label": "timing sample",
+   "jobs": 1,
+   "started": "2026-11-22T19:31:48.133118+00:00",
+   "ended": "2026-11-22T19:44:17.715766+00:00",
+   "wall_s": 749.6,
+   "to_run": 24,
+   "ran": 24,
+   "skipped": 0,
+   "errors": 0,
+   "retries": 0,
+   "retry_event_counts": {},
+   "crashed": 0,
+   "env": {
+    "LLM_BACKEND": "voyager",
+    "ANTHROPIC_MODEL": null,
+    "HF_MODEL": null,
+    "VOYAGER_MODEL": "qwen3-30b-a3b",
+    "VOYAGER_MAX_TOKENS": "1024",
+    "VOYAGER_TEMPERATURE": null,
+    "AGENT_MAX_TOOL_CALLS": null,
+    "AGENT_SUBMIT_GRACE_STEPS": null,
+    "AGENT_REPEAT_MODE": null,
+    "AGENT_TURN_STATUS": null,
+    "AGENT_SHOW_IDENTITY": null,
+    "AGENT_GAP_YARDSTICK": null,
+    "AGENT_TURN_REPEAT": "run"
+   }
+  },
+  {
+   "label": "agent",
+   "jobs": 10,
+   "started": "2026-11-22T19:44:17.717381+00:00",
+   "ended": "2026-11-22T20:05:13.273882+00:00",
+   "wall_s": 1255.6,
+   "to_run": 225,
+   "ran": 225,
+   "skipped": 0,
+   "errors": 0,
+   "retries": 0,
+   "retry_event_counts": {},
+   "crashed": 0,
+   "env": {
+    "LLM_BACKEND": "voyager",
+    "ANTHROPIC_MODEL": null,
+    "HF_MODEL": null,
+    "VOYAGER_MODEL": "qwen3-30b-a3b",
+    "VOYAGER_MAX_TOKENS": "1024",
+    "VOYAGER_TEMPERATURE": null,
+    "AGENT_MAX_TOOL_CALLS": null,
+    "AGENT_SUBMIT_GRACE_STEPS": null,
+    "AGENT_REPEAT_MODE": null,
+    "AGENT_TURN_STATUS": null,
+    "AGENT_SHOW_IDENTITY": null,
+    "AGENT_GAP_YARDSTICK": null,
+    "AGENT_TURN_REPEAT": "run"
+   }
+  }
+ ],
+ "timing_sample": {
+  "k": 24,
+  "seed": 0,
+  "jobs": 1,
+  "scenarios": {
+   "2019_06_monaco:BOT:75": "late",
+   "2019_06_monaco:KUB:70": "late",
+   "2020_16_sakhir:GAS:60": "late",
+   "2020_16_sakhir:OCO:65": "late",
+   "2020_16_sakhir:RIC:60": "late",
+   "2025_11_austria:HUL:20": "early",
+   "2025_11_austria:NOR:15": "early",
+   "2025_11_austria:STR:20": "early",
+   "2024_11_austria:MAG:05": "early",
+   "2024_11_austria:MAG:20": "early",
+   "2021_07_france:HAM:05": "early",
+   "2021_07_france:RAI:00": "early",
+   "2021_07_france:SAI:15": "early",
+   "2021_18_mexico:GIO:55": "late",
+   "2021_18_mexico:LAT:55": "late",
+   "2021_18_mexico:LEC:60": "late",
+   "2022_05_miami:GAS:25": "mid",
+   "2022_05_miami:LEC:30": "mid",
+   "2022_05_miami:RIC:25": "mid",
+   "2022_03_australia:NOR:20": "mid",
+   "2022_03_australia:TSU:30": "mid",
+   "2022_14_belgium:ALB:25": "mid",
+   "2022_14_belgium:GAS:25": "mid",
+   "2022_14_belgium:STR:20": "mid"
+  }
+ },
+ "agent_jobs": 10,
+ "scenarios": 225,
+ "only": false,
+ "headline": "the decision time reported is the isolated timing sample's (timing_sample.csv: K episodes run sequentially, one job, before the pass); the full pass's per-episode latency_s was measured with agent_jobs episodes running concurrently and is reported beside it, not as the decision time",
+ "latency_measured_under": "10 concurrent episodes (agent_jobs) in the full pass; other users of the endpoint are not controlled",
+ "agent_wall_s": 1255.6,
+ "timing_sample_wall_s": 749.6,
+ "retry_policy": {
+  "tries": 3,
+  "backoff_s": [
+   5.0,
+   20.0
+  ],
+  "request_timeout_s": 180.0,
+  "retried": "429, 5xx, timeouts, dropped connections; 401/403 stop the pass"
+ },
+ "rows_status": {
+  "ok": 224,
+  "no_reference": 1
+ }
+}
