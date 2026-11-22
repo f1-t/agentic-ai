@@ -22,7 +22,9 @@ Every stage reads and writes under one directory, --out-dir (default reports/eva
 The sets are defined in configs/eval/rerun_sets.yaml. A report set (development false: test9,
 the held-out races) is built only with --final, on the owner's word: building it loads the
 held-out races. --world-config / --belief-config take a SimConfig file or "default" (the world:
-the race's own SimConfig; the belief: configs/sim/belief.yaml). The parallel stages run --jobs
+score.default_world_config of config.world_default, the scorecard-chosen judge with driver effects,
+the history-only tyre-life edge and hybrid SC/VSC; the belief: configs/sim/belief.yaml, which the
+agent's tools read too). provenance.json names each of those choices. The parallel stages run --jobs
 worker processes, one race at a time each, with BLAS capped at one thread per worker.
 """
 from __future__ import annotations
@@ -399,6 +401,40 @@ def as_of_tables(races) -> dict:
     return out
 
 
+def default_world():
+    """The world `--world-config default` scores with (score.race_simulators on the default profile)."""
+    from ..sim import SimConfig
+    from ..sim.config import world_default
+    from .score import default_world_config
+    return default_world_config(world_default(SimConfig()))
+
+
+def config_choices(c, role: str) -> dict:
+    """Each simulator choice the fidelity scorecard decides (docs/eval.md "Simulator fidelity"), named
+    as it stands in config `c`, so provenance.json says which world and belief a run used without
+    reading the hash. `role` "world" adds the judge-only choices (the tyre-life edge)."""
+    deg = c.degradation.params or {}
+    out = {"wear_fit": c.degradation.name,
+           "driver_effects": deg.get("driver_effects", "off"),
+           "hinge": c.degradation.name == "linear_fuel_hinge",
+           "wear_lower_bound": deg.get("wear_lower_bound"),
+           "sd_scale": deg.get("sd_scale"),
+           "wear_cliff": c.wear_cliff.enabled,
+           "stint_limit_margin_laps (R8)": c.stint_limit_margin_laps,
+           "events": c.events.name, **({"events_params": dict(c.events.params)} if c.events.params else {}),
+           "traffic": c.traffic.name if c.traffic.name == "none" else
+           f"{c.traffic.name} ({c.traffic.params.get('source', 'recorded')})",
+           "lap_noise": c.lap_noise, "plan_on": c.plan_on, "fit_window": c.fit_window}
+    if c.fit_window == "full":
+        out["tyre_life_edge"] = c.wear_cliff.world_edge
+    else:   # a windowed fit places the edge as of the snapshot (sim/cliff.py), whatever world_edge says
+        out["tyre_life_edge"] = "as_of_snapshot (history extended by the tyre ages seen so far)"
+    if role != "world":
+        out.update(calibrator=c.calibrator.name, fuel_anchor=c.fuel_anchor.model_dump(mode="json"),
+                   pit_loss=c.pit_loss.source)
+    return out
+
+
 def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
     """provenance.json beside the outputs: commit, tag, the world and belief configs with their
     file sha256 and config_hash, SIM_CODE_VERSION, the set digest, the model id and loop settings,
@@ -409,10 +445,11 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
     s = ScenarioSet.load(d / "scenarios.json") if (d / "scenarios.json").exists() else None
     belief, world = belief_path(args.belief_config), world_path(args.world_config)
 
-    def cfg(path):
-        c = SimConfig.from_file(path) if path else SimConfig()
-        return {"path": path or "default (the race's own SimConfig)", "file_sha256": _file_sha(path),
-                "config_hash": calibration.config_hash(c)}
+    def cfg(path, role):
+        c = SimConfig.from_file(path) if path else default_world()
+        return {"path": path or "default (score.default_world_config(config.world_default(SimConfig())))",
+                "file_sha256": _file_sha(path), "config_hash": calibration.config_hash(c),
+                "choices": config_choices(c, role)}
     stamps = {}
     if rows is not None:
         for col in ("world_config_hash", "belief_config_hash", "sim_code_version", "scenario_digest", "belief_window"):
@@ -422,7 +459,7 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
     doc = {"commit": _git("rev-parse", "HEAD"), "tag": _git("describe", "--tags", "--exact-match"),
            "dirty": bool(_git("status", "--porcelain")), "set": args.set,
            "set_digest": s.digest if s else None, "set_kind": s.kind if s else None,
-           "sampling": s.sampling if s else None, "world": cfg(world), "belief": cfg(belief),
+           "sampling": s.sampling if s else None, "world": cfg(world, "world"), "belief": cfg(belief, "belief"),
            "sim_code_version": calibration.SIM_CODE_VERSION, "profile": prof.model_dump(mode="json"),
            # the backend and model id only: never a key, a token or an endpoint
            "model": {k: os.environ.get(k) for k in MODEL_ENV},

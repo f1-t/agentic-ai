@@ -397,21 +397,24 @@ def world_pit_loss(data, world) -> float:
 def race_simulators(profile=None, belief_config=None, world_config=None):
     """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
-    by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
-    residual lap noise on, driver effects in the fits); the world runs
+    by default agent_tools.belief_config(), the agent tools' belief: configs/sim/belief.yaml unless
+    AGENT_BELIEF_CONFIG names another (to_snapshot window, traffic off, posterior draws and
+    persistent lap noise on, driver effects in the fits); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off; the wear fit
     config.WORLD_DEGRADATION and the tyre-life edge config.WORLD_EDGE, config.world_default;
     default_world_config, WORLD_EVENTS on by default). The world alone
     gets the race's whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
     and role."""
-    from ..sim import SimConfig, jobs
+    from ..sim import agent_tools, jobs
     from ..sim.config import world_default
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
 
     profile = profile or load_profile()
-    belief_config = belief_config or SimConfig.from_file(BELIEF_CONFIG)
+    # one source of truth: the agent tools' belief (configs/sim/belief.yaml, or AGENT_BELIEF_CONFIG);
+    # AgentPolicy runs the tools on whatever belief this returns
+    belief_config = belief_config or agent_tools.belief_config()
     races, cache = {}, {}
 
     def sim_for(race_id, role):
