@@ -87,6 +87,55 @@ plan, stops, first pit, regret and R8 stamps; the agent-only columns (`decision`
 tool calls, tokens) are blank. It is not in the `baselines` group, so default commands and
 existing result files are unchanged; select it by name.
 
+## Rule baselines: run_to_flag and one_stop_total
+
+Two deterministic rule policies (`src/eval/policies.py`), selected by name
+(`--policies run_to_flag one_stop_total`) and, like `belief_optimizer`, not in the `baselines`
+group, so default commands and existing result files are unchanged. They were added because
+`fixed_one_stop` always makes exactly one more stop from the snapshot, also after the driver
+has made their stop, when the sensible plan is usually to run to the flag.
+
+**run_to_flag.** Make no further stop when the rules allow it; otherwise the fewest stops
+that make the plan legal, each as late as the rules allow:
+
+1. The plan is the current set to the flag. If it passes every rule (R1-R4, R8 and the
+   belief's known compounds, checked with `belief.validate` on the plan as a contract, sets
+   assigned by `to_contract` as for every baseline), that is the plan.
+2. Otherwise, for k = 1, 2, ... up to `max_stops` (the future-stop limit every policy gets,
+   2 in the committed runs), take the k-stop plans that pass every rule and submit the first
+   one in this order: the latest first stop, then the latest second stop (pit laps compared
+   first stop first), then the compounds of the new stints in the preference order SOFT,
+   MEDIUM, HARD, then any other modelled compound alphabetically, compared stint by stint.
+   The new stints may use any compound the belief models, the current one included (a new set).
+   The first k with a legal plan wins.
+3. If no plan with at most `max_stops` stops is legal, the plan is the current set to the
+   flag; the world rejects it and the row is `invalid` with the world's reason.
+
+The compound rule is fixed: since the forced stops are placed as late as the rules allow, the
+stint after one is as short as they allow, and the softest legal compound is the usual choice
+for a short final stint. Placing the stops first and choosing the compound second is part of
+the rule: when a later stop needs a harder compound (an R8 limit), the later stop wins.
+
+**one_stop_total.** A one-stop race in the ordinary sense, one stop in the whole race:
+
+- If the driver has not stopped yet in this race (the snapshot's completed-stint history,
+  `snapshot.stints`, is empty), the decision is `fixed_one_stop`'s, through the same eval
+  wrapper: the stop at the middle of the remaining laps (moved to respect the minimum stint,
+  R2), onto the first of HARD, MEDIUM, SOFT the belief models that differs from the current
+  compound, and moved earlier to the last legal lap when the plan breaks R8
+  (`_one_stop_within_limit`). Where `fixed_one_stop` is unavailable or invalid, so is this row.
+- If the driver has stopped at least once (`snapshot.stints` is not empty), it is
+  `run_to_flag`.
+
+What they read. Both are functions of the snapshot and the published rules only: the laps
+completed and left, the current compound, its age and laps on the set, the stint history, the
+tyre sets, the set of compounds the belief models at the snapshot (fitted only on what is known
+there), the minimum stint (R2) and the future-stop limit. Neither reads a lap time, a pace or
+wear fit, the belief optimizer, the reference or any tuned constant, and neither reads the pit
+loss. The one thing they know that nobody at the snapshot could is what every policy already
+gets: the race-wide R8 stint limits, a hindsight race constant (docs/rules.md R8, "Limitations"
+below). A plan the world rejects is an `invalid` row with its reason, as for any policy.
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
@@ -741,6 +790,8 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | dev6, baselines (development, calibration races) | `reports/eval/dev6_baselines.csv` (R8 rank 1, margin 3, limit-aware baselines) | |
 | dev6, live agent pass 1 (development, calibration races) | `reports/eval/dev6_agent_pass1.csv`, trajectories in `reports/eval/trajectories/dev6_pass1/`; `dev6_pass1_combined.csv` (agent + baseline rows, the input to `dev6_pass1_compare_regret_s_*` with driver clusters and `dev6_pass1_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_pass1_compare_per_race_regret_s_paired.csv`; figure table `dev6_pass1_chart.csv` | |
 | dev6, baselines + belief_optimizer, run 2 (development, calibration races) | `reports/eval/dev6_run2_baselines.csv` (compound proxy on, reference `fbb33ef732dd`) | `dev6_baselines.csv` (before the proxy) is the record pass 1 was compared with |
+| d4, rule baselines, scored once after the d4 results (**report set**) | `reports/eval/d4_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, frozen at `5a2bc41`); `d4_combined_rules.csv` (`d4_combined.csv`'s rows plus these) and `d4_rules_compare_*` ("Rule baselines added after the held-out run") | `d4_combined.csv` stays as committed |
+| dev6, rule baselines (development, calibration races) | `reports/eval/dev6_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, reference `fbb33ef732dd`); `dev6_run2_combined_rules.csv` (run 2's rows plus these) and `dev6_run2_rules_compare_*` ("Rule baselines added after the held-out run") | |
 | dev6, live agent run 2 (development, calibration races) | `reports/eval/dev6_run2_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run2/`; `dev6_run2_combined.csv` (agent + baseline + belief_optimizer rows, the input to `dev6_run2_compare_regret_s_*` with driver clusters and `dev6_run2_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run2_compare_per_race_regret_s_paired.csv`; figure table `dev6_run2_chart.csv` | pass 1 stays as the record of the earlier loop and world |
 
 Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
@@ -957,7 +1008,11 @@ events, the d3 exception), `regret_se_s` on a world with known per-draw differen
 `within_mc` at N = 1 against the tie rule, and the R8 stamps on rows and summaries.
 `tests/test_optimizer_bridge.py` covers the limit-aware baselines (fixed_one_stop's moved
 stop, greedy_crossover's forced stop, a plan still past the limit scored invalid, and every
-baseline unchanged with R8 off). `tests/test_sim_proxy.py` covers the compound proxy (which
+baseline unchanged with R8 off). `tests/test_eval_rule_baselines.py` covers the rule
+baselines on synthetic races and on 2021 Spain: the default `baselines` group unchanged, the
+already-stopped and not-yet-stopped branches, a forced stop for R3 and for R8 (one stop and two),
+the invalid row when no legal plan exists within `max_stops`, legality, determinism and regret
+>= 0. `tests/test_sim_proxy.py` covers the compound proxy (which
 sources enter the blend and with what weight, the weighted mean, anchoring, the qualifying gap
 and its place in the model report, the ordering constraint and the wear floor, the proxied
 covariance and draws, the belief's information boundary, R8 for an unraced compound, the off
@@ -1078,6 +1133,143 @@ trajectories): at 2024 Austria the belief prices SOFT from practice and the cros
 references, fitted on every race lap, use SOFT; every policy's regret there is about 16 s. Against dev6 run 2 (development, calibration races) the regrets roughly double for the agent
 (3.95 to 8.93 s) and belief_optimizer (4.11 to 8.95), and the agent's lead over actual_strategy
 (-3.25 [-5.50, -1.25] on dev6) is not there on d4.
+
+### Rule baselines added after the held-out run
+
+**Why.** `fixed_one_stop` always makes exactly one more stop from the snapshot, also after the
+driver has made their stop, when the best plan is usually to run to the flag. Split by whether
+the driver had already stopped, the agent was 7.4 s worse than fixed_one_stop on d4 before the
+driver's first stop and 8.5 s better after it, so the headline "the agent beats a fixed
+one-stop rule by 4.3 s" came from scenarios where the baseline makes a pointless stop. Two
+sensible rule baselines were added beside it, `run_to_flag` and `one_stop_total` (rules in
+"Rule baselines: run_to_flag and one_stop_total" above). They were added after the d4 results
+were known.
+
+**Order.** The rules were written in this file first, then implemented and tested, then scored
+on the development set dev6 (below). No rule was changed after it was scored. They were then
+frozen (code, docs, tests and dev6 outputs committed; the commit is given in the d4 part below)
+and scored once on d4. No existing d4 or dev6 row was rescored.
+
+**dev6 (development, calibration races).** `score --scenarios data/scenarios/dev6.json --policies
+run_to_flag one_stop_total --seed 0 --n-samples 50 --max-stops 2 --require-reference`
+(`reports/eval/dev6_rule_baselines.csv`, reference `fbb33ef732dd`, sim_code_version
+`58b50a00e0e3`), compared with the committed dev6 run 2 rows
+(`dev6_run2_combined.csv`) by `scripts/rule_baseline_tables.py`, which reads csv and scenario
+json only and writes `dev6_run2_combined_rules.csv` (the run 2 rows plus the new ones; the
+reference columns are checked equal first) and `dev6_run2_rules_compare_*`. Pooled:
+
+| policy | scored / invalid / unavailable | mean regret s | median | p90 |
+| --- | --- | --- | --- | --- |
+| agent | 150 / 0 / 0 | 3.95 | 1.68 | 11.82 |
+| belief_optimizer | 150 / 0 / 0 | 4.11 | 1.20 | 13.26 |
+| fixed_one_stop | 123 / 27 / 0 | 9.00 | 7.28 | 20.57 |
+| actual_strategy | 147 / 0 / 3 | 7.15 | 3.10 | 20.98 |
+| run_to_flag | 150 / 0 / 0 | 4.27 | 0.05 | 10.93 |
+| one_stop_total | 135 / 15 / 0 | 4.10 | 0.05 | 10.93 |
+
+Agent minus each policy, paired on the rows both scored, 95% interval with (race, driver)
+clusters (`eval.compare`, 2000 draws), wins / ties / losses from the agent's side:
+
+| X | n | agent - X | 95% CI | W / T / L |
+| --- | --- | --- | --- | --- |
+| belief_optimizer | 150 | -0.16 | [-0.58, 0.20] | 26 / 88 / 36 |
+| fixed_one_stop | 123 | -5.28 | [-7.25, -3.30] | 88 / 2 / 33 |
+| actual_strategy | 147 | -3.25 | [-5.50, -1.25] | 70 / 37 / 40 |
+| run_to_flag | 150 | -0.31 | [-2.10, 1.35] | 49 / 53 / 48 |
+| one_stop_total | 135 | -0.24 | [-2.24, 1.56] | 46 / 47 / 42 |
+
+Split by whether the driver has already stopped (`snapshot.stints` not empty), agent minus X:
+
+| subset | X | n | agent - X | 95% CI |
+| --- | --- | --- | --- | --- |
+| not yet stopped (60) | fixed_one_stop | 45 | +3.96 | [1.86, 6.04] |
+| not yet stopped | run_to_flag | 60 | +2.73 | [0.62, 4.59] |
+| not yet stopped | one_stop_total | 45 | +3.96 | [1.86, 6.04] |
+| already stopped (90) | fixed_one_stop | 78 | -10.61 | [-12.44, -8.75] |
+| already stopped | run_to_flag | 90 | -2.34 | [-4.75, -0.17] |
+| already stopped | one_stop_total | 90 | -2.34 | [-4.75, -0.17] |
+
+On dev6 the agent ties both rule baselines pooled (intervals across 0); it loses to them before
+the driver's first stop and beats them after it. `one_stop_total`'s 15 invalid rows are
+`fixed_one_stop`'s own, on not-yet-stopped drivers (its plan there is fixed_one_stop's, row for
+row: status, plan and regret), all R8 breaches of the second stint (12 at 2021 Spain, on the
+proxied HARD and its practice limit of 21, 2 at 2022 Saudi Arabia, 1 at 2023 Bahrain), which
+moving the stop earlier cannot fix. `run_to_flag` has no invalid row; it makes a stop on all 60
+not-yet-stopped rows (the two-compound rule) and on 23 of the 90 already-stopped rows (20 where
+the current set would pass its R8 limit before the flag, 3 where the driver had stopped onto the
+same compound, so the two-compound rule still needed a stop), and runs to the flag on the other
+67. No row of either has negative regret. Nothing was changed after this run:
+it found no bug. Per race (`dev6_run2_rules_compare_per_race_regret_s_paired.csv`), the agent is
+worse than both at 2022 Saudi Arabia (+3.3 and +3.7 s) and better than `one_stop_total` at 2021
+Spain on its 13 scored rows; dev6 is a development set on calibration races, not a held-out
+result.
+
+**Freeze.** Commit `5a2bc41` (branch `feat/fair-rule-baselines`) holds the rules, the code, the
+tests and the dev6 outputs above. No file under `src/`, `configs/` or `tests/` changed after it.
+
+**d4 (held out), scored once, after the d4 results were known.** One command at the freeze
+commit, the only command that loaded the four held-out races: `score --scenarios
+data/scenarios/d4.json --policies run_to_flag one_stop_total --seed 0 --n-samples 50 --max-stops 2
+--require-reference --out reports/eval/d4_rule_baselines.csv` (reference
+`data/references/d4/39bf1bbb4aa9.parquet`, sim_code_version `58b50a00e0e3`). It ran without error
+and was not rerun. No existing d4 row was rescored: the comparison rows are the committed
+`d4_combined.csv`, and `scripts/rule_baseline_tables.py` (csv and scenario json only, the
+reference columns checked equal) wrote `d4_combined_rules.csv` and `d4_rules_compare_*`.
+`d4_combined.csv` is unchanged. Pooled:
+
+| policy | scored / invalid / unavailable | mean regret s | median | p90 |
+| --- | --- | --- | --- | --- |
+| agent | 100 / 0 / 0 | 8.93 | 6.53 | 22.13 |
+| belief_optimizer | 100 / 0 / 0 | 8.95 | 6.36 | 22.67 |
+| fixed_one_stop | 94 / 6 / 0 | 12.87 | 16.76 | 26.28 |
+| actual_strategy | 98 / 0 / 2 | 8.87 | 2.56 | 28.03 |
+| run_to_flag | 100 / 0 / 0 | 9.26 | 6.63 | 24.59 |
+| one_stop_total | 95 / 5 / 0 | 7.02 | 2.94 | 20.57 |
+
+Agent minus each policy, paired, 95% interval with (race, driver) clusters, wins / ties / losses
+from the agent's side:
+
+| X | n | agent - X | 95% CI | W / T / L |
+| --- | --- | --- | --- | --- |
+| belief_optimizer | 100 | -0.03 | [-0.29, 0.22] | 29 / 39 / 32 |
+| fixed_one_stop | 94 | -4.28 | [-6.73, -1.90] | 59 / 0 / 35 |
+| actual_strategy | 98 | -0.19 | [-1.88, 1.43] | 30 / 28 / 40 |
+| run_to_flag | 100 | -0.33 | [-2.14, 1.47] | 41 / 26 / 33 |
+| one_stop_total | 95 | +1.66 | [-0.33, 3.65] | 35 / 26 / 34 |
+
+Split by whether the driver has already stopped, agent minus X:
+
+| subset | X | n | agent - X | 95% CI |
+| --- | --- | --- | --- | --- |
+| not yet stopped (30) | fixed_one_stop | 25 | +7.44 | [3.59, 11.42] |
+| not yet stopped | run_to_flag | 30 | -0.18 | [-3.93, 2.96] |
+| not yet stopped | one_stop_total | 25 | +7.44 | [3.59, 11.42] |
+| already stopped (70) | fixed_one_stop | 69 | -8.53 | [-10.66, -6.37] |
+| already stopped | run_to_flag | 70 | -0.40 | [-2.55, 1.81] |
+| already stopped | one_stop_total | 70 | -0.40 | [-2.55, 1.81] |
+
+Per race, agent minus run_to_flag / one_stop_total (`d4_rules_compare_per_race_regret_s_paired.csv`):
+2019 Monaco +3.55 / +6.88, 2020 Sakhir +4.30 / +5.49, 2024 Austria -2.82 / -1.21, 2025 Austria
+-6.37 / -5.42. The rule baselines are much better than the agent at Monaco and Sakhir and much
+worse at 2025 Austria; a t interval over the four race means is [-8.51, 7.84] for run_to_flag
+and [-7.76, 10.63] for one_stop_total.
+
+What this says, plainly. On the held-out races **the agent does not beat a sensible rule**: it
+ties `run_to_flag` (-0.33 s, interval across 0) and is 1.66 s worse than `one_stop_total` on the
+95 scenarios that baseline scored, an interval that just reaches 0, so the agent is not shown
+to be worse either. The agent's 4.3 s lead over `fixed_one_stop` is the pointless extra stop
+that baseline makes after the driver's first stop: against a rule that does not make it, the
+lead is gone, after the first stop (-0.40 s) as before it. Before the first stop, the agent
+loses to the one-stop rule by 7.4 s, as it lost to `fixed_one_stop`, since the two are the same
+plan there. `one_stop_total` has 5 invalid rows, `fixed_one_stop`'s own on not-yet-stopped
+drivers (its plan there is fixed_one_stop's, row for row): the first stint passes its R8 limit
+(2025 Austria SOFT, limit 19; 2024 Austria MEDIUM, limit 32) and no earlier stop keeps the one
+remaining stint inside the second compound's limit. Those 5 rows are left out of its paired
+comparison; the agent's regret on them is 1.9, 4.9, 24.8, 20.5 and 15.8 s. `run_to_flag` has
+no invalid row and stops in 57 of 100 scenarios (25 one-stops and 5 two-stops before the first
+stop, 26 one-stops and 1 two-stop after it). No row of either has negative regret. These are
+one scoring of deterministic rules on four races; with the large race-to-race spread, the
+pooled intervals are the ones to quote.
 
 To print a Case B episode as a terminal transcript (for screenshots), replay a committed run with
 `python scripts/show_case.py --replay reports/eval/case_b/run_01.json --commit 29d164c` (the commit
