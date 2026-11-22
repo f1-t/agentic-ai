@@ -1,0 +1,11 @@
+# Learned-calibrator arm "belief_hybrid", WRITTEN by `python -m src.sim.learned_calibrator train` (src/sim/learned_calibrator.py)
+# from the per-factor adoption rule: ridge for the factor kinds in `factors` (lower leave-one-race-out
+# rmse than shrinkage and coverage no worse, in both belief windows), shrinkage for every other kind.
+# The belief simulator otherwise (base_config). Do not edit by hand; rerun the command.
+base_config: configs/sim/belief.yaml
+calibrator:
+  name: ridge
+  params:
+    targets: degradation
+    factors:
+    - fuel_s_per_lap

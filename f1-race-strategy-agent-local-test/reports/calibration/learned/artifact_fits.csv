@@ -1,0 +1,57 @@
+artifact,factor,status,alpha,sigma,n_races,n_rows,reason
+loo/2021_04_spain,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2021_04_spain,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2021_04_spain,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2021_04_spain,fuel_s_per_lap,ridge,100.0,0.018652301436917103,6.0,71.0,
+loo/2021_04_spain,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2021_04_spain,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2021_04_spain,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+loo/2023_07_spain,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2023_07_spain,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2023_07_spain,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2023_07_spain,fuel_s_per_lap,ridge,10.0,0.019803213083323615,6.0,73.0,
+loo/2023_07_spain,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2023_07_spain,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2023_07_spain,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+loo/2023_01_bahrain,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2023_01_bahrain,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2023_01_bahrain,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2023_01_bahrain,fuel_s_per_lap,ridge,10.0,0.019972220146022977,6.0,73.0,
+loo/2023_01_bahrain,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2023_01_bahrain,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2023_01_bahrain,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+loo/2019_10_united_kingdom,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2019_10_united_kingdom,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2019_10_united_kingdom,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2019_10_united_kingdom,fuel_s_per_lap,ridge,10.0,0.018905142032457398,6.0,74.0,
+loo/2019_10_united_kingdom,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2019_10_united_kingdom,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2019_10_united_kingdom,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+loo/2022_02_saudi_arabia,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2022_02_saudi_arabia,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2022_02_saudi_arabia,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2022_02_saudi_arabia,fuel_s_per_lap,ridge,1000.0,0.015655414960891807,6.0,72.0,
+loo/2022_02_saudi_arabia,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2022_02_saudi_arabia,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2022_02_saudi_arabia,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+loo/2024_07_emilia_romagna,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2024_07_emilia_romagna,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2024_07_emilia_romagna,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2024_07_emilia_romagna,fuel_s_per_lap,ridge,100.0,0.016234827202483433,6.0,74.0,
+loo/2024_07_emilia_romagna,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2024_07_emilia_romagna,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2024_07_emilia_romagna,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+loo/2025_23_qatar,base_delta_s[HARD],fallback,,,,,not adopted
+loo/2025_23_qatar,base_delta_s[MEDIUM],fallback,,,,,not adopted
+loo/2025_23_qatar,base_delta_s[SOFT],fallback,,,,,not adopted
+loo/2025_23_qatar,fuel_s_per_lap,ridge,1.0,0.009494726467304194,6.0,73.0,
+loo/2025_23_qatar,wear_s_per_lap[HARD],fallback,,,,,not adopted
+loo/2025_23_qatar,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+loo/2025_23_qatar,wear_s_per_lap[SOFT],fallback,,,,,not adopted
+all,base_delta_s[HARD],fallback,,,,,not adopted
+all,base_delta_s[MEDIUM],fallback,,,,,not adopted
+all,base_delta_s[SOFT],fallback,,,,,not adopted
+all,fuel_s_per_lap,ridge,100.0,0.018185277284828334,7.0,85.0,
+all,wear_s_per_lap[HARD],fallback,,,,,not adopted
+all,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted
+all,wear_s_per_lap[SOFT],fallback,,,,,not adopted
