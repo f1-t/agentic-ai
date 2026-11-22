@@ -126,7 +126,8 @@ POLICY_SIDE = {
         "evaluate_strategy, NaN for a race not after every summary race (model_report.calibration_error)",
         "as_of", _summary_recorded, _summary_for, ("reports/calibration/midrace_summary.csv",)),
     "event_rates": Artifact(
-        "configs/sim/neutralised_history.csv: the belief's SC/VSC rates (events.RateEvents as_of, "
+        "configs/sim/neutralised_history.csv: the belief's SC/VSC rates and, under duration \"history\", period "
+        "lengths (race_history.period_lengths as_of) (events.RateEvents as_of, "
         "race_history.as_of_event_rates) shrunk toward the a priori race_history.EVENT_PRIOR",
         "as_of", _periods_recorded, _periods_for, ("configs/sim/neutralised_history.csv",)),
     "pre_race_base_delta": Artifact(
