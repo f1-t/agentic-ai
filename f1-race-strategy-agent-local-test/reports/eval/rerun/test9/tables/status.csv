@@ -1,0 +1,15 @@
+policy,status,reason,rows
+actual_strategy,unavailable,New stints must reach the minimum stint length.,5
+actual_strategy,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,5
+actual_strategy,no_reference,No legal remaining plan exists within the future-stop limit.,1
+actual_strategy,unavailable,The current stint must reach the minimum before a pit stop.,1
+agent,no_reference,No legal remaining plan exists within the future-stop limit.,1
+belief_optimizer,no_reference,No legal remaining plan exists within the future-stop limit.,1
+fixed_one_stop,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,7
+fixed_one_stop,no_reference,No legal remaining plan exists within the future-stop limit.,1
+fixed_two_stop,unavailable,There are too few laps for exactly 2 future stops.,13
+fixed_two_stop,no_reference,No legal remaining plan exists within the future-stop limit.,1
+greedy_crossover,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,189
+greedy_crossover,no_reference,No legal remaining plan exists within the future-stop limit.,1
+one_stop_total,no_reference,No legal remaining plan exists within the future-stop limit.,1
+run_to_flag,no_reference,No legal remaining plan exists within the future-stop limit.,1

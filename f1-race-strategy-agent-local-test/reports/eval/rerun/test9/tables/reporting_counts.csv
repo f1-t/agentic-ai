@@ -1,0 +1,25 @@
+policy,no_reference,ok,unavailable,group,group_label,group_races
+actual_strategy,1.0,116,8,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+agent,1.0,124,0,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+belief_optimizer,1.0,124,0,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+fixed_one_stop,1.0,121,3,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+fixed_two_stop,1.0,118,6,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+greedy_crossover,1.0,20,104,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+one_stop_total,1.0,124,0,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+run_to_flag,1.0,124,0,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+actual_strategy,,97,3,earlier four,"a second look, the four races scored once under the superseded protocol",4
+agent,,100,0,earlier four,"a second look, the four races scored once under the superseded protocol",4
+belief_optimizer,,100,0,earlier four,"a second look, the four races scored once under the superseded protocol",4
+fixed_one_stop,,96,4,earlier four,"a second look, the four races scored once under the superseded protocol",4
+fixed_two_stop,,93,7,earlier four,"a second look, the four races scored once under the superseded protocol",4
+greedy_crossover,,15,85,earlier four,"a second look, the four races scored once under the superseded protocol",4
+one_stop_total,,100,0,earlier four,"a second look, the four races scored once under the superseded protocol",4
+run_to_flag,,100,0,earlier four,"a second look, the four races scored once under the superseded protocol",4
+actual_strategy,1.0,213,11,all nine,every held-out race,9
+agent,1.0,224,0,all nine,every held-out race,9
+belief_optimizer,1.0,224,0,all nine,every held-out race,9
+fixed_one_stop,1.0,217,7,all nine,every held-out race,9
+fixed_two_stop,1.0,211,13,all nine,every held-out race,9
+greedy_crossover,1.0,35,189,all nine,every held-out race,9
+one_stop_total,1.0,224,0,all nine,every held-out race,9
+run_to_flag,1.0,224,0,all nine,every held-out race,9
