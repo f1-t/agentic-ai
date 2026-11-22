@@ -406,10 +406,13 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain, legacy_gaps):
     # and with the cross-race tables read whatever the race (the legacy switches: the midrace
     # summary, measured on 2021 Spain itself, the Spain-derived shrinkage priors and event rates);
     # as of 2021 Spain there is no calibration error (docs/eval.md "Cross-race tables, as of the race");
-    # and iid lap noise (the belief before "Honest uncertainty": persistent stint offsets widen the gap)
+    # and iid lap noise (the belief before "Honest uncertainty": persistent stint offsets widen the gap);
+    # and no driver effects in the fit (the belief before the scorecard-chosen defaults)
     cfg = agent_tools.belief_config()
+    no_de = {k: v for k, v in cfg.degradation.params.items() if k != "driver_effects"}
     sim = agent_tools.belief_simulator(
         snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False}),
+                                            "degradation": cfg.degradation.model_copy(update={"params": no_de}),
                                             "lap_noise": "residual",
                                             "cross_race_as_of": False, "calibrator": ComponentSpec(name="shrinkage"),
                                             "events": ComponentSpec(name="rate"),
@@ -453,7 +456,10 @@ def test_run_agent_end_to_end_through_the_belief(spain):
     assert tools._contract() is snap
     out = {t["tool"]: t["output"] for t in traj}
     assert out["get_race_snapshot"]["min_stint_laps"] == snap.race.min_stint_laps
-    assert out["estimate_tyre_degradation"]["wear_at_bound"] is True
+    # the flag follows the fit: SOFT's wear sat on the bound 0 here without driver effects; with them
+    # (the belief's default since the scorecard) the fit recovers a positive wear
+    soft = out["estimate_tyre_degradation"]
+    assert soft["wear_at_bound"] is (soft["point_estimate"]["deg_per_lap_s"] <= 0.0)
     asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)
     assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == pytest.approx(asof["pit_loss_s"])
     assert out["estimate_pit_loss"]["source"] == "asof" and asof["pit_loss_s"] != spain.race.pit_loss_s
