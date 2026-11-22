@@ -364,14 +364,16 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
 # reference (common random numbers). The replay accuracy that chose the recorded lap times over
 # the lap factors is in reports/calibration/neutralised (src/sim/neutral_report.py).
 WORLD_EVENTS = {"name": "hybrid", "params": {"lap_times": "recorded"}}
-# OFF until the integration decides it (the fidelity scorecard, PR #93): the default world draws no
-# neutralisations, as before. Opt in with `--world-config configs/sim/world_hybrid.yaml`.
-WORLD_EVENTS_DEFAULT = False
+# ON by default since the fidelity scorecard chose it (docs/eval.md "What the ablation says": close
+# pairs +0.016 [+0.000, +0.038], Spearman +0.011, relative gap -2.4 s, belief-favourite regret
+# -0.36 s on 18 races). The world without neutralisations: `default_world_config(c, on=False)`, or
+# `--world-config configs/sim/legacy/world_pre_scorecard.yaml` (the whole world before the change).
+WORLD_EVENTS_DEFAULT = True
 
 
 def default_world_config(config, on: bool | None = None):
     """The world when no world config is given: `config` (the profile's SimConfig), with
-    WORLD_EVENTS when `on` (default WORLD_EVENTS_DEFAULT, off). A config whose events are not
+    WORLD_EVENTS when `on` (default WORLD_EVENTS_DEFAULT, on). A config whose events are not
     "none" is returned as it is."""
     on = WORLD_EVENTS_DEFAULT if on is None else on
     if not on or config.events.name != "none":
@@ -396,9 +398,10 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     """sim_for(race_id, role) over the committed cache, role "belief" or "world". Both share
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
     by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
-    residual lap noise on); the world runs
+    residual lap noise on, driver effects in the fits); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off; the wear fit
-    config.WORLD_DEGRADATION; default_world_config, WORLD_EVENTS off by default). The world alone
+    config.WORLD_DEGRADATION and the tyre-life edge config.WORLD_EDGE, config.world_default;
+    default_world_config, WORLD_EVENTS on by default). The world alone
     gets the race's whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
     and role."""
