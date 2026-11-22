@@ -2667,6 +2667,30 @@ and `pit_out_time_s` (out-lap row), and `pit_loss.stop_table` each stop's `lane_
   after the snapshot: `tests/test_sim_pit_stops.py` alters every other car's rows after the
   cut and the belief's times stay identical (the judge's change: the canary).
 
+Measured (19 calibration races, main 2c7665b with this branch, the adopted judge and belief;
+A/B sections without the hindsight variants, leave-one-stint-out or components; race-cluster
+95% intervals; base close-pair order 0.753, Spearman 0.958, relative gap 13.17 s, abs 18.9 s,
+B2 rho 0.866, regret 4.12 s, pit-now 0.810):
+
+| arm | close-pair order | Spearman | rel gap s | abs MAE s | B2 rho | B2 regret s | pit-now |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| replay actual | +0.016 [-0.007, +0.043] | -0.001 | +0.02 [-0.31, +0.36] | -0.64 | 0 | 0 | 0 |
+| team typical (judge) | +0.000 [-0.013, +0.014] | +0.001 | -0.01 | -0.21 | +0.000 | +0.004 | +0.000 |
+| both, belief's as-of team stop too | +0.016 | -0.001 | +0.02 | -0.64 | +0.000 [-0.034, +0.031] | -0.001 | +0.001 |
+
+Decision. `replay: actual` moves the close-pair order the way the noise floor said real stops would
+(+0.016; its interval includes 0) and leaves the gaps alone. It touches only the replays of real
+strategies, so the eval's scoring of hypothetical plans is unchanged: it can be adopted as a
+measurement input (ledger `pit_stops_replay`, this race whole). `team: true` changes nothing
+measurable (team medians differ by tenths after shrinkage, the same for every plan of a car
+except through the stop count): not adopted. Both stay off by default.
+
+The noise floor on this main (19 races, 368 close pairs, the adopted judge): judge 0.753
+[0.698, 0.793] / 13.2 s; + per-stint pace 0.696 / 11.9 s; + pit laps 0.739 / 11.4 s; + SC/VSC
+laps 0.614 / 5.2 s; + lap 1 (the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]; pit laps alone
+0.755 / 12.6 s. The judge's order is at the ceiling; the room is in the gaps, almost all of it on
+the neutralised laps.
+
 ### What the ablation says (f7be251, selection rule applied)
 
 Changes against the base (the default world and `belief.yaml`), pooled, race-cluster 95% intervals:
