@@ -397,7 +397,17 @@ class SimConfig(_Cfg):
     # N(0, residual_s^2) on every remaining green lap, residual_s from the degradation
     # fit_report, one vector per sample shared by every plan (engine LAP_NOISE_STREAM).
     # The degradation parameter draw is the model's `draw` param (degradation.py).
-    lap_noise: Literal["none", "residual"] = "none"
+    # "persistent" (docs/eval.md "Honest uncertainty"): the residuals are not independent
+    # (lag-1 autocorrelation 0.78-0.94), so each sample draws one offset per plan stint, held
+    # over the stint, plus the lap-to-lap part iid, both sds from the fit's residual_components
+    # (engine._lap_noise_offsets, LAP_OFFSET_STREAM).
+    lap_noise: Literal["none", "residual", "persistent"] = "none"
+    # what optimize_batch (the belief optimizer, the rule baselines' search and the tools'
+    # continuations) ranks candidates on: "draws" (the default, as before) the mean over the
+    # posterior parameter draws and lap noise; "point" the point estimate (no parameter draw, no
+    # lap noise; events and pit-loss draws kept), Simulator.point_estimate. The tools' reported
+    # intervals still come from the draws. Left out of config_hash at its default.
+    plan_on: Literal["draws", "point"] = "draws"
     # R8 stint limit, RETIRED (docs/rules.md R8): a stint could end at most this many laps past
     # the oldest tyre age any car ran on its compound in the whole race, a hindsight rule handed
     # to every policy. None (the default) is off. The legacy setting that reproduces the results
@@ -429,12 +439,15 @@ class SimConfig(_Cfg):
             return cls.model_validate(json.load(f))
 
 
-# The eval world's wear fit (score.race_simulators' default world, docs/eval.md "The wear
-# cliff"): linear_fuel_hinge with driver effects on the race rows, the arm the cross-race
-# selection rule picks for the full window on the calibration races (driver_effects_hinge,
-# reports/calibration/cross_race). The SimConfig default stays linear_fuel, the comparator the
-# cross-race arms are overlays on.
-WORLD_DEGRADATION = {"name": "linear_fuel_hinge", "params": {"driver_effects": "race"}}
+# The eval world's wear fit (score.race_simulators' default world, docs/eval.md "The world's wear
+# fit"): linear_fuel with driver effects on the race rows. The fidelity scorecard (src/sim/
+# fidelity.py, six races) finds driver effects the one factor that improves its primary measure
+# (close-pair finishing order) and the hinge adds nothing (DE + hinge slightly worse than DE
+# alone); the cross-race G rule on the calibration races does not tell the two apart (DE against
+# DE + hinge: +0.26 [-0.08, 0.62] s), so the simpler one is the default. Both are named world
+# overlays for the scorecard's ablation: configs/sim/world_de.yaml and world_de_hinge.yaml. The
+# SimConfig default stays linear_fuel, the comparator the cross-race arms are overlays on.
+WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}}
 
 
 def world_default(config: "SimConfig") -> "SimConfig":

@@ -13,6 +13,7 @@ import json
 import os
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from src.baselines.domain import PolicyUnavailable
@@ -52,15 +53,25 @@ SNAPS = (8, 20, 30)
 HAS_CACHE = os.path.isdir(os.path.join(CACHE_DIR, "2021"))
 
 
-def truncate_after(df, k):
-    return df[df["lap"] <= k].copy()
+def _late(df, k, driver=None):
+    """The rows not yet visible when `driver` completes lap k: by session time (end_s after that
+    moment) when the frame has it, else by lap number."""
+    if driver is not None and "end_s" in df and "driver" in df:
+        t = df.loc[(df["driver"] == driver) & (df["lap"] == k), "end_s"]
+        if len(t) and pd.notna(t.iloc[0]):
+            return (pd.to_numeric(df["end_s"], errors="coerce") > float(t.iloc[0])).to_numpy()
+    return (df["lap"] > k).to_numpy()
 
 
-def scramble_after(df, k, seed=1):
-    """Every lap after k rewritten: tyre ages stretched far past any real stint, compounds
-    swapped, lap times shuffled and shifted."""
+def truncate_after(df, k, driver=None):
+    return df[~_late(df, k, driver)].copy()
+
+
+def scramble_after(df, k, seed=1, driver=None):
+    """Every lap not yet visible at the snapshot rewritten: tyre ages stretched far past any real
+    stint, compounds swapped, lap times shuffled and shifted."""
     df = df.copy()
-    late = (df["lap"] > k).to_numpy()
+    late = _late(df, k, driver)
     rng = np.random.default_rng(seed)
     df.loc[late, "tyre_age"] = df.loc[late, "tyre_age"].to_numpy() * 3 + 40
     swap = {"SOFT": "MEDIUM", "MEDIUM": "SOFT"}
@@ -172,7 +183,8 @@ def test_development_races_belief_is_blind_to_the_future(race_id):
     for k in (10, 25, 40):
         snap = calibration.snapshot_at(data.frame, data.race, driver, k)
         views = []
-        for frame in (data.frame, truncate_after(data.frame, k), scramble_after(data.frame, k)):
+        for frame in (data.frame, truncate_after(data.frame, k, driver=driver),
+                      scramble_after(data.frame, k, driver=driver)):
             sim = Simulator(frame, BELIEF, data.practice, qualifying=data.qualifying)
             cl = {c: vars(x) for c, x in sorted(sim.cliffs_for(snap).items())}
             plan = optimize_batch(snap, sim.fitted_for(snap), seed=agent_tools.SEED, n_samples=4, max_stops=2).plan

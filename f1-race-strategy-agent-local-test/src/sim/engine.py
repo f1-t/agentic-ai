@@ -183,6 +183,10 @@ PIT_LOSS_STREAM = 5
 # (n, len(config.compound_classes)) normal matrix per batch call, column per compound in sorted
 # order, so turning it on leaves every other draw as it was
 CLIFF_STREAM = 6
+# lap_noise "persistent": per sample one offset per plan stint (column j stint j), an
+# (n, max stints) normal matrix per batch call; the lap-to-lap part still draws from
+# LAP_NOISE_STREAM
+LAP_OFFSET_STREAM = 7
 # never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
 # [seed, k, 1] key
 STREAM_KEY = 2 ** 32 - 1
@@ -406,6 +410,18 @@ class Simulator:
             fit._fit_window(snapshot, k0 or 0)
             self._fits[key] = fit
         return self._fits[key]
+
+    def point_estimate(self) -> "Simulator":
+        """A shallow copy that simulates the point estimate: no posterior parameter draw and no
+        lap noise; events, pit-loss and calibrated factor draws are kept (SimConfig.plan_on
+        "point"). Call it on a fitted instance (fitted_for)."""
+        out = copy.copy(self)
+        out.config = self.config.model_copy(update={"lap_noise": "none"})
+        if getattr(self.degradation, "param_draw", "none") != "none":
+            m = copy.copy(self.degradation)
+            m.param_draw = "none"
+            out.degradation = m
+        return out
 
     def _keep(self, drop):
         def keep(f):
@@ -666,6 +682,7 @@ class Simulator:
         ages = np.empty((len(valid), n_laps))
         age0 = np.empty((len(valid), n_laps))                  # the lap's stint starting age
         stint_start = np.empty((len(valid), n_laps), dtype=int)  # index of the stint's first lap
+        stint_no = np.empty((len(valid), n_laps), dtype=int)     # the lap's stint, 0 the current one
         stops = np.zeros((len(valid), n_laps))
         n_stints = np.array([len(p.stints) for p in valid])
         bounds = np.full((len(valid), n_stints.max() + 1), n_laps, dtype=int)
@@ -679,6 +696,7 @@ class Simulator:
                 ages[r, pos:pos + s.laps] = a0 + np.arange(1, s.laps + 1)
                 age0[r, pos:pos + s.laps] = a0
                 stint_start[r, pos:pos + s.laps] = pos
+                stint_no[r, pos:pos + s.laps] = j
                 pos += s.laps
                 if j < len(p.stints) - 1:
                     stops[r, pos - 1] = 1.0
@@ -702,6 +720,10 @@ class Simulator:
                 if cal is not None and cal.correction is not None else None)
         lap1_extra = snapshot.laps_completed == 0 and snapshot.standing_start
         noise_sd = self._lap_noise_sd()
+        # "persistent": the offsets on top of the lap-to-lap noise (_lap_noise_offsets)
+        off_sd = self._lap_noise_offsets()
+        z_off = (batch_normals(seed, LAP_OFFSET_STREAM, n, int(n_stints.max()), off_sd)
+                 if off_sd is not None and off_sd > 0 else None)
         # parameter draws: the linear models take row k of one (n, n_params) normal matrix
         # (draw_z); another model's draw(rng) gets the per-sample substream [seed, k, 2]. A
         # model whose draw is "none" returns itself and draws nothing, so nothing is built.
@@ -780,6 +802,8 @@ class Simulator:
                 lap_s = np.where(sc | vsc, lap_s, lap_s + offset)
             if eps is not None:   # one vector per sample on the green laps, shared by every plan
                 lap_s += np.where(sc | vsc, 0.0, eps[k])
+            if z_off is not None:   # persistent: each plan stint's own offset, held over the stint
+                lap_s += np.where(sc | vsc, 0.0, z_off[k][stint_no])
             if lap1_extra:
                 lap_s[:, 0] += v["lap1_extra_s"]
             scale = np.where(sc, v["sc_pit_loss_factor"], np.where(vsc, pl["vsc_factor"], 1.0))
@@ -871,12 +895,28 @@ class Simulator:
 
     def _lap_noise_sd(self) -> float:
         """SimConfig.lap_noise: 0 for "none", else the fit's residual_s (0 when the fit
-        report has none, or it is NaN)."""
+        report has none, or it is NaN). Under "persistent" with the fit's residual_components,
+        their lap-to-lap part only (the offsets are _lap_noise_offsets')."""
         if self.config.lap_noise == "none":
             return 0.0
         rep = getattr(self.degradation, "fit_report", None) or {}
+        comp = rep.get("residual_components")
+        if self.config.lap_noise == "persistent" and comp:
+            return float(comp["lap_s"])
         s = float((rep.get("sd") or {}).get("residual_s", float("nan")))
         return 0.0 if np.isnan(s) else s
+
+    def _lap_noise_offsets(self) -> float | None:
+        """The stint-offset sd of lap_noise "persistent" (docs/eval.md "Honest uncertainty"): the
+        driver-stint offset sd of the fit's residual_components, sqrt(driver_s^2 + stint_s^2)
+        (degradation._residual_components on the rows the fit saw, so as of the snapshot under
+        to_snapshot; early in a race every car is on its first stint and the two cannot be told
+        apart). Each sample draws one offset per plan stint, held on that stint's green laps; the
+        lap-to-lap part is the iid noise. None otherwise (no offsets drawn)."""
+        if self.config.lap_noise != "persistent":
+            return None
+        comp = (getattr(self.degradation, "fit_report", None) or {}).get("residual_components")
+        return float(np.hypot(comp["driver_s"], comp["stint_s"])) if comp else None
 
     def _events_drawn(self, snapshot: Snapshot, scenario: Scenario | None) -> bool:
         """Whether the samples' SC and VSC laps may differ from the recorded race's: an event

@@ -142,7 +142,12 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     plan is legal. It also adds diagnostics["searched"], every legal plan in tie-break order
     (the chosen plan first): {"plans": [contract Plan, ...], "mean_time_s": (k,) array,
     "times": (k, n_samples) array}. The eval's reference cache (src/eval/reference.py) reads
-    them for its paired standard errors and near-tie measurements."""
+    them for its paired standard errors and near-tie measurements.
+
+    Under SimConfig.plan_on "point" the candidates are ranked on the fit's point estimate
+    (Simulator.point_estimate) instead of the posterior draws."""
+    if getattr(sim.config, "plan_on", "draws") == "point" and hasattr(sim, "point_estimate"):
+        sim = sim.fitted_for(snapshot).point_estimate()
     state = from_contract(snapshot, sim)
     candidates = list(candidate_plans(state, max_stops))
     nonzero = [p for p in candidates if p.stints[0].laps > 0]

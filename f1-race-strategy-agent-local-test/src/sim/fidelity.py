@@ -1692,6 +1692,115 @@ def order_table(o_rows: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([t, pd.DataFrame(pooled)], ignore_index=True)[O_KEYS + ["race_id"] + ORDER_COLS]
 
 
+# --- the noise floor ------------------------------------------------------------------------------
+# Levels of hindsight handed to the judge's whole-race replay (version 1, the headline's
+# leave-one-driver-out fit and whole-race pace offset), each lap's error zeroed or corrected
+# where the level knows the real value. What the last level leaves is incidents, driver errors,
+# lap-to-lap noise around each stint's pace and unmodelled effects: no simulator of these inputs
+# can order the field better than it does.
+CEILING_PARTS = {
+    "stint_pace": "each stint's own pace offset (mean clean-lap residual of that stint, five or more clean laps; else the car's), on every lap of the stint",
+    "pit_laps": "in- and out-laps as recorded, no charged pit loss (the real stop durations and pit-lane driving)",
+    "neutral_laps": "SC and VSC laps as recorded",
+    "lap1": "lap 1 as recorded (the start)",
+}
+CEILING_LEVELS = [("0 judge", ()), ("1 +stint pace", ("stint_pace",)),
+                  ("2 +pit laps", ("stint_pace", "pit_laps")),
+                  ("3 +neutral laps", ("stint_pace", "pit_laps", "neutral_laps")),
+                  ("4 +lap 1", ("stint_pace", "pit_laps", "neutral_laps", "lap1")),
+                  ("alone: pit laps", ("pit_laps",)), ("alone: neutral laps", ("neutral_laps",)),
+                  ("alone: lap 1", ("lap1",))]
+
+
+def ceiling_errors(laps: pd.DataFrame, drivers: pd.DataFrame, parts) -> pd.Series:
+    """Per driver, the replay's whole-race time error (simulated less real, pace term included)
+    when the judge is handed `parts` (CEILING_PARTS) of the real race. `laps` / `drivers` are one
+    race's a_laps / a_drivers of one variant. With no parts it is the headline's error
+    (err_pace_s): the charged pit loss less the summed lap residuals."""
+    out = {}
+    for d, g in laps.groupby("driver"):
+        row = drivers[drivers["driver"] == d]
+        if not len(row):
+            continue
+        resid = g["resid_s"].to_numpy(dtype=float)
+        kind = g["kind"].to_numpy()
+        pit = np.isin(kind, ["in_lap", "out_lap"])
+        charged = float(row["pit_err_s"].iloc[0] + np.nansum(resid[pit]))   # the pit loss the replay charged
+        e = -resid
+        if "stint_pace" in parts:
+            clean = g["clean"].to_numpy(dtype=bool) & np.isfinite(resid)
+            for j in np.unique(g["stint"].to_numpy()):
+                sel = g["stint"].to_numpy() == j
+                if (sel & clean).sum() >= MIN_OFFSET_LAPS:
+                    e[sel] += float(np.mean(resid[sel & clean]))
+        if "pit_laps" in parts:
+            e[pit] = 0.0
+            charged = 0.0
+        if "neutral_laps" in parts:
+            e[np.isin(kind, ["sc", "vsc"])] = 0.0
+        if "lap1" in parts:
+            e[kind == "lap1"] = 0.0
+        out[d] = float(np.nansum(e) + charged)
+    return pd.Series(out, dtype=float)
+
+
+def ceiling_table(per_race: dict, variant="lodo") -> pd.DataFrame:
+    """The noise floor: order and gap measures of the judge's whole-race replay at each
+    CEILING_LEVELS level, per race and pooled (close pairs pooled, the rest means over races)."""
+    rows = []
+    for race, t in sorted(per_race.items()):
+        lp, dr, o = t.get("a_laps"), t.get("a_drivers"), t.get("o_rows")
+        if lp is None or dr is None or o is None or not len(lp) or not len(dr):
+            continue
+        lp, dr = lp[lp["variant"] == variant], dr[dr["variant"] == variant]
+        fit = {"in": "in-sample", "lodo": "leave-one-driver-out"}[variant]
+        base = o[(o["version"] == "1 judge") & (o["fit"] == fit) & (o["pace"] == "insample")]
+        base = base.drop_duplicates("driver").set_index("driver")
+        for level, parts in CEILING_LEVELS:
+            err = ceiling_errors(lp, dr, parts).reindex(base.index)
+            t2 = base.reset_index().assign(pred_total_s=base["real_s"].to_numpy() + err.to_numpy())
+            m = order_measures(t2)
+            if m:
+                rows.append({"level": level, "race_id": race, **m})
+    if not rows:
+        return pd.DataFrame()
+    t = pd.DataFrame(rows)
+    pooled = []
+    for level, part in t.groupby("level", sort=False):
+        pairs = part["close_pairs"].sum()
+        pooled.append({"level": level, "race_id": "pooled",
+                       "close_pair_acc": float((part["close_pair_acc"] * part["close_pairs"]).sum() / pairs) if pairs else np.nan,
+                       "close_pairs": int(pairs),
+                       **{c: _mean(part[c]) for c in ORDER_COLS if c not in ("close_pair_acc", "close_pairs")}})
+    return pd.concat([t, pd.DataFrame(pooled)], ignore_index=True)[["level", "race_id"] + ORDER_COLS]
+
+
+def ceiling_bootstrap(per_race: dict, n_boot=N_BOOT, seed=0) -> pd.DataFrame:
+    """Pooled close-pair order and relative gap error per ceiling level, with race-cluster
+    bootstrap 95% intervals."""
+    t = ceiling_table(per_race)
+    if not len(t):
+        return pd.DataFrame()
+    t = t[t["race_id"] != "pooled"]
+    races = sorted(t["race_id"].unique())
+    rng = np.random.default_rng(seed)
+    draws = [rng.choice(len(races), len(races)) for _ in range(n_boot)]
+    out = []
+    for level, part in t.groupby("level", sort=False):
+        p = part.set_index("race_id").reindex(races)
+        num = (p["close_pair_acc"].fillna(0) * p["close_pairs"]).to_numpy(dtype=float)
+        den = p["close_pairs"].to_numpy(dtype=float)
+        gap = p["rel_gap_mae_s"].to_numpy(dtype=float)
+        acc_b = [num[i].sum() / den[i].sum() for i in draws if den[i].sum()]
+        gap_b = [np.nanmean(gap[i]) for i in draws]
+        out.append({"level": level, "close_pair_acc": num.sum() / den.sum(),
+                    "close_pair_lo": float(np.percentile(acc_b, 2.5)), "close_pair_hi": float(np.percentile(acc_b, 97.5)),
+                    "spearman": _mean(p["spearman"]), "rel_gap_mae_s": float(np.nanmean(gap)),
+                    "rel_gap_lo": float(np.percentile(gap_b, 2.5)), "rel_gap_hi": float(np.percentile(gap_b, 97.5)),
+                    "abs_mae_s": _mean(p["abs_mae_s"]), "close_pairs": int(den.sum()), "races": len(races)})
+    return pd.DataFrame(out)
+
+
 def _err_stats(x) -> dict:
     return {"n": int(np.isfinite(np.asarray(x, dtype=float)).sum()), "mae_s": _mae(x), "bias_s": _mean(x)}
 
@@ -2067,7 +2176,8 @@ def write_scorecard(label: str, per_race: dict, spec: Spec, opts: Options, out_d
               "b_rows.csv.gz": concat(per_race, "b_rows"), "b_factors.csv": concat(per_race, "b_factors"),
               "b_g.csv": concat(per_race, "b_g"), "d_components.csv": d_summary(per_race),
               "d_rows.csv": concat(per_race, "d_rows"), "d_status.csv": concat(per_race, "d_status"),
-              "ledger.csv": ledger_frame(spec), "field_replay.csv": concat(per_race, "o_field_replay")}
+              "ledger.csv": ledger_frame(spec), "field_replay.csv": concat(per_race, "o_field_replay"),
+              "ceiling.csv": ceiling_table(per_race), "ceiling_pooled.csv": ceiling_bootstrap(per_race)}
     for name, t in tables.items():
         if t is not None and len(t):
             # gzip without a timestamp, so an unchanged table writes an unchanged file
@@ -2121,6 +2231,12 @@ def scorecard_md(label, per_race, spec, opts, b5=None, secs=None) -> str:
              "Versions 1 and 2 replay from lap 0; version 3 from k. Without traffic the order is the order of "
              "simulated times; it becomes a traffic measure when the traffic branch lands.", "",
              _md(_order_view(o), 3)]
+    lines += ["## Noise floor (the judge handed the real race, step by step)", "",
+              "The judge's whole-race replay (version 1, leave-one-driver-out fit, whole-race pace offset: level 0 is "
+              "the headline) with each level's real values in place of the model's, cumulative from 1 to 4, then each "
+              "alone: " + "; ".join(f"{k}: {v}" for k, v in CEILING_PARTS.items()) + ". What level 4 leaves is "
+              "lap-to-lap noise around each stint's pace, incidents, errors and unmodelled effects. Pooled with "
+              "race-cluster bootstrap 95% intervals:", "", _md(ceiling_bootstrap(per_race), 3)]
     if "o_field_replay" in next(iter(per_race.values()), {}):
         lines += ["Whole-field replay of branch feat/traffic-in-eval (its own summary):", "",
                   _md(concat(per_race, "o_field_replay"), 3)]
