@@ -1,0 +1,8 @@
+# Learned-calibrator comparison arm "belief_ridge_all" (src/sim/learned_calibrator.py): the belief
+# simulator (base_config configs/sim/belief.yaml) with ridge on the event factors too. Its
+# degradation fits are belief_ridge's; the adoption rule reads its event factors.
+base_config: configs/sim/belief.yaml
+calibrator:
+  name: ridge
+  params:
+    targets: all

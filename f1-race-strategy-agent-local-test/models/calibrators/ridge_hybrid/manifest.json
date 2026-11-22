@@ -1,0 +1,65 @@
+{
+ "description": "The learned calibrator's trained artifacts (src/sim/learned_calibrator.py): the per-factor hybrid of ridge and shrinkage. calibrators.TrainedCalibrator loads loo/<race_id>.json for a race in `races` (fitted without it) and all.json for any other race; nothing is trained at evaluation time.",
+ "command": "python -m src.sim.learned_calibrator train",
+ "races": [
+  "2021_04_spain",
+  "2023_07_spain",
+  "2023_01_bahrain",
+  "2019_10_united_kingdom",
+  "2022_02_saudi_arabia",
+  "2024_07_emilia_romagna",
+  "2025_23_qatar"
+ ],
+ "held_out_never_loaded": "data/eval_set.json",
+ "calibrator": {
+  "name": "ridge",
+  "params": {
+   "targets": "degradation",
+   "factors": [
+    "fuel_s_per_lap"
+   ]
+  }
+ },
+ "arm": "belief_hybrid",
+ "sources": {
+  "base_delta_s": "shrinkage",
+  "wear_s_per_lap": "shrinkage",
+  "fuel_s_per_lap": "ridge",
+  "hinge_s_per_lap": "shrinkage",
+  "pit_loss_s": "shrinkage",
+  "sc_lap_factor": "shrinkage",
+  "vsc_lap_factor": "shrinkage",
+  "sc_pit_loss_factor": "shrinkage",
+  "lap1_extra_s": "shrinkage"
+ },
+ "dataset": {
+  "rows": 85,
+  "laps_k": "jobs.laps_k_for under the profile",
+  "profile": "local",
+  "profile_hash": "683b71b96524"
+ },
+ "sim_code_version": "2ccedd3638d5",
+ "commit": "589b98d77e3f8d42d2f4904d09936de616928911",
+ "dirty": false,
+ "temporal_caveat": "a leave-one-out model is trained on races before and after the race it calibrates (none of that race); not strictly as of the race",
+ "adopted": [
+  "fuel_s_per_lap"
+ ],
+ "decision": {
+  "default": null,
+  "checks": {
+   "hybrid": {
+    "g_mae_lower": true,
+    "stop_gain_no_worse": false,
+    "coverage_no_worse": true,
+    "passes": false
+   },
+   "ridge": {
+    "g_mae_lower": false,
+    "stop_gain_no_worse": false,
+    "coverage_no_worse": true,
+    "passes": false
+   }
+  }
+ }
+}

@@ -1,0 +1,183 @@
+fold,calibrator,factor,status,alpha,sigma,n_races,n_rows,reason,arm
+2021_04_spain,ridge,base_delta_s[HARD],ridge,1000.0,3.656212755563307,5.0,59.0,,ridge
+2021_04_spain,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.8894644555742737,6.0,71.0,,ridge
+2021_04_spain,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge
+2021_04_spain,ridge,fuel_s_per_lap,ridge,100.0,0.018652301436917103,6.0,71.0,,ridge
+2021_04_spain,ridge,wear_s_per_lap[HARD],ridge,100.0,0.03060549737003493,6.0,71.0,,ridge
+2021_04_spain,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11794820562155357,6.0,71.0,,ridge
+2021_04_spain,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.04919276871061421,5.0,58.0,,ridge
+2023_07_spain,ridge,base_delta_s[HARD],ridge,1000.0,3.656212755563307,5.0,59.0,,ridge
+2023_07_spain,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7991630319853207,6.0,73.0,,ridge
+2023_07_spain,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge
+2023_07_spain,ridge,fuel_s_per_lap,ridge,10.0,0.0198032130833236,6.0,73.0,,ridge
+2023_07_spain,ridge,wear_s_per_lap[HARD],ridge,1000.0,0.04424358903105358,5.0,59.0,,ridge
+2023_07_spain,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.1146699121115955,6.0,73.0,,ridge
+2023_07_spain,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.048743804707150326,5.0,60.0,,ridge
+2023_01_bahrain,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge
+2023_01_bahrain,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7559076566454017,6.0,73.0,,ridge
+2023_01_bahrain,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge
+2023_01_bahrain,ridge,fuel_s_per_lap,ridge,10.0,0.019972220146023012,6.0,73.0,,ridge
+2023_01_bahrain,ridge,wear_s_per_lap[HARD],ridge,1000.0,0.017867280945055377,5.0,59.0,,ridge
+2023_01_bahrain,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.02602539144139951,6.0,73.0,,ridge
+2023_01_bahrain,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.03363577277633726,5.0,60.0,,ridge
+2019_10_united_kingdom,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge
+2019_10_united_kingdom,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.2605827108010486,6.0,74.0,,ridge
+2019_10_united_kingdom,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge
+2019_10_united_kingdom,ridge,fuel_s_per_lap,ridge,10.0,0.018905142032457387,6.0,74.0,,ridge
+2019_10_united_kingdom,ridge,wear_s_per_lap[HARD],ridge,1000.0,0.03402257613393762,5.0,60.0,,ridge
+2019_10_united_kingdom,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11100437962746998,6.0,74.0,,ridge
+2019_10_united_kingdom,ridge,wear_s_per_lap[SOFT],ridge,0.01,0.025127944088513127,5.0,61.0,,ridge
+2022_02_saudi_arabia,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge
+2022_02_saudi_arabia,ridge,base_delta_s[MEDIUM],ridge,100.0,1.6625629117783896,6.0,72.0,,ridge
+2022_02_saudi_arabia,ridge,base_delta_s[SOFT],fallback,,,,,"4 training race(s), under 5",ridge
+2022_02_saudi_arabia,ridge,fuel_s_per_lap,ridge,1000.0,0.015655414960891807,6.0,72.0,,ridge
+2022_02_saudi_arabia,ridge,wear_s_per_lap[HARD],ridge,100.0,0.03443358806184396,5.0,58.0,,ridge
+2022_02_saudi_arabia,ridge,wear_s_per_lap[MEDIUM],ridge,100.0,0.11557298676014517,6.0,72.0,,ridge
+2022_02_saudi_arabia,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.04305059103145416,6.0,72.0,,ridge
+2024_07_emilia_romagna,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge
+2024_07_emilia_romagna,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7802722690641126,6.0,74.0,,ridge
+2024_07_emilia_romagna,ridge,base_delta_s[SOFT],fallback,,,,,"4 training race(s), under 5",ridge
+2024_07_emilia_romagna,ridge,fuel_s_per_lap,ridge,100.0,0.01623482720248343,6.0,74.0,,ridge
+2024_07_emilia_romagna,ridge,wear_s_per_lap[HARD],ridge,100.0,0.03500465175976909,5.0,60.0,,ridge
+2024_07_emilia_romagna,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11495337303575485,6.0,74.0,,ridge
+2024_07_emilia_romagna,ridge,wear_s_per_lap[SOFT],ridge,100.0,0.03236237217287301,5.0,61.0,,ridge
+2025_23_qatar,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge
+2025_23_qatar,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7638948349584511,6.0,73.0,,ridge
+2025_23_qatar,ridge,base_delta_s[SOFT],fallback,,,,,"4 training race(s), under 5",ridge
+2025_23_qatar,ridge,fuel_s_per_lap,ridge,1.0,0.009494726467304364,6.0,73.0,,ridge
+2025_23_qatar,ridge,wear_s_per_lap[HARD],ridge,100.0,0.032622904763660324,5.0,59.0,,ridge
+2025_23_qatar,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11192970298806706,6.0,73.0,,ridge
+2025_23_qatar,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.04509877710317144,5.0,60.0,,ridge
+2021_04_spain,ridge,base_delta_s[HARD],ridge,1000.0,3.656212755563307,5.0,59.0,,ridge_all
+2021_04_spain,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.8894644555742737,6.0,71.0,,ridge_all
+2021_04_spain,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge_all
+2021_04_spain,ridge,fuel_s_per_lap,ridge,100.0,0.018652301436917103,6.0,71.0,,ridge_all
+2021_04_spain,ridge,lap1_extra_s,ridge,1000.0,1.3170161043344688,6.0,71.0,,ridge_all
+2021_04_spain,ridge,pit_loss_s,ridge,0.01,0.9328677159591088,6.0,71.0,,ridge_all
+2021_04_spain,ridge,sc_lap_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2021_04_spain,ridge,sc_pit_loss_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2021_04_spain,ridge,vsc_lap_factor,fallback,,,,,"2 training race(s), under 5",ridge_all
+2021_04_spain,ridge,wear_s_per_lap[HARD],ridge,100.0,0.03060549737003493,6.0,71.0,,ridge_all
+2021_04_spain,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11794820562155357,6.0,71.0,,ridge_all
+2021_04_spain,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.04919276871061421,5.0,58.0,,ridge_all
+2023_07_spain,ridge,base_delta_s[HARD],ridge,1000.0,3.656212755563307,5.0,59.0,,ridge_all
+2023_07_spain,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7991630319853207,6.0,73.0,,ridge_all
+2023_07_spain,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge_all
+2023_07_spain,ridge,fuel_s_per_lap,ridge,10.0,0.0198032130833236,6.0,73.0,,ridge_all
+2023_07_spain,ridge,lap1_extra_s,ridge,1000.0,1.7504357026684838,6.0,73.0,,ridge_all
+2023_07_spain,ridge,pit_loss_s,ridge,0.01,1.731575821633676,6.0,73.0,,ridge_all
+2023_07_spain,ridge,sc_lap_factor,fallback,,,,,"4 training race(s), under 5",ridge_all
+2023_07_spain,ridge,sc_pit_loss_factor,fallback,,,,,"4 training race(s), under 5",ridge_all
+2023_07_spain,ridge,vsc_lap_factor,fallback,,,,,"2 training race(s), under 5",ridge_all
+2023_07_spain,ridge,wear_s_per_lap[HARD],ridge,1000.0,0.04424358903105358,5.0,59.0,,ridge_all
+2023_07_spain,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.1146699121115955,6.0,73.0,,ridge_all
+2023_07_spain,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.048743804707150326,5.0,60.0,,ridge_all
+2023_01_bahrain,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge_all
+2023_01_bahrain,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7559076566454017,6.0,73.0,,ridge_all
+2023_01_bahrain,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge_all
+2023_01_bahrain,ridge,fuel_s_per_lap,ridge,10.0,0.019972220146023012,6.0,73.0,,ridge_all
+2023_01_bahrain,ridge,lap1_extra_s,ridge,100.0,1.4723667760483483,6.0,73.0,,ridge_all
+2023_01_bahrain,ridge,pit_loss_s,ridge,0.1,0.8106129409842517,6.0,73.0,,ridge_all
+2023_01_bahrain,ridge,sc_lap_factor,fallback,,,,,"4 training race(s), under 5",ridge_all
+2023_01_bahrain,ridge,sc_pit_loss_factor,fallback,,,,,"4 training race(s), under 5",ridge_all
+2023_01_bahrain,ridge,vsc_lap_factor,fallback,,,,,"1 training race(s), under 5",ridge_all
+2023_01_bahrain,ridge,wear_s_per_lap[HARD],ridge,1000.0,0.017867280945055377,5.0,59.0,,ridge_all
+2023_01_bahrain,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.02602539144139951,6.0,73.0,,ridge_all
+2023_01_bahrain,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.03363577277633726,5.0,60.0,,ridge_all
+2019_10_united_kingdom,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge_all
+2019_10_united_kingdom,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.2605827108010486,6.0,74.0,,ridge_all
+2019_10_united_kingdom,ridge,base_delta_s[SOFT],fallback,,,,,"3 training race(s), under 5",ridge_all
+2019_10_united_kingdom,ridge,fuel_s_per_lap,ridge,10.0,0.018905142032457387,6.0,74.0,,ridge_all
+2019_10_united_kingdom,ridge,lap1_extra_s,ridge,10.0,1.3895889807104547,6.0,74.0,,ridge_all
+2019_10_united_kingdom,ridge,pit_loss_s,ridge,0.01,0.538192069876703,6.0,74.0,,ridge_all
+2019_10_united_kingdom,ridge,sc_lap_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2019_10_united_kingdom,ridge,sc_pit_loss_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2019_10_united_kingdom,ridge,vsc_lap_factor,fallback,,,,,"2 training race(s), under 5",ridge_all
+2019_10_united_kingdom,ridge,wear_s_per_lap[HARD],ridge,1000.0,0.03402257613393762,5.0,60.0,,ridge_all
+2019_10_united_kingdom,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11100437962746998,6.0,74.0,,ridge_all
+2019_10_united_kingdom,ridge,wear_s_per_lap[SOFT],ridge,0.01,0.025127944088513127,5.0,61.0,,ridge_all
+2022_02_saudi_arabia,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge_all
+2022_02_saudi_arabia,ridge,base_delta_s[MEDIUM],ridge,100.0,1.6625629117783896,6.0,72.0,,ridge_all
+2022_02_saudi_arabia,ridge,base_delta_s[SOFT],fallback,,,,,"4 training race(s), under 5",ridge_all
+2022_02_saudi_arabia,ridge,fuel_s_per_lap,ridge,1000.0,0.015655414960891807,6.0,72.0,,ridge_all
+2022_02_saudi_arabia,ridge,lap1_extra_s,ridge,0.1,0.5870903184568457,6.0,72.0,,ridge_all
+2022_02_saudi_arabia,ridge,pit_loss_s,ridge,1.0,0.9418738445544188,6.0,72.0,,ridge_all
+2022_02_saudi_arabia,ridge,sc_lap_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2022_02_saudi_arabia,ridge,sc_pit_loss_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2022_02_saudi_arabia,ridge,vsc_lap_factor,fallback,,,,,"1 training race(s), under 5",ridge_all
+2022_02_saudi_arabia,ridge,wear_s_per_lap[HARD],ridge,100.0,0.03443358806184396,5.0,58.0,,ridge_all
+2022_02_saudi_arabia,ridge,wear_s_per_lap[MEDIUM],ridge,100.0,0.11557298676014517,6.0,72.0,,ridge_all
+2022_02_saudi_arabia,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.04305059103145416,6.0,72.0,,ridge_all
+2024_07_emilia_romagna,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge_all
+2024_07_emilia_romagna,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7802722690641126,6.0,74.0,,ridge_all
+2024_07_emilia_romagna,ridge,base_delta_s[SOFT],fallback,,,,,"4 training race(s), under 5",ridge_all
+2024_07_emilia_romagna,ridge,fuel_s_per_lap,ridge,100.0,0.01623482720248343,6.0,74.0,,ridge_all
+2024_07_emilia_romagna,ridge,lap1_extra_s,ridge,1000.0,1.8272151813982596,6.0,74.0,,ridge_all
+2024_07_emilia_romagna,ridge,pit_loss_s,ridge,0.01,1.3406653438600213,6.0,74.0,,ridge_all
+2024_07_emilia_romagna,ridge,sc_lap_factor,fallback,,,,,"4 training race(s), under 5",ridge_all
+2024_07_emilia_romagna,ridge,sc_pit_loss_factor,fallback,,,,,"4 training race(s), under 5",ridge_all
+2024_07_emilia_romagna,ridge,vsc_lap_factor,fallback,,,,,"2 training race(s), under 5",ridge_all
+2024_07_emilia_romagna,ridge,wear_s_per_lap[HARD],ridge,100.0,0.03500465175976909,5.0,60.0,,ridge_all
+2024_07_emilia_romagna,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11495337303575485,6.0,74.0,,ridge_all
+2024_07_emilia_romagna,ridge,wear_s_per_lap[SOFT],ridge,100.0,0.03236237217287301,5.0,61.0,,ridge_all
+2025_23_qatar,ridge,base_delta_s[HARD],fallback,,,,,"4 training race(s), under 5",ridge_all
+2025_23_qatar,ridge,base_delta_s[MEDIUM],ridge,1000.0,1.7638948349584511,6.0,73.0,,ridge_all
+2025_23_qatar,ridge,base_delta_s[SOFT],fallback,,,,,"4 training race(s), under 5",ridge_all
+2025_23_qatar,ridge,fuel_s_per_lap,ridge,1.0,0.009494726467304364,6.0,73.0,,ridge_all
+2025_23_qatar,ridge,lap1_extra_s,ridge,1000.0,1.7293925459186954,6.0,73.0,,ridge_all
+2025_23_qatar,ridge,pit_loss_s,ridge,0.01,0.9175479120695752,6.0,73.0,,ridge_all
+2025_23_qatar,ridge,sc_lap_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2025_23_qatar,ridge,sc_pit_loss_factor,fallback,,,,,"3 training race(s), under 5",ridge_all
+2025_23_qatar,ridge,vsc_lap_factor,fallback,,,,,"2 training race(s), under 5",ridge_all
+2025_23_qatar,ridge,wear_s_per_lap[HARD],ridge,100.0,0.032622904763660324,5.0,59.0,,ridge_all
+2025_23_qatar,ridge,wear_s_per_lap[MEDIUM],ridge,1000.0,0.11192970298806706,6.0,73.0,,ridge_all
+2025_23_qatar,ridge,wear_s_per_lap[SOFT],ridge,1000.0,0.04509877710317144,5.0,60.0,,ridge_all
+2021_04_spain,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2021_04_spain,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2021_04_spain,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2021_04_spain,ridge,fuel_s_per_lap,ridge,100.0,0.018652301436917103,6.0,71.0,,hybrid
+2021_04_spain,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2021_04_spain,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2021_04_spain,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid
+2023_07_spain,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2023_07_spain,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2023_07_spain,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2023_07_spain,ridge,fuel_s_per_lap,ridge,10.0,0.0198032130833236,6.0,73.0,,hybrid
+2023_07_spain,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2023_07_spain,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2023_07_spain,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid
+2023_01_bahrain,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2023_01_bahrain,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2023_01_bahrain,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2023_01_bahrain,ridge,fuel_s_per_lap,ridge,10.0,0.019972220146023012,6.0,73.0,,hybrid
+2023_01_bahrain,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2023_01_bahrain,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2023_01_bahrain,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid
+2019_10_united_kingdom,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2019_10_united_kingdom,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2019_10_united_kingdom,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2019_10_united_kingdom,ridge,fuel_s_per_lap,ridge,10.0,0.018905142032457387,6.0,74.0,,hybrid
+2019_10_united_kingdom,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2019_10_united_kingdom,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2019_10_united_kingdom,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid
+2022_02_saudi_arabia,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2022_02_saudi_arabia,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2022_02_saudi_arabia,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2022_02_saudi_arabia,ridge,fuel_s_per_lap,ridge,1000.0,0.015655414960891807,6.0,72.0,,hybrid
+2022_02_saudi_arabia,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2022_02_saudi_arabia,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2022_02_saudi_arabia,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid
+2024_07_emilia_romagna,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2024_07_emilia_romagna,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2024_07_emilia_romagna,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2024_07_emilia_romagna,ridge,fuel_s_per_lap,ridge,100.0,0.01623482720248343,6.0,74.0,,hybrid
+2024_07_emilia_romagna,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2024_07_emilia_romagna,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2024_07_emilia_romagna,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid
+2025_23_qatar,ridge,base_delta_s[HARD],fallback,,,,,not adopted,hybrid
+2025_23_qatar,ridge,base_delta_s[MEDIUM],fallback,,,,,not adopted,hybrid
+2025_23_qatar,ridge,base_delta_s[SOFT],fallback,,,,,not adopted,hybrid
+2025_23_qatar,ridge,fuel_s_per_lap,ridge,1.0,0.009494726467304364,6.0,73.0,,hybrid
+2025_23_qatar,ridge,wear_s_per_lap[HARD],fallback,,,,,not adopted,hybrid
+2025_23_qatar,ridge,wear_s_per_lap[MEDIUM],fallback,,,,,not adopted,hybrid
+2025_23_qatar,ridge,wear_s_per_lap[SOFT],fallback,,,,,not adopted,hybrid

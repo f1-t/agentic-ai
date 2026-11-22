@@ -136,11 +136,15 @@ def contract_of(view, profile=None) -> Snapshot:
     race_id = race_id_for_view(view)
     if race_id is None:
         return view.to_contract()
-    race = _race_data(race_id, profile or load_profile()).race
+    profile = profile or load_profile()
+    race = _race_data(race_id, profile).race
     update = {"total_laps": view.total_laps}
     if view.min_stint_laps is not None:
         update["min_stint_laps"] = view.min_stint_laps
-    return view.to_contract(race=race.model_copy(update=update))
+    snap = view.to_contract(race=race.model_copy(update=update))
+    # the race's whole-race pit loss is the world's; the contract carries the belief's as-of one
+    pl = belief_simulator(snap, profile).fitted_for(snap).pit_loss_inputs(snap)
+    return snap.model_copy(update={"race": snap.race.model_copy(update={"pit_loss_s": round(pl["pit_loss_s"], 3)})})
 
 
 # --- helpers ------------------------------------------------------------------------------
@@ -384,6 +388,39 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
     return _jsonable(out)
 
 
+NEUTRAL_HORIZONS = (5, 10)   # laps ahead for the chance of a new SC / VSC (pit_loss)
+RATE_BAND = 2.0              # the rate's uncertainty: a factor of 2 either way (provisional rates)
+
+
+def _neutralised_for(snapshot: Snapshot) -> int:
+    """Consecutive laps up to the snapshot under its current status (0 when green)."""
+    laps = set(snapshot.sc_laps if snapshot.track_status == "sc" else
+               snapshot.vsc_laps if snapshot.track_status == "vsc" else [])
+    n, lap = 0, snapshot.laps_completed
+    while lap in laps:
+        n, lap = n + 1, lap - 1
+    return n
+
+
+def neutralisation_outlook(snapshot: Snapshot, config: SimConfig | None = None) -> dict:
+    """The chance a new SC or VSC period starts within each of NEUTRAL_HORIZONS laps (capped at
+    the laps left), from the rates the belief draws with (event_rates): 1 - (1 - p)^n, with a
+    low / high band from the rate divided and multiplied by RATE_BAND. Only the rates as of the
+    race start and the status so far enter; nothing about later neutralisations."""
+    r = event_rates(snapshot, config)
+    if r["p_sc"] is None:
+        return {"source": r["source"]}
+    left = snapshot.remaining_laps
+
+    def chance(p, n):
+        return {"low": 1 - (1 - p / RATE_BAND) ** n, "median": 1 - (1 - p) ** n,
+                "high": 1 - (1 - min(1.0, p * RATE_BAND)) ** n}
+    out = {f"next_{h}_laps": {"sc": chance(r["p_sc"], min(h, left)), "vsc": chance(r["p_vsc"], min(h, left))}
+           for h in NEUTRAL_HORIZONS}
+    return {**out, "mean_period_laps": {"sc": r["d_sc"], "vsc": r["d_vsc"]}, "rates_source": r["source"],
+            "band": f"rate / {RATE_BAND:g} to rate x {RATE_BAND:g}"}
+
+
 def _tyre_life(life) -> dict:
     """model_report's tyre_life entry of one compound's belief cliff (cliff.Cliff)."""
     seen = life.lower if life.prior is not None else life.age
@@ -396,29 +433,43 @@ def _tyre_life(life) -> dict:
 
 
 def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
-    """pit_loss_s {low, median, high}: race.pit_loss_s, or the calibrator's value, with the
-    calibrator's sd (calibrators.effective_factors) as -+ 1.64 sd, source "calibrator";
-    when the calibrator gives no sd, the value with a fixed 10 percent band, source
-    "config". pit_loss_now_s is that interval times pit_loss_now_factor, the factor for the
-    current track status: sc_pit_loss_factor under SC, vsc_pit_loss_factor under VSC, 1 when
-    green. The SC and VSC factors are config.effects'. estimate_pit_loss's body."""
+    """pit_loss_s {low, median, high}: the pit loss the belief prices a green stop with at this
+    snapshot (Simulator.pit_loss_inputs). Under the as-of belief (SimConfig.pit_loss.source
+    "asof", configs/sim/belief.yaml) it is pit_loss.estimate: a prior from earlier races
+    updated with this race's green stops seen so far, -+ 1.64 sd, source "asof", with `basis`
+    (prior, its source, stops seen). A calibrator's sd (calibrators.effective_factors), when it
+    gives one, takes over (source "calibrator"); with no sd at all a fixed 10 percent band,
+    source "config". pit_loss_now_s is that interval times pit_loss_now_factor, the factor for
+    the current track status (the as-of SC / VSC factor under SC / VSC, 1 when green), and
+    neutralised_for_laps how long the current SC / VSC has lasted. `outlook` is the chance of a
+    new SC or VSC in the coming laps (neutralisation_outlook). Never the whole-race value the
+    world scores with. estimate_pit_loss's body."""
     sim, _ = _setup(snapshot, sim, profile)
     fit = sim.fitted_for(snapshot)
-    mean, sd = float(snapshot.race.pit_loss_s), 0.0
-    if fit.calibration is not None:
+    pl = fit.pit_loss_inputs(snapshot)
+    mean, sd = float(pl["pit_loss_s"]), float(pl["sd_s"])
+    source = "asof" if pl["source"] == "asof" else None
+    if fit.calibration is not None and pl["source"] != "asof":
         mean, sd = calibrators.effective_factors(fit, snapshot.race)["pit_loss_s"]
     if not _nan(sd) and sd > 0:
-        band, source = Z90 * sd, "calibrator"
+        band, source = Z90 * sd, source or "calibrator"
     else:
         band, source, sd = PIT_LOSS_BAND * mean, "config", None
-    fx = sim.config.effects
     green = {"low": mean - band, "median": mean, "high": mean + band}
-    factor = {"sc": fx.sc_pit_loss_factor, "vsc": fx.vsc_pit_loss_factor}.get(snapshot.track_status, 1.0)
-    return _jsonable({
-        "pit_loss_s": green, "source": source, "sd_s": sd,
-        "pit_loss_now_s": {k: v * factor for k, v in green.items()}, "pit_loss_now_factor": factor,
-        "sc_pit_loss_factor": fx.sc_pit_loss_factor, "vsc_pit_loss_factor": fx.vsc_pit_loss_factor,
-        "factor_source": "config", "track_status": snapshot.track_status})
+    sc, vsc = pl["sc_factor"], pl["vsc_factor"]
+    factor = {"sc": sc, "vsc": vsc}.get(snapshot.track_status, 1.0)
+    out = {"pit_loss_s": green, "source": source, "sd_s": sd,
+           "pit_loss_now_s": {k: v * factor for k, v in green.items()}, "pit_loss_now_factor": factor,
+           "sc_pit_loss_factor": sc, "vsc_pit_loss_factor": vsc,
+           "factor_source": "asof" if pl["source"] == "asof" else "config",
+           "track_status": snapshot.track_status, "neutralised_for_laps": _neutralised_for(snapshot),
+           "outlook": neutralisation_outlook(snapshot, sim.config)}
+    if pl["source"] == "asof":
+        out["basis"] = {"prior_s": pl["prior_s"], "prior_source": pl["prior_source"],
+                        "green_stops_seen": pl["n_green_stops"], "sc_stops_seen": pl["n_sc_stops"],
+                        "vsc_stops_seen": pl["n_vsc_stops"],
+                        "sc_factor_sd": pl["sc_factor_sd"], "vsc_factor_sd": pl["vsc_factor_sd"]}
+    return _jsonable(out)
 
 
 def simulate_plan(snapshot: Snapshot, stints, n_samples=None, *, sim=None, profile=None) -> dict:

@@ -346,8 +346,11 @@ def test_saudi_world_prices_soft(saudi):
     assert "SOFT" in world_on.modelled
     e = world_on.degradation.fit_report["proxy"]["SOFT"]
     assert e["pace_tier"] in (2, 3, 5) and e["wear_tier"] in (2, 5)
-    # the world's support edge for the unraced SOFT is its practice age (R8 retired: an edge, not a limit)
-    edge = world_on.cliffs_for(calibration.snapshot_at(saudi.frame, saudi.race, saudi.frame["driver"].iloc[0], 0))["SOFT"]
+    # under the race-only edge source (c) the world's support edge for the unraced SOFT is its
+    # practice age (R8 retired: an edge, not a limit)
+    cfg = saudi.config.model_copy(update={"wear_cliff": saudi.config.wear_cliff.model_copy(update={"world_edge": "race"})})
+    race_edge = Simulator(saudi.frame, cfg, saudi.practice, qualifying=saudi.qualifying)
+    edge = race_edge.cliffs_for(calibration.snapshot_at(saudi.frame, saudi.race, saudi.frame["driver"].iloc[0], 0))["SOFT"]
     assert edge.source == "practice"
     assert edge.age == saudi.practice.loc[saudi.practice["compound"] == "SOFT", "tyre_age"].max()
 

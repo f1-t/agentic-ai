@@ -331,7 +331,7 @@ def decision_rows(race_id, per_race, sources_table, arm="blend") -> list[dict]:
     raced = tier1(true_world.degradation, cfg.min_samples)
     starters = {}
     for d in calibration._finisher_ids(data.frame, 0.9):
-        snap = calibration.snapshot_at(data.frame, data.race, d, 0)
+        snap = calibration.with_race(calibration.snapshot_at(data.frame, data.race, d, 0), data.race)
         starters.setdefault(snap.compound, snap)
     rows = []
     for x in raced:

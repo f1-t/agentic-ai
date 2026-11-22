@@ -12,3 +12,6 @@ docs/sim_model_plan.md
 
 # wandb offline runs (compute.training_run), synced later with `wandb sync`.
 wandb/
+
+# learned calibrator fold outputs (src/sim/learned_calibrator.py --work), rebuilt by its train command.
+reports/calibration/learned/work/
