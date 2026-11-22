@@ -1031,6 +1031,90 @@ block uses 60 draws and 1 driver, which reduces the Monte Carlo noise in the rep
   noise and no truncation bias), but the planner's ranking agreement and regret are the worst (0.830,
   6.76 s). The draws help ranking here, unlike in the design study (D3, with oracle tyre-life edges).
 
+### Belief priors: where the belief over-stops, and the tyre-life edge at its point
+
+**Where.** On the dev20 development results the belief's plans beat the two fixed rules by about
+6 s overall, but by less at circuits with no earlier race in the tyre history, and the rules win
+at four low-wear races (2019 Britain, 2021 Austria, 2021 Abu Dhabi, 2022 Azerbaijan). The fidelity
+scorecard on the 19 calibration races (adopted configuration at ebde038; 6 drivers, a snapshot
+every 5 laps, 20 draws) locates it. Over the plan panel, the belief's favourite has more stops than
+the judge's favourite at 14% of snapshots and fewer at 8%. Early in the race (the first third) the
+gap is wider: 27% against 8%, a mean of 1.68 stops against 1.49, and a judge-regret of 8.9 s
+against 2.4 s mid-race and 1.2 s late. The over-stopping snapshots carry 37% of all the
+judge-regret. Their commonest form is two stops where the judge's favourite is one long HARD stint.
+
+**Why.** A diagnosis, not a policy input: at the same snapshots, one belief component at a time
+was replaced by the judge's (hindsight), and the judge-regret of the belief's favourite was
+measured again (race-cluster 95% intervals):
+
+| belief component replaced by the judge's | regret, all (4.11 s) | early (8.92 s) | no circuit history (4.79 s) | low-wear four (5.19 s) |
+|---|---|---|---|---|
+| fresh pace and wear of every compound | -2.87 [-3.73, -2.08] | -6.38 [-8.89, -4.12] | -3.19 [-4.10, -2.32] | -3.75 [-4.77, -2.67] |
+| the same, HARD only | -0.82 [-1.72, +0.10] | -2.48 [-4.95, -0.62] | -1.19 [-2.42, -0.04] | -1.10 [-2.51, -0.25] |
+| fresh pace only (gaps to MEDIUM) | +0.08 [-0.85, +1.09] | -0.55 [-2.37, +1.34] | -0.17 [-1.44, +1.14] | -1.98 [-2.56, -1.32] |
+| wear only | +0.30 [-1.45, +2.37] | -0.12 [-3.78, +3.64] | -0.04 [-2.34, +3.12] | +2.77 [-2.46, +8.98] |
+| the tyre-life edges (the judge's: the prior's point) | -0.59 [-1.10, -0.18] | -0.53 [-1.02, -0.12] | -0.91 [-1.68, -0.24] | -0.64 [-1.24, -0.12] |
+| the edge not drawn (max(seen so far, prior)) | -0.20 [-0.38, -0.06] | -0.44 [-0.92, -0.05] | -0.30 [-0.58, -0.05] | -0.45 [-0.88, -0.11] |
+| no parameter draws or lap noise (point estimate) | +0.41 [-0.36, +1.31] | +0.91 [-1.21, +3.23] | +0.51 [-0.74, +1.87] | -0.22 [-0.90, +0.25] |
+
+Most of the regret is the belief's pace and wear per compound early in the race, and only as a
+pair: the fitted intercept and slope trade off against each other, so replacing either alone does
+nothing. At lap 0 the belief is the practice prior. Practice long runs on a compound come from one
+or two cars, in a fit without driver or session terms, and the HARD comes out 0.6 s/lap slower
+than MEDIUM fresh against the judge's race fit (2019 Britain: 2.1 s against 0.1 s). At lap 10 the
+HARD rows come from the few cars that started on it, often slow ones (Britain 2019: two Haas cars,
+whose pace is then taken for the HARD's, +2.4 s). The tyre-life prior is not short on average
+against the observed edge (the 0.9 quantile of stint ends: +0.9 to +2.6 laps by compound). The
+field's ages seen so far are already a lower bound on the belief's edge, and by lap 20 they rarely
+pass it. The edge's spread does matter, though. The cost past the edge is convex, so averaging it
+over drawn edges raises the expected cost of every long stint (Jensen's inequality): it penalises
+exactly the long one-stop the judge prefers.
+
+**The switch** `belief_cliff_edge` (SimConfig, left out of config_hash at its default): `draw`
+(the default, as before) draws each sample's edge, max(seen so far, prior + sd z); `point` takes
+max(seen so far, prior) in every sample, the edge the judge's `history_only` prior uses, with the
+same lower bound. The tools still report the prior and its sd. Measured on the fidelity scorecard,
+point minus draw, race-cluster 95% intervals (* excludes 0):
+
+| split | snapshots | rank rho | regret s | pit-now agreement | over-stop share |
+|---|---|---|---|---|---|
+| all | 1225 | 0.868, +0.005 [+0.001, +0.010]* | 4.11, -0.20 [-0.38, -0.06]* | 0.816, +0.003 [-0.009, +0.017] | 0.142, -0.008 [-0.019, +0.001] |
+| laps 0 to a third | 392 | 0.814, +0.014 [+0.005, +0.028]* | 8.92, -0.44 [-0.92, -0.05]* | 0.719, +0.008 [-0.027, +0.046] | 0.265, -0.010 [-0.037, +0.010] |
+| middle third | 461 | 0.892, +0.000 [-0.004, +0.005] | 2.40, -0.15 [-0.42, +0.04] | 0.857, +0.000 [-0.012, +0.014] | 0.124, -0.011 [-0.026, +0.000] |
+| last third | 372 | 0.896, +0.000 [+0.000, +0.001]* | 1.16, -0.03 [-0.10, +0.01] | 0.867, +0.003 [-0.005, +0.014] | 0.035, -0.003 [-0.009, +0.000] |
+| earlier race at the circuit (8 races) | 499 | 0.892, +0.003 [+0.002, +0.005]* | 3.12, -0.07 [-0.16, -0.00]* | 0.841, +0.004 [+0.000, +0.012] | 0.134, -0.010 [-0.022, +0.000] |
+| none (11 races) | 726 | 0.852, +0.006 [+0.000, +0.014]* | 4.79, -0.30 [-0.58, -0.05]* | 0.799, +0.003 [-0.017, +0.025] | 0.147, -0.007 [-0.024, +0.006] |
+| the low-wear four | 246 | 0.796, +0.013 [-0.002, +0.034] | 5.19, -0.45 [-0.88, -0.11]* | 0.800, -0.004 [-0.024, +0.013] | 0.130, +0.000 [-0.023, +0.025] |
+
+The judge, the tyre-life component rows and the order measures are unchanged (the judge does not
+read the switch; the belief's point edge is the same number). Predictive close-pair order 0.664 ->
+0.667; the plans' 90% interval coverage of the judge 0.991 -> 0.988.
+
+The decision-level check: the belief optimizer on the committed dev20 scenarios, re-scored with no
+model call (the `baselines` stage into a scratch directory, the references rebuilt at this code;
+with the switch off every baseline row is identical to the committed `baselines.csv`). Mean
+judge-regret, point minus draw, race-cluster 95% intervals; the rule baselines do not move (they
+plan on the point edge already):
+
+| split | scenarios | draw | point | change |
+|---|---|---|---|---|
+| all | 469 | 3.82 | 3.63 | -0.19 [-0.43, +0.01] |
+| laps 0 to a third | 167 | 7.72 | 7.24 | -0.48 [-1.12, +0.06] |
+| middle third | 153 | 2.58 | 2.54 | -0.04 [-0.34, +0.25] |
+| last third | 149 | 0.71 | 0.70 | -0.01 [-0.05, +0.00] |
+| earlier race at the circuit | 194 | 3.35 | 3.25 | -0.10 [-0.36, +0.07] |
+| none | 275 | 4.14 | 3.89 | -0.25 [-0.61, +0.07] |
+| the low-wear four | 100 | 6.07 | 5.54 | -0.52 [-0.57, -0.47] |
+
+At the low-wear four `run_to_flag` scores 3.22 s, so the rules still win there, by 2.3 s instead of
+2.9 s. The switch removes one cause of the over-stopping, not the main one: that is the pace and
+wear of the compounds early in the race (the table above), for which no as-of fix tested so far
+holds up (2026-11-22 notes, "sim gaps").
+
+**Decision.** An adopt-candidate by the scorecard rule (plan-ranking agreement and judge-regret
+improve with race-cluster intervals that exclude 0, pit-now agreement holds). It is a switch, off
+here; adopting it is `belief_cliff_edge: point` in `configs/sim/belief.yaml`.
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
