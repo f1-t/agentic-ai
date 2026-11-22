@@ -46,4 +46,9 @@ degradation:
   params:
     draw: posterior
     wear_lower_bound: 0.0
-lap_noise: residual
+# Persistent lap noise (docs/eval.md "Honest uncertainty"): the residuals are autocorrelated, so
+# each sample draws one offset per plan stint (the as-of driver-stint residual sd) plus the
+# lap-to-lap part iid. "residual" (iid, residual_s) is the belief before it. The coverage-chosen
+# parameter widening (degradation.params.sd_scale, 1.75 per kind) is a switch, off: it worsened
+# the replay order measures.
+lap_noise: persistent

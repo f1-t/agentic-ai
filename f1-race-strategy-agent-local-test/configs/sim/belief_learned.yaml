@@ -16,7 +16,7 @@ degradation:
   params:
     draw: posterior
     wear_lower_bound: 0.0
-lap_noise: residual
+lap_noise: persistent
 calibrator:
   name: trained
   params:

@@ -66,6 +66,10 @@ SEED = 0 + BELIEF_SEED_OFFSET
 Z90 = 1.64              # a 90 percent normal band, mean -+ Z90 sd
 PIT_LOSS_BAND = 0.10    # the band around a pit loss with no calibrated sd, source "config"
 PROBABILITY_COVERS = "parameter and lap-noise uncertainty under this model; does not include model error"
+# interval_meaning (docs/eval.md "Honest uncertainty"): what a 90 percent interval of the fit means,
+# widened (the fit's sd_scale, chosen by coverage on past races) or not
+INTERVAL_MEANING_WIDENED = "90% range, widened so about 9 in 10 such ranges held the full-race value on past races"
+INTERVAL_MEANING_RAW = "90% range from this race's laps alone; on past races such ranges held the full-race value far less often"
 # event_rates source: the EventModel defaults, or the race's own (circuit) rates
 EVENT_RATES_PROVISIONAL = "provisional: fixed config rates, not fitted to earlier races"   # events as_of off (legacy)
 EVENT_RATES_CIRCUIT = "circuit"
@@ -323,6 +327,13 @@ def race_state(snapshot: Snapshot, *, config: SimConfig | None = None) -> dict:
                       "remaining_laps": snapshot.remaining_laps, "event_rates": event_rates(snapshot, config)})
 
 
+def interval_meaning(degradation) -> str:
+    """One short phrase for what the tools' intervals mean: INTERVAL_MEANING_WIDENED when the fit
+    carries sd_scale (degradation._scale_sd), else INTERVAL_MEANING_RAW."""
+    rep = getattr(degradation, "fit_report", None) or {}
+    return INTERVAL_MEANING_WIDENED if rep.get("sd_scale") else INTERVAL_MEANING_RAW
+
+
 def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, profile=None) -> dict:
     """Simulator.model_report's dump plus, per modelled compound:
 
@@ -399,6 +410,7 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
             entry.update(pace_source=tiers["pace_source"], wear_source=tiers["wear_source"],
                          pace_sources=tiers.get("pace_sources", []), wear_sources=tiers.get("wear_sources", []),
                          qualifying_gap_s=tiers.get("qualifying_gap_s"), price_basis=_proxy.describe(c, tiers))
+    out["interval_meaning"] = interval_meaning(deg)
     if rep.fuel_s_per_lap is not None:
         iv, basis = _interval(rep.fuel_s_per_lap.value, rep.fuel_s_per_lap.sd)
         out["fuel_s_per_lap_interval"], out["fuel_interval_basis"] = iv, basis
@@ -613,7 +625,8 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
     out = {"action": act, "plan": res.candidates[0].as_pairs(), "remaining": res.summaries[0].model_dump(),
            "relative_race_time_delta_s": {"optimistic": None, "median": None, "pessimistic": None},
            "gap_mean_s": None, "gap_std_s": None, "probability_improves_outcome": None,
-           "probability_covers": PROBABILITY_COVERS, "within_sim_error": None, "confidence_basis": None,
+           "probability_covers": PROBABILITY_COVERS, "interval_meaning": interval_meaning(fit.degradation),
+           "within_sim_error": None, "confidence_basis": None,
            "calibration_error_s": calibration_error_s(sim, snapshot), "calibration_error_note": CALIBRATION_NOTE,
            "dominated": res.dominated[0], "support_warnings": res.support_warnings[0],
            "traffic": TRAFFIC_NOTE, "alternative": None, "n_samples": res.n_samples, "seed": res.seed,
