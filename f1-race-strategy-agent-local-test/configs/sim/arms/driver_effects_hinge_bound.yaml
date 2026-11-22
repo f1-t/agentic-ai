@@ -1,0 +1,9 @@
+# Wear identification arm "driver_effects_hinge_bound" (world): driver_effects_hinge with every
+# fitted hinge below 0 dropped and the rest refitted (degradation.py hinge_lower_bound), so a
+# flattening of long stints (2023 Spain HARD, 2024 Emilia Romagna HARD) is not extrapolated into
+# free pace. Fixed before the second cross-race run of the tyre-life change.
+degradation:
+  name: linear_fuel_hinge
+  params:
+    driver_effects: race
+    hinge_lower_bound: 0.0

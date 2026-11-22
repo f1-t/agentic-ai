@@ -472,8 +472,10 @@ PHYSICS_MODULES = (
     "event_rates",    # fills the RaceParams SC/VSC rates, which move the simulated periods
     # the fuel_* calibrators (SPEC 0020) set the fuel prior and its tau, which move lap times
     "fuel_prior",
-    # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their R8 limit
+    # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their cliff age
     "proxy",
+    # the wear cliff: where each simulator places a compound's tyre life (world and belief)
+    "cliff",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only

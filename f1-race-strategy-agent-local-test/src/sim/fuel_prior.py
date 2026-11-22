@@ -409,12 +409,21 @@ class CircuitFeaturesCalibrator(FuelPriorCalibrator):
 
 @CALIBRATORS.register("fuel_practice_longrun")
 class PracticeLongrunCalibrator(FuelPriorCalibrator):
-    """Physics fuel term plus practice evolution per lap; trains on nothing."""
+    """Physics fuel term plus practice evolution per lap; trains on nothing, so it reads nothing
+    from this race's laps or any other race. `sd_s_per_lap` (optional) replaces the a priori
+    predictive sd, the to_snapshot fuel tau: configs/sim/belief.yaml sets it from interval
+    coverage on the calibration races (docs/eval.md "Fuel identification")."""
     name = "fuel_practice_longrun"
     candidate = "practice_longrun"
 
+    def __init__(self, sd_s_per_lap=None, features_path=None, **params):
+        extra = {} if sd_s_per_lap is None else {"sd_s_per_lap": float(sd_s_per_lap)}
+        super().__init__(features_path=features_path, **extra, **params)
+        self.sd_s_per_lap = None if sd_s_per_lap is None else float(sd_s_per_lap)
+
     def predict(self, race, config, practice_model=None, practice=None):
-        return practice_longrun_prediction(race, practice_model, practice)
+        p = practice_longrun_prediction(race, practice_model, practice)
+        return p if self.sd_s_per_lap is None else {**p, "sd": self.sd_s_per_lap}
 
 
 class HindsightFuel(FuelPriorCalibrator):

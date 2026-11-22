@@ -41,7 +41,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import proxy
+from . import proxy, rules
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 STEPS_OUT = ROOT / "configs" / "sim" / "compound_steps.json"
@@ -95,7 +95,8 @@ def race_steps(race_id, data=None) -> list[dict]:
         if soft not in raced or hard not in raced:
             continue
         (bs, ws), (bh, wh) = deg.coefs[soft], deg.coefs[hard]
-        ls, lh = world.stint_limits.get(soft), world.stint_limits.get(hard)
+        life = rules.stint_limits(data.frame)   # the oldest tyre age run per compound, whole race
+        ls, lh = life.get(soft), life.get(hard)
         rows.append({"race_id": race_id, "pair": proxy.pair_key(soft, hard),
                      "pace_frac": bs / bh - 1.0, "pace_step_s": bs - bh,
                      "wear_ratio": ws / wh if wh > 0 else np.nan,
@@ -375,20 +376,21 @@ def decision_summary(dec: pd.DataFrame) -> pd.DataFrame:
 
 
 def r8_rows(race_id) -> list[dict]:
-    """The R8 limit of each compound no car raced, beside the practice run it came from."""
-    from .engine import Simulator
+    """The age proxy.unraced_limits gives each compound no car raced (the retired R8 limit, now
+    the world's cliff age for it, sim/cliff.py), beside the practice run it came from."""
     data = load(race_id)
-    world = Simulator(data.frame, data.config, data.practice, qualifying=data.qualifying)
+    limits, sources = proxy.unraced_limits(rules.stint_limits(data.frame), data.practice,
+                                           data.config.compound_proxy.steps)
     p = data.practice
     rows = []
-    for c, src in sorted(world.stint_limit_sources.items()):
+    for c, src in sorted(sources.items()):
         on = p[p["compound"] == c] if p is not None and len(p) else p
         longest = (on.groupby(["session", "driver", "stint"]).size().max()
                    if on is not None and len(on) else np.nan)
         oldest = on.loc[on["tyre_age"].idxmax()] if on is not None and len(on) and on["tyre_age"].notna().any() else None
-        rows.append({"race_id": race_id, "compound": c, "source": src, "limit_age": world.stint_limits[c],
+        rows.append({"race_id": race_id, "compound": c, "source": src, "limit_age": limits[c],
                      "margin": data.config.stint_limit_margin_laps,
-                     "cap_end_age": world.stint_limits[c] + (data.config.stint_limit_margin_laps or 0),
+                     "cap_end_age": limits[c] + (data.config.stint_limit_margin_laps or 0),
                      "oldest_practice_session": None if oldest is None else oldest["session"],
                      "oldest_practice_driver": None if oldest is None else oldest["driver"],
                      "longest_practice_run_laps": longest})

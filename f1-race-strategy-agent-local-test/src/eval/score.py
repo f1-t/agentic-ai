@@ -308,8 +308,9 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
     residual lap noise on); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off, as before
-    the split). Cached per race and role."""
+    the split, with the wear fit config.WORLD_DEGRADATION). Cached per race and role."""
     from ..sim import SimConfig, jobs
+    from ..sim.config import world_default
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
 
@@ -324,7 +325,7 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
             if race_id not in races:
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
-            config = belief_config if role == "belief" else world_config or data.config
+            config = belief_config if role == "belief" else world_config or world_default(data.config)
             cache[race_id, role] = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
         return cache[race_id, role]
     return sim_for

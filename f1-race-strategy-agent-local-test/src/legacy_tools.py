@@ -163,7 +163,7 @@ def _get_simulator():
         frame = lap_frame(_load_session().laps, OUTLIER_FACTOR)
         _simulator = Simulator(frame, SimConfig(degradation={"name": "linear"},
                                                 effects=EventEffects(lap1_extra_s=0.0),
-                                                stint_limit_margin_laps=None,
+                                                stint_limit_margin_laps=None, wear_cliff={"enabled": False},
                                                 compound_proxy={"enabled": False}))
     return _simulator
 

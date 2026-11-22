@@ -199,7 +199,9 @@ def test_no_feasible_plan(sim):
         optimize_batch(start().model_copy(update={"sets_available": []}), sim)
 
 
-# --- R8 stint limit (SPEC 0023 B, docs/rules.md) --------------------------------------
+# --- R8 stint limit (SPEC 0023 B, docs/rules.md), RETIRED: the legacy setting --------------
+# R8 is off by default; these tests run the legacy setting (stint_limit_margin_laps 3, the wear
+# cliff off, LEGACY) and pin that it reproduces the old search exactly.
 # synthetic_frame's layout (every compound run up to age 20 in the race, so at the default
 # margin of 3 a stint may end at age 23) with a slow-wearing MEDIUM, so the unlimited
 # optimum runs one long MEDIUM stint
@@ -211,8 +213,12 @@ def limit_frame():
                          for start in range(0, 30, 3) for age in range(1, 21)])
 
 
+LEGACY = {"stint_limit_margin_laps": 3, "wear_cliff": {"enabled": False}}
+
+
 def limit_sim(margin=3, degradation="linear", **kw):
-    return Simulator(limit_frame(), SimConfig(degradation={"name": degradation}, stint_limit_margin_laps=margin, **kw))
+    return Simulator(limit_frame(), SimConfig(degradation={"name": degradation}, stint_limit_margin_laps=margin,
+                                              wear_cliff={"enabled": False}, **kw))
 
 
 def _ends(plan, snap):
@@ -259,8 +265,8 @@ def test_the_limit_is_a_race_constant_whatever_the_fit_window():
     come from the race frame, not from the window's fit."""
     from test_sim import synthetic_practice
     world = limit_sim()
-    belief = Simulator(limit_frame(), SimConfig(fit_window="to_snapshot", degradation={"name": "linear"}),
-                       synthetic_practice())
+    belief = Simulator(limit_frame(), SimConfig(fit_window="to_snapshot", degradation={"name": "linear"},
+                                                **LEGACY), synthetic_practice())
     mid = Snapshot(race=RACE, driver="X", laps_completed=5, compound="SOFT", tyre_age=5)
     fit = belief.fitted_for(mid)
     assert fit is not belief and fit.stint_limits == world.stint_limits == {"MEDIUM": 20.0, "SOFT": 20.0}
@@ -281,7 +287,7 @@ def test_stint_limit_rank_is_the_age_that_many_cars_reached():
     assert stint_limits(frame, 2) == {"MEDIUM": 12.0, "SOFT": 25.0}
     assert stint_limits(frame, 3) == {"MEDIUM": 12.0, "SOFT": 20.0}   # MEDIUM: 2 cars, its smallest maximum
     assert stint_limits(frame, 5) == {"MEDIUM": 12.0, "SOFT": 18.0}
-    assert Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_rank=3)).stint_limits == \
+    assert Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_rank=3, **LEGACY)).stint_limits == \
         {"MEDIUM": 12.0, "SOFT": 20.0}
     assert SimConfig().stint_limit_rank == 1
     with pytest.raises(ValueError, match="driver column"):

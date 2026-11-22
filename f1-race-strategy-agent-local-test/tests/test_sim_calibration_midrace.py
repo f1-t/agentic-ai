@@ -136,6 +136,7 @@ def test_k0_full_rows_equal_run_on_the_spain_shape():
 # exact only on the synthetic compounds' own fits: with the proxy on, a compound short of race
 # laps at k is re-priced by a blend that includes the cross-race step from real races
 @pytest.mark.compound_proxy_off
+@pytest.mark.wear_cliff_off   # exact on the fit alone: the belief's cliff prices the synthetic stints
 def test_pred_remaining_exact_on_noise_free_data_at_every_k(frame):
     rows = calibration.midrace(factory(frame), frame, RACE, laps_k=list(range(0, 50)), windows=WINDOWS)
     assert len(rows) == 3 * 2 * 50
@@ -148,6 +149,7 @@ def test_pred_remaining_exact_on_noise_free_data_at_every_k(frame):
     assert (rows["pred_pos_sim"] == rows["pred_pos_real"]).all()
 
 
+@pytest.mark.wear_cliff_off   # the world's and the belief's cliffs differ by design (sim/cliff.py)
 def test_to_snapshot_at_last_lap_equals_full(frame):
     rows = calibration.midrace(factory(frame), frame, RACE, laps_k=[RACE.total_laps - 1],
                                windows=["full", "to_snapshot"]).set_index(["window", "driver"])

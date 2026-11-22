@@ -5,9 +5,11 @@
 `belief` is the belief simulator (docs/eval.md "Who sees what"): fitted only on what is
 known at the snapshot. Policies plan on it; the world simulator that scores them and plans
 the reference is not passed in. The four baselines are Quan's reference policies
-(src/baselines) run through the optimizer bridge on the belief's fit; under the R8 stint
-limit this wrapper makes fixed_one_stop and greedy_crossover limit-aware (_bridged), with
-src/baselines unchanged. `belief_optimizer` and the rule baselines `run_to_flag` and
+(src/baselines) run through the optimizer bridge on the belief's fit, src/baselines unchanged.
+Under the retired R8 stint limit (legacy setting only, docs/rules.md R8) this wrapper makes
+fixed_one_stop and greedy_crossover limit-aware (_bridged); by default no tyre-life limit
+exists, so every baseline plans on the published rules alone and its plan is invalid only for
+a published-regulation violation. `belief_optimizer` and the rule baselines `run_to_flag` and
 `one_stop_total` are named policies outside the baselines group. `recorded_policy`
 replays plans saved from earlier agent runs, and `agent_policy` (an AgentPolicy) asks the
 live agent loop (src/agent.py) through whatever LLM_BACKEND is configured, at any lap of any
@@ -180,7 +182,8 @@ def run_to_flag(scenario, belief, max_stops):
     """No further stop when the rules allow it; otherwise the fewest stops (at most
     `max_stops`) that make the plan legal, each as late as the rules allow, the new stints on
     the softest compound that keeps it legal (docs/eval.md "Rule baselines"). Legal means
-    every rule passes on the belief (belief.validate, R1-R4, R8, known compounds). With no
+    every rule passes on the belief (belief.validate, R1-R4, known compounds; R8 only under the
+    legacy setting). With no
     legal plan the current set runs to the flag and the world rejects it (an invalid row).
     Reads the snapshot, the belief's modelled compounds and the rules, no pace. Not in
     "baselines"; select it by name."""

@@ -361,9 +361,9 @@ def world_config_for(config_hash: str):
     """(label, SimConfig or None) of the world config with this config_hash: None for the
     races' own default config (score.race_simulators' world default), else a
     configs/sim/*.yaml file. None when no candidate has that hash."""
-    from .config import SimConfig
-    if calibration.config_hash(SimConfig()) == config_hash:
-        return "default (SimConfig())", None
+    from .config import SimConfig, world_default
+    if calibration.config_hash(world_default(SimConfig())) == config_hash:
+        return "default (world_default(SimConfig()))", None
     for path in sorted(SIM_CONFIG_DIR.glob("*.yaml")):
         cfg = SimConfig.from_file(path)
         if calibration.config_hash(cfg) == config_hash:

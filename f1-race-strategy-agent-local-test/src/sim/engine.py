@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from ..contracts import (Compound, CompareResult, ModelReport, Plan, PlanStint, SimResult, Snapshot,
                          StintRecord, TimeSummary)
 from . import calibrators as _cal
+from . import cliff as _cliff
 from . import model_report as _report
 from . import proxy as _proxy
 from .config import SimConfig, class_names, compound_class
@@ -149,6 +150,10 @@ LAP_NOISE_STREAM = 3
 # its first (DEGRADATION_STREAM's row) is rejected, so an accepted first proposal is the
 # unbounded run's draw
 DEGRADATION_RETRY_STREAM = 4
+# the belief's wear-cliff age spread (sim/cliff.py, Cliff.sample_ages): one
+# (n, len(config.compound_classes)) normal matrix per batch call, column per compound in sorted
+# order, so turning it on leaves every other draw as it was
+CLIFF_STREAM = 5
 # never a sample index, so [seed, STREAM_KEY, s] differs from every main [seed, k] and event
 # [seed, k, 1] key
 STREAM_KEY = 2 ** 32 - 1
@@ -183,8 +188,12 @@ class Simulator:
 
     `qualifying` (data.qualifying_frame of this weekend's qualifying) feeds the tier-3 pace of
     an unraced compound (proxy.py); with config.compound_proxy.enabled every fit then prices
-    HARD, MEDIUM and SOFT, and R8 gains a limit for a compound no car raced
-    (stint_limit_sources says where each such limit came from).
+    HARD, MEDIUM and SOFT.
+
+    The wear cliff (config.wear_cliff, sim/cliff.py) prices tyres past their life: under the
+    full window from the whole race (the scorer), under any other window only from what is
+    known at the snapshot (cliffs_for). The retired R8 stint limit (config.stint_limit_margin_laps,
+    legacy only) is computed from the full race frame only when it is set.
     """
 
     def __init__(self, laps: pd.DataFrame, config: SimConfig | None = None,
@@ -193,10 +202,12 @@ class Simulator:
         self.config = config or SimConfig()
         self.laps, self.practice, self.pace = laps, practice, pace
         self.qualifying, self._quali_gaps = qualifying, None
-        # R8, from the full race frame; shared by fitted_for copies
-        self.stint_limits = stint_limits(laps, self.config.stint_limit_rank)
-        self.stint_limit_sources = {}
-        if self.config.compound_proxy.enabled:
+        # retired R8 (legacy setting only), from the full race frame; shared by fitted_for copies.
+        # Never computed under the default config, so nothing a policy sees carries it.
+        self.stint_limits, self.stint_limit_sources = {}, {}
+        if self.config.stint_limit_margin_laps is not None:
+            self.stint_limits = stint_limits(laps, self.config.stint_limit_rank)
+        if self.config.stint_limit_margin_laps is not None and self.config.compound_proxy.enabled:
             self.stint_limits, self.stint_limit_sources = _proxy.unraced_limits(
                 self.stint_limits, practice, self.config.compound_proxy.steps)
         self.weather, self.race_features = weather, race_features
@@ -204,7 +215,7 @@ class Simulator:
         self.calibrator = calibrator if calibrator is not None else _cal.CALIBRATORS.get(spec.name)(**spec.params)
         self.calibration = None   # CalibrationState on a pre_race or to_snapshot instance
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
-        self._fits = {}
+        self._fits, self._cliffs = {}, {}
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
         ev = self.config.events
         self.events = EVENTS.get(ev.name)(**ev.params)
@@ -225,7 +236,7 @@ class Simulator:
         """A shallow copy with `pace` set. The fits are shared, the windowed copies are not
         (they carry the pace they were built with)."""
         out = copy.copy(self)
-        out.pace, out._fits = pace, {}
+        out.pace, out._fits, out._cliffs = pace, {}, {}
         return out
 
     def _pace_offset(self, driver) -> float:
@@ -309,7 +320,7 @@ class Simulator:
             if len(self._fits) >= FIT_CACHE_SIZE:
                 del self._fits[next(iter(self._fits))]
             fit = copy.copy(self)
-            fit.window, fit._fits = key, {}
+            fit.window, fit._fits, fit._cliffs = key, {}, {}
             fit._fit_window(snapshot, k0 or 0)
             self._fits[key] = fit
         return self._fits[key]
@@ -388,6 +399,34 @@ class Simulator:
             return self._fit(practice, model=_cal.held_prior(prior, out))
         ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
         self._fit(race, ref=ref, prior=prior, shrinkage=taus, fuel_prior=fuel)
+
+    def cliffs_for(self, snapshot: Snapshot) -> dict:
+        """compound -> cliff.Cliff on this instance's fit at `snapshot` ({} with the cliff off).
+        The full window is the scorer's (cliff.world_cliffs, whole race, the fitted model's
+        identified hinges); every other window reads only what is known at the snapshot
+        (cliff.as_of_cliffs: practice, race laps up to the fit's calibration point, earlier races).
+        Cached per instance and information horizon."""
+        wc = self.config.wear_cliff
+        if not wc.enabled:
+            return {}
+        fit = self.fitted_for(snapshot)
+        if fit is not self:
+            return fit.cliffs_for(snapshot)
+        if self.config.fit_window == "full":
+            key = ("world",)
+            if key not in self._cliffs:
+                steps = self.config.compound_proxy.steps if self.config.compound_proxy.enabled else None
+                self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, self.degradation, wc, steps)
+            return self._cliffs[key]
+        # the information horizon is the fit's, never the snapshot's: a plan's continuation is
+        # scored at advanced snapshots, and their laps are the plan's hypothetical future
+        horizon = (self.window[1] or 0) if self.config.fit_window == "to_snapshot" and self.window else 0
+        key = (snapshot.race.race_id, snapshot.race.total_laps, horizon)
+        if key not in self._cliffs:
+            if len(self._cliffs) >= FIT_CACHE_SIZE:
+                del self._cliffs[next(iter(self._cliffs))]
+            self._cliffs[key] = _cliff.as_of_cliffs(self.laps, self.practice, snapshot.race, horizon, wc)
+        return self._cliffs[key]
 
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
@@ -516,6 +555,14 @@ class Simulator:
         z_retry = (batch_normals(seed, DEGRADATION_RETRY_STREAM, n, (tries - 1) * self.degradation.n_params)
                    if tries > 1 else None)
         eps = batch_normals(seed, LAP_NOISE_STREAM, n, n_laps, noise_sd) if noise_sd > 0 else None
+        # wear cliff (sim/cliff.py): per compound in the plans, (slope, age per sample)
+        cliffs = {name: cl for name, cl in self.cliffs_for(snapshot).items() if name in code_of and cl.slope > 0}
+        cliff_age = {}
+        if cliffs:
+            cols = sorted(set(self.config.compound_classes) | set(cliffs))
+            z_cl = (batch_normals(seed, CLIFF_STREAM, n, len(cols))
+                    if any(cl.prior_sd > 0 for cl in cliffs.values()) else np.zeros((n, len(cols))))
+            cliff_age = {name: cl.sample_ages(z_cl[:, cols.index(name)]) for name, cl in cliffs.items()}
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
         for k in range(n):
@@ -555,6 +602,9 @@ class Simulator:
                 eff = ages
                 for name, m, a, ln in groups:
                     green[m] = model.lap_times(name, a, ln)
+            for name, m, _, _ in groups:
+                if name in cliffs:   # extra wear past the cliff age
+                    green[m] += cliffs[name].slope * np.maximum(0.0, eff[m] - cliff_age[name][k])
             if corr is not None:
                 green += corr.add(eff, z)
             green *= self.track.factor(track, class_codes, lapnums)

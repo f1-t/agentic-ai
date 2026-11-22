@@ -160,6 +160,53 @@ class CompoundProxy(_Cfg):
     sd_floor: dict = Field(default_factory=lambda: _blend_section("sd_floor"))
 
 
+def _cliff_history():
+    from .cliff import load_history
+    return load_history()
+
+
+def _cliff_life_rows():
+    from .cliff import load_life_ratio_rows
+    return load_life_ratio_rows()
+
+
+# extra wear past the cliff age, s/lap per lap of tyre age (sim/cliff.py, docs/eval.md "The wear
+# cliff"): the median of the hinge slopes the whole-race linear_fuel_hinge fit (driver_effects
+# race, knot 25) identifies on the seven calibration races, rounded (WearCliff.penalty_s_per_lap2)
+CLIFF_PENALTY_S_PER_LAP2 = 0.12
+# belief tyre-life prior (sim/cliff.py life_prior) where no earlier race ran the compound: the
+# oldest stint as a share of race distance, a priori (soft about two fifths, hard about two thirds)
+PRIOR_LIFE_FRACTION = {"SOFT": 0.4, "MEDIUM": 0.55, "HARD": 0.7}
+# its sd per tier of the fallback chain, a share of race distance, a priori and wider down the
+# chain: the same circuit, earlier races anywhere, a neighbour's prior times the life ratio, the
+# constant (the widest)
+PRIOR_SD_FRACTION = {"circuit_history": 0.10, "history_fraction": 0.15, "life_ratio_as_of": 0.18,
+                     "config_fraction": 0.20}
+
+
+class WearCliff(_Cfg):
+    """Tyre life as physics (sim/cliff.py): past a compound's cliff age A every lap costs
+    penalty_s_per_lap2 * (age - A) more. The world (fit_window full) places A from the whole
+    race (an identified hinge, else the oldest age raced); every other window places it from
+    what is known at the snapshot: the ages seen so far as a lower bound and a pre-race
+    tyre-life prior from earlier races (sim/cliff.py life_prior), sd prior_sd_fraction of race
+    distance. `enabled: false` removes it, as the legacy R8 setting does (docs/rules.md R8)."""
+
+    enabled: bool = True
+    penalty_s_per_lap2: float = Field(default=CLIFF_PENALTY_S_PER_LAP2, ge=0)
+    hinge_min_z: float = 2.0   # a fitted hinge counts as identified at slope >= this many sds
+    # belief prior on tyre life as a share of race distance, when no earlier race has the compound
+    prior_life_fraction: dict[str, float] = Field(default_factory=lambda: dict(PRIOR_LIFE_FRACTION))
+    prior_sd_fraction: dict[str, float] = Field(default_factory=lambda: dict(PRIOR_SD_FRACTION))
+    # also read every cached race strictly before the race (held-out ones never) at run time, so
+    # newly cached seasons enter the prior without a code change (sim/cliff.py history_for)
+    scan_cache: bool = True
+    # races whose tyre ages say nothing about tyre life (a mandated stint cap)
+    life_excluded: list[str] = Field(default_factory=lambda: ["2025_23_qatar"])
+    history: dict = Field(default_factory=_cliff_history)          # configs/sim/tyre_life_history.json
+    life_ratio_rows: list = Field(default_factory=_cliff_life_rows)  # compound_steps.json per_race
+
+
 class SimConfig(_Cfg):
     degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
@@ -224,17 +271,21 @@ class SimConfig(_Cfg):
     # fit_report, one vector per sample shared by every plan (engine LAP_NOISE_STREAM).
     # The degradation parameter draw is the model's `draw` param (degradation.py).
     lap_noise: Literal["none", "residual"] = "none"
-    # R8 stint limit (docs/rules.md, SPEC 0023 B): a stint may end at most this many laps past
-    # the oldest tyre age any car ran on its compound in this race (Simulator.stint_limits, from
-    # the full race lap frame). Enforced by the "stint_limit" rule, so by simulate_batch,
-    # optimize_batch's candidate filter and the agent's tools. None turns R8 off.
-    stint_limit_margin_laps: int | None = Field(default=3, ge=0)
+    # R8 stint limit, RETIRED (docs/rules.md R8): a stint could end at most this many laps past
+    # the oldest tyre age any car ran on its compound in the whole race, a hindsight rule handed
+    # to every policy. None (the default) is off. The legacy setting that reproduces the results
+    # before its retirement is stint_limit_margin_laps 3 with wear_cliff.enabled false
+    # (configs/sim/legacy/); then the "stint_limit" rule binds simulate_batch,
+    # optimize_batch's candidate filter and the agent's tools as before.
+    stint_limit_margin_laps: int | None = Field(default=None, ge=0)
     # R8: the limit is the age at least this many cars reached on the compound (the rank-th
     # largest per-car maximum); 1 is the oldest tyre any car ran
     stint_limit_rank: int = Field(default=1, ge=1)
     # unraced dry compounds priced by proxy (proxy.py); compound_proxy.enabled False restores the
     # simulator as it was before proxying, bit for bit
     compound_proxy: CompoundProxy = Field(default_factory=CompoundProxy)
+    # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
+    wear_cliff: WearCliff = Field(default_factory=WearCliff)
 
     @classmethod
     def from_file(cls, path):
@@ -243,6 +294,19 @@ class SimConfig(_Cfg):
                 import yaml
                 return cls.model_validate(yaml.safe_load(f))
             return cls.model_validate(json.load(f))
+
+
+# The eval world's wear fit (score.race_simulators' default world, docs/eval.md "The wear
+# cliff"): linear_fuel_hinge with driver effects on the race rows, the arm the cross-race
+# selection rule picks for the full window on the calibration races (driver_effects_hinge,
+# reports/calibration/cross_race). The SimConfig default stays linear_fuel, the comparator the
+# cross-race arms are overlays on.
+WORLD_DEGRADATION = {"name": "linear_fuel_hinge", "params": {"driver_effects": "race"}}
+
+
+def world_default(config: "SimConfig") -> "SimConfig":
+    """`config` with the eval world's wear fit (WORLD_DEGRADATION)."""
+    return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION)})
 
 
 def compound_class(config, compound) -> str:

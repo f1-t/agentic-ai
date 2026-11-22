@@ -43,6 +43,7 @@ import numpy as np
 
 from ..contracts import Plan, Snapshot
 from . import calibrators, jobs
+from . import cliff as _cliff
 from . import model_report as _report
 from . import proxy as _proxy
 from .compute import load_profile
@@ -323,6 +324,14 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
       price_basis               all of it in words, e.g. "SOFT: pace from practice long runs
                                 40%, qualifying 35%, the cross-race step 25% (anchor MEDIUM);
                                 ...". A proxied compound's price has no race laps behind it.
+      tyre_life                 with the wear cliff on (sim/cliff.py): the belief's estimate of
+                                the compound's tyre life at the snapshot, {longest_run_seen_laps
+                                (practice and this race so far, None when nothing was seen),
+                                seen_source, prior_life_laps and prior_sd_laps (the pre-race
+                                estimate from earlier races, None when the runs seen already
+                                exceed it), prior_source, cliff_s_per_lap_per_lap (extra wear per
+                                lap past the cliff), note}. An estimate with uncertainty, never a
+                                limit: it reads nothing after the snapshot.
 
     and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis and
     fuel_point_estimate) for models with a
@@ -335,6 +344,7 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
     fit_report = getattr(deg, "fit_report", None) or {}
     draws = _wear_draws(deg, n_samples or profile.sim.n_samples)
     bounded = fit_report.get("bounded") or {}
+    cliffs = sim.cliffs_for(snapshot)
     out = rep.model_dump()
     for c, r in rep.compounds.items():
         if not r.modelled:
@@ -355,6 +365,9 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
                      interval_basis={name: basis for name, (_, basis) in pairs.items()},
                      wear_at_bound=bool(bounded.get(c, False)),
                      fuel_wear_corr=(rep.fuel_wear_corr or {}).get(c), flags=flags)
+        life = cliffs.get(c)
+        if life is not None:   # SimConfig.wear_cliff: the as-of tyre-life estimate, never a limit
+            entry["tyre_life"] = _tyre_life(life)
         tiers = (fit_report.get("proxy") or {}).get(c)
         if tiers is not None:   # SimConfig.compound_proxy: where this compound's pace and wear come from
             entry.update(pace_source=tiers["pace_source"], wear_source=tiers["wear_source"],
@@ -369,6 +382,16 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
     out["calibration_error_note"] = CALIBRATION_NOTE
     out["event_rates"] = event_rates(snapshot, sim.config)
     return _jsonable(out)
+
+
+def _tyre_life(life) -> dict:
+    """model_report's tyre_life entry of one compound's belief cliff (cliff.Cliff)."""
+    seen = life.lower if life.prior is not None else life.age
+    seen_src = life.seen_source if life.prior is not None else life.source
+    return {"longest_run_seen_laps": seen if seen_src is not None else None, "seen_source": seen_src,
+            "prior_life_laps": life.prior, "prior_sd_laps": life.prior_sd if life.prior is not None else None,
+            "prior_source": life.source if life.prior is not None else None,
+            "cliff_s_per_lap_per_lap": life.slope, "note": _cliff.describe(life)}
 
 
 def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
