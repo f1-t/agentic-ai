@@ -21,6 +21,14 @@ it and to_contract goes back. RaceSnapshot retires once agent.py reads the contr
 available_compounds are the inventory-legal compounds: those with a set in sets_available,
 else race.compounds when the snapshot is unconstrained (the default three when the race
 names none). The stint history, SC laps and sets are not in the agent's view.
+
+What the model is shown is anonymised by default (docs/eval.md "Information contract"): a
+language model may remember how a famous race went. `anonymised(labels)` gives the view with
+no season (dropped from to_dict), event RACE_LABEL and every driver code replaced by its
+label: the snapshot's own car OWN_LABEL, the nearby cars "Car B", "Car C", ... in their
+order (pseudonyms). AGENT_SHOW_IDENTITY=1 (show_identity) keeps the real names, for an
+ablation only. The mapping stays in the harness (tools.identity()); scoring and logs keep
+the real ids.
 """
 from __future__ import annotations
 
@@ -29,11 +37,34 @@ from typing import Any
 
 DEFAULT_COMPOUNDS = ["SOFT", "MEDIUM", "HARD"]
 _STATUS_TO_AGENT = {"green": "GREEN", "sc": "SC", "vsc": "VSC"}
+SHOW_IDENTITY_ENV = "AGENT_SHOW_IDENTITY"   # 1/true/on: the model sees real names (ablation only)
+RACE_LABEL = "anonymised race"
+OWN_LABEL = "Car A"
+OTHER_LABEL = "another car"
+
+
+def show_identity(flag: bool | None = None) -> bool:
+    """`flag` when given, else AGENT_SHOW_IDENTITY (default off: the model sees pseudonyms)."""
+    if flag is not None:
+        return bool(flag)
+    import os
+    return os.environ.get(SHOW_IDENTITY_ENV, "").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def pseudonyms(driver: str, nearby=()) -> dict[str, str]:
+    """{real driver code: label} for one snapshot: `driver` is OWN_LABEL, each code in `nearby`
+    (in order, a repeat once) "Car B", "Car C", ... Stable for the snapshot, never a real code."""
+    labels = {str(driver): OWN_LABEL}
+    for code in nearby:
+        if code is not None and str(code) not in labels:
+            n = len(labels)
+            labels[str(code)] = "Car " + (chr(ord("A") + n) if n < 26 else str(n + 1))
+    return labels
 
 
 @dataclass
 class RaceSnapshot:
-    season: int
+    season: int | None   # None in the anonymised view (to_dict leaves it out)
     event: str
     lap: int
     total_laps: int
@@ -59,8 +90,24 @@ class RaceSnapshot:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        if self.season is None:
+            del data["season"]
         data["laps_remaining"] = self.laps_remaining
         return data
+
+    def anonymised(self, labels: dict[str, str] | None = None) -> "RaceSnapshot":
+        """This view as the model is shown it by default: no season, event RACE_LABEL, and each
+        driver code in `labels` (default: pseudonyms of this view) replaced by its label, a
+        code it does not list by OTHER_LABEL. A copy."""
+        import copy
+        labels = labels or pseudonyms(self.driver, [c.get("driver") for c in self.nearby_cars])
+        out = copy.deepcopy(self)
+        out.season, out.event = None, RACE_LABEL
+        out.driver = labels.get(str(self.driver), OTHER_LABEL)
+        for car in out.nearby_cars:
+            if car.get("driver") is not None:
+                car["driver"] = labels.get(str(car["driver"]), OTHER_LABEL)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RaceSnapshot":

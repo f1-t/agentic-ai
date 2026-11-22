@@ -109,18 +109,41 @@ def _race_args(ap):
     ap.add_argument("--config", help="json or yaml SimConfig file, overrides --degradation")
     ap.add_argument("--free-air", action="store_true", help=FREE_AIR_HELP)
     ap.add_argument("--report-dir", default=REPORT_DIR, help="where the csvs go")
+    ap.add_argument("--compounds", choices=COMPOUND_SOURCES, default=DEFAULT_COMPOUND_SOURCE,
+                    help="RaceParams.compounds: the nominated dry three, or every compound raced (legacy)")
+
+
+# the dry compounds every weekend nominates (the regulations' three, by name): what a policy
+# may assume is available before a lap is run (docs/eval.md "Information contract")
+NOMINATED_DRY_COMPOUNDS = ("HARD", "MEDIUM", "SOFT")
+# RaceParams.compounds: "nominated" (NOMINATED_DRY_COMPOUNDS, the default) or "raced" (every
+# compound any car ran in the whole race, a leak: rain to come shows as INTERMEDIATE; legacy)
+COMPOUND_SOURCES = ("nominated", "raced")
+DEFAULT_COMPOUND_SOURCE = "nominated"
+
+
+def race_compounds(frame, source=DEFAULT_COMPOUND_SOURCE) -> list[str]:
+    """RaceParams.compounds for a race lap frame under `source` (COMPOUND_SOURCES)."""
+    if source == "nominated":
+        return sorted(NOMINATED_DRY_COMPOUNDS)
+    if source == "raced":
+        return sorted(frame["compound"].dropna().unique())
+    raise ValueError(f"compound source must be one of {COMPOUND_SOURCES}, got {source!r}")
 
 
 def _race_setup(args):
     """Session, frame, config and race. The race's pit loss is args.pit_loss, or DEFAULT_PIT_LOSS_S
-    when that is "observed"; _pit_loss then measures the observed value."""
+    when that is "observed"; _pit_loss then measures the observed value. total_laps is the
+    scheduled distance (session.total_laps), compounds race_compounds under args.compounds
+    (DEFAULT_COMPOUND_SOURCE when absent)."""
     session = load_session(args.season, args.gp)
     frame = lap_frame(session.laps)
     cfg = _config(args)
     pit_loss = DEFAULT_PIT_LOSS_S if args.pit_loss == "observed" else float(args.pit_loss)
     race = RaceParams(
         race_id=f"{args.season}_{args.gp}", total_laps=int(session.total_laps), pit_loss_s=pit_loss,
-        min_stint_laps=args.min_stint, compounds=sorted(frame["compound"].dropna().unique()))
+        min_stint_laps=args.min_stint,
+        compounds=race_compounds(frame, getattr(args, "compounds", None) or DEFAULT_COMPOUND_SOURCE))
     return session, frame, cfg, race
 
 

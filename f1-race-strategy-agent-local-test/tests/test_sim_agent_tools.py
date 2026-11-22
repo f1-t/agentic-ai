@@ -38,17 +38,6 @@ def syn_frame():
     return gap_columns(df)
 
 
-def perturb_after(df, k):
-    """Every car's laps after k changed: lap times, the session clock, positions and gaps."""
-    df = df.copy()
-    late = df["lap"] > k
-    df.loc[late, "lap_time_s"] += 1.3
-    df.loc[late, ["start_s", "end_s"]] += 37.0
-    df.loc[late, "position"] = 99.0
-    df.loc[late, ["gap_ahead_s", "gap_behind_s"]] += 0.7
-    return df
-
-
 def syn_sim(df, config=BELIEF):
     return Simulator(df, config, synthetic_practice())
 
@@ -57,46 +46,10 @@ def syn_snap(df=None, k=K):
     return calibration.snapshot_at(syn_frame() if df is None else df, SYN_RACE, DRIVER, k)
 
 
-def outputs(sim, snap):
-    """Every function's output for one snapshot, as JSON text."""
-    kw = {"sim": sim, "profile": PROFILE}
-    rest = snap.remaining_laps
-    out = {
-        "race_state": agent_tools.race_state(snap, config=sim.config),
-        "model_report": agent_tools.model_report(snap, ages={"MEDIUM": 30}, **kw),
-        "pit_loss": agent_tools.pit_loss(snap, **kw),
-        "simulate_plan": agent_tools.simulate_plan(snap, [["SOFT", 5], ["MEDIUM", rest - 5]], **kw),
-        "compare_plans": agent_tools.compare_plans(
-            snap, [[["SOFT", 5], ["MEDIUM", rest - 5]], {"action": "stay_out", "laps": 2},
-                   {"action": "pit", "compound": "MEDIUM"}], **kw),
-        "evaluate_pit": agent_tools.evaluate_action(snap, {"action": "pit", "compound": "MEDIUM"}, **kw),
-        "evaluate_stay": agent_tools.evaluate_action(snap, {"action": "stay", "laps": 3}, **kw),
-        "recommendation_fields": agent_tools.recommendation_fields(snap, {"decision": "PIT", "confidence": 0.7}),
-    }
-    return {name: json.dumps(v, sort_keys=True, allow_nan=False) for name, v in out.items()}
-
-
-# --- the information-boundary canary -----------------------------------------------------
-def test_canary_outputs_ignore_every_lap_after_the_snapshot():
-    df = syn_frame()
-    snap = syn_snap(df)
-    a = outputs(syn_sim(df), snap)
-    b = outputs(syn_sim(perturb_after(df, K)), snap)
-    assert a == b
-    got = {name: json.loads(v) for name, v in a.items()}
-    assert got["simulate_plan"]["valid"] and got["compare_plans"]["valid"] == [True, True, True]
-    assert all(got[e]["gap_mean_s"] is not None and got[e]["alternative"]["valid"]
-               for e in ("evaluate_pit", "evaluate_stay"))
-
-
-def test_canary_bites_with_the_full_window():
-    df = syn_frame()
-    snap = syn_snap(df)
-    full = BELIEF.model_copy(update={"fit_window": "full"})
-    a = outputs(syn_sim(df, full), snap)
-    b = outputs(syn_sim(perturb_after(df, K), full), snap)
-    for name in ("model_report", "simulate_plan", "compare_plans", "evaluate_pit", "evaluate_stay"):
-        assert a[name] != b[name], name
+# The information-boundary canary that lived here (perturb_after: lap times, clock, positions
+# and gaps after K, with fixed race constants) could not see a leak through a race constant or
+# a precomputed frame column. tests/test_eval_information_contract.py replaces it: truncated and
+# scrambled races, every policy-visible output, and the legacy switches shown to fail.
 
 
 # --- per function ------------------------------------------------------------------------
@@ -301,7 +254,7 @@ def test_tools_keep_the_contract_and_read_min_stint_from_it():
     assert {"get_model_report", "compare_plans"} <= set(names)
     snap = syn_snap()
     view = tools.set_snapshot(snap)
-    assert tools._contract() is snap and view == RaceSnapshot.from_contract(snap)
+    assert tools._contract() is snap and view == RaceSnapshot.from_contract(snap).anonymised()   # what the model is shown
     assert view.min_stint_laps == SYN_RACE.min_stint_laps
     # the synthetic race is not in the cache: the tools say so instead of failing
     out = tools.estimate_pit_loss()

@@ -210,7 +210,7 @@ def test_the_factor_reaches_the_fit_as_prior_mean_and_tau():
     assert FixedFuel(-0.07, 0.0).prediction(data.race)["sd"] == fp.MIN_SD
     assert tight.degradation.fit_report["fuel_slope_source"] == "shrunk"
     # the same fit by hand: the prior model, the taus and the fuel prior the calibrator gave
-    race_rows = data.frame[data.frame["lap"] <= 12]
+    race_rows = tight.window_rows(snap, 12)   # the rows visible when D05 completed lap 12
     # plus the compound proxy (sim/proxy.py), which _fit applies to every fitted model
     by_hand = tight._proxied(tight._model(race_rows, prior=prior, shrinkage=taus, fuel_prior=fuel), prior)
     assert by_hand.fuel_slope == tight.degradation.fuel_slope and by_hand.coefs == tight.degradation.coefs

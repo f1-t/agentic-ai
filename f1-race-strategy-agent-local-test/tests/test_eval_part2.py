@@ -317,10 +317,11 @@ def test_run_agent_takes_a_contract_snapshot_and_reports_usage():
                           stats=stats)
     assert rec["decision"] == "STAY_OUT" and len(traj) == 2
     assert traj[0]["output"]["lap"] == 10 and traj[0]["output"]["min_stint_laps"] == 8
+    assert stats.pop("identity")["race_id"] == mid_race().race.race_id   # the harness keeps the real id
     assert stats == {"steps": 2, "evidence_calls": 1, "repeat_calls": 0, "input_tokens": 200, "output_tokens": 40}
     stats = {}
     run_agent(mid_race(), backend=Scripted(submit(), usage=None), verbose=False, stats=stats)
-    assert stats == {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
+    assert stats.pop("identity") and stats == {"steps": 1, "evidence_calls": 0, "repeat_calls": 0, "input_tokens": None, "output_tokens": None}
 
 
 def test_agent_policy_rows_are_decisions_with_trajectories(tmp_path):

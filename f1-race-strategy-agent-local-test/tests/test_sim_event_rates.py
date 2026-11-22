@@ -132,7 +132,11 @@ def test_stats_from_periods_counts_and_laps_at_risk():
 
 def test_circuit_info_map_features_and_unknown():
     ids = ["2021_04_spain", "2023_06_monaco", "2017_06_monaco", "2017_02_atlantis"]
-    c = er.circuit_info(ids).set_index("race_id")   # 2021 and 2023 schedules are cached, 2017 is not
+    # 2021 and 2023 schedules are cached; 2017 is not, and asking FastF1 for it reaches Ergast, so
+    # the lookup is served from the cache for the cached seasons only (offline)
+    from src.sim.data import season_schedule
+    cached = lambda season: season_schedule(season) if season in (2021, 2023) else None   # noqa: E731
+    c = er.circuit_info(ids, schedule=cached).set_index("race_id")
     assert tuple(c.loc["2021_04_spain"]) == ("catalunya", "permanent")
     assert tuple(c.loc["2023_06_monaco"]) == ("monaco", "street")          # from the cached schedule's Location
     assert tuple(c.loc["2017_06_monaco"]) == ("monaco", er.UNKNOWN)       # the race id never names the circuit
@@ -143,7 +147,7 @@ def test_circuit_info_map_features_and_unknown():
     assert tuple(c.loc["2023_06_monaco"]) == ("monaco", "street")
     feats = pd.DataFrame({"race_id": ["2021_Spain", "2017_02_atlantis"], "circuit": ["x", ""],
                           "circuit_type": ["Street", "permanent"]})
-    c = er.circuit_info(ids, feats).set_index("race_id")
+    c = er.circuit_info(ids, feats, schedule=cached).set_index("race_id")
     assert tuple(c.loc["2021_04_spain"]) == ("x", "street")            # alias, lower-cased
     assert tuple(c.loc["2017_02_atlantis"]) == ("atlantis", "permanent")   # blank circuit keeps the slug
 
