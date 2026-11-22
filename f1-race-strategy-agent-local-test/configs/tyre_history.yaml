@@ -1,0 +1,69 @@
+# The historical tyre-life prior (src/sim/tyre_history.py, docs/eval.md "Historical tyre-life
+# prior"). Every number here is a stated constant, chosen a priori and NOT fitted to anything:
+# the validation (python -m src.sim.tyre_history validate) reports how they do, it never tunes them.
+
+# --- the per-race observation (observed_tyre_life) -------------------------------------------
+observation:
+  # The edge of a compound in one race: this quantile of the tyre ages at which its stints
+  # ended, over stints ended by a green-flag pit stop or run to the chequered flag (stints
+  # ended under SC / VSC / red flag, by a red-flag tyre change, or by a retirement are left out).
+  quantile: 0.9
+  min_stints: 3            # fewer usable stints on a compound in a race: no observation
+  neutralised_codes: ["4", "5", "6", "7"]   # FastF1 TrackStatus digits: SC, red, VSC, VSC ending
+  wet_lap_share: 0.10      # a race with more than this share of its laps on INTERMEDIATE / WET is "wet"
+  # pace check (reported, never used by the prior): per usable stint with at least
+  # min_green_laps green laps, a straight line on the first fit_share of them (fuel and linear
+  # wear), and the median excess of its last late_laps green laps over that line
+  pace_min_green_laps: 10
+  pace_fit_share: 0.6
+  pace_late_laps: 3
+  pace_falloff_s: 0.5      # a stint whose late excess is above this counts as fallen off
+
+# Observations kept in the history table but never used by the prior, with the reason.
+excluded_observations:
+  2025_23_qatar: "mandated 25-lap maximum stint (Pirelli safety limit), so its stint ends say nothing about tyre life"
+
+# Races held out in addition to data/eval_set.json: never built into the history, never fed to
+# the prior by default. The five below are the held-out draw from the 2021-22 weekends cached by
+# data-more-races (#92), listed here until they reach data/eval_set.json.
+held_out_extra: [2021_07_france, 2021_18_mexico, 2022_05_miami, 2022_03_australia, 2022_14_belgium]
+
+# --- the prior (tyre_life_prior) --------------------------------------------------------------
+weights:
+  # category of an earlier race's observation relative to the target race and role; ordered
+  # strictly (tests/test_sim_tyre_history.py checks it): same circuit and same common-index
+  # compound, then same circuit with a neighbouring compound, then other circuits with the same
+  # compound, then other circuits with neighbouring compounds. Each step is a factor of about 3.
+  same_circuit_same_compound: 1.0
+  same_circuit_other_compound: 0.3
+  other_circuit_same_compound: 0.1
+  other_circuit_other_compound: 0.03
+  same_compound_tolerance: 0.25   # |common-index difference| at or below this is "the same compound"
+  compound_step_decay: 0.5        # further factor per common-index step beyond the first
+  recency_per_season: 0.85        # factor per season between the observation and the target race
+  other_era: 0.4                  # observation from the other regulation era (2018-2021 vs 2022+)
+  wet_race: 0.3                   # observation from a wet race (observation.wet_lap_share)
+
+scaling:
+  # an observation from another circuit is moved by the circuit's severity as Pirelli judged it
+  # before each race: the mean common index of the nominated trio. A circuit given a trio one
+  # step softer is one step gentler, so its tyres are taken to last life_ratio times as long at
+  # the target (steps += trio_obs - trio_target). Same-circuit observations are not moved.
+  severity_from_nomination: true
+
+life_ratio:
+  # the tyre life of a compound one common-index step softer, as a share of the harder one's:
+  # estimated as of the target race from the earlier races holding two indexed compounds
+  # (geometric mean of (edge_softer / edge_harder) ** (1 / steps)), else this default
+  default_per_step: 0.75
+  min_pairs: 3
+  clip: [0.5, 1.0]
+
+# sd floor of the prior, as a share of race distance, by tier: the uncertainty widens down the
+# fallback chain (1 same circuit and compound, 2 same circuit, 3 other circuits, 4 constant prior)
+sd_floor_frac: {1: 0.05, 2: 0.08, 3: 0.10, 4: 0.20}
+
+# tier 4: no usable earlier race at all; the edge as a share of race distance per role
+tier4_frac: {HARD: 0.65, MEDIUM: 0.50, SOFT: 0.35}
+
+default_race_laps: 57     # only when neither the caller, the nomination table nor history gives the distance
