@@ -260,8 +260,10 @@ def test_a_pit_too_early_says_which_stint_and_the_earliest_legal_stop(syn):
            "the latest at the end of lap 42.")
     out = agent_tools.evaluate_action(early, {"action": "pit", "compound": "MEDIUM"}, sim=sim, profile=PROFILE)
     assert out["errors"] == [msg] and out["error"] == msg
+    # a stay is compared with the nearest legal alternative, the earliest legal stop (lap 8), not "pit now"
     stay = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)
-    assert stay["alternative"]["errors"] == [msg]
+    assert stay["alternative"]["action"]["at_end_of_lap"] == 8 and stay["alternative"]["valid"]
+    assert "at the end of lap 8" in stay["gap_reading"] and "earliest legal stop" in stay["note"]
 
 
 def test_a_pit_too_late_says_only_staying_out_is_legal(syn):
@@ -328,9 +330,13 @@ def test_evaluate_action_errors_and_edges(syn):
     assert bad["valid"] is False and bad["error"]
     early = syn_snap(k=2)   # 2 laps on the set: a pit now is a 3-lap stint, below the 8-lap minimum
     out = agent_tools.evaluate_action(early, {"action": "stay", "laps": 1}, sim=sim, profile=PROFILE)
-    assert out["alternative"]["valid"] is False and out["alternative"]["errors"]
-    assert out["relative_race_time_delta_s"] == {"optimistic": None, "median": None, "pessimistic": None}
-    assert out["gap_reading"] is None and out["probability_improves_outcome"] is None
+    # compared with the earliest legal stop instead of an illegal "pit now"
+    assert out["alternative"]["valid"] and out["probability_improves_outcome"] is not None
+    # no stop fits (3 laps left): STAY_OUT to the flag is the only legal action, nothing to compare
+    late = agent_tools.evaluate_action(syn_snap(k=47), {"action": "stay", "laps": 3}, sim=sim, profile=PROFILE)
+    assert late["alternative"] is None and "only STAY_OUT to the flag is legal" in late["note"]
+    assert late["relative_race_time_delta_s"] == {"optimistic": None, "median": None, "pessimistic": None}
+    assert late["gap_reading"] is None and late["probability_improves_outcome"] is None
     # a stay past the flag runs the current set to the end, which breaks R3 on one compound
     flag = agent_tools.evaluate_action(snap, {"action": "stay_out", "laps": 99}, sim=sim, profile=PROFILE)
     assert "two different compounds" in flag["error"]
@@ -406,10 +412,13 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain, legacy_gaps):
     # and with the cross-race tables read whatever the race (the legacy switches: the midrace
     # summary, measured on 2021 Spain itself, the Spain-derived shrinkage priors and event rates);
     # as of 2021 Spain there is no calibration error (docs/eval.md "Cross-race tables, as of the race");
-    # and iid lap noise (the belief before "Honest uncertainty": persistent stint offsets widen the gap)
+    # and iid lap noise (the belief before "Honest uncertainty": persistent stint offsets widen the gap);
+    # and no driver effects in the fit (the belief before the scorecard-chosen defaults)
     cfg = agent_tools.belief_config()
+    no_de = {k: v for k, v in cfg.degradation.params.items() if k != "driver_effects"}
     sim = agent_tools.belief_simulator(
         snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False}),
+                                            "degradation": cfg.degradation.model_copy(update={"params": no_de}),
                                             "lap_noise": "residual",
                                             "cross_race_as_of": False, "calibrator": ComponentSpec(name="shrinkage"),
                                             "events": ComponentSpec(name="rate"),
@@ -453,7 +462,10 @@ def test_run_agent_end_to_end_through_the_belief(spain):
     assert tools._contract() is snap
     out = {t["tool"]: t["output"] for t in traj}
     assert out["get_race_snapshot"]["min_stint_laps"] == snap.race.min_stint_laps
-    assert out["estimate_tyre_degradation"]["wear_at_bound"] is True
+    # the flag follows the fit: SOFT's wear sat on the bound 0 here without driver effects; with them
+    # (the belief's default since the scorecard) the fit recovers a positive wear
+    soft = out["estimate_tyre_degradation"]
+    assert soft["wear_at_bound"] is (soft["point_estimate"]["deg_per_lap_s"] <= 0.0)
     asof = agent_tools.belief_simulator(snap).fitted_for(snap).pit_loss_inputs(snap)
     assert out["estimate_pit_loss"]["pit_loss_s"]["median"] == pytest.approx(asof["pit_loss_s"])
     assert out["estimate_pit_loss"]["source"] == "asof" and asof["pit_loss_s"] != spain.race.pit_loss_s

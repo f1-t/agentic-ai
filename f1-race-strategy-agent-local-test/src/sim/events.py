@@ -109,8 +109,21 @@ class RateEvents:
     lap 1 like every lap.
     """
 
-    def __init__(self, as_of: bool = False, **params):
+    # duration "geometric" (the default, as before): every period, and the rest of one in
+    # progress, a geometric number of laps with mean d (memoryless, at least one more lap).
+    # "history": a period's length is drawn from the lengths of the neutralised periods of the
+    # history table (race_history.period_lengths: as of the race for the belief, pooled for the
+    # judge with `pooled`), and a period in progress for e laps continues by L - e laps with L
+    # drawn given L >= e (0: it ends at the snapshot). On the calibration races the geometric
+    # overstated the rest of an SC in progress by 1.8 laps on average (3.9 predicted at every
+    # elapsed lap against 3.7, 2.7, 1.7, 1.7, 1.0, 0.2 real after 1..6 laps) and of a VSC by 1.7.
+    # `pooled` (the judge's later periods): the rates and lengths pooled over every dry race in
+    # the table (race_history.pooled_event_rates) instead of the params.
+    def __init__(self, as_of: bool = False, duration: str = "geometric", pooled: bool = False, **params):
+        if duration not in ("geometric", "history"):
+            raise ValueError(f"events duration must be 'geometric' or 'history', not {duration!r}")
         self.as_of = bool(as_of)
+        self.duration, self.pooled = duration, bool(pooled)
         self.params = EventModel(**params)
 
     def defaults(self, race) -> tuple:
@@ -120,6 +133,10 @@ class RateEvents:
         if self.as_of:
             from .race_history import as_of_event_rates
             r = as_of_event_rates(race.race_id)
+            return r["p_sc"], r["d_sc"], r["p_vsc"], r["d_vsc"]
+        if self.pooled:
+            from .race_history import pooled_event_rates
+            r = pooled_event_rates()
             return r["p_sc"], r["d_sc"], r["p_vsc"], r["d_vsc"]
         cfg = self.params
         return cfg.p_sc, cfg.d_sc, cfg.p_vsc, cfg.d_vsc
@@ -148,6 +165,27 @@ class RateEvents:
             raise ValueError(f"race {race.race_id}: lap-1 p_sc + p_vsc = {out[0] + out[1]} exceeds 1")
         return out
 
+    def length_pmf(self, race, kind):
+        """The period length distribution of duration "history" (race_history.period_lengths)."""
+        from .race_history import period_lengths
+        return period_lengths(race.race_id, kind, "pooled" if self.pooled or not self.as_of else "as_of")["pmf"]
+
+    def _length(self, race, kind, rng, at_least=1) -> int:
+        """A period length drawn from length_pmf given at least `at_least` laps."""
+        pmf = self.length_pmf(race, kind)[at_least - 1:] if at_least <= len(self.length_pmf(race, kind)) else []
+        if not len(pmf) or pmf.sum() <= 0:
+            return at_least
+        return at_least + int(rng.choice(len(pmf), p=pmf / pmf.sum()))
+
+    @staticmethod
+    def elapsed(snapshot: Snapshot) -> int:
+        """Laps of the snapshot's SC or VSC so far: the run of its laps ending at laps_completed."""
+        laps = set(snapshot.sc_laps if snapshot.track_status == "sc" else snapshot.vsc_laps)
+        e, lap = 0, snapshot.laps_completed
+        while lap in laps:
+            e, lap = e + 1, lap - 1
+        return max(e, 1)
+
     def draw(self, snapshot: Snapshot, rng) -> Scenario:
         p_sc, d_sc, p_vsc, d_vsc = self.rates(snapshot.race)
         status = snapshot.track_status
@@ -158,9 +196,15 @@ class RateEvents:
         if p_sc + p_vsc == 0 and status == "green" and (lap1 is None or sum(lap1) == 0):
             return Scenario()
         mean = {"sc": d_sc, "vsc": d_vsc}
+        hist = self.duration == "history"
         active, left = None, 0
         if status != "green":
-            active, left = status, int(rng.geometric(1.0 / mean[status]))
+            if hist:
+                e = self.elapsed(snapshot)
+                left = self._length(snapshot.race, status, rng, e) - e
+                active = status if left > 0 else None
+            else:
+                active, left = status, int(rng.geometric(1.0 / mean[status]))
         u = rng.uniform(size=last - first + 1)
         out = {"sc": [], "vsc": []}
         for lap, x in zip(range(first, last + 1), u):
@@ -168,7 +212,8 @@ class RateEvents:
                 a, b = lap1 if lap1 is not None and lap == 1 else (p_sc, p_vsc)
                 active = "sc" if x < a else "vsc" if x < a + b else None
                 if active is not None:
-                    left = int(rng.geometric(1.0 / mean[active]))
+                    left = (self._length(snapshot.race, active, rng) if hist
+                            else int(rng.geometric(1.0 / mean[active])))
             if active is not None:
                 out[active].append(lap)
                 left -= 1

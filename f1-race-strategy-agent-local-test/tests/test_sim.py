@@ -752,13 +752,13 @@ def test_fit_report_fields_present(name):
             "base_delta_source", "sd", "cov"}
     for snap in (start(), at_lap(30)):
         rep = s.fitted_for(snap).degradation.fit_report
-        assert set(rep) == keys
+        assert keys <= set(rep)   # required fields; a field added later does not fail it
         assert set(rep["n_rows"]) == set(rep["n_race_rows_per_compound"]) == set(rep["max_tyre_age"]) == set(TRUE)
         assert sum(rep["n_race_rows_per_compound"].values()) == rep["n_race_rows"]
         assert set(rep["shrinkage_weight"]["base_s"]) == set(rep["shrinkage_weight"]["wear_s_per_lap"]) == set(TRUE)
     assert np.isfinite(rep["condition_number"]) and rep["condition_number"] >= 1.0
     full = Simulator(synthetic_frame(fuel=FUEL), SimConfig(degradation={"name": name})).degradation.fit_report
-    assert set(full) == keys and np.isfinite(full["condition_number"])
+    assert keys <= set(full) and np.isfinite(full["condition_number"])
     assert full["n_rows"] == {"SOFT": 200, "MEDIUM": 200} and full["n_race_rows"] == 400
     assert full["n_race_rows_per_compound"] == {"SOFT": 200, "MEDIUM": 200}
     assert full["max_tyre_age"] == {"SOFT": 20, "MEDIUM": 20}

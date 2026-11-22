@@ -11,11 +11,13 @@ events:
   name: rate
   params:
     as_of: true   # the SC/VSC rates as of the race, as belief.yaml (docs/eval.md "Cross-race tables, as of the race")
+    duration: history   # period lengths as of the race, as belief.yaml
 degradation:
   name: linear_fuel
   params:
     draw: posterior
     wear_lower_bound: 0.0
+    driver_effects: race
 lap_noise: persistent
 calibrator:
   name: trained

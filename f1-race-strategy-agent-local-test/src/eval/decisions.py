@@ -11,6 +11,8 @@ The eval turns it into a plan for the remaining laps and the world scores that p
     PIT c                          -> {"action": "pit", "compound": c}, pit at the end of this lap
     STAY_OUT, reassess_after n     -> {"action": "stay", "laps": n}
     continuation                   =  optimizer_bridge.optimize_batch(advanced, belief_sim, stops left)
+                                      (a STAY_OUT n under SC/VSC: the best full plan from the
+                                      snapshot with min_first_laps n + 1, docs/eval.md "Decisions")
 
 `max_stops` counts future stops from the decision snapshot, the same space the reference
 optimizer searches: after a PIT the continuation may add max_stops - 1 (at least 0), after a

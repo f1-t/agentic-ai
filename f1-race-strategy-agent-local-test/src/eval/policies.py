@@ -290,16 +290,26 @@ class AgentPolicy:
         return self.log_dir / self.set_name / f"{scenario.scenario_id.replace(':', '_')}.jsonl"
 
     def __call__(self, scenario, belief, max_stops):
+        import contextlib
+
         from ..agent import run_agent
+        from ..sim import agent_tools
         from ..sim.compute import load_profile
 
         max_steps = self.max_steps or (self.profile or load_profile()).agent.max_steps
         path = self.log_path(scenario)
         path.unlink(missing_ok=True)
         stats = {}
+        # one belief: the tools plan on the scorer's belief config (the one to_plan expands the
+        # submission on and belief_optimizer plans with); a full-window simulator passed as the
+        # belief (score_scenario with no belief: the world in both roles) is never handed to them
+        cfg = getattr(belief, "config", None)
+        same = (agent_tools.belief_config_as(cfg) if cfg is not None and cfg.fit_window != "full"
+                else contextlib.nullcontext())
         try:
-            rec, trajectory = run_agent(scenario.snapshot, verbose=False, backend=self.backend,
-                                        max_steps=max_steps, log_path=path, stats=stats)
+            with same:
+                rec, trajectory = run_agent(scenario.snapshot, verbose=False, backend=self.backend,
+                                            max_steps=max_steps, log_path=path, stats=stats)
         except Exception as exc:  # noqa: BLE001  a backend failure must not end an overnight run
             return Decision(None, error=f"{type(exc).__name__}: {exc}", input_tokens=stats.get("input_tokens"),
                             output_tokens=stats.get("output_tokens"))

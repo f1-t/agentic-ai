@@ -1,0 +1,219 @@
+{
+ "note": "race_entry of each cached race outside pit_loss_prior.json and the held-out split, as pit_loss._entry would build it from the cache at run time. Built by `python -m src.sim.pit_loss build-entries`; rebuild it when the cache, race_entry or the default SimConfig's fit changes. Never holds a held-out race.",
+ "races": {
+  "2021_02_emilia_romagna": {
+   "left_out": "The data you are trying to access has not been loaded yet. See `Session.load`"
+  },
+  "2021_12_belgium": {
+   "left_out": "\"None of ['driver'] are in the columns\""
+  },
+  "2021_21_saudi_arabia": {
+   "circuit": "saudi_arabia",
+   "n_green_stops": 1,
+   "pit_loss_s": 22.874,
+   "replay_mean_s": 21.05,
+   "sc": {
+    "factors": [
+     0.5141,
+     0.7047,
+     0.7571,
+     -0.0166,
+     0.6346,
+     0.839,
+     0.7257,
+     0.8752,
+     1.209
+    ],
+    "stops": [
+     "ALO:10",
+     "BOT:10",
+     "HAM:10",
+     "LAT:10",
+     "LEC:10",
+     "NOR:10",
+     "PER:10",
+     "RUS:9",
+     "STR:9"
+    ]
+   },
+   "source": "prior",
+   "total_laps": 50,
+   "vsc": {
+    "factors": [
+     2.8496
+    ],
+    "stops": [
+     "TSU:23"
+    ]
+   },
+   "wet": false
+  },
+  "2022_04_emilia_romagna": {
+   "circuit": "emilia_romagna",
+   "n_green_stops": 24,
+   "pit_loss_s": 38.336,
+   "replay_mean_s": 38.92,
+   "sc": {
+    "factors": [
+     -0.0376
+    ],
+    "stops": [
+     "RIC:2"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 63,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": true
+  },
+  "2022_07_monaco": {
+   "circuit": "monaco",
+   "n_green_stops": 7,
+   "pit_loss_s": 26.04,
+   "replay_mean_s": 59.09,
+   "sc": {
+    "factors": [
+     0.7702,
+     0.2488,
+     0.2299
+    ],
+    "stops": [
+     "GAS:2",
+     "LAT:2",
+     "STR:2"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 77,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": true
+  },
+  "2022_17_singapore": {
+   "circuit": "singapore",
+   "n_green_stops": 11,
+   "pit_loss_s": 45.896,
+   "replay_mean_s": 39.56,
+   "sc": {
+    "factors": [
+     0.3015,
+     0.3664,
+     0.4206
+    ],
+    "stops": [
+     "NOR:36",
+     "RIC:36",
+     "RUS:35"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 61,
+   "vsc": {
+    "factors": [
+     0.593
+    ],
+    "stops": [
+     "RUS:21"
+    ]
+   },
+   "wet": true
+  },
+  "2024_08_monaco": {
+   "circuit": "monaco",
+   "n_green_stops": 7,
+   "pit_loss_s": 22.699,
+   "replay_mean_s": 23.62,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 78,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
+  },
+  "2024_12_united_kingdom": {
+   "circuit": "united_kingdom",
+   "n_green_stops": 45,
+   "pit_loss_s": 26.546,
+   "replay_mean_s": 28.05,
+   "sc": {
+    "factors": [],
+    "stops": []
+   },
+   "source": "green_median",
+   "total_laps": 52,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": true
+  },
+  "2024_21_brazil": {
+   "left_out": "LAW: replay plan rejected: [\"Unknown compound 'WET'. Modelled compounds: ['INTERMEDIATE']\"]"
+  },
+  "2025_23_qatar": {
+   "circuit": "qatar",
+   "n_green_stops": 23,
+   "pit_loss_s": 27.137,
+   "replay_mean_s": 28.47,
+   "sc": {
+    "factors": [
+     -0.0841,
+     -0.0696,
+     -0.0039,
+     -0.0782,
+     -0.0725,
+     -0.0513,
+     0.6073,
+     -0.0921,
+     0.0234,
+     -0.0837,
+     -0.1153,
+     0.0343,
+     0.4097,
+     0.0162,
+     -0.0833,
+     -0.027,
+     -0.1035,
+     0.0581
+    ],
+    "stops": [
+     "ALB:7",
+     "ALO:7",
+     "ANT:7",
+     "BEA:7",
+     "BOR:7",
+     "COL:7",
+     "GAS:7",
+     "HAD:7",
+     "HAM:7",
+     "LAW:7",
+     "LEC:7",
+     "OCO:8",
+     "OCO:9",
+     "RUS:7",
+     "SAI:7",
+     "STR:7",
+     "TSU:7",
+     "VER:7"
+    ]
+   },
+   "source": "green_median",
+   "total_laps": 57,
+   "vsc": {
+    "factors": [],
+    "stops": []
+   },
+   "wet": false
+  }
+ }
+}

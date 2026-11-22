@@ -39,6 +39,7 @@ to the flag.
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import math
 import os
@@ -117,6 +118,23 @@ def belief_config() -> SimConfig:
     if "config" not in _BELIEF:
         _BELIEF["config"] = SimConfig.from_file(os.environ.get(BELIEF_CONFIG_ENV) or BELIEF_CONFIG)
     return _BELIEF["config"]
+
+
+@contextlib.contextmanager
+def belief_config_as(config: SimConfig):
+    """The tools plan on `config` inside the block (eval.policies.AgentPolicy passes the scorer's
+    belief), so the agent's tools, the continuation the scorer expands its submission with and the
+    belief_optimizer policy run one belief config whatever --belief-config or AGENT_BELIEF_CONFIG
+    say. The previous config comes back after the block."""
+    had, prev = "config" in _BELIEF, _BELIEF.get("config")
+    _BELIEF["config"] = config
+    try:
+        yield config
+    finally:
+        if had:
+            _BELIEF["config"] = prev
+        else:
+            _BELIEF.pop("config", None)
 
 
 def _race_data(race_id: str, profile):
@@ -287,6 +305,32 @@ def _continuation(fit, n_samples, max_stops):
             return (pit if just_pitted else stay)(after)
         except NoFeasiblePlan:
             return to_flag
+
+    def stay_plan(snapshot: Snapshot, laps: int):
+        """A stay under SC or VSC (Simulator.expand_action): the whole plan from the decision
+        snapshot, the current set to the flag on the same terms as above."""
+        to_flag = Plan.of([[snapshot.compound, snapshot.remaining_laps]])
+        if snapshot.compound not in fit.modelled:
+            return to_flag
+        try:
+            return stay.stay_plan(snapshot, laps)
+        except NoFeasiblePlan:
+            return to_flag
+
+    def stop_plan(snapshot: Snapshot, lap: int, compound: str):
+        """A stop at the end of a later lap under SC or VSC (_stop_at): the whole plan from the
+        decision snapshot; with no feasible plan, the one stop run to the flag, whose legality
+        the simulator's rules then decide."""
+        w = lap - snapshot.laps_completed
+        one_stop = [[snapshot.compound, w], [compound, snapshot.remaining_laps - w]]
+        if snapshot.compound not in fit.modelled or compound not in fit.modelled:
+            return one_stop
+        try:
+            return stay.stop_plan(snapshot, lap, compound)
+        except NoFeasiblePlan:
+            return one_stop
+    continuation.stay_plan = stay_plan
+    continuation.stop_plan = stop_plan
     return continuation
 
 
@@ -379,6 +423,60 @@ def _window_text(snapshot: Snapshot, config=None) -> str:
     wait = first - done - 1
     now = "pitting now is legal" if wait == 0 else f"stay out {_laps(wait)} first, then pit"
     return f"the earliest legal stop is at the end of lap {first} ({now}), the latest at the end of lap {last}"
+
+
+def pit_window(snapshot: Snapshot, config=None) -> dict:
+    """Whether pitting now (a stop at the end of the next lap) is legal, and the earliest and
+    latest laps at whose end a stop is legal (None when no stop fits), from the regulations and
+    the laps so far only (stop_window), with the same in words (_window_text)."""
+    first, last = stop_window(snapshot)
+    done = snapshot.laps_completed
+    fits = first <= last
+    return {"pit_now_legal": bool(fits and first == done + 1), "earliest_stop_lap": first if fits else None,
+            "latest_stop_lap": last if fits else None, "laps_remaining": snapshot.remaining_laps,
+            "summary": _window_text(snapshot, config)}
+
+
+def _stop_at(fit, snapshot: Snapshot, lap: int, compound: str, continuation):
+    """(plan, errors) of a stop at the end of lap `lap` onto `compound`, the current set run until
+    then and the continuation after the stop: expand_action's pit, preceded by a stay when the
+    stop is later than the end of the next lap. Under SC or VSC a later stop is instead the best
+    full plan from this snapshot whose first stop is at the end of `lap` onto `compound`
+    (continuation.stop_plan), so the period in progress runs on as the belief draws it per sample
+    rather than being carried to the stop by an advanced snapshot; a stop now is unchanged."""
+    pit = {"action": "pit", "compound": compound}
+    wait = lap - snapshot.laps_completed - 1
+    if wait <= 0:
+        return fit.expand_action(snapshot, pit, continuation)
+    stop_plan = getattr(continuation, "stop_plan", None)
+    if snapshot.track_status != "green" and stop_plan is not None:
+        from pydantic import ValidationError
+        try:
+            return Plan.of(stop_plan(snapshot, lap, compound)), []
+        except ValidationError as exc:
+            return None, [e["msg"] for e in exc.errors()]
+    inner = {}
+
+    def after_stay(after):
+        plan, errors = fit.expand_action(after, pit, continuation)
+        if errors:
+            inner["errors"] = errors
+            return [[after.compound, after.remaining_laps]]   # a placeholder; the errors are returned
+        return plan
+    plan, errors = fit.expand_action(snapshot, {"action": "stay", "laps": wait}, after_stay)
+    return (None, inner["errors"]) if inner.get("errors") else (plan, errors)
+
+
+def describe_plan(snapshot: Snapshot, pairs) -> str:
+    """A plan in words from the snapshot: its first stop (the lap at whose end and the compound),
+    or that it runs the current set to the flag."""
+    pairs = [list(p) for p in pairs]
+    if len(pairs) < 2:
+        return "the current set runs to the flag, no further stop"
+    stop = snapshot.laps_completed + int(pairs[0][1])
+    more = len(pairs) - 2
+    return (f"the first stop is at the end of lap {stop} onto {pairs[1][0]}"
+            + (f", then {more} more stop{'s' if more != 1 else ''}" if more else ", no further stop"))
 
 
 def explain_rule_errors(snapshot: Snapshot, plan, errors, config=None) -> list[str]:
@@ -711,9 +809,12 @@ def compare_plans(snapshot: Snapshot, candidates, n_samples=None, *, sim=None, p
 
 
 def action_label(raw) -> str:
-    """An action in the agent's words: "PIT MEDIUM", "STAY_OUT 3 laps"."""
+    """An action in the agent's words: "PIT MEDIUM", "PIT MEDIUM at the end of lap 3",
+    "STAY_OUT 3 laps"."""
     act = _action(raw)
     if act.get("action") == "pit":
+        if act.get("at_end_of_lap") is not None:
+            return f"PIT {act.get('compound')} at the end of lap {act['at_end_of_lap']}"
         return f"PIT {act.get('compound')}"
     return f"STAY_OUT {_laps(int(act.get('laps', 1)))}"
 
@@ -765,12 +866,32 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
     n = _compare_n(profile, n_samples)
     fit = sim.fitted_for(snapshot)
     act = _action(action)
+    cont = _continuation(fit, n, profile.sim.max_stops)
+    window = pit_window(snapshot, sim.config)
+    note = None
+    pits = [c for c in legal_compounds(snapshot, sim.config) if c in fit.modelled]
     if act.get("action") == "pit":
         alts = [{"action": "stay", "laps": 1}]
+    elif window["earliest_stop_lap"] is None:
+        # no stop is legal: staying out to the flag is the only action, there is nothing to compare
+        alts = []
+        note = (f"{window['summary'][0].upper()}{window['summary'][1:]}; there is no other legal action to "
+                f"compare this with.")
+    elif window["pit_now_legal"]:
+        alts = [{"action": "pit", "compound": c} for c in pits]
     else:
-        alts = [{"action": "pit", "compound": c} for c in legal_compounds(snapshot, sim.config) if c in fit.modelled]
-    res = fit.compare(snapshot, [_candidate(snapshot, a) for a in [act, *alts]], seed=SEED, n_samples=n,
-                      continuation=_continuation(fit, n, profile.sim.max_stops))
+        # pitting now is illegal: the nearest legal alternative is a stop at the earliest legal lap
+        first = window["earliest_stop_lap"]
+        alts = [{"action": "pit", "compound": c, "at_end_of_lap": first} for c in pits]
+        note = (f"Pitting now is not legal; the alternative compared is a stop at the end of lap {first}, the "
+                f"earliest legal stop.")
+
+    def candidate(a):
+        if a.get("at_end_of_lap") is None:
+            return _candidate(snapshot, a)
+        plan, errors = _stop_at(fit, snapshot, a["at_end_of_lap"], a["compound"], cont)
+        return plan if plan is not None else {"action": "pit", "compound": a["compound"]}   # invalid either way
+    res = fit.compare(snapshot, [candidate(a) for a in [act, *alts]], seed=SEED, n_samples=n, continuation=cont)
     if not res.valid[0]:
         errors = explain_rule_errors(snapshot, res.candidates[0], res.errors[0], sim.config)
         return _jsonable({"action": act, "valid": False, "errors": errors, "error": "; ".join(errors)})
@@ -788,7 +909,11 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
            **gap_fields,
            "dominated": res.dominated[0], "support_warnings": res.support_warnings[0],
            "traffic": TRAFFIC_NOTE, "alternative": None, "n_samples": res.n_samples, "seed": res.seed,
-           "assumptions": [f"SC and VSC rates: {event_rates(snapshot, sim.config)['source']}"]}
+           "assumptions": [f"SC and VSC rates: {event_rates(snapshot, sim.config)['source']}"],
+           "continuation": continuation_text(snapshot, act, res.candidates[0].as_pairs()),
+           "pit_window": window["summary"]}
+    if note:
+        out["note"] = note
     if res.traffic is not None:
         out["traffic"] = {"action": traffic_view(res.traffic[0]),
                           "alternative": traffic_view(res.traffic[j]) if j is not None else None,
@@ -815,7 +940,97 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
                    confidence_basis="model error" if model_error else "sampling spread")
     else:
         out["gap_reading"] = gap_reading(action_label(act), action_label(alt), p, float(med), float(lo), float(hi))
+    if act.get("action") == "stay" and window["earliest_stop_lap"] is not None:
+        out["stop_lap_scan"] = stop_lap_scan(fit, snapshot, res.candidates[0], alt["compound"], window, cont, n)
     return _jsonable(out)
+
+
+SCAN_POINTS = 5     # stop laps in evaluate_action's stop_lap_scan
+SCAN_SPAN = 20      # laps after the earliest legal stop the scan reaches, at most
+
+
+def stop_lap_scan(fit, snapshot: Snapshot, plan, compound: str, window: dict, cont, n: int) -> dict:
+    """The evaluated plan against a stop at the end of each of up to SCAN_POINTS laps, evenly
+    spread from the earliest legal stop over at most SCAN_SPAN laps (and no later than the latest),
+    onto `compound` with the best continuation after it, under the same draws: per stop lap the
+    mean of that plan's time minus this plan's and the share of draws it is faster. One compare."""
+    first, last = window["earliest_stop_lap"], min(window["latest_stop_lap"], window["earliest_stop_lap"] + SCAN_SPAN)
+    laps = sorted({int(round(x)) for x in np.linspace(first, last, SCAN_POINTS)})
+    plans, kept = [], []
+    for lap in laps:
+        p, errors = _stop_at(fit, snapshot, lap, compound, cont)
+        if p is not None and not errors:
+            plans.append(p)
+            kept.append(lap)
+    if not plans:
+        return {"compound": compound, "rows": []}
+    res = fit.compare(snapshot, [plan, *plans], seed=SEED, n_samples=n)
+    rows = []
+    for i, lap in enumerate(kept, start=1):
+        if res.valid[i] and res.gap_mean_s[i][0] is not None:
+            rows.append({"stop_lap": lap, "minus_this_plan_s": round(float(res.gap_mean_s[i][0]), 1),
+                         "faster_share": round(float(res.p_beats[i][0]), 2)})
+    return {"compound": compound,
+            "meaning": f"a stop at the end of each lap onto {compound} with the best continuation after it, against "
+                       "this plan: its mean time minus this plan's (negative: that stop lap is faster) and the share "
+                       "of draws it is faster",
+            "rows": rows}
+
+
+def continuation_text(snapshot: Snapshot, act: dict, pairs) -> str:
+    """What an evaluated action's plan is, in words: a stay of k laps is a minimum (the best
+    continuation then picks its own stop), so the plan's first stop is named."""
+    if act.get("action") == "stay":
+        k = int(act.get("laps", 1))
+        return f"staying out at least {_laps(k)}; with the best continuation after that, {describe_plan(snapshot, pairs)}"
+    return f"pitting now: {describe_plan(snapshot, pairs)}"
+
+
+def submission_error(snapshot: Snapshot, decision: dict, *, sim=None, profile=None) -> str | None:
+    """Why the scorer would reject this submission, said with the legal alternative; None when it
+    accepts it. The checks are the scorer's own (eval.decisions: the decision, a compound for a PIT,
+    a whole reassess_after_laps of at least 1 for a STAY_OUT, the confidence in [0, 1] for p_pit),
+    then the decision is expanded exactly as the scorer expands it (decisions.to_plan on this belief,
+    seed 0, the profile's samples and stops) and the plan is checked against the rules."""
+    from ..eval import decisions
+    sim, profile = _setup(snapshot, sim, profile)
+    window = pit_window(snapshot, sim.config)
+    legal = window["summary"][0].upper() + window["summary"][1:]
+    remaining, done = snapshot.remaining_laps, snapshot.laps_completed
+    try:
+        kind = decisions.kind(decision)
+    except decisions.InvalidDecision:
+        return "decision must be PIT or STAY_OUT."
+    conf = decision.get("confidence")
+    if isinstance(conf, bool) or not isinstance(conf, (int, float)) or not 0.0 <= float(conf) <= 1.0:
+        return f"confidence must be a number from 0 to 1, got {conf!r}."
+    fit = sim.fitted_for(snapshot)
+    pits = [c for c in legal_compounds(snapshot, sim.config) if c in fit.modelled]
+    if kind == "PIT":
+        compound = decision.get("compound")
+        if not compound or str(compound).upper() not in pits:
+            return f"PIT needs a compound that can be fitted now: one of {pits}, got {compound!r}."
+        if not window["pit_now_legal"]:
+            first = window["earliest_stop_lap"]
+            fix = (f"submit STAY_OUT with reassess_after_laps = {first - done - 1} to reassess when the stop becomes "
+                   f"legal" if first is not None else f"submit STAY_OUT with reassess_after_laps = {remaining}")
+            return f"Pitting now is not legal: {window['summary']}. {fix[0].upper()}{fix[1:]}."
+    else:
+        laps = decision.get("reassess_after_laps")
+        if isinstance(laps, bool) or not isinstance(laps, int) or laps < 1:
+            fix = (f"only STAY_OUT to the flag is legal: use reassess_after_laps = {remaining}"
+                   if window["earliest_stop_lap"] is None else
+                   f"use a whole number from 1 to {remaining} ({remaining} stays out to the flag)")
+            return f"STAY_OUT needs reassess_after_laps of at least 1, got {laps!r}; {remaining} laps remain: {fix}."
+    try:
+        plan = decisions.to_plan(snapshot, decision, sim, profile.sim.max_stops, seed=0,
+                                 n_samples=profile.sim.n_samples)
+    except decisions.InvalidDecision as exc:
+        return f"This decision has no legal plan ({exc}). {legal}."
+    errors = sim.validate(snapshot, plan)
+    if errors:
+        return f"This decision has no legal plan: {'; '.join(explain_rule_errors(snapshot, plan, errors, sim.config))}"
+    return None
 
 
 def recommendation_fields(snapshot: Snapshot, decision: dict) -> dict:

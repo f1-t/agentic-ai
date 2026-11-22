@@ -262,6 +262,7 @@ def small_profile():
     return p.model_copy(update={"g": p.g.model_copy(update={"laps_every": 20, "sc_adjacent": False})})
 
 
+@pytest.mark.slow
 def test_synthetic_report_end_to_end(tmp_path):
     circuits = {k: fp.SYN_CIRCUITS[k] for k in ("c1", "c3")}
     path = fp.run_synthetic(tmp_path, seasons=range(2018, 2021), circuits=circuits, profile=small_profile(),

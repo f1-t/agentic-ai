@@ -153,7 +153,15 @@ def read_config_file(path) -> tuple[dict, list]:
 
 
 def merge(base: dict, overlay: dict) -> dict:
-    return cross_race._merge(copy.deepcopy(base), copy.deepcopy(overlay or {}))
+    """`overlay` deep-merged onto `base`, except that an overlay naming another events model replaces
+    the events block: event params belong to their model (hybrid's lap_times is no RateEvents
+    field), so switching the default hybrid world to "rate" or "none" must not carry them over."""
+    out = cross_race._merge(copy.deepcopy(base), copy.deepcopy(overlay or {}))
+    ev, was = (overlay or {}).get("events"), (base or {}).get("events")
+    if isinstance(ev, dict) and isinstance(was, dict) and ev.get("name", was.get("name")) != was.get("name"):
+        out["events"] = {**{k: v for k, v in out["events"].items() if k not in ("name", "params")},
+                         "name": ev["name"], "params": copy.deepcopy(ev.get("params") or {})}
+    return out
 
 
 @dataclass
@@ -469,11 +477,33 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
     if dp.get("draw", "none") != "none" or cfg.lap_noise != "none":
         add("draws", f"parameter draws ({dp.get('draw', 'none')}) and lap noise ({cfg.lap_noise})", wt,
             "the fit's own covariance and residual sd")
+    ps = getattr(cfg, "pit_stops", None)
+    if ps is not None and ps.replay == "actual":
+        add("pit_stops_replay", "whole-race replays: each real stop at its own lane time", _W,
+            "the timing data's pit entry to exit less the race's median green lane time")
+    if ps is not None and ps.team:
+        add("pit_stops_team", "the team's typical stop on every stop priced", _W if cfg.fit_window == "full" else _K,
+            "every green stop of the race" if cfg.fit_window == "full" else "the green stops completed by the snapshot")
+    sq = getattr(cfg, "sc_queue", None)
+    if sq is not None and sq.enabled:
+        add("sc_queue_spacing", f"safety-car queue spacing {sq.spacing_s} s", _H,
+            "the median real gap at the end of the calibration races' SC periods (measured once)")
+        if sq.mode == "field":
+            add("sc_queue", "safety-car queue over the whole-field replays (fidelity only)", _W,
+                "the replayed cars queued together at each recorded SC end; the recorded period lengths")
+        elif cfg.fit_window == "full":
+            add("sc_queue", "safety-car queue: the car placed among the other cars' recorded race", _W,
+                "the others' recorded times at each SC start and their stops under it, the recorded period length, "
+                "the car's whole-race pace (when the engine has none), the cars that finished laps down")
+        else:
+            add("sc_queue", "safety-car queue: the car placed among the field visible at the snapshot", _K,
+                "the others' times as of the snapshot, projected with gaps held; the car's as-of pace")
     add("min_stint_two_compounds", "R1-R3: minimum stint, two dry compounds", _R)
     covered = {"fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
-               "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit"}
+               "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit", "sc_queue",
+               "pit_stops"}
     default = SimConfig().model_dump(mode="json")
     mine = cfg.model_dump(mode="json")
     for k in sorted(mine):
@@ -569,7 +599,7 @@ def _replay(sim, data, race, d):
     recorded events when it models them (replay_events)."""
     if replay_events(sim.config) == "scenario":
         g, res = calibration.replay_driver(sim, data.frame, race, d)
-        return g, res, np.asarray(res.lap_times_s, dtype=float)
+        return g, _actual_stops(sim, data.frame, d, res), np.asarray(res.lap_times_s, dtype=float)
     from ..contracts import Snapshot
     frame = data.frame
     g = frame[frame["driver"] == d].sort_values("lap")
@@ -580,7 +610,26 @@ def _replay(sim, data, race, d):
                        return_laps=True)
     if not res.valid:
         raise ValueError(f"{d}: replay plan rejected: {res.errors}")
-    return g, res, np.asarray(res.lap_times_s, dtype=float)
+    return g, _actual_stops(sim, data.frame, d, res), np.asarray(res.lap_times_s, dtype=float)
+
+
+def _actual_stops(sim, frame, d, res):
+    """`res` with each of car d's stops at its real duration under the judge's
+    config.pit_stops.replay "actual": the charged pit loss plus the stop's lane time less the race's
+    median green lane time (pit_loss.lane_deltas; the team's typical stop taken back out where
+    pit_stops.team charged it). Unchanged otherwise, or where the timing data has no lane times."""
+    ps = getattr(sim.config, "pit_stops", None)
+    if ps is None or ps.replay != "actual" or not res.valid:
+        return res
+    from . import pit_loss as _pl
+    stops = _pl.stop_table(frame)
+    dev = _pl.lane_deltas(stops)[(stops["driver"] == d).to_numpy()].dropna()
+    if not len(dev):
+        return res
+    team = sim.team_pit_delta_for(d, None) if ps.team else 0.0
+    add = float(dev.sum() - team * len(dev))
+    return res.model_copy(update={"remaining": res.remaining.model_copy(update={"mean_s": res.remaining.mean_s + add}),
+                                  "pit_loss_total_s": (res.pit_loss_total_s or 0.0) + add})
 
 
 def _green_pit(g):
@@ -634,6 +683,60 @@ def _driver_tables(d, g, res, pred, variant, fit, exclude=None, pit_loss_used=No
                       "real_s": float(np.nansum(actual[sel])), "pred_s": float(np.nansum(pred[sel] + off)),
                       "err_s": float(np.nansum(pred[sel] + off) - np.nansum(actual[sel]))})
     return row, laps, srows
+
+
+def _trajectory(g, pred, res, offset, effects):
+    """(cumulative simulated race time at the end of each lap, pit loss charged on each lap), both
+    pd.Series by lap, of one replay with its pace offset on every lap. The replay's charged pit
+    loss is split over its in-laps by the SC/VSC factor of each in-lap (the engine's scale)."""
+    off = 0.0 if not np.isfinite(offset) else float(offset)
+    ts = g["track_status"].astype(str)
+    scale = np.where(ts.str.contains("4"), effects.sc_pit_loss_factor,
+                     np.where(ts.str.contains("[67]"), effects.vsc_pit_loss_factor, 1.0))
+    inl = g["pit_in"].astype(bool).to_numpy() & (g["lap"].to_numpy() < g["lap"].max())
+    w = np.where(inl, scale, 0.0)
+    total = float(res.pit_loss_total_s or 0.0)
+    charge = total * w / w.sum() if w.sum() > 0 else np.zeros(len(g))
+    lap = g["lap"].to_numpy()
+    return (pd.Series(np.cumsum(np.asarray(pred, dtype=float) + off + charge), index=lap),
+            pd.Series(charge, index=lap))
+
+
+def _apply_queue(rows, trajs, frame, cfg, lap_ref_s):
+    """The safety-car queue (sim/sc_queue.py) over one variant's replays together: every driver
+    row gains pred_queue_s (its race time with the whole-field queue, pace offset taken back out);
+    under the judge's sc_queue mode "field" pred_s, err_s and err_pace_s become the queued ones
+    (pred_free_s keeps the time without). Mode "single" queues inside the engine instead."""
+    from . import sc_queue
+    if not trajs:
+        return
+    periods = sc_queue.sc_periods(frame)
+    q = sc_queue.apply({d: t[0] for d, t in trajs.items()}, {d: t[1] for d, t in trajs.items()},
+                       periods, cfg.sc_queue.spacing_s, lap_ref_s, sc_queue.durations(frame, periods),
+                       lapped={d for d, t in trajs.items() if len(t[0]) < max(len(x[0]) for x in trajs.values())})
+    for row in rows:
+        d = row["driver"]
+        if d not in q:
+            continue
+        off = row["pace_offset_s"] if np.isfinite(row["pace_offset_s"]) else 0.0
+        row["pred_queue_s"] = float(q[d].iloc[-1]) - off * row["laps"]
+        if cfg.sc_queue.enabled and cfg.sc_queue.mode == "field":
+            row["pred_free_s"] = row["pred_s"]
+            row["pred_s"] = row["pred_queue_s"]
+            row["err_s"] = row["pred_s"] - row["real_s"]
+            row["err_pace_s"] = row["err_s"] + off * row["laps"]
+
+
+def _single_queue(cfg) -> bool:
+    q = getattr(cfg, "sc_queue", None)
+    return q is not None and q.enabled and q.mode == "single"
+
+
+def _paced(sim, offsets: dict):
+    """Under the single-car queue a replay runs with the car's pace in the engine (Simulator.with_pace,
+    its whole-race offset from a first pass): the queue erases the pace gaps built up before each
+    safety car, so the pace cannot be added afterwards over every lap. Else `sim`."""
+    return sim.with_pace(pd.Series(offsets, dtype=float).fillna(0.0)) if _single_queue(sim.config) else sim
 
 
 def _stop_cost(g, pred, offset):
@@ -717,17 +820,29 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
     fins = _finishers(data.frame)
     drivers, laps, stints, errors = [], [], [], []
     insample_cost = {}
+    trajs = {}
+    first = {}
+    if _single_queue(cfg):   # the first pass: each car's whole-race pace offset
+        for d in fins:
+            try:
+                g, res, pred = _replay(world, data, race, d)
+            except ValueError:
+                continue
+            first[d] = _offset(_actual(g), pred, g["clean"].to_numpy(dtype=bool))
+    paced = _paced(world, first)
     for d in fins:
         try:
-            g, res, pred = _replay(world, data, race, d)
+            g, res, pred = _replay(paced, data, race, d)
         except ValueError as exc:
             errors.append({"driver": d, "variant": "in", "error": str(exc)})
             continue
         row, lp, st = _driver_tables(d, g, res, pred, "in", "in-sample", pit_loss_used=world.race_pit_loss_s)
+        trajs[d] = _trajectory(g, pred, res, row["pace_offset_s"], cfg.effects)
         drivers.append(row)
         laps.append(lp)
         stints += st
         insample_cost[d] = _stop_cost(g, pred, row["pace_offset_s"])
+    _apply_queue(drivers, trajs, data.frame, cfg, world.ref_lap_s)
     gains = _stop_gain_rows(lambda d: world.degradation, data, fins, "in", "in-sample")
     if opts.lodo and "lodo" in variants:
         lodo = _judge(data, spec, cfg.model_copy(update={"exclude_snapshot_driver": True}),
@@ -738,6 +853,7 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
         green = stops[stops["kind"] == "green"]
         losses = _pl.stop_losses(green, world.degradation, _pl._field_medians(data.frame))
         center = np.mean if cfg.pit_loss.world == "replay_mean" else np.median
+        lodo_rows, trajs = [], {}
         for d in fins:
             if "pit_loss_s" not in spec.world_race:   # a substituted pit loss stays as substituted
                 others = losses[(green["driver"] != d).to_numpy()].dropna()
@@ -745,14 +861,20 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
                                         else world.race_pit_loss_s)
             try:
                 g, res, pred = _replay(lodo, data, race, d)
+                if _single_queue(cfg):   # again with the car's pace in the engine (_paced)
+                    off = _offset(_actual(g), pred, g["clean"].to_numpy(dtype=bool))
+                    g, res, pred = _replay(_paced(lodo, {d: off}), data, race, d)
             except ValueError as exc:
                 errors.append({"driver": d, "variant": "lodo", "error": str(exc)})
                 continue
             row, lp, st = _driver_tables(d, g, res, pred, "lodo", "leave-one-driver-out",
                                          pit_loss_used=lodo.race_pit_loss_s)
-            drivers.append(row)
+            trajs[d] = _trajectory(g, pred, res, row["pace_offset_s"], cfg.effects)
+            lodo_rows.append(row)
             laps.append(lp)
             stints += st
+        _apply_queue(lodo_rows, trajs, data.frame, cfg, world.ref_lap_s)
+        drivers += lodo_rows
 
         def lodo_model(d):
             return lodo.fitted_for(calibration.snapshot_at(data.frame, race, d, 0)).degradation
@@ -1002,7 +1124,10 @@ def section_b(data, spec: Spec, opts: Options, belief=None, world=None, pool=())
         for k in range(opts.b_every, nlaps - data.race.min_stint_laps, opts.b_every):
             if not (g["lap"] == k).any():
                 continue
-            snap = build(data.frame, data.race, d, k)
+            try:
+                snap = build(data.frame, data.race, d, k)
+            except ValueError:   # no snapshot here (a set with no recorded compound): skipped, as sample_race does
+                continue
             # the judge scores the policy's snapshot (its pit loss comes from race_pit_loss_s), with any
             # other RaceParams the spec overrides
             other = {k: v for k, v in spec.world_race.items() if k != "pit_loss_s"}

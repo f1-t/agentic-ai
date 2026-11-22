@@ -127,6 +127,7 @@ def test_synthetic_legal_deterministic_nonnegative_regret(items):
     assert len(fresh) and (fresh["num_stops"] == 1).all()
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not HAS_CACHE, reason="committed race cache not present")
 def test_spain_legal_deterministic_branches_and_nonnegative_regret():
     """2021 Spain (calibration race): every row is scored (legal), the two branches of

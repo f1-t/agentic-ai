@@ -119,6 +119,10 @@ def _columns(laps):
         "track_status": laps["TrackStatus"].astype(str).to_numpy(),
         "pit_in": laps["PitInTime"].notna().to_numpy(),
         "pit_out": laps["PitOutTime"].notna().to_numpy(),
+        # session time the car crossed the pit entry (in-lap row) and the pit exit (out-lap row):
+        # pit_loss.stop_table's lane time (sim/pit_loss.py "actual stop durations")
+        "pit_in_time_s": laps["PitInTime"].dt.total_seconds().to_numpy(),
+        "pit_out_time_s": laps["PitOutTime"].dt.total_seconds().to_numpy(),
         "start_s": laps["LapStartTime"].dt.total_seconds().to_numpy(),
         "end_s": laps["Time"].dt.total_seconds().to_numpy(),
         "team": laps["Team"].to_numpy(),

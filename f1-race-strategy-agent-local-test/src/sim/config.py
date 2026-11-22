@@ -292,6 +292,37 @@ PRIOR_SD_FRACTION = {"circuit_history": 0.10, "history_fraction": 0.15, "life_ra
                      "config_fraction": 0.20}
 
 
+class PitStops(_Cfg):
+    """Pit-stop durations (pit_loss.lane_deltas / team_delta, docs/eval.md "Pit-stop durations").
+    The pit loss is one whole-race number; real stops vary by seconds and reorder close cars.
+
+    replay  "charged" (as before): a whole-race replay of a real strategy charges every stop the
+            pit loss; "actual": plus each stop's own lane time less the race's median green lane
+            time (the timing data's pit entry to exit, hindsight; the fidelity tool's replays).
+    team    every stop a simulation prices is the pit loss plus the snapshot car's team's typical
+            stop: the median lane-time difference of the team's green stops, shrunk toward 0 by
+            n / (n + team_prior_stops). The judge (fit_window "full") reads every stop of the race,
+            a windowed fit the stops completed by the snapshot moment (pit_loss.snapshot_time).
+    Off (the defaults): bit for bit as before. team_prior_stops 3, set a priori."""
+
+    replay: Literal["charged", "actual"] = "charged"
+    team: bool = False
+    team_prior_stops: float = Field(default=3.0, ge=0)
+class ScQueue(_Cfg):
+    """The safety-car queue (sim/sc_queue.py, docs/eval.md "The safety-car queue"): at the end of
+    each SC period the field's gaps close to `spacing_s` behind the leader in the order of the
+    cars' time when it came out plus their stops under it. Off (the default): as before.
+    spacing_s 0.5: the median real consecutive gap at the end of the calibration races' SC periods."""
+
+    enabled: bool = False
+    # "single": the engine places each simulated car in the queue among the other cars' race (the
+    # judge: their recorded times; a windowed fit: the rows visible at the snapshot, projected
+    # beyond them with gaps held), sc_queue.FieldQueue; "field": the fidelity tool's whole-field
+    # replays queue every replayed car together (sc_queue.apply) and the engine does nothing
+    mode: Literal["single", "field"] = "single"
+    spacing_s: float = Field(default=0.5, ge=0)
+
+
 class WearCliff(_Cfg):
     """Tyre life as physics (sim/cliff.py): past a compound's support edge E a lap costs
     min(kappa (age - E)^2, cap_s_per_lap) more. Both simulators start from the same historical
@@ -429,6 +460,10 @@ class SimConfig(_Cfg):
     min_race_rows_to_fit: int | None = Field(default=None, ge=1)
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
+    # pit-stop durations (PitStops); left out of config_hash at its default
+    pit_stops: PitStops = Field(default_factory=PitStops)
+    # the safety-car queue in whole-field replays (ScQueue); left out of config_hash at its default
+    sc_queue: ScQueue = Field(default_factory=ScQueue)
 
     @classmethod
     def from_file(cls, path):
@@ -448,11 +483,18 @@ class SimConfig(_Cfg):
 # overlays for the scorecard's ablation: configs/sim/world_de.yaml and world_de_hinge.yaml. The
 # SimConfig default stays linear_fuel, the comparator the cross-race arms are overlays on.
 WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}}
+# The eval world's tyre-life edge (WearCliff.world_edge): "history_only", the historical prior both
+# simulators share and nothing from this race. Chosen by the fidelity scorecard (docs/eval.md "What
+# the ablation says"): close-pair order +0.025 [+0.000, +0.060] against "history" on 18 races, and
+# no hindsight. The SimConfig default stays "history"; the eval world sets it here. The earlier
+# world (edge "history") is configs/sim/legacy/world_pre_scorecard.yaml.
+WORLD_EDGE = "history_only"
 
 
 def world_default(config: "SimConfig") -> "SimConfig":
-    """`config` with the eval world's wear fit (WORLD_DEGRADATION)."""
-    return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION)})
+    """`config` with the eval world's wear fit (WORLD_DEGRADATION) and tyre-life edge (WORLD_EDGE)."""
+    return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION),
+                                     "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE})})
 
 
 def compound_class(config, compound) -> str:

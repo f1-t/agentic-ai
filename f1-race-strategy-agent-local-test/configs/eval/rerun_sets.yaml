@@ -2,6 +2,11 @@
 # "Rerunning the evaluation"). Each: races (or races_from, a json with a "races" list), the
 # scenarios sampled per race, the seed, and development (true: a development set; false: a report
 # set, which the scenarios stage builds only with --final). eras: split the tables by era.
+# A set names no simulator: the stages take --world-config / --belief-config, "default" being the
+# scorecard-chosen world (driver effects, history-only tyre-life edge, hybrid SC/VSC) and
+# configs/sim/belief.yaml (driver effects, fuel anchoring, persistent lap noise). A set's scenarios
+# under the as_of rule do not depend on the world (the stratified rule samples on it); its references
+# do (keyed by the world's config_hash and SIM_CODE_VERSION).
 dev20:
   description: >-
     the calibration races, nineteen: the six development races and thirteen 2021-22 weekends cached for
@@ -38,3 +43,20 @@ test9:
   seed: 0
   development: false
   eras: true
+smoke:
+  description: >-
+    the smoke run (python -m src.eval.rerun smoke): development races with safety cars, lap-0 and late points,
+    sampled by the leak-free builder; the command keeps a fixed seeded handful of them (src/eval/smoke.py)
+  races:
+    - 2021_04_spain
+    - 2021_09_austrian
+    - 2022_01_bahrain
+    - 2022_09_canada
+    - 2022_12_france
+    - 2022_21_brazil
+    - 2023_07_spain
+    - 2024_07_emilia_romagna
+  per_race: 25
+  seed: 0
+  development: true
+  eras: false

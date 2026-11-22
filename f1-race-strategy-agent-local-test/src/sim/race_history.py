@@ -184,6 +184,64 @@ def as_of_event_rates(race_id, periods: pd.DataFrame | None = None) -> dict:
     return _RATES[key]
 
 
+def pooled_event_rates(periods: pd.DataFrame | None = None) -> dict:
+    """as_of_event_rates over every dry race the table records (the judge's later periods under
+    RateEvents pooled: a world that may read the calibration set)."""
+    from . import event_rates
+    p = load_periods() if periods is None else periods
+    key = ("pooled", len(p), tuple(sorted(set(map(str, p["race_id"])))) if len(p) else ())
+    if key not in _RATES:
+        stats = event_rates.dry(event_rates.stats_from_periods(p)) if len(p) else pd.DataFrame(columns=event_rates.STAT_COLUMNS)
+        fit = event_rates.fit(stats, prior=EVENT_PRIOR)
+        row = {"race_id": "pooled", "era": "", "circuit": event_rates.UNKNOWN, "circuit_type": event_rates.UNKNOWN}
+        r = fit.rates(row, EVENT_LEVEL)
+        _RATES[key] = {"p_sc": r["p_sc"], "d_sc": r["d_sc"], "p_vsc": r["p_vsc"], "d_vsc": r["d_vsc"],
+                       "source": f"pooled over {len(stats)} dry race(s), global level", "races": sorted(stats["race_id"])}
+    return _RATES[key]
+
+
+# Period lengths (events.RateEvents duration "history"): the lengths of the neutralised periods of
+# the dry races, as of the race (earlier races only) or pooled over the table, plus an a priori
+# prior worth LENGTH_PRIOR_PERIODS periods: a geometric length with EVENT_PRIOR's mean, on 1..MAX_PERIOD_LAPS.
+MAX_PERIOD_LAPS = 12
+LENGTH_PRIOR_PERIODS = 2.0
+_LENGTHS: dict = {}
+
+
+def _prior_pmf(mean: float) -> np.ndarray:
+    p = 1.0 / mean
+    k = np.arange(1, MAX_PERIOD_LAPS + 1)
+    pmf = p * (1 - p) ** (k - 1)
+    return pmf / pmf.sum()
+
+
+def period_lengths(race_id, kind: str, scope: str = "as_of", periods: pd.DataFrame | None = None) -> dict:
+    """{pmf (lengths 1..MAX_PERIOD_LAPS), n, source, races}: the length distribution of `kind`
+    ("sc" / "vsc") periods, from the dry races before `race_id` (scope "as_of", the belief's) or
+    from every dry race in the table (scope "pooled", the judge's), shrunk toward the a priori
+    geometric of EVENT_PRIOR (worth LENGTH_PRIOR_PERIODS periods)."""
+    p = load_periods() if periods is None else periods
+    if scope == "as_of":
+        races = tuple(earlier_races(race_id, sorted(set(p["race_id"])))) if len(p) else ()
+    else:
+        races = tuple(sorted(set(map(str, p["race_id"])))) if len(p) else ()
+    key = (kind, scope, len(p), races)
+    if key not in _LENGTHS:
+        rows = p[p["race_id"].isin(races) & (p["kind"] == kind)] if len(p) else p
+        if len(rows) and "wet" in rows:
+            rows = rows[~rows["wet"].astype(str).str.lower().isin(["true", "1"])]
+        L = (rows["end_lap"].astype(float) - rows["start_lap"].astype(float) + 1).to_numpy() if len(rows) else np.array([])
+        L = np.clip(L[np.isfinite(L)].astype(int), 1, MAX_PERIOD_LAPS)
+        counts = np.bincount(L - 1, minlength=MAX_PERIOD_LAPS).astype(float)[:MAX_PERIOD_LAPS]
+        prior = _prior_pmf(EVENT_PRIOR.d_sc if kind == "sc" else EVENT_PRIOR.d_vsc)
+        pmf = counts + LENGTH_PRIOR_PERIODS * prior
+        _LENGTHS[key] = {"pmf": pmf / pmf.sum(), "n": int(len(L)),
+                         "source": f"{len(L)} {kind} period(s) of {'earlier' if scope == 'as_of' else 'all'} dry races "
+                                   f"+ a priori geometric (mean {EVENT_PRIOR.d_sc if kind == 'sc' else EVENT_PRIOR.d_vsc})",
+                         "races": sorted(set(map(str, rows["race_id"]))) if len(rows) else []}
+    return _LENGTHS[key]
+
+
 # --- the calibrator --------------------------------------------------------------------------------
 def _register(cls):
     """Register once: `python -m src.sim.race_history` runs this file as __main__ besides the

@@ -1,202 +1,145 @@
-# F1 Race Strategy Engineer Agent — CSE 598 Capstone Baseline
+# PITWALL: an F1 race-strategy agent, evaluated without hindsight
 
-An **agentic** baseline: Claude acts as a Formula 1 race strategist. Given a driver
-and their starting tyre, the agent reasons over **real 2021 Spanish GP telemetry**
-to recommend a pit/tyre strategy. It runs a genuine *plan → call tools → observe →
-refine* loop — it inspects tyre degradation, proposes candidate one- and two-stop
-strategies, simulates each with a deterministic race-time model, compares them, and
-submits a final recommendation.
+CSE 598 (Agentic AI, ASU) capstone. It started from a stakeholder baseline: one question about
+one race, answered by Claude with a deterministic simulator. That baseline is kept as the
+"Legacy baseline" section below. The project is now an evaluation of a tool-using language-model
+agent that makes one pit-stop decision at a time, from a snapshot of a real race.
 
-The recommendation is **objectively checkable**: it is compared against the
-optimum of the same deterministic simulator (see `data/ground_truth.json`).
+- **The decision.** At a snapshot (race R, driver D, after lap L), the agent decides: pit now
+  onto a compound, or stay out for k laps and reassess.
+- **The loop.** It runs a hand-written plan → call tools → observe → refine loop (`src/agent.py`,
+  at most 10 steps). The tools (`src/tools.py`) read the snapshot and estimate:
+  - tyre wear;
+  - pit loss;
+  - how a pit or a stay plays out, with ranges and probabilities.
 
-## What the baseline does (step by step)
+  The agent ends the episode by submitting a decision (`submit_recommendation`).
 
-1. **Model** — Anthropic `claude-opus-5` (configurable) via the official `anthropic`
-   SDK, driven by a **hand-written tool-use loop** in [`src/agent.py`](src/agent.py)
-   (the loop is explicit on purpose, so the agentic cycle is visible).
-2. **Tools** the agent can call ([`src/tools.py`](src/tools.py)):
-   - `get_race_info` — race length, compounds, pit-loss, min stint length.
-   - `get_driver_stints` — a driver's *actual* stints + starting compound (from data).
-   - `estimate_tyre_degradation` — fits a linear pace-vs-tyre-age model per compound
-     from that race's green-flag laps.
-   - `simulate_strategy` — deterministic estimate of total race time for any proposed
-     stint plan (validates: laps sum to race length, ≥2 compounds, min stint length).
-3. **Data** — real timing data from [FastF1](https://docs.fastf1.dev), pre-downloaded
-   into `cache/` and read in **offline mode** → no network needed for race data.
+## How it is judged
 
-## Setup
+There are two simulators over the same race data, from the committed FastF1 cache (`cache/`,
+read offline):
+
+- **The belief** (`configs/sim/belief.yaml`) is what every policy plans on, the agent's tools
+  included. It is fitted only on what was known at the snapshot:
+  - the race laps up to lap L;
+  - this weekend's practice;
+  - priors from earlier races only.
+
+  Under SC or VSC, it draws the period from rates and lengths fitted on earlier races.
+- **The world** (the judge) knows the whole race. It scores every policy's plan and finds the
+  best plan from the same snapshot under the same random draws. The **regret** is the
+  difference.
+
+**The information contract** (docs/eval.md, "Information contract"): nothing a policy can read
+depends on anything after the snapshot. Tests enforce it (`tests/test_future_blindness.py`,
+`tests/test_eval_information_contract.py`), including that the model never sees the real race,
+season or driver names.
+
+**The comparators**, all scored the same way:
+- simple rules: `run_to_flag` and `one_stop_total`;
+- the teams' actual strategy;
+- `belief_optimizer`, the optimizer the agent's tools run, deciding alone.
+
+## Result
+
+**Held-out** (`reports/eval/rerun/test9/`, tag `eval-v2-test`, one pass of `qwen3-30b-a3b`):
+
+- On the five races examined for the first time (the pre-registered primary test), the agent is
+  level with both simple rules, with mean regret higher by about 1.5 s and intervals that include
+  zero. It is also level with the teams and with its own tools' optimizer.
+- On all nine held-out races it is level with the rules and ahead of the teams' actual strategies
+  (-4.55 s).
+- The roughly 6 s lead over the rules on the calibration races (`reports/eval/rerun/dev20/`) did
+  not hold on unseen races. That shortfall shows up in the tools' optimizer as well.
+
+The full tables, the method and the limitations are in docs/eval.md:
+- "Held-out result (test9) at eval-v2-test";
+- "Development result (dev20) at eval-v2-dev2";
+- "Changes after the freeze";
+- "Limitations".
+
+Every other file in `reports/eval/` is a superseded record ("Result files").
+
+## Setup (Python 3.12)
 
 ```bash
-git clone https://github.com/DoomDust7/f1-race-strategy-agent.git
-cd f1-race-strategy-agent
-python -m venv .venv
-source .venv/bin/activate           # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt        # runtime + pytest + pyyaml
+pip install -r requirements-hf.txt         # only for a local Hugging Face model
+cp .env.example .env                       # then set the backend variables below
 ```
 
-### API key (required)
+Run everything from this directory (`f1-race-strategy-agent-local-test/`).
 
-The agent calls the Anthropic API, so you need an API key with credits.
+**Model backend.** `LLM_BACKEND` chooses it. Every value comes from `.env`, and no key is ever
+committed or recorded.
 
-```bash
-cp .env.example .env
-# edit .env and set ANTHROPIC_API_KEY=sk-ant-...
-# optional: ANTHROPIC_MODEL=claude-sonnet-5   (cheaper/faster than the default claude-opus-5)
-```
+| backend | `LLM_BACKEND` | variables |
+| --- | --- | --- |
+| ASU RC Voyager (the evaluated model) | `voyager` | `VOYAGER_API_KEY`, `VOYAGER_BASE_URL`, `VOYAGER_MODEL`, `VOYAGER_MAX_TOKENS`, `VOYAGER_TEMPERATURE` |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
+| local Hugging Face (Transformers in-process) | `huggingface` | `HF_MODEL`, `HF_DEVICE`, `HF_MAX_NEW_TOKENS`, `HF_TOKEN` (gated models only) |
 
-### No API key handy?
+## Tests and the smoke run
 
-You can still confirm the environment, the offline data, and the deterministic
-simulator (no key, no network, no cost):
+| what | command | needs a model |
+| --- | --- | --- |
+| fast tier (about 2.5 min) | `python -m pytest -q` | no |
+| slow tier (real races, end to end) | `python -m pytest -q -m "slow and not legacy"` | no |
+| legacy tier (superseded switches still load) | `python -m pytest -q -m legacy` | no |
+| smoke: 8 development scenarios through every stage, then the trajectory lint | `python -m src.eval.rerun smoke --n 8 --jobs 4` | yes |
+| one agent episode on 2021 Spain, HAM at lap 0, graded | `python tests/test_case.py` | yes |
+| one decision from a `RaceSnapshot` JSON (`src/snapshot.py`; a built-in 2021 Spain demo without one) | `python -m src.run [snapshot.json]` | yes |
+
+CI (`.github/workflows/tests.yml`) runs the fast tier and the slow tier split into four jobs.
+`tests/test_case.py` is a script, not collected by pytest.
+
+**Rerunning the evaluation** takes one command per stage: `python -m src.eval.rerun
+{scenarios,references,baselines,agent,tables} --set dev20 ...`. The details are in docs/eval.md,
+"Rerunning the evaluation". The held-out set `test9` has been built and run once, and is not
+rebuilt.
+
+## Where things are
+
+| path | what |
+| --- | --- |
+| `src/agent.py`, `src/tools.py`, `src/llm/` | the agent loop, its tools, the model backends |
+| `src/sim/` | the simulators (belief and world), fits, priors, the optimizer bridge |
+| `src/eval/` | scenarios, references, policies, scoring, the rerun pipeline, the lint |
+| `configs/sim/`, `configs/eval/` | simulator configs (current and legacy), sets and the pre-registered reporting choices |
+| `reports/eval/rerun/{dev20,test9}/` | the current development and held-out results |
+| `docs/eval.md`, `docs/rules.md`, `docs/baselines.md`, `docs/traffic.md` | the protocol, the race rules, the baselines, the traffic model |
+| `poster/` | the research poster build |
+
+## Legacy baseline (the original stakeholder project)
+
+The original baseline asked Claude one question about the 2021 Spanish GP:
+
+> Hamilton starts on SOFT; one stop or two?
+
+Claude answered with four full-race tools and a deterministic linear simulator, which:
+- had no safety cars, traffic or fuel effect;
+- used a 22 s pit loss and a 10-lap minimum stint.
+
+The answer was graded against that simulator's brute-force optimum, 5510.1 s
+(`data/ground_truth.json`). That code is frozen in `src/legacy_tools.py` so the result stays
+reproducible. It runs with no key and no network:
 
 ```bash
 python -c "from src import legacy_tools; print(legacy_tools.optimal_strategy('SOFT'))"
 # -> {'num_stops': 2, 'first_pit_lap': 28, ..., 'total_time_s': 5510.1}
-python -m src.eval report reports/eval/v1_baselines_split.csv
-# -> the current v1 baseline table (belief and world simulators, docs/eval.md)
 ```
 
-A full captured agent run (real `python tests/test_case.py` output ending in
-`RESULT: PASS`) is saved in [`docs/sample_run.txt`](docs/sample_run.txt), so the
-baseline's behavior is visible even without running the model.
+`docs/sample_run.txt` is a captured run of that baseline. The current agent no longer uses these
+tools. `tests/test_case.py` now runs the snapshot agent, and its legacy check lives in the test
+suite. The proposal is `CSE598_Capstone_Proposal_Manav.docx`.
 
-## Run
+## Bird's-eye race demo
 
-**The concrete test case** (this is the graded example — runs the agent and checks
-its answer against the deterministic optimum):
+`python scripts/run_game_demo.py`, then open http://127.0.0.1:8000.
 
-```bash
-python tests/test_case.py
-```
-
-**Ask the agent your own question:**
-
-```bash
-python -m src.run "Hamilton starts on SOFT. One-stop or two-stop, and when should he first pit?"
-```
-
-### Input / output
-
-- **Input:** a natural-language strategy question (the test uses a fixed one about
-  Hamilton in the 2021 Spanish GP). Race data comes from `cache/`.
-- **Output:** the agent's tool-call trajectory printed to stdout, then a final
-  recommendation (number of stops, first pit lap, full stint plan, rationale).
-  The test additionally prints `PASS`/`FAIL`.
-
-## Expected result
-
-The deterministic optimum (in `data/ground_truth.json`) is ≈ **5510s**. The test
-**passes when the agent's recommended strategy is valid and its simulated race time
-is within 1% of that optimum** — i.e. the agent used the tools to reach a
-near-optimal plan. (The simple model ranks a two-stop fastest, echoing Hamilton's
-real two-stop that day; a good one-stop lands ~0.2% off and also passes.)
-
-## Reproducibility notes
-
-- **No race-data network dependency:** `cache/` is committed and read with
-  `fastf1.Cache.offline_mode(True)`. The only external call is to the Anthropic API.
-- **Regenerate the cache** (needs network, optional):
-  `python scripts/build_cache.py`.
-- **Deterministic ground truth:** `data/ground_truth.json` is produced by
-  `legacy_tools.optimal_strategy()` (a brute-force over the simulator) and is re-derivable.
-- Runtime: a few minutes (one cached `session.load` + the agent's ~5–8 tool calls).
-- **Test suite:** `python -m pytest -q` skips the tests marked `slow` (pytest.ini); run the full set
-  with `python -m pytest -q -m "slow or not slow"` before any merge that touches `src/sim` or `src/eval`.
-
-## Known limitations (baseline)
-
-- The strategy simulator is a **simplified oracle**: a linear tyre model, a constant
-  pit-loss, no safety cars, traffic, track evolution, fuel effect, or rival response.
-  Because stint time is additive it ignores fuel burn, so it slightly over-values the
-  softer compound; the test therefore grades on being *within 1% of the optimum*
-  rather than on one exact plan.
-- Single race, single driver. See the proposal's "Limitations and Next Steps".
-
-## Autonomous bird's-eye race demo
-
-Run the local browser interface (a provider key is not needed just to view the heuristic visualization; using the real strategist button requires the configured model backend):
-
-```bash
-cd f1-race-strategy-agent-local-test
-python scripts/run_game_demo.py
-# Open http://127.0.0.1:8000
-```
-
-Choose a race distance, start/pause/reset the visualization, watch its illustrative car
-field and classification, and use **Record video** → **Stop & save** to download a WebM
-recording in browsers that support canvas capture. Otherwise use QuickTime Player or your OS
-screen recorder. Video is recorded locally. The strategist button sends the selected historical
-snapshot and prompt to the provider configured for this project.
-
-The moving field is a lightweight JavaScript visualization only; its car motion, tire wear,
-and pit behavior are not the project's AI or strategy simulator. The **Project Strategy Agent**
-panel runs the same `src.agent.run_agent` loop used by the project, with the selected validated
-historical snapshot and the normal strategy tools. It displays the agent's actual submitted
-decision, rationale, confidence, risks, and tool names. This requires the configured provider
-(`LLM_BACKEND`, credentials/model settings); clicking the button may consume provider quota.
-The agent's recommendation is deliberately separate from the moving animation—it does not
-control those cars. The visualization is not an FIA-grade vehicle model or an EA-level
-commercial simulator.
-
-The bundled snapshot selector includes only contract-format snapshots under `data/snapshots`.
-To add official GPS centerlines, run `python scripts/build_track_geometries.py` when network
-access is available; generated circuits appear in the circuit selector. Without generated
-geometry, the default loop is clearly labeled illustrative.
-
-## Model backends (Anthropic or local Hugging Face)
-
-The agent loop is provider-neutral. `src/agent.py` owns the F1 plan -> tool -> observe
-loop, while `src/llm/` contains interchangeable model adapters. The simulator,
-race data, tool definitions, grading, and test case are shared across backends.
-
-### Local Hugging Face on a Mac (no vLLM)
-
-Install the normal project dependencies plus the local-model dependencies:
-
-```bash
-pip install -r requirements.txt
-pip install -r requirements-hf.txt
-cp .env.example .env
-```
-
-Then set:
-
-```bash
-LLM_BACKEND=huggingface
-HF_MODEL=Qwen/Qwen3-4B-Instruct-2507
-HF_DEVICE=auto
-```
-
-`HF_DEVICE=auto` prefers Apple Silicon MPS when available, then CUDA, then CPU.
-The model is loaded directly by Transformers in the same Python process; there is
-no vLLM server or other inference service. The first run downloads model weights
-from Hugging Face, so it requires network access and enough free disk/RAM.
-
-For a smaller Mac, start with a small instruct/tool-capable model. You can change
-`HF_MODEL` without touching the F1 agent code. If a model is gated/private, set
-`HF_TOKEN`; public models do not require it.
-
-Run the same evaluation entry point for either backend:
-
-```bash
-python tests/test_case.py
-```
-
-### Anthropic
-
-To switch back to Claude:
-
-```bash
-LLM_BACKEND=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-opus-5
-```
-
-### Why local tool calls use JSON
-
-Anthropic exposes native tool-call objects, while open-weight models differ in
-how they represent tools. The Hugging Face adapter therefore asks the model for a
-small provider-neutral JSON envelope (`tool_calls`) and converts it into the same
-internal `ToolCall` objects used by the agent. This keeps model-provider formatting
-out of the F1 simulator and agent logic.
+- The moving field is an illustrative JavaScript animation, not the project's simulator.
+- The "Project Strategy Agent" panel runs the real `src.agent.run_agent` loop on a snapshot from
+  `data/snapshots/`. It uses the configured backend and may spend provider quota.
+- `python scripts/build_track_geometries.py` (network) adds real circuit outlines.

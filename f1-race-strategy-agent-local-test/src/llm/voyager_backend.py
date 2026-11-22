@@ -134,14 +134,15 @@ def _parse_reclosed(text: str, exc: json.JSONDecodeError):
 def _parse_envelopes(text: str):
     """(payload, note) for a reply made of two or more complete {"tool_calls": [...]} objects, each
     valid JSON on its own, with only whitespace or prose (no bracket or brace) around and between
-    them: one payload whose tool_calls are theirs in order. None for anything else, malformed
-    included: nothing is guessed.
+    them: one payload whose tool_calls are theirs in order. The LAST one may instead end the reply
+    with a wrong final run of closers, which _reclose_tail reads as the one run that closes it, as
+    for a single envelope. None for anything else, malformed included: nothing is guessed.
 
     qwen3-30b-a3b now and then writes a second envelope after the first (smoke test 2026-11-22:
     evaluate_strategy calls, then a compare_plans envelope), which reads as "Extra data"."""
 
     decoder = json.JSONDecoder()
-    calls, pos, n = [], 0, 0
+    calls, pos, n, closers = [], 0, 0, None
 
     while True:
         start = text.find("{", pos)
@@ -153,7 +154,14 @@ def _parse_envelopes(text: str):
         try:
             obj, pos = decoder.raw_decode(text, start)
         except json.JSONDecodeError:
-            return None
+            fixed = _reclose_tail(text[start:]) if n else None   # the last envelope only, never the first
+            if fixed is None:
+                return None
+            try:
+                obj = json.loads(fixed[0])
+            except json.JSONDecodeError:
+                return None
+            pos, closers = len(text), fixed[1:]
         if not (isinstance(obj, dict) and set(obj) == {"tool_calls"} and isinstance(obj["tool_calls"], list)):
             return None
         calls += obj["tool_calls"]
@@ -161,16 +169,26 @@ def _parse_envelopes(text: str):
 
     if n < 2:
         return None
-    return {"tool_calls": calls}, f"{n} complete tool_calls envelopes read as one"
+    note = f"{n} complete tool_calls envelopes read as one"
+    if closers:
+        note = (f"{n} tool_calls envelopes read as one, the last one's final closing brackets "
+                f"{closers[0]!r} read as {closers[1]!r}")
+    return {"tool_calls": calls}, note
 
 
 def _bare_submission(payload, tools):
     """(payload, note) wrapping a bare submit_recommendation argument object as its call: a JSON
-    object with no tool_calls whose keys are exactly a valid argument set of the offered
-    submit_recommendation (every required key, nothing undeclared). None otherwise."""
+    object whose keys are exactly a valid argument set of the offered submit_recommendation
+    (every required key, nothing undeclared), with no tool_calls or an empty "tool_calls": []
+    beside them (seen live: a submission with an empty envelope key). None otherwise."""
 
-    if not isinstance(payload, dict) or "tool_calls" in payload:
+    if not isinstance(payload, dict):
         return None
+    dropped = "tool_calls" in payload
+    if dropped:
+        if payload["tool_calls"] != [] or len(payload) == 1:
+            return None
+        payload = {k: v for k, v in payload.items() if k != "tool_calls"}
     spec = next((t for t in tools or [] if t.get("name") == "submit_recommendation"), None)
     if spec is None:
         return None
@@ -179,7 +197,8 @@ def _bare_submission(payload, tools):
     if not (set(schema.get("required", [])) <= keys <= set(schema.get("properties", {}))):
         return None
     return ({"tool_calls": [{"name": "submit_recommendation", "arguments": payload}]},
-            "a bare submit_recommendation argument object read as its call")
+            "a bare submit_recommendation argument object read as its call"
+            + (", its empty tool_calls key dropped" if dropped else ""))
 
 
 class VoyagerBackend(ModelBackend):

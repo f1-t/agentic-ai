@@ -1,0 +1,9 @@
+policy,ok,unavailable,group,group_label,group_races
+actual_strategy,428,41,development (all),"development races, labelled development",19
+agent,469,0,development (all),"development races, labelled development",19
+belief_optimizer,469,0,development (all),"development races, labelled development",19
+fixed_one_stop,457,12,development (all),"development races, labelled development",19
+fixed_two_stop,432,37,development (all),"development races, labelled development",19
+greedy_crossover,80,389,development (all),"development races, labelled development",19
+one_stop_total,469,0,development (all),"development races, labelled development",19
+run_to_flag,469,0,development (all),"development races, labelled development",19

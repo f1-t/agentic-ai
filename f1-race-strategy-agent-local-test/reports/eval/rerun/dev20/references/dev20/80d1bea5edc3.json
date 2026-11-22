@@ -1,0 +1,13 @@
+{
+  "format": 2,
+  "hindsight": false,
+  "key": "80d1bea5edc3",
+  "max_stops": 2,
+  "n_samples": 50,
+  "n_scenarios": 469,
+  "scenario_set": "dev20",
+  "seed": 0,
+  "set_digest": "a269f07b5b76c78fb96ad0fd7588ad10955c3d9b353d3c426ea446db7aca99cd",
+  "sim_code_version": "c8f30186efed",
+  "world_config_hash": "5069228b35e7"
+}

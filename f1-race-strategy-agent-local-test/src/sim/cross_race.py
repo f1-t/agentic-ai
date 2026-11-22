@@ -46,9 +46,10 @@ window, every point estimate race-weighted (the mean over races of the per-race 
 statistic the race-cluster CIs resample; the row-pooled value is reported beside it), and
 every comparison incumbent-first: the incumbent is the arm the config carries now
 (INCUMBENTS, the report's "Current defaults"), and a change in either direction must pass:
-  to_snapshot (the BELIEF), in two stages: first the bound, the baseline (no bound) as the
-      challenger against the incumbent wear_nonneg (belief.yaml, adopted a priori), so the
-      bound stays unless removing it passes; then every other candidate against the stage-1
+  to_snapshot (the BELIEF; its incumbent is as_of_history, the arm belief.yaml carries since
+      #102), in two stages: first the bound, the baseline (no bound) as the challenger against
+      the bound arm wear_nonneg (adopted a priori), so the bound stays unless removing it
+      passes; then every other candidate (as_of_history among them) against the stage-1
       result. A challenger replaces its comparator when the 95 percent CI of the paired
       stop-gain mae difference (challenger less comparator) is below 0 AND the upper end of
       the paired G mae_offset CI at horizons 10-49 is under +NONINFERIORITY_S.
@@ -108,7 +109,9 @@ ARMS = ("baseline", "none", "hinge", "free_air", "hinge_free", "posterior", "wea
         # per-compound knots at a share of the longest life seen, negative hinges dropped
         "driver_effects_hinge_life", "driver_effects_hinge_bound",
         # fuel identification (belief): the physics fuel prior, tau by coverage
-        "fuel_physics", "fuel_physics_driver_effects")
+        "fuel_physics", "fuel_physics_driver_effects",
+        # the belief as configs/sim/belief.yaml carries it (#102): the bound plus as-of history
+        "as_of_history")
 BASELINE = "baseline"
 COVERAGE_ONLY = ("posterior",)
 # learned calibrator arms (SPEC 0024), run only when asked (run(learned=...), --learned): each
@@ -123,7 +126,7 @@ LEARNED_ROLE = "learned (reported, not selected)"
 CALIBRATOR_ARMS = ("belief_none", "belief_shrinkage", "belief_ridge", "belief_ridge_all", "belief_hybrid")
 CALIBRATOR_ROLE = "calibrator comparison (learned_calibrator.py)"
 # simplest first: the tie-break among arms that pass
-SIMPLICITY = ("none", "baseline", "wear_nonneg", "collinear_hold", "collinear_hold_nonneg", "free_air",
+SIMPLICITY = ("none", "baseline", "wear_nonneg", "as_of_history", "collinear_hold", "collinear_hold_nonneg", "free_air",
               "driver_effects", "driver_effects_nonneg", "hinge", "collinear_hold_hinge", "collinear_hold_nonneg_hinge",
               "driver_effects_hinge", "driver_effects_hinge_bound", "driver_effects_hinge_life", "fuel_physics", "fuel_physics_driver_effects",
               "hinge_free")
@@ -969,12 +972,14 @@ def compare_arms(arm_data: dict[str, dict], comparator: str, windows, n_boot=N_B
 
 
 BOUND_ARM = "wear_nonneg"
+BELIEF_ARM = "as_of_history"   # the arm belief.yaml carries: the to_snapshot incumbent
 # Every comparison is incumbent-first: the incumbent is the arm the config carries now, and a
 # change in either direction has to pass the window's rule. (arm, source, set by) per window.
 INCUMBENTS = {
-    "to_snapshot": (BOUND_ARM, "a priori",
-                    "configs/sim/belief.yaml: wear bound 0 (SPEC 0017b, #40: the physical argument and the "
-                    "stop-gain check)"),
+    "to_snapshot": (BELIEF_ARM, "a priori",
+                    "configs/sim/belief.yaml: the as_of_history calibrator, fuel anchoring and the as-of pit "
+                    "loss (#102) and driver effects (#114, the fidelity scorecard) on the wear bound 0 "
+                    "(SPEC 0017b, #40: the physical argument and the stop-gain check)"),
     "full": ("driver_effects", "selected",
              "config.WORLD_DEGRADATION, the eval world (score.race_simulators): driver effects, by the "
              "fidelity scorecard's finishing-order measure (the G rule does not separate it from "
@@ -1009,12 +1014,12 @@ def current_defaults() -> pd.DataFrame:
 
 def belief_selection(arm_data, n_boot=N_BOOT) -> tuple[pd.DataFrame, str, str]:
     """The belief (to_snapshot) in two stages, incumbent-first. Stage 1 is the bound: the baseline
-    (no bound) is the challenger against the incumbent wear_nonneg, so the bound stays unless
+    (no bound) is the challenger against the bound arm wear_nonneg, so the bound stays unless
     removing it passes the belief rule. Stage 2 compares every other candidate against the
     stage-1 result, the belief default a candidate would replace (while provisional, the
     incumbent). Returns (both stages' rows, the stage-1 result, the choice)."""
-    inc = incumbent(BELIEF_WINDOW)
-    challenger = BASELINE if inc == BOUND_ARM else BOUND_ARM
+    inc = BOUND_ARM   # stage 1 is the bound question, asked on the bound arm
+    challenger = BASELINE
     s1 = compare_arms({a: arm_data[a] for a in (inc, challenger)}, inc, [BELIEF_WINDOW], n_boot, "bound")
     bound = choose(s1, BELIEF_WINDOW, inc)
     others = [a for a in arm_data if a not in (BASELINE, BOUND_ARM)]
@@ -1029,7 +1034,7 @@ def selection_tables(out, races, profile, n_boot=N_BOOT, arms=ARMS) -> dict:
     Learned arms in `arms` get rows beside the others with LEARNED_ROLE, never chosen."""
     arm_data = {a: arm_outputs(out, a, races, profile) for a in arms}
     windows = list(profile.g.windows)
-    parts, chosen, bound = [], {}, incumbent(BELIEF_WINDOW)
+    parts, chosen, bound = [], {}, BOUND_ARM
     for w in windows:
         if w == BELIEF_WINDOW:
             t, bound, chosen[w] = belief_selection(arm_data, n_boot)
@@ -1498,7 +1503,7 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
            "race-cluster 95% CI in brackets resamples); diff is the per-race paired difference, challenger less "
            "the stage's comparator (the incumbent); 'pooled' is the row-pooled difference, secondary. "
            f"Belief rule (to_snapshot): SG diff CI below 0 and G diff CI upper end under +{NONINFERIORITY_S:g} s, "
-           f"in two stages: the bound (the baseline, no bound, challenging the incumbent {BOUND_ARM}; the bound "
+           f"in two stages: the bound (the baseline, no bound, challenging the bound arm {BOUND_ARM}; the bound "
            "stays unless removing it passes), then every other candidate against the stage-1 result. World "
            "(full) and pre_race: G diff below 0 with its CI excluding 0, against the SimConfig default. Ties to "
            "the simpler arm. n/a: the same as the comparator in that window by construction (in the full window "
@@ -1513,7 +1518,7 @@ def report(out=CROSS_DIR, profile=None, features_path=RACE_FEATURES, n_boot=N_BO
         md += [f"### {w} ({rule_for(w)}; incumbent {inc})", ""]
         for stage, part in t.groupby("stage", sort=False):
             if w == BELIEF_WINDOW:
-                label = (f"1, the bound: {BASELINE} (no bound) challenging the incumbent {inc}" if stage == "bound"
+                label = (f"1, the bound: {BASELINE} (no bound) challenging {BOUND_ARM}" if stage == "bound"
                          else f"2, against the stage-1 result {part['comparator'].iloc[0]}")
                 md += [f"Stage {label}:", ""]
             md += [_selection_md(part), ""]

@@ -80,8 +80,10 @@ def _summary_for(race_id):
 
 
 def _pit_loss_recorded():
+    from . import pit_loss
     from .config import PitLossModel
-    return sorted((PitLossModel().prior or {}).get("races", {}))
+    entries = {r for r, e in pit_loss.committed_entries().items() if "left_out" not in e}
+    return sorted(set((PitLossModel().prior or {}).get("races", {})) | entries)
 
 
 def _pit_loss_for(race_id):
@@ -124,7 +126,8 @@ POLICY_SIDE = {
         "evaluate_strategy, NaN for a race not after every summary race (model_report.calibration_error)",
         "as_of", _summary_recorded, _summary_for, ("reports/calibration/midrace_summary.csv",)),
     "event_rates": Artifact(
-        "configs/sim/neutralised_history.csv: the belief's SC/VSC rates (events.RateEvents as_of, "
+        "configs/sim/neutralised_history.csv: the belief's SC/VSC rates and, under duration \"history\", period "
+        "lengths (race_history.period_lengths as_of) (events.RateEvents as_of, "
         "race_history.as_of_event_rates) shrunk toward the a priori race_history.EVENT_PRIOR",
         "as_of", _periods_recorded, _periods_for, ("configs/sim/neutralised_history.csv",)),
     "pre_race_base_delta": Artifact(
@@ -149,8 +152,10 @@ POLICY_SIDE = {
         "a8d9d3a; under as_of_history the base and fuel taus are the as-of sds instead",
         "a_priori", _none, _none_for, ("src/sim/config.py",)),
     "pit_loss_prior": Artifact(
-        "configs/sim/pit_loss_prior.json and the cached races: the as-of pit loss prior (pit_loss.pit_loss_prior)",
-        "as_of", _pit_loss_recorded, _pit_loss_for, ("configs/sim/pit_loss_prior.json",)),
+        "configs/sim/pit_loss_prior.json, configs/sim/pit_loss_entries.json and the cached races: the as-of "
+        "pit loss prior (pit_loss.pit_loss_prior)",
+        "as_of", _pit_loss_recorded, _pit_loss_for, ("configs/sim/pit_loss_prior.json",
+                                                      "configs/sim/pit_loss_entries.json")),
     "tyre_history": Artifact(
         "configs/sim/tyre_life_history.json and data/derived/tyre_history*.csv: the tyre-life prior "
         "(cliff.life_prior, tyre_history.tyre_life_prior), races strictly before the race",

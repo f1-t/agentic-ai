@@ -20,6 +20,7 @@ def default_loop_options(monkeypatch):
     monkeypatch.delenv("AGENT_TURN_STATUS", raising=False)
     monkeypatch.delenv("AGENT_REPEAT_MODE", raising=False)
     monkeypatch.delenv("AGENT_GAP_YARDSTICK", raising=False)
+    monkeypatch.delenv("AGENT_TURN_REPEAT", raising=False)
 
 
 @pytest.fixture
@@ -323,7 +324,8 @@ def test_a_repeat_of_a_call_that_errored_gets_the_same_error(monkeypatch, cache_
     bad = {"action": {"action": "pit", "compound": "WET"}}
     backend = RecordingBackend([ModelTurn(tool_calls=[tc("evaluate_strategy", bad)]),
                                 ModelTurn(tool_calls=[tc("evaluate_strategy", bad)]), submit_turn()])
-    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats,
+                          turn_repeat="run")   # the per-call repeat, not the turn repeat
     assert rec is not None and dispatched == ["evaluate_strategy"]
     assert traj[0]["error"] and traj[1]["error"] == traj[0]["error"]
     assert traj[1]["output"] == {**traj[0]["output"], "repeat_of": 1} and traj[1]["repeat_of"] == 1
@@ -360,7 +362,7 @@ def test_a_repeat_on_the_anthropic_path(monkeypatch, cache_mode):
     backend = RecordingBackend([turn([ToolCall("a1", "estimate_pit_loss", {})]),
                                 turn([ToolCall("a2", "estimate_pit_loss", {})]),
                                 turn([ToolCall("s1", "submit_recommendation", SUBMIT)])], name="anthropic")
-    rec, traj = run_agent(snap(), backend=backend, verbose=False)
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, turn_repeat="run")
     assert rec is not None
     content = backend.seen[-1][-1]["content"]
     assert content[0]["type"] == "tool_result" and content[0]["tool_use_id"] == "a2"
@@ -497,7 +499,7 @@ def test_by_default_a_repeat_on_the_anthropic_path_runs_again(monkeypatch):
     backend = RecordingBackend([turn([ToolCall("a1", "estimate_pit_loss", {})]),
                                 turn([ToolCall("a2", "estimate_pit_loss", {})]),
                                 turn([ToolCall("s1", "submit_recommendation", SUBMIT)])], name="anthropic")
-    rec, _ = run_agent(snap(), backend=backend, verbose=False)
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, turn_repeat="run")
     assert rec is not None and len(ran) == 2
     content = backend.seen[-1][-1]["content"]
     assert [(b["type"], b["tool_use_id"]) for b in content] == [("tool_result", "a2")]
@@ -756,7 +758,8 @@ def test_a_real_bare_submission_is_read_as_its_call(tmp_path):
 @pytest.mark.parametrize("args", [
     {**SUBMIT, "extra": 1},                                      # a key the schema does not declare
     {k: v for k, v in SUBMIT.items() if k != "confidence"},      # a required key missing
-    {"tool_calls": [], **SUBMIT},                                # an envelope, not a bare object
+    {"tool_calls": [{"name": "x"}], **SUBMIT},                   # an envelope with a call, not a bare object
+    {"tool_calls": []},                                          # an empty envelope
     {"decision": "STAY_OUT"},
 ])
 def test_only_an_exact_submission_argument_set_is_read_bare(args):
@@ -814,3 +817,179 @@ def test_a_cut_off_anthropic_turn_is_told_so(monkeypatch):
     rec, _ = run_agent(snap(), backend=backend, verbose=False)
     assert rec is not None
     assert "cut off at the output limit" in backend.seen[1][-1]["content"]
+
+
+# --- a whole turn repeated: not run, answered with what it returned, ended on the third repeat ---
+RULE_REPLY = ("Below the 3-lap minimum stint: stopping at the end of lap 1 makes the current SOFT stint 1 lap "
+              "(0 run so far + 1). The earliest legal stop is at the end of lap 3 (stay out 2 laps first, then "
+              "pit), the latest at the end of lap 49.")
+PIT_NOW = {"action": {"action": "pit", "compound": "MEDIUM"}}
+
+
+def rule_dispatch(monkeypatch):
+    """_dispatch stubbed: evaluate_strategy answers with a rule reply, anything else with a count."""
+    ran = []
+
+    def dispatch(name, args):
+        ran.append(name)
+        return {"error": RULE_REPLY, "recoverable": True} if name == "evaluate_strategy" else {"ran": len(ran)}
+    monkeypatch.setattr(agent, "_dispatch", dispatch)
+    return ran
+
+
+def same_turn():
+    # the two calls in another order each time: a turn repeat is the same set of calls
+    return ModelTurn(tool_calls=[tc("estimate_pit_loss"), tc("evaluate_strategy", PIT_NOW)])
+
+
+def test_a_repeated_turn_is_not_run_and_is_told_what_it_returned(monkeypatch, tmp_path):
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    swapped = ModelTurn(tool_calls=[tc("evaluate_strategy", PIT_NOW), tc("estimate_pit_loss")])
+    backend = RecordingBackend([same_turn(), swapped, submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, log_path=tmp_path / "t.jsonl",
+                          turn_repeat="end")
+    assert rec is not None and ran == ["estimate_pit_loss", "evaluate_strategy"]   # run once
+    assert [(t["step"], t.get("turn_repeat"), t.get("repeat_of")) for t in traj] == [
+        (1, None, None), (1, None, None), (2, 1, 2), (2, 1, 1), (3, None, None)]
+    assert traj[2]["output"] == {"not_run": "repeat of the previous turn", "repeat_of": 2} and traj[2]["error"] is None
+    assert (stats["evidence_calls"], stats["repeat_calls"], stats["turn_repeats"], stats["evidence_ended_at"]) == (2, 2, 1, None)
+    msg = backend.seen[2][-1]["content"]
+    assert msg.startswith("This turn repeats your previous one exactly")
+    assert f'- evaluate_strategy {json.dumps(PIT_NOW)}: error: {RULE_REPLY}' in msg   # the legal alternative, whole
+    assert "- estimate_pit_loss: returned the result shown above" in msg
+    assert "make a different evidence call or call submit_recommendation" in msg
+    assert len((tmp_path / "t.jsonl").read_text().splitlines()) == 5   # the repeats are logged events
+
+
+def test_the_third_repeat_ends_the_evidence_phase(monkeypatch):
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    backend = RecordingBackend([same_turn() for _ in range(4)] + [submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, turn_repeat="end")
+    assert rec is not None and len(ran) == 2
+    assert (stats["turn_repeats"], stats["repeat_calls"], stats["evidence_ended_at"], stats["evidence_calls"]) == (3, 6, 4, 2)
+    second, third = backend.seen[3][-1]["content"], backend.seen[4][-1]["content"]
+    assert second.startswith("Again the same calls") and "One more identical turn ends the evidence phase." in second
+    assert RULE_REPLY in second
+    assert third.startswith("Your turn repeated the previous one again") and "evidence phase is over" in third
+    assert SPENT in third and "2 submission turns left" in third
+    assert backend.offered[4] == ["submit_recommendation"]   # the grace follows at once
+    assert traj[-1]["phase"] == "grace" and traj[-1]["step"] == 5
+
+
+def test_no_submission_after_an_early_end_still_stops_after_the_grace(monkeypatch):
+    rule_dispatch(monkeypatch)
+    stats = {}
+    backend = RecordingBackend([same_turn() for _ in range(4)] + [evidence_turn(1), evidence_turn(1)])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, turn_repeat="end")
+    assert rec is None and stats["steps"] == 6
+    assert all(t["phase"] == "grace" and "Evidence turns are spent" in t["error"] for t in traj[-2:])
+
+
+def test_remind_mode_keeps_answering_and_never_ends_early(monkeypatch):
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    backend = RecordingBackend([same_turn() for _ in range(5)] + [submit_turn()])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, stats=stats, turn_repeat="remind")
+    assert rec is not None and len(ran) == 2 and traj[-1]["phase"] == "evidence"
+    assert (stats["turn_repeats"], stats["evidence_ended_at"]) == (4, None)
+    assert all("ends the evidence phase" not in backend.seen[k][-1]["content"] for k in range(2, 6))
+    assert backend.seen[5][-1]["content"].startswith("Again the same calls")
+
+
+def test_run_mode_runs_a_repeated_turn_again(monkeypatch):
+    monkeypatch.setenv("AGENT_TURN_REPEAT", "run")
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    rec, traj = run_agent(snap(), backend=RecordingBackend([same_turn() for _ in range(4)] + [submit_turn()]),
+                          verbose=False, stats=stats)
+    assert rec is not None and len(ran) == 8 and stats["turn_repeats"] == 0 and stats["repeat_calls"] == 6
+    assert not any("turn_repeat" in t for t in traj)
+
+
+def test_run_is_the_default_turn_repeat(monkeypatch):
+    # unset (the fixture clears AGENT_TURN_REPEAT): a repeated turn runs again (docs/eval.md, 2026-11-22)
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    rec, _ = run_agent(snap(), backend=RecordingBackend([same_turn(), same_turn(), submit_turn()]),
+                       verbose=False, stats=stats)
+    assert rec is not None and len(ran) == 4 and stats["turn_repeats"] == 0
+
+
+def test_a_different_turn_resets_the_count_and_a_submission_is_never_a_repeat(monkeypatch):
+    ran = rule_dispatch(monkeypatch)
+    stats = {}
+    turns = [same_turn(), same_turn(), same_turn(), evidence_turn(1), same_turn(), same_turn(), same_turn(),
+             submit_turn()]
+    rec, traj = run_agent(snap(), backend=RecordingBackend(turns), verbose=False, stats=stats, turn_repeat="end")
+    assert rec is not None and stats["evidence_ended_at"] is None and stats["turn_repeats"] == 4
+    assert len(ran) == 2 + 1 + 2   # the turn after a different one runs again
+    rec, traj = run_agent(snap(), backend=RecordingBackend([submit_turn({**SUBMIT, "confidence": 2}),
+                                                            submit_turn({**SUBMIT, "confidence": 2}), submit_turn()]),
+                          verbose=False)
+    assert rec is not None and [t["error"] is not None for t in traj] == [True, True, False]
+
+
+def test_a_repeated_turn_uses_no_budget(monkeypatch):
+    rule_dispatch(monkeypatch)
+    stats = {}
+    rec, traj = run_agent(snap(), backend=RecordingBackend([same_turn(), same_turn(), evidence_turn(1),
+                                                            submit_turn()]),
+                          verbose=False, stats=stats, max_tool_calls=3, turn_repeat="end")
+    assert rec is not None and stats["evidence_calls"] == 3 and traj[4]["error"] is None   # the third call ran
+
+
+def test_a_repeated_turn_on_the_anthropic_path(monkeypatch):
+    rule_dispatch(monkeypatch)
+
+    def turn(ids):
+        calls = [ToolCall(ids[0], "estimate_pit_loss", {}), ToolCall(ids[1], "evaluate_strategy", PIT_NOW)]
+        return ModelTurn(tool_calls=calls, raw=SimpleNamespace(content=[{"type": "tool_use", "id": i} for i in ids]))
+    submit = ModelTurn(tool_calls=[ToolCall("s", "submit_recommendation", SUBMIT)],
+                       raw=SimpleNamespace(content=[{"type": "tool_use", "id": "s"}]))
+    backend = RecordingBackend([turn(["a1", "a2"]), turn(["b1", "b2"]), submit], name="anthropic")
+    rec, _ = run_agent(snap(), backend=backend, verbose=False, turn_repeat="end")
+    assert rec is not None
+    content = backend.seen[2][-1]["content"]
+    assert [(b["type"], b.get("tool_use_id")) for b in content] == [("tool_result", "b1"), ("tool_result", "b2"),
+                                                                     ("text", None)]
+    assert content[0]["content"].startswith("Not run") and RULE_REPLY in content[2]["text"]
+
+
+@pytest.mark.parametrize("env, arg", [("again", None), (None, "never")])
+def test_an_invalid_turn_repeat_mode_raises(monkeypatch, env, arg):
+    if env:
+        monkeypatch.setenv("AGENT_TURN_REPEAT", env)
+    with pytest.raises(ValueError, match="end, remind, run"):
+        run_agent(snap(), backend=NoTurns(), verbose=False, turn_repeat=arg)
+
+
+def test_the_recap_clips_the_arguments_never_the_rule_reply():
+    long = {"candidates": [[["SOFT", 1], ["MEDIUM", 50]]] * 8}
+    line = agent._recap("compare_plans", long, {"errors": [[RULE_REPLY]] * 8, "gap_readings": []})
+    assert line.startswith("- compare_plans {") and "...: candidates[0] not legal: " + RULE_REPLY[:40] in line
+    assert agent._recap("evaluate_strategy", PIT_NOW, {"gap_reading": "PIT MEDIUM is faster"}).endswith(
+        ": PIT MEDIUM is faster")
+
+
+# --- the parser's two follow-ups ---------------------------------------------------------------
+def test_a_real_reply_whose_last_envelope_is_misclosed_is_read():
+    from src.llm.voyager_backend import _parse_envelopes
+    text = REAL["several_envelopes_last_misclosed"][0]
+    payload, note = _parse_envelopes(text)
+    assert [c["name"] for c in payload["tool_calls"]] == ["evaluate_strategy", "submit_recommendation"]
+    assert note == "2 tool_calls envelopes read as one, the last one's final closing brackets ']}}}' read as ']}}]}'"
+    # only the last one: a first envelope with wrong closers is not guessed
+    first, second = text.split("\n\n", 1)
+    assert _parse_envelopes(second + "\n\n" + first) is None
+
+
+def test_a_real_submission_with_an_empty_envelope_key_is_read(monkeypatch):
+    stub_dispatch(monkeypatch)
+    text = REAL["bare_submission_empty_envelope"][0]
+    assert json.loads(text)["tool_calls"] == []
+    rec, traj = run_agent(snap(), backend=voyager([openai_reply(text)]), verbose=False)
+    assert rec is not None and "tool_calls" not in rec
+    assert traj[0]["parse_repair"] == ("a bare submit_recommendation argument object read as its call, its empty "
+                                       "tool_calls key dropped")
