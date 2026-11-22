@@ -1393,20 +1393,28 @@ any scenario of any race (the lap-0 same-race guard is gone):
   argument set as that submission (the key dropped, said in the note).
 - `AGENT_TURN_REPEAT` (also `run_agent(turn_repeat=...)`) says what an evidence turn whose
   calls are exactly the previous turn's (the same set of tool and arguments; a turn with a
-  submission never counts) gets. `end` (the default): none of it runs and no budget is
+  submission never counts) gets. `run` (the default): the turn runs again like any other
+  (`AGENT_REPEAT_MODE` then applies per call). `end`: none of it runs and no budget is
   used; the model is told once that the turn repeats the previous one, with one line per
   call of what it returned (its error whole, so a rule reply's legal alternative; its gap
   reading; or a pointer to the result above) and that a different evidence call or
   `submit_recommendation` moves things forward; a second repeat in a row gets the same in
   other words and the warning that one more ends the evidence phase; the third ends it, and
-  the grace turns follow at once. `remind`: the same messages, never the early end. `run`:
-  the turn runs again like any other (the behaviour before; `AGENT_REPEAT_MODE` then applies
-  per call). The calls of an answered repeat are trajectory events with `repeat_of` and
-  `turn_repeat` (the count in the row) and count in `repeat_calls`; a submission after an
-  early end is `submitted_in_grace`. Rerun provenance records the mode. Why: in the live
-  check of 2026-11-22, two of 18 episodes re-sent their whole turn eight times with the
-  results in front of them; refusing repeated calls (#72) slowed the model and caching
-  them let it loop, since neither told it anything new.
+  the grace turns follow at once. `remind`: the same messages, never the early end. The
+  calls of an answered repeat are trajectory events with `repeat_of` and `turn_repeat` (the
+  count in the row) and count in `repeat_calls`; a submission after an early end is
+  `submitted_in_grace`. Rerun provenance records the mode in effect (the default when the
+  variable is unset). Why the switch exists: in the live check of 2026-11-22, two of 18
+  episodes re-sent their whole turn eight times with the results in front of them;
+  refusing repeated calls (#72) slowed the model and caching them let it loop, since
+  neither told it anything new. Why `run` is the default (2026-11-22, was `end`): a clean
+  three-way test on one commit, 48 development scenarios per mode, chose by a rule stated
+  in advance: fewest wasted calls and tokens without lowering voluntary submissions, regret
+  not consulted. `run`: 43 voluntary and 5 grace submissions, 78.5k input tokens, 273
+  repeated calls re-run. `remind`: 41 and 7, 92.4k, 193 re-run plus 302 not run. `end`: 32
+  and 16, 98.2k, 237 re-run plus 253 not run. Decisions agree on 46 of 48 between every
+  pair of modes. Answering or cutting off a repeated turn does not stop the model
+  repeating; it makes it use more turns and tokens. `end` and `remind` stay as options.
 
 ### Plan gaps and rule replies
 
