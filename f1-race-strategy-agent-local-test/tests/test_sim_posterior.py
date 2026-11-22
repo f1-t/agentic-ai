@@ -234,6 +234,7 @@ def test_clip_wear_at_zero_floors_the_drawn_wear():
 
 
 # --- (7) coverage on a race simulated from the model itself ----------------------------
+@pytest.mark.wear_cliff_off   # the race is drawn from the fitted model alone, with no cliff
 def test_coverage_90_on_a_race_from_the_model_itself():
     """200 replications: race laps from the true model plus N(0, s2), fitted on the laps up
     to k, the remaining time of one car predicted with both draws on. Its 90 percent

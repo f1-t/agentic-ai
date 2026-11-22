@@ -329,8 +329,8 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
                                 (practice and this race so far, None when nothing was seen),
                                 seen_source, prior_life_laps and prior_sd_laps (the pre-race
                                 estimate from earlier races, None when the runs seen already
-                                exceed it), prior_source, cliff_s_per_lap_per_lap (extra wear per
-                                lap past the cliff), note}. An estimate with uncertainty, never a
+                                exceed it), prior_source, cost_past_life_s_per_lap (the extra lap time
+                                past it, in words), note}. An estimate with uncertainty, never a
                                 limit: it reads nothing after the snapshot.
 
     and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis and
@@ -391,7 +391,8 @@ def _tyre_life(life) -> dict:
     return {"longest_run_seen_laps": seen if seen_src is not None else None, "seen_source": seen_src,
             "prior_life_laps": life.prior, "prior_sd_laps": life.prior_sd if life.prior is not None else None,
             "prior_source": life.source if life.prior is not None else None,
-            "cliff_s_per_lap_per_lap": life.slope, "note": _cliff.describe(life)}
+            "cost_past_life_s_per_lap": f"min({life.kappa:g} x laps_past^2, {life.cap:g})",
+            "note": _cliff.describe(life)}
 
 
 def pit_loss(snapshot: Snapshot, *, sim=None, profile=None) -> dict:

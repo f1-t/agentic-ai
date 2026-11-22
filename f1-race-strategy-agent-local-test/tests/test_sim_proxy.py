@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.contracts import Snapshot
-from src.sim import SimConfig, Simulator, proxy
+from src.sim import SimConfig, Simulator, calibration, proxy
 from src.sim.config import CompoundProxy, load_compound_steps
 from test_sim import RACE, TRUE, at_lap, synthetic_frame, synthetic_practice
 from test_sim_position import race_frame
@@ -257,9 +257,12 @@ def limit_frame():
     return f[f["tyre_age"] < 100]
 
 
+LEGACY = {"stint_limit_margin_laps": 3, "wear_cliff": {"enabled": False}}   # R8 retired: the legacy setting
+
+
 def test_r8_caps_an_unraced_compound_at_its_practice_age():
     prac = practice()
-    sim = world(frame=limit_frame(), prac=prac)
+    sim = world(frame=limit_frame(), prac=prac, **LEGACY)
     assert sim.stint_limits["HARD"] == prac.loc[prac["compound"] == "HARD", "tyre_age"].max() == 10
     assert sim.stint_limit_sources == {"HARD": "practice"}
     snap = Snapshot.at_start(RACE, "X", "SOFT")
@@ -270,7 +273,7 @@ def test_r8_caps_an_unraced_compound_at_its_practice_age():
 
 
 def test_r8_without_practice_scales_the_nearest_raced_limit_by_the_life_ratio():
-    sim = world(frame=limit_frame())
+    sim = world(frame=limit_frame(), **LEGACY)
     assert sim.stint_limits["HARD"] == np.floor(20 / 0.8)
     assert sim.stint_limit_sources == {"HARD": "life_ratio:MEDIUM"}
 
@@ -343,8 +346,10 @@ def test_saudi_world_prices_soft(saudi):
     assert "SOFT" in world_on.modelled
     e = world_on.degradation.fit_report["proxy"]["SOFT"]
     assert e["pace_tier"] in (2, 3, 5) and e["wear_tier"] in (2, 5)
-    assert world_on.stint_limit_sources.get("SOFT") == "practice"
-    assert world_on.stint_limits["SOFT"] == saudi.practice.loc[saudi.practice["compound"] == "SOFT", "tyre_age"].max()
+    # the world's support edge for the unraced SOFT is its practice age (R8 retired: an edge, not a limit)
+    edge = world_on.cliffs_for(calibration.snapshot_at(saudi.frame, saudi.race, saudi.frame["driver"].iloc[0], 0))["SOFT"]
+    assert edge.source == "practice"
+    assert edge.age == saudi.practice.loc[saudi.practice["compound"] == "SOFT", "tyre_age"].max()
 
 
 def test_saudi_belief_continuation_is_accepted_by_the_world(saudi):

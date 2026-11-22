@@ -376,8 +376,9 @@ def test_greedy_crossover_takes_a_forced_stop_at_the_limit():
                           for c, (b, k) in {"SOFT": (80.0, 0.01), "MEDIUM": (81.0, 0.01)}.items()
                           for s in range(0, 30, 3) for age in range(1, 21)])
 
-    def sim(margin):
-        return Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_margin_laps=margin))
+    def sim(margin):   # the legacy setting's mechanics (R8 retired): the wear cliff off
+        return Simulator(frame, SimConfig(degradation={"name": "linear"}, stint_limit_margin_laps=margin,
+                                          wear_cliff={"enabled": False}))
     policy, scenario = BASELINE_POLICIES["greedy_crossover"], _scenario(start())
     assert policy(scenario, sim(None), 2).plan.as_pairs() == [["SOFT", 42], ["MEDIUM", 8]]
     forced = policy(scenario, sim(3), 2)

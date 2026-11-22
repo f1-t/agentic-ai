@@ -417,14 +417,6 @@ def _restore_total_laps(orig_snap, alt_snap):
     return alt_snap.model_copy(update={"race": alt_snap.race.model_copy(update={"total_laps": orig_snap.race.total_laps})})
 
 
-def _stint_limits_patch(orig):
-    recorded = orig.frame
-
-    def stint_limits(laps, rank=1):
-        return rules.stint_limits(recorded, rank)
-    return [mock.patch.object(engine, "stint_limits", stint_limits)]
-
-
 KNOWN_LEAKS: dict[str, Leak] = {}
 
 
@@ -434,12 +426,8 @@ def register(leak: Leak):
 
 
 # Most severe first (by how far they move what the belief and the policies plan).
-register(Leak(
-    "stint_limit", "R8's stint limit is the oldest tyre age any car ran on the compound in the whole race "
-    "(and, under the compound proxy, whether a compound counts as raced at all)",
-    "src/sim/engine.py:197 Simulator.__init__ stint_limits(laps) (src/sim/rules.py:103; proxy.unraced_limits) -> "
-    "rules.stint_limit, optimizer_bridge._stint_limit_filter:183, eval/policies.py:74,136", "scramble",
-    patches=_stint_limits_patch))
+# fixed: "stint_limit" (R8's whole-race stint limit) is retired; tyre life is the wear cliff, the
+# belief's placed from what is known at the snapshot (src/sim/cliff.py). test_fixed_stint_limit.
 register(Leak(
     "frame_filter", "data.lap_frame's clean flag (with pace_resid_s and driver_offset_s) comes from one robust "
     "pace fit over every lap of the race, so which laps before the snapshot count as clean depends on later laps",

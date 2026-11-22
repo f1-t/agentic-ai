@@ -218,6 +218,7 @@ def test_positions_in_both_modes():
     assert rows.loc[(45, "BBB"), "pred_pos_sim"] == 1
 
 
+@pytest.mark.wear_cliff_off   # exact predicted totals of the synthetic plans, fit alone
 def test_simulated_order_cancels_a_common_bias():
     """Every driver 1 s a lap slower than the model: against real totals each is predicted to win,
     while the order of the predicted totals is the real order."""

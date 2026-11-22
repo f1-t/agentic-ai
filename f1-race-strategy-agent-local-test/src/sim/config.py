@@ -170,10 +170,12 @@ def _cliff_life_rows():
     return load_life_ratio_rows()
 
 
-# extra wear past the cliff age, s/lap per lap of tyre age (sim/cliff.py, docs/eval.md "The wear
-# cliff"): the median of the hinge slopes the whole-race linear_fuel_hinge fit (driver_effects
-# race, knot 25) identifies on the seven calibration races, rounded (WearCliff.penalty_s_per_lap2)
-CLIFF_PENALTY_S_PER_LAP2 = 0.12
+# the cost past a compound's support edge (sim/cliff.py, docs/eval.md "The wear cliff"): a lap
+# o laps past it costs min(CLIFF_KAPPA o^2, CLIFF_CAP_S_PER_LAP) s more. kappa anywhere in
+# 0.02-0.10 gives the same lap-0 stop counts on the development races, so it is 0.05 and not
+# tuned; the cap is a dead tyre, not a wall, so one absurd plan cannot dominate a mean
+CLIFF_KAPPA = 0.05
+CLIFF_CAP_S_PER_LAP = 4.0
 # belief tyre-life prior (sim/cliff.py life_prior) where no earlier race ran the compound: the
 # oldest stint as a share of race distance, a priori (soft about two fifths, hard about two thirds)
 PRIOR_LIFE_FRACTION = {"SOFT": 0.4, "MEDIUM": 0.55, "HARD": 0.7}
@@ -185,16 +187,26 @@ PRIOR_SD_FRACTION = {"circuit_history": 0.10, "history_fraction": 0.15, "life_ra
 
 
 class WearCliff(_Cfg):
-    """Tyre life as physics (sim/cliff.py): past a compound's cliff age A every lap costs
-    penalty_s_per_lap2 * (age - A) more. The world (fit_window full) places A from the whole
-    race (an identified hinge, else the oldest age raced); every other window places it from
+    """Tyre life as physics (sim/cliff.py): past a compound's support edge E a lap costs
+    min(kappa (age - E)^2, cap_s_per_lap) more. Both simulators start from the same historical
+    prior (races strictly before this one); the world (fit_window full) extends it by the ages
+    this race has lap data for (world_edge "history"), or uses the race alone ("race"); every
+    other window places it from
     what is known at the snapshot: the ages seen so far as a lower bound and a pre-race
     tyre-life prior from earlier races (sim/cliff.py life_prior), sd prior_sd_fraction of race
     distance. `enabled: false` removes it, as the legacy R8 setting does (docs/rules.md R8)."""
 
     enabled: bool = True
-    penalty_s_per_lap2: float = Field(default=CLIFF_PENALTY_S_PER_LAP2, ge=0)
-    hinge_min_z: float = 2.0   # a fitted hinge counts as identified at slope >= this many sds
+    # the world's edge (sim/cliff.py world_cliffs): "history_only" (a: the historical prior both
+    # simulators share, nothing from this race), "history" (b: that prior extended by the ages this
+    # race has lap data for; the default until the fidelity scorecard chooses between a and b) or
+    # "race" (c: the oldest age raced in this race, the earlier design)
+    world_edge: Literal["history_only", "history", "race"] = "history"
+    # the historical prior (sim/cliff.py history_prior): "stub" (cliff.life_prior) until the
+    # standalone module (src/sim/tyre_history.py) is on main, then "tyre_history"
+    prior_source: Literal["stub", "tyre_history"] = "stub"
+    kappa: float = Field(default=CLIFF_KAPPA, ge=0)
+    cap_s_per_lap: float = Field(default=CLIFF_CAP_S_PER_LAP, ge=0)
     # belief prior on tyre life as a share of race distance, when no earlier race has the compound
     prior_life_fraction: dict[str, float] = Field(default_factory=lambda: dict(PRIOR_LIFE_FRACTION))
     prior_sd_fraction: dict[str, float] = Field(default_factory=lambda: dict(PRIOR_SD_FRACTION))
@@ -284,6 +296,10 @@ class SimConfig(_Cfg):
     # unraced dry compounds priced by proxy (proxy.py); compound_proxy.enabled False restores the
     # simulator as it was before proxying, bit for bit
     compound_proxy: CompoundProxy = Field(default_factory=CompoundProxy)
+    # a compound with fewer clean race rows than this in a fit's race rows is left to the compound
+    # proxy rather than fitted from a handful of laps (Simulator._thin_dropped); None (the default)
+    # fits every compound with min_samples rows, as before
+    min_race_rows_to_fit: int | None = Field(default=None, ge=1)
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
 

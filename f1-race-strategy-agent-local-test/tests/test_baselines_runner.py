@@ -53,9 +53,10 @@ def test_run_pipeline_offline_lap0():
     assert rows["actual_strategy"]["status"] == "ok"
     assert rows["fixed_two_stop"]["status"] == "ok"
     # HAM starts on a 4-lap-old SOFT: S33 > M33 ends it at 37. R8 (retired, docs/rules.md) moved
-    # the stop to lap 31; now no tyre-life limit binds a baseline, the wear cliff prices the stint
+    # the stop to lap 31 with the whole race's limit; now the wrapper moves it inside the belief's
+    # as-of tyre-life estimate (about 29 laps for SOFT at lap 0, from earlier races)
     assert rows["fixed_one_stop"]["status"] == "ok"
-    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 33], ["MEDIUM", 33]]
+    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 25], ["MEDIUM", 41]]
     assert rows["actual_strategy"]["regret_s"] >= 0.0
 
 
@@ -74,10 +75,10 @@ def test_run_pipeline_offline_midrace():
     rows = {r["policy"]: r for r in res["results"]}
     assert rows["actual_strategy"]["status"] == "ok"
     # SOFT at age 31. Under R8 (retired, docs/rules.md) the one stop was pulled to age 35 and the
-    # two stop was invalid; now both are their own plans, priced by the world's wear cliff, and
-    # invalid only for a published-regulation violation
+    # two stop was invalid; now the set is past the belief's as-of tyre-life estimate, so the one
+    # stop pits at once, and no plan is invalid for tyre age
     assert rows["fixed_one_stop"]["status"] == "ok"
-    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 19], ["MEDIUM", 20]]
+    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 1], ["MEDIUM", 38]]
     assert rows["fixed_two_stop"]["status"] == "ok"
     assert rows["fixed_one_stop"]["regret_s"] > 0
 

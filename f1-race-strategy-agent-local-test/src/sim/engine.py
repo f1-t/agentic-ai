@@ -270,6 +270,22 @@ class Simulator:
         keep = practice | frame["free_air"].eq(True).to_numpy()
         return frame[keep], int((frame["clean"].to_numpy(dtype=bool) & ~keep).sum())
 
+    def _thin_dropped(self, frame):
+        """`frame` without the race rows of a compound with fewer than
+        config.min_race_rows_to_fit clean race rows (None: every compound keeps its rows), so the
+        compound proxy prices it (proxy.py) instead of an extrapolated fit of a handful of laps.
+        Practice rows (lap NaN) stay."""
+        n = self.config.min_race_rows_to_fit
+        if n is None or frame is None or not len(frame) or "lap" not in frame:
+            return frame
+        race = frame["lap"].notna().to_numpy()
+        clean = frame["clean"].astype(bool).to_numpy() if "clean" in frame else np.ones(len(frame), dtype=bool)
+        counts = frame[race & clean].groupby("compound").size()
+        thin = set(counts.index[counts < n]) | (set(frame.loc[race, "compound"].dropna()) - set(counts.index))
+        if not thin:
+            return frame
+        return frame[~(race & frame["compound"].isin(thin).to_numpy())]
+
     def _fit(self, frame, ref=None, model=None, **extra):
         """Fit the degradation model on `frame` (or use `model`); the hazard model and ref_lap_s
         (the median clean lap) on `ref`, which adds practice to the race laps under to_snapshot.
@@ -277,6 +293,8 @@ class Simulator:
         degradation fit_report gains n_pack_rows, the clean rows of `frame` dropped."""
         frame, n_pack = self._free_air(frame)
         ref = frame if ref is None else self._free_air(ref)[0]
+        if model is None:
+            frame = self._thin_dropped(frame)
         self.degradation = model if model is not None else self._model(frame, **extra)
         if self.config.fit_free_air_only and getattr(self.degradation, "fit_report", None) is not None:
             self.degradation = copy.copy(self.degradation)   # `model` may be a shared prior
@@ -402,8 +420,9 @@ class Simulator:
 
     def cliffs_for(self, snapshot: Snapshot) -> dict:
         """compound -> cliff.Cliff on this instance's fit at `snapshot` ({} with the cliff off).
-        The full window is the scorer's (cliff.world_cliffs, whole race, the fitted model's
-        identified hinges); every other window reads only what is known at the snapshot
+        The full window is the scorer's (cliff.world_cliffs: the historical prior extended by
+        this race's laps, or the race alone under wear_cliff.world_edge "race");
+        every other window reads only what is known at the snapshot
         (cliff.as_of_cliffs: practice, race laps up to the fit's calibration point, earlier races).
         Cached per instance and information horizon."""
         wc = self.config.wear_cliff
@@ -416,7 +435,12 @@ class Simulator:
             key = ("world",)
             if key not in self._cliffs:
                 steps = self.config.compound_proxy.steps if self.config.compound_proxy.enabled else None
-                self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, self.degradation, wc, steps)
+                self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, snapshot.race, wc, steps)
+                rep = getattr(self.degradation, "fit_report", None)
+                if rep is not None:   # where each edge came from, for the fidelity tool's hindsight ledger
+                    self.degradation = copy.copy(self.degradation)
+                    self.degradation.fit_report = {**rep, "support_edge": {
+                        "world_edge": wc.world_edge, **_cliff.world_ledger(self._cliffs[key])}}
             return self._cliffs[key]
         # the information horizon is the fit's, never the snapshot's: a plan's continuation is
         # scored at advanced snapshots, and their laps are the plan's hypothetical future
@@ -427,6 +451,11 @@ class Simulator:
                 del self._cliffs[next(iter(self._cliffs))]
             self._cliffs[key] = _cliff.as_of_cliffs(self.laps, self.practice, snapshot.race, horizon, wc)
         return self._cliffs[key]
+
+    def cliff_ledger(self, snapshot: Snapshot) -> dict:
+        """compound -> {edge, source, whole_race_input} of cliffs_for(snapshot) (cliff.world_ledger):
+        where each edge came from, and whether it used this race's laps."""
+        return _cliff.world_ledger(self.cliffs_for(snapshot))
 
     def validate(self, snapshot: Snapshot, plan: Plan, rules=None):
         names = self.config.rules if rules is None else rules
@@ -556,7 +585,8 @@ class Simulator:
                    if tries > 1 else None)
         eps = batch_normals(seed, LAP_NOISE_STREAM, n, n_laps, noise_sd) if noise_sd > 0 else None
         # wear cliff (sim/cliff.py): per compound in the plans, (slope, age per sample)
-        cliffs = {name: cl for name, cl in self.cliffs_for(snapshot).items() if name in code_of and cl.slope > 0}
+        cliffs = {name: cl for name, cl in self.cliffs_for(snapshot).items()
+                  if name in code_of and cl.kappa > 0 and cl.cap > 0}
         cliff_age = {}
         if cliffs:
             cols = sorted(set(self.config.compound_classes) | set(cliffs))
@@ -603,8 +633,8 @@ class Simulator:
                 for name, m, a, ln in groups:
                     green[m] = model.lap_times(name, a, ln)
             for name, m, _, _ in groups:
-                if name in cliffs:   # extra wear past the cliff age
-                    green[m] += cliffs[name].slope * np.maximum(0.0, eff[m] - cliff_age[name][k])
+                if name in cliffs:   # the cost past the support edge
+                    green[m] += cliffs[name].extra(eff[m], cliff_age[name][k])
             if corr is not None:
                 green += corr.add(eff, z)
             green *= self.track.factor(track, class_codes, lapnums)

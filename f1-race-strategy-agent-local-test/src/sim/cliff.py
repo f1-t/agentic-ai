@@ -3,46 +3,55 @@
 A degradation model's wear is a straight line (or a line with a hinge), so with nothing else an
 optimizer happily plans a 59-lap SOFT stint. The old answer, R8, forbade any stint past the
 oldest tyre age run in the whole race: a rule computed from laps after the snapshot and handed
-to every policy. It is retired (docs/rules.md R8). In its place each simulator prices old tyres:
+to every policy. It is retired (docs/rules.md R8). In its place each simulator prices old tyres
+past the edge of what is known about them (the support edge E_c):
 
-    lap time = the model's lap time (linear in age as fitted)
-               + slope_c * max(0, age - A_c)
+    lap time = the model's lap time (as fitted, inside the support)
+               + min(kappa * max(0, age - E_c)^2, cap)
 
-so past the cliff age A_c every lap costs slope_c seconds more than the one before. Nothing is
-forbidden; an over-long stint is slow. SimConfig.wear_cliff configures it; `enabled: false`
-removes it (the legacy R8 setting turns it off, docs/rules.md R8).
+so a lap 2 past the edge costs kappa x 4 (0.2 s at kappa 0.05) and a dead tyre at most `cap`
+(4 s/lap) more. Nothing is forbidden; an over-long stint is slow. SimConfig.wear_cliff configures
+it; `enabled: false` removes it (the legacy R8 setting turns it off, docs/rules.md R8). The data
+cannot locate a cliff by itself (fitted curvature is significantly negative on several
+race/compound pairs: long runs are survivorship-selected), so past the support the model's
+knowledge ends and this stated extrapolation takes over; kappa anywhere in 0.02-0.10 gives the
+same lap-0 stop counts on the development races (docs/eval.md "The wear cliff").
 
-Where A_c and slope_c come from depends on what the simulator may know:
+Where E_c comes from. Both simulators start from the SAME historical prior on tyre life
+(history_prior: races strictly before this one by date, held-out races never; behind an adapter
+so the standalone history module can replace the stub, see history_prior), so the predictive
+simulator and the judge agree as far as they can and the judge carries as little hindsight as
+it can. Each extends the prior outward only where it has lap data:
 
-world (fit_window "full", the scorer and the hindsight reference, which may read the whole
-race), world_cliffs, per compound in this order:
-  1. "hinge": the degradation model's own hinge where the whole-race fit identifies one
-     (linear_fuel_hinge, fit_report["hinge"] source "fitted", slope > 0 and at least
-     WearCliff.hinge_min_z sds from 0). The hinge is already in the model's lap time, so no
-     penalty is added;
-  2. "race": a prior cliff at the oldest tyre age any car ran on the compound in this race,
-     slope WearCliff.penalty_s_per_lap2;
-  3. for a compound no car raced, the proxy's practice-age rule (proxy.unraced_limits): the
-     oldest age run on it in practice this weekend ("practice"), else the nearest raced
-     compound's age times the cross-race life ratio ("life_ratio:<anchor>").
+world (fit_window "full", the scorer), world_cliffs, WearCliff.world_edge, three sources with
+the same cost form. Hindsight facts are measurement targets where the judge can do without them:
+the oldest age actually run is how the prior's prediction is scored, not an input, in (a).
+  "history_only" (a): E_c = the prior's point edge; nothing from this race.
+  "history" (b, the default until the fidelity scorecard chooses between (a) and (b)):
+      E_c = max(the prior's point edge, the oldest tyre age any car ran on c in this race): the
+      judge has measured laps up to that age, so it charges no extrapolation cost there. That
+      extension is the judge's one whole-race input here.
+  "race" (c, the earlier design): E_c = the oldest age raced in this race; for a compound no car
+      raced the proxy's practice-age rule (proxy.unraced_limits).
+Cliff.source records the source per compound ("history:<tier>", "history:<tier> extended by race
+data to age N", "race", ...), and the world's fit_report["support_edge"] carries it
+(world_ledger) for the fidelity tool's hindsight ledger.
 
-belief (any other fit window, what a policy plans on), as_of_cliffs: only what is known at the
-snapshot, and only races strictly before this one (race_ids.as_of). Per compound:
-  - a lower bound: the oldest tyre age seen on the compound in this weekend's practice and
-    sprint ("practice") and in race laps up to the snapshot (every car, lap <= laps_completed,
-    the snapshot's own set included, "race_so_far"). Ages seen are tyres that ran that long, a
-    lower bound on life, never an estimate of it: practice runs are short by design;
-  - a pre-race prior on tyre life (life_prior): the same circuit in an earlier season
-    ("circuit_history:<race>"), else the median share of race distance the compound's oldest
-    stint ran in earlier races at any circuit ("history_fraction"), else a neighbour's prior
-    times the as-of life ratio ("life_ratio_as_of:<anchor>"), else a config fraction of race
-    distance ("config_fraction"); sd WearCliff.prior_sd_fraction[tier] of race distance, wider
-    down the chain. Every dry compound gets a prior whatever history exists.
-A sample's cliff age is max(lower, prior + sd z), z standard normal from engine.CLIFF_STREAM, so
-the cliff moves up as the race shows tyres lasting longer and never sits below what has been
-seen. The slope is the world's. This is an estimate with uncertainty the agent's tools report
-("longest run seen so far on this compound: N laps; ... wear beyond that is uncertain"),
-never a rule.
+belief (any other fit window, what a policy plans on), as_of_cliffs: the same prior with its
+uncertainty drawn per sample, extended by the tyre ages seen so far: this weekend's practice and
+sprint ("practice") and race laps up to the fit's calibration point (every car, "race_so_far").
+A sample's edge is max(seen so far, prior + sd z), z standard normal from engine.CLIFF_STREAM, so
+it never sits below what has been seen and moves up as the race shows tyres lasting longer.
+
+The stub prior (life_prior), per compound in order, each tier with a wider sd: the same circuit
+in an earlier season ("circuit_history:<race>"), else the median share of race distance the
+compound's oldest stint ran in earlier races at any circuit ("history_fraction"), else a
+neighbour's prior times the as-of life ratio ("life_ratio_as_of:<anchor>"), else a documented
+constant share of race distance ("config_fraction", the widest). Every dry compound gets one,
+whatever history exists; nothing in it reads the race it is for.
+
+The agent's tools report the belief's edge as an estimate ("longest run seen so far on this
+compound: N laps; ... wear beyond that is uncertain"), never a rule.
 
 The circuit history table (configs/sim/tyre_life_history.json) is written by
 `python -m src.sim.cliff history`, which refuses held-out races before loading anything.
@@ -67,13 +76,19 @@ AS_OF_SOURCES = ("race_so_far", "practice")   # tie order: the race's own laps f
 
 @dataclass(frozen=True)
 class Cliff:
-    age: float           # tyre age where the extra wear starts (the point estimate)
-    slope: float         # s/lap added per lap of age past `age`
+    age: float           # the support edge, where the extra cost starts (the point estimate)
+    kappa: float         # s/lap per lap^2: a lap `o` laps past the edge costs kappa o^2 more ...
+    cap: float           # ... at most `cap` s/lap
     source: str | None   # where `age` came from (module docstring)
     lower: float = 0.0   # belief: the oldest age seen so far, a lower bound on the cliff age
     prior: float | None = None   # belief: the pre-race prior age when it is above `lower`
     prior_sd: float = 0.0        # its sd: a sample's age is max(lower, prior + prior_sd z)
     seen_source: str | None = None   # where `lower` came from
+
+    def extra(self, ages, edge):
+        """s/lap added at `ages` with the edge at `edge`: min(kappa max(0, age - edge)^2, cap)."""
+        over = np.maximum(0.0, np.asarray(ages, dtype=float) - edge)
+        return np.minimum(self.kappa * over * over, self.cap)
 
     def sample_ages(self, z):
         """Cliff ages for standard normals z (one per sample)."""
@@ -93,37 +108,59 @@ def oldest_ages(frame, upto_lap=None) -> dict[str, float]:
     return {str(c): float(a) for c, a in f.groupby("compound")["tyre_age"].max().items()}
 
 
-def identified_hinges(model, min_z: float) -> dict[str, tuple[int, float]]:
-    """compound -> (knot, slope) of each hinge the fit identifies: source "fitted", slope > 0,
-    a finite sd and slope >= min_z * sd."""
-    rep = (getattr(model, "fit_report", None) or {}).get("hinge") or {}
+def world_cliffs(laps, practice, race, wc, steps=None) -> dict[str, Cliff]:
+    """The scorer's cliffs (module docstring, world) for `race` (RaceParams), by
+    WearCliff.world_edge. Every compound gets its edge, a fitted hinge or not; Cliff.source says
+    where it came from (the judge's whole-race input, for the fidelity ledger). `steps` is the
+    proxy's step table, None when the compound proxy is off."""
+    raced = oldest_ages(laps)
+    if wc.world_edge == "race":
+        from . import proxy
+        ages, sources = raced, {}
+        if steps is not None:
+            ages, sources = proxy.unraced_limits(ages, practice, steps)
+        return {c: Cliff(a, wc.kappa, wc.cap_s_per_lap, sources.get(c, "race")) for c, a in sorted(ages.items())}
     out = {}
-    for c, h in rep.items():
-        v, sd = float(h.get("value", 0.0)), float(h.get("sd", float("nan")))
-        if h.get("source") == "fitted" and v > 0 and math.isfinite(sd) and v >= min_z * sd:
-            out[c] = (int(h["knot"]), v)
+    prior = history_prior(race.race_id, race.total_laps, wc, role="world")
+    if wc.world_edge == "history_only":
+        raced = {c: a for c, a in raced.items() if c not in prior}   # only where there is no prior
+    for c in sorted(set(prior) | set(raced)):
+        p = prior.get(c)
+        seen = raced.get(c)
+        if p is None:   # no prior (a wet compound): the race's own support
+            out[c] = Cliff(seen, wc.kappa, wc.cap_s_per_lap, "race (no history prior)")
+        elif seen is not None and seen > p[0]:
+            out[c] = Cliff(seen, wc.kappa, wc.cap_s_per_lap,
+                           f"history:{p[2]} extended by race data to age {seen:g}")
+        else:
+            out[c] = Cliff(p[0], wc.kappa, wc.cap_s_per_lap, f"history:{p[2]}")
     return out
 
 
-def world_cliffs(laps, practice, model, wc, steps=None) -> dict[str, Cliff]:
-    """The scorer's cliffs (module docstring, world). `steps` is the proxy's step table, None
-    when the compound proxy is off (then a compound no car raced gets no cliff)."""
-    from . import proxy
-    ages, sources = oldest_ages(laps), {}
-    if steps is not None:
-        ages, sources = proxy.unraced_limits(ages, practice, steps)
-    hinged = identified_hinges(model, wc.hinge_min_z)
-    return {c: Cliff(a, wc.penalty_s_per_lap2, sources.get(c, "race"))
-            for c, a in sorted(ages.items()) if c not in hinged}
+def world_ledger(cliffs: dict) -> dict[str, dict]:
+    """compound -> {edge, source, whole_race_input}: the judge's edges and whether each used this
+    race's laps (a whole-race input), for the fidelity ledger."""
+    def whole_race(src):
+        return not str(src).startswith("history:") or "extended by race data" in str(src)
+    return {c: {"edge": cl.age, "source": cl.source, "whole_race_input": whole_race(cl.source)}
+            for c, cl in cliffs.items()}
 
 
-def world_report(laps, practice, model, wc, steps=None) -> dict[str, dict]:
-    """compound -> {age, slope, source}: world_cliffs plus each identified hinge (source "hinge",
-    age its knot, slope the hinge), for reports."""
-    out = {c: {"age": cl.age, "slope": cl.slope, "source": cl.source}
-           for c, cl in world_cliffs(laps, practice, model, wc, steps).items()}
-    for c, (knot, v) in identified_hinges(model, wc.hinge_min_z).items():
-        out[c] = {"age": float(knot), "slope": v, "source": "hinge"}
+def history_prior(race_id, total_laps, wc, role="belief") -> dict[str, tuple[float, float, str]]:
+    """compound -> (edge laps, sd laps, tier): the historical tyre-life prior both simulators
+    share (`role` is "world" or "belief"; the prior is the same for both). WearCliff.prior_source
+    picks it: "stub" (the default) is this module's as-of life_prior; "tyre_history" is the
+    standalone module (src/sim/tyre_history.py, tyre_life_prior(race_id, compound, total_laps) ->
+    TyreLifePrior with edge_laps, sd_laps and tier), switched over once it is on main (it then
+    joins calibration.PHYSICS_MODULES). Both are strictly as-of by date and never read a held-out
+    race."""
+    if wc.prior_source == "stub":
+        return life_prior(race_id, total_laps, wc)
+    from .tyre_history import tyre_life_prior
+    out = {}
+    for c in SOFTNESS:
+        p = tyre_life_prior(race_id, c, total_laps=total_laps)
+        out[c] = (float(p.edge_laps), float(p.sd_laps), str(p.tier))
     return out
 
 
@@ -274,15 +311,16 @@ def as_of_cliffs(laps, practice, race, horizon: int, wc) -> dict[str, Cliff]:
         offer(c, a, "race_so_far")
     for c, a in oldest_ages(practice).items():
         offer(c, a, "practice")
-    prior = life_prior(race.race_id, race.total_laps, wc)
+    prior = history_prior(race.race_id, race.total_laps, wc, role="belief")
     out = {}
     for c in sorted(set(seen) | set(prior)):
         lower, lsrc = seen.get(c, (0.0, None))
         p, psd, psrc = prior.get(c, (None, 0.0, None))
         if p is None or lower >= p:
-            out[c] = Cliff(lower, wc.penalty_s_per_lap2, lsrc, lower=lower)
+            out[c] = Cliff(lower, wc.kappa, wc.cap_s_per_lap, lsrc, lower=lower)
         else:
-            out[c] = Cliff(p, wc.penalty_s_per_lap2, psrc, lower=lower, prior=p, prior_sd=psd, seen_source=lsrc)
+            out[c] = Cliff(p, wc.kappa, wc.cap_s_per_lap, psrc, lower=lower, prior=p, prior_sd=psd,
+                           seen_source=lsrc)
     return out
 
 

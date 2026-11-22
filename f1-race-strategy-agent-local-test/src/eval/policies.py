@@ -6,10 +6,11 @@
 known at the snapshot. Policies plan on it; the world simulator that scores them and plans
 the reference is not passed in. The four baselines are Quan's reference policies
 (src/baselines) run through the optimizer bridge on the belief's fit, src/baselines unchanged.
-Under the retired R8 stint limit (legacy setting only, docs/rules.md R8) this wrapper makes
-fixed_one_stop and greedy_crossover limit-aware (_bridged); by default no tyre-life limit
-exists, so every baseline plans on the published rules alone and its plan is invalid only for
-a published-regulation violation. `belief_optimizer` and the rule baselines `run_to_flag` and
+The wrapper makes fixed_one_stop and greedy_crossover tyre-life-aware (_bridged): by default
+with the belief's as-of tyre-life estimate at the snapshot (the support edge of its wear cliff,
+sim/cliff.py, the information every policy has), under the retired R8 setting with R8's limit.
+A baseline plan is still invalid only for a published-regulation violation: the world prices
+tyre life, it never rejects a plan for it. `belief_optimizer` and the rule baselines `run_to_flag` and
 `one_stop_total` are named policies outside the baselines group. `recorded_policy`
 replays plans saved from earlier agent runs, and `agent_policy` (an AgentPolicy) asks the
 live agent loop (src/agent.py) through whatever LLM_BACKEND is configured, at any lap of any
@@ -71,12 +72,24 @@ def submitted_in_grace(rec, trajectory) -> bool:
 PAST_LIMIT_S = 1e6   # the lap time greedy_crossover sees on a set past its R8 limit
 
 
-def _stint_limit(belief):
-    """(limits, margin) of R8 when the belief applies it, else None (docs/rules.md R8)."""
+def _stint_limit(belief, snapshot=None):
+    """(limits, margin) a rule baseline plans its tyre life with, else None: R8's (limits, margin)
+    under the legacy setting (docs/rules.md R8); otherwise, with the wear cliff on, the belief's
+    as-of support edge per compound at the snapshot (Simulator.cliffs_for: the point estimate,
+    max(ages seen so far, the pre-race prior), nothing after the snapshot), margin 0."""
     margin, limits = belief.config.stint_limit_margin_laps, getattr(belief, "stint_limits", None)
-    if margin is None or not limits or "stint_limit" not in belief.config.rules:
+    if margin is not None and limits and "stint_limit" in belief.config.rules:
+        return limits, margin
+    if snapshot is None or not belief.config.wear_cliff.enabled:
         return None
-    return limits, margin
+    edges = {c: float(cl.age) for c, cl in belief.cliffs_for(snapshot).items()}
+    return (edges, 0) if edges else None
+
+
+def _legal(belief, snapshot, contract, limit) -> bool:
+    """Every rule passes on the belief, and the plan keeps inside `limit` when there is one."""
+    return not belief.validate(snapshot, contract) and (
+        limit is None or not stint_limit_violations(snapshot, contract, *limit))
 
 
 def _bridged(choose, within_limit=None):
@@ -99,7 +112,7 @@ def _bridged(choose, within_limit=None):
                                     "(docs/rules.md R1).")
         sources = belief.config.inventory_sources
         contract = to_contract(plan, snap, sources=sources)
-        limit = _stint_limit(belief)
+        limit = _stint_limit(belief, snap)
         if limit is None or not stint_limit_violations(snap, contract, *limit):
             return Decision(contract)
         adjusted = None
@@ -121,7 +134,7 @@ def _one_stop_within_limit(scenario, state, belief, max_stops, plan, limit):
     (first, second), remaining = plan.stints, state.remaining_laps
     for laps in range(first.laps - 1, 0, -1):
         moved = domain.Plan((domain.Stint(first.compound, laps), domain.Stint(second.compound, remaining - laps)))
-        if not belief.validate(snap, to_contract(moved, snap, sources=sources)):
+        if _legal(belief, snap, to_contract(moved, snap, sources=sources), limit):
             return moved
     return None
 
@@ -182,17 +195,18 @@ def run_to_flag(scenario, belief, max_stops):
     """No further stop when the rules allow it; otherwise the fewest stops (at most
     `max_stops`) that make the plan legal, each as late as the rules allow, the new stints on
     the softest compound that keeps it legal (docs/eval.md "Rule baselines"). Legal means
-    every rule passes on the belief (belief.validate, R1-R4, known compounds; R8 only under the
-    legacy setting). With no
+    every rule passes on the belief (belief.validate, R1-R4, known compounds) and no stint passes
+    the belief's as-of tyre-life estimate (_stint_limit; R8's limit under the legacy setting). With no
     legal plan the current set runs to the flag and the world rejects it (an invalid row).
     Reads the snapshot, the belief's modelled compounds and the rules, no pace. Not in
     "baselines"; select it by name."""
     snap = scenario.snapshot
     sources = belief.config.inventory_sources
     state = from_contract(snap, belief)
+    limit = _stint_limit(belief, snap)
     flag = to_contract(domain.Plan((domain.Stint(state.current_compound, state.remaining_laps),)), snap,
                        sources=sources)
-    if not belief.validate(snap, flag):
+    if _legal(belief, snap, flag, limit):
         return Decision(flag, meta={"forced_stops": 0})
     compounds = _preferred(state.available_compounds)
     for stops in range(1, max_stops + 1):
@@ -201,7 +215,7 @@ def run_to_flag(scenario, belief, max_stops):
                 plan = domain.Plan(tuple(domain.Stint(c, n) for c, n in
                                          zip((state.current_compound, *later), lengths)))
                 contract = to_contract(plan, snap, sources=sources)
-                if not belief.validate(snap, contract):
+                if _legal(belief, snap, contract, limit):
                     return Decision(contract, meta={"forced_stops": stops})
     return Decision(flag, meta={"forced_stops": None})
 
