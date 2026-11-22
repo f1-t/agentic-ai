@@ -46,6 +46,10 @@ from .data import visible_rows
 from .race_ids import as_of, canonical_race_id, parse_race_id
 
 PRIOR_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "sim", "pit_loss_prior.json")
+# the run-time pool's entries (race_entry) of the cached races outside PRIOR_FILE, precomputed so a
+# process prices a prior without loading those races (build-entries); outside SimConfig, so it
+# changes no config_hash, and it never holds a held-out race
+ENTRIES_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "sim", "pit_loss_entries.json")
 GREEN_STATUS = ("1", "12", "21")   # calibration._by_lap_type's green in/out laps
 MIN_PRIOR_RACES = 2
 KINDS = ("sc", "vsc")
@@ -163,13 +167,33 @@ def stop_losses(stops: pd.DataFrame, model, medians: dict) -> pd.Series:
 #                         at least min_cross_sd_s: wider than tier 1)
 #   3 constant            default_s with default_sd_s (the widest), when nothing earlier exists
 # The pool is the committed table (configs/sim/pit_loss_prior.json, precomputed) plus, under
-# cache_lookup, every race in the FastF1 cache at run time (real_run.cached_races), its entry
-# built on first use from its whole race (race_entry) and kept per process: more cached seasons
-# widen the pool with no code change. A held-out race (the registered split's file) enters the
+# cache_lookup, every race in the FastF1 cache at run time (real_run.cached_races). A cached
+# race's entry is read from ENTRIES_FILE (race_entry, precomputed by build-entries), else built on
+# first use from its whole race (race_entry) and kept per process: more cached seasons widen the
+# pool with no code change, and the committed entries keep a process from loading them. A held-out race (the registered split's file) enters the
 # pool only when the race being priced is itself held out (the held-out run), so a development
 # run never loads one; it is still used only when earlier in time.
 _ENTRIES: dict = {}     # (race id, the loader) -> run-time entry (race_entry), per process
 _CACHED: dict = {}      # cache dir -> cached race ids
+_COMMITTED: dict = {}   # (ENTRIES_FILE, mtime, size) -> its races
+
+
+def committed_entries(path=ENTRIES_FILE) -> dict:
+    """ENTRIES_FILE's races ({race id: entry, or {"left_out": reason} for a race the run-time
+    build leaves out}), read once per process; {} without the file."""
+    if not os.path.isfile(path):
+        return {}
+    st = os.stat(path)
+    key = (os.path.abspath(path), st.st_mtime_ns, st.st_size)
+    if key not in _COMMITTED:
+        with open(path) as f:
+            _COMMITTED[key] = json.load(f).get("races", {})
+    return _COMMITTED[key]
+
+
+def _real_loader(fn) -> bool:
+    """jobs.load_race itself, not a test's replacement: only then do committed entries stand in for it."""
+    return getattr(fn, "__module__", None) == "src.sim.jobs" and getattr(fn, "__qualname__", None) == "load_race"
 
 
 def _cached_ids() -> list[str]:
@@ -210,6 +234,14 @@ def _entry(race_id: str, cfg) -> dict | None:
         return table[race_id]
     from . import jobs
     key = (race_id, jobs.load_race)   # a replaced loader (a test's) never shares entries with the real one
+    committed = committed_entries() if _real_loader(jobs.load_race) else {}
+    if key not in _ENTRIES and race_id in committed:
+        got = committed[race_id]
+        if "left_out" in got:
+            import warnings
+            warnings.warn(f"pit-loss prior: {race_id} left out ({got['left_out']})")
+            got = None
+        _ENTRIES[key] = got
     if key not in _ENTRIES:
         try:
             from .config import SimConfig
@@ -402,6 +434,34 @@ def build_prior(race_ids, path=PRIOR_FILE) -> dict:
     return table
 
 
+def build_entries(path=ENTRIES_FILE, cached=None, held=None) -> dict:
+    """ENTRIES_FILE: race_entry of every cached race (real_run.cached_races) outside PRIOR_FILE and
+    the held-out split, built as _entry builds it at run time (a race that fails to build is
+    recorded with the reason, as _entry leaves it out). Held-out races are never loaded."""
+    from .config import SimConfig
+    from .engine import Simulator
+    table = load_prior()
+    held = _held_out() if held is None else set(held)
+    ids = sorted(set(_cached_ids() if cached is None else cached) - set(table.get("races", {})) - held)
+    races = {}
+    for rid in ids:
+        try:
+            data = _load(rid)
+            full = Simulator(data.frame, SimConfig(), data.practice, qualifying=data.qualifying)
+            races[rid] = race_entry(data, full.degradation)
+        except Exception as exc:   # noqa: BLE001  as _entry: left out, with the reason
+            races[rid] = {"left_out": str(exc)}
+    doc = {"note": ("race_entry of each cached race outside pit_loss_prior.json and the held-out split, as "
+                    "pit_loss._entry would build it from the cache at run time. Built by `python -m "
+                    "src.sim.pit_loss build-entries`; rebuild it when the cache, race_entry or the default "
+                    "SimConfig's fit changes. Never holds a held-out race."),
+           "races": races}
+    with open(path, "w") as f:
+        json.dump(doc, f, indent=1, sort_keys=True)
+        f.write("\n")
+    return doc
+
+
 def asof_error(race_ids, laps_every=5, belief_config=None) -> pd.DataFrame:
     """Per race and lap L (every laps_every, through total_laps - 5): the as-of estimate for
     the driver at the median position after lap L against the whole-race value."""
@@ -442,6 +502,8 @@ def main(argv=None):
     b = sub.add_parser("build-prior")
     b.add_argument("--races", nargs="+", required=True)
     b.add_argument("--out", default=PRIOR_FILE)
+    e = sub.add_parser("build-entries")
+    e.add_argument("--out", default=ENTRIES_FILE)
     r = sub.add_parser("report")
     r.add_argument("--races", nargs="+", required=True)
     r.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "..", "reports", "calibration",
@@ -451,6 +513,10 @@ def main(argv=None):
         t = build_prior(args.races, args.out)
         print(json.dumps({k: {"pit_loss_s": v["pit_loss_s"], "sc": len(v["sc"]["factors"]),
                               "vsc": len(v["vsc"]["factors"])} for k, v in t["races"].items()}, indent=1))
+        return 0
+    if args.cmd == "build-entries":
+        t = build_entries(args.out)
+        print(json.dumps({k: v.get("pit_loss_s", v.get("left_out")) for k, v in t["races"].items()}, indent=1))
         return 0
     df = asof_error(args.races)
     os.makedirs(args.out, exist_ok=True)

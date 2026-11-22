@@ -19,11 +19,12 @@ DEFAULT_MAX_TOOL_CALLS = 24
 DEFAULT_SUBMIT_GRACE_STEPS = 2
 DEFAULT_REPEAT_MODE = "run"
 REPEAT_MODES = ("run", "cache")
-# A turn whose calls are exactly the previous turn's (AGENT_TURN_REPEAT): "end" (default) runs
-# nothing, recaps what those calls returned, and on the third identical turn in a row ends the
-# evidence phase early (the grace turns follow); "remind" does the same without the early end;
-# "run" runs the turn again as any other (the behaviour before the switch).
-DEFAULT_TURN_REPEAT = "end"
+# A turn whose calls are exactly the previous turn's (AGENT_TURN_REPEAT): "run" (default) runs the
+# turn again as any other; "end" runs nothing, recaps what those calls returned, and on the third
+# identical turn in a row ends the evidence phase early (the grace turns follow); "remind" does the
+# same without the early end. "run" is the default since 2026-11-22: on 48 development scenarios
+# per mode it wasted the fewest calls and tokens with the most voluntary submissions (docs/eval.md).
+DEFAULT_TURN_REPEAT = "run"
 TURN_REPEAT_MODES = ("end", "remind", "run")
 TURN_REPEAT_LIMIT = 3   # repeats in a row (after the turn that ran) that end the evidence phase ("end")
 RECAP_CHARS = 400       # a recap line's result, at most this long (a rule reply fits whole)
@@ -231,11 +232,11 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     added, also once the budget is spent, and uses no budget: the tools are deterministic for
     a snapshot. Either way the trajectory event carries ``repeat_of``. An evidence turn whose
     calls (no submission among them) are exactly the previous turn's, as a set, is a turn
-    repeat; ``turn_repeat`` (AGENT_TURN_REPEAT) says what it gets: "end" (default) runs none of
-    them, uses no budget, and answers once with what they returned (_turn_repeat_message), in
-    other words the second time, and the third repeat in a row (TURN_REPEAT_LIMIT) ends
-    the evidence phase: the grace turns follow it at once; "remind" the same without the early
-    end; "run" runs the turn like any other (repeat_mode then applies to each call). A call of
+    repeat; ``turn_repeat`` (AGENT_TURN_REPEAT) says what it gets: "run" (default) runs the turn
+    like any other (repeat_mode then applies to each call); "end" runs none of them, uses no
+    budget, and answers once with what they returned (_turn_repeat_message), in other words the
+    second time, and the third repeat in a row (TURN_REPEAT_LIMIT) ends the evidence phase: the
+    grace turns follow it at once; "remind" the same without the early end. A call of
     a turn repeat is a trajectory event with ``repeat_of`` (its call in the turn that ran) and
     ``turn_repeat`` (the count) and counts in ``repeat_calls``. When ``stats`` is a
     dict it receives ``steps`` (grace turns included), ``evidence_calls`` (the evidence calls

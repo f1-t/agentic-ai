@@ -13,6 +13,7 @@ from . import calibrators as _cal
 from . import cliff as _cliff
 from . import model_report as _report
 from . import proxy as _proxy
+from . import sc_queue as _queue
 from .config import SimConfig, class_names, compound_class
 from .data import as_of_columns, visible_rows
 from .degradation import DEGRADATION
@@ -197,6 +198,17 @@ def batch_normals(seed: int, stream: int, n: int, width: int, sd: float = 1.0) -
     so row k depends on (seed, k, width) only, never on n: sample k is the same in a batch of
     10 or 200 (R6)."""
     return np.random.default_rng([seed, STREAM_KEY, stream]).normal(0.0, sd, (n, width))
+
+
+def _race_key(snapshot: Snapshot) -> tuple:
+    """The race constants a cached fit or wear-cliff edge reads from snapshot.race: the race, its
+    length (the tyre-life prior and the fuel prior scale with total_laps) and its compounds. Every
+    per-instance cache built from a snapshot keys on it, so what a scenario is scored with never
+    depends on which scenario built the cache first (a snapshot_at set varies total_laps by
+    driver; an as-of set's compounds grow after a wet start). pit_loss_s is left out: no default
+    fit reads it (the learned calibrator's feature row does, and policy_scenario sets it per
+    snapshot, so keying on it would refit the belief for every scenario)."""
+    return snapshot.race.race_id, int(snapshot.race.total_laps), tuple(sorted(snapshot.race.compounds))
 
 
 class Simulator:
@@ -402,14 +414,18 @@ class Simulator:
         t = self.cut_time(snapshot.driver, k0 or 0)
         if t is not None:   # cut by session time: one fit per cut, the time the driver completed k0
             key = (*key, t)
-        if key not in self._fits:
+        # the cache also keys on the race constants the fit reads (_fit_window keeps snapshot.race:
+        # the fuel prior and the calibrator scale with total_laps), so no fit built for one race
+        # length serves another; the fit's `window` stays the window alone
+        cache_key = (*key, _race_key(snapshot))
+        if cache_key not in self._fits:
             if len(self._fits) >= FIT_CACHE_SIZE:
                 del self._fits[next(iter(self._fits))]
             fit = copy.copy(self)
             fit.window, fit._fits, fit._cliffs = key, {}, {}
             fit._fit_window(snapshot, k0 or 0)
-            self._fits[key] = fit
-        return self._fits[key]
+            self._fits[cache_key] = fit
+        return self._fits[cache_key]
 
     def point_estimate(self) -> "Simulator":
         """A shallow copy that simulates the point estimate: no posterior parameter draw and no
@@ -483,16 +499,17 @@ class Simulator:
         """The calibrator's output at k0, cached per (calibrator, k0, exclusion, cut time)."""
         cfg, every = self.config, self.config.calibration_every
         t = self.cut_time(snapshot.driver, k0)
-        key = (self.calibrator.name, k0, drop, t)
+        rk = _race_key(snapshot)   # the calibrator reads snapshot.race (total_laps): never shared across lengths
+        key = (self.calibrator.name, k0, drop, t, rk)
         if key in self._outputs:
             return self._outputs[key]
         pre = self._calibrate(snapshot, 0, drop) if k0 > 0 else None
         # an earlier point that saw no more than this one (by time when the window is cut by time)
-        earlier = [(k, s) for (n, k, d, s) in self._outputs
-                   if n == key[0] and d == drop and k < k0 and (t is None or s is None or s <= t)]
+        earlier = [(k, s) for (n, k, d, s, r) in self._outputs
+                   if n == key[0] and d == drop and r == rk and k < k0 and (t is None or s is None or s <= t)]
         if earlier:
             k_prev, t_prev = max(earlier, key=lambda e: (e[0], -1.0 if e[1] is None else e[1]))
-            previous = self._outputs[(key[0], k_prev, drop, t_prev)]
+            previous = self._outputs[(key[0], k_prev, drop, t_prev, rk)]
         else:
             previous = pre
         race = self.window_rows(snapshot, k0, drop)
@@ -562,8 +579,13 @@ class Simulator:
         if fit is not self:
             return fit.cliffs_for(snapshot)
         if self.config.fit_window == "full":
-            key = ("world",)
+            # keyed by the race constants world_cliffs reads (the prior scales with total_laps,
+            # which a set built by snapshot_at varies per driver): a cache keyed without them kept
+            # the first snapshot's edges, so a plan's score depended on the scenarios scored before
+            key = ("world", *_race_key(snapshot))
             if key not in self._cliffs:
+                if len(self._cliffs) >= FIT_CACHE_SIZE:
+                    del self._cliffs[next(iter(self._cliffs))]
                 steps = self.config.compound_proxy.steps if self.config.compound_proxy.enabled else None
                 self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, snapshot.race, wc, steps)
                 rep = getattr(self.degradation, "fit_report", None)
@@ -671,6 +693,7 @@ class Simulator:
                 out.support_warnings[i] = out.support_warnings[i] + tw
         offset = self._pace_offset(snapshot.driver)
         team_pit = self.team_pit_delta(snapshot)   # 0.0 unless config.pit_stops.team
+        fq = self.field_queue(snapshot)   # None unless config.sc_queue is on in mode "single"
 
         # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
         # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
@@ -829,6 +852,11 @@ class Simulator:
                 lap_s[rows, np.minimum(lap[rows] + 1, n_laps - 1)] += hx.dnf_penalty_s
                 out.dnf[idx, k], out.big_loss[idx, k] = dnf, big
                 out.dnf_lap[idx, k] = np.where(dnf, laps[lap], np.nan)
+            if fq is not None and sc.any():   # the safety-car queue (sim/sc_queue.py), mode "single"
+                pit_q = v["pit_loss_s"] * stops * scale
+                for S, E in _queue.runs(laps[sc]):
+                    lap_s[:, E - int(laps[0])] += fq.shift(S, E, lap_s, pit_q, int(laps[0]), snapshot.elapsed_s or 0.0,
+                                                           v["pit_loss_s"], v["sc_pit_loss_factor"])
             if tstate is not None:
                 # the full pit loss is booked at the end of the in-lap, so the out-lap starts
                 # from the rejoin position; it stays out of lap_s, as below
@@ -896,6 +924,36 @@ class Simulator:
                 del self._pit_loss_cache[next(iter(self._pit_loss_cache))]
             self._pit_loss_cache[key] = _pl.team_delta(stops, team.iloc[0] if len(team) else None,
                                                        ps.team_prior_stops)[0]
+        return self._pit_loss_cache[key]
+
+    def field_queue(self, snapshot: Snapshot):
+        """sc_queue.FieldQueue of this snapshot under config.sc_queue (mode "single"), else None.
+        The full window (the judge) reads the whole race and the recorded periods' lengths; a
+        windowed fit only its window's rows (window_rows at its calibration point, the snapshot's
+        own lap k on a pre_race fit reading nothing after lap 0), projected beyond them. Cached."""
+        q = self.config.sc_queue
+        if not q.enabled or q.mode != "single" or self.laps is None or "end_s" not in self.laps:
+            return None
+        key = ("sc_queue", self.window, snapshot.driver, snapshot.laps_completed, self.pace is None)
+        if key not in self._pit_loss_cache:
+            lapped, own_lapped = (), False
+            if self.config.fit_window == "full":
+                rows, horizon, recorded = self.laps, int(self.laps["lap"].max()), True
+                # the recorded classification: cars that finished laps down stayed out of the queue
+                last = rows.groupby("driver")["lap"].max()
+                lapped = set(last.index[last < last.max()])
+                own_lapped = snapshot.race.total_laps < last.max()
+            else:
+                k0 = (self.window[1] or 0) if self.window is not None and self.config.fit_window == "to_snapshot" else 0
+                rows = self.window_rows(snapshot, k0) if k0 > 0 else self.laps.iloc[0:0]
+                horizon, recorded = k0, False
+            if len(self._pit_loss_cache) >= FIT_CACHE_SIZE:
+                del self._pit_loss_cache[next(iter(self._pit_loss_cache))]
+            # the car's own pace places it in the queue when no pace term is in its lap times
+            pace = (_queue.own_pace(self.degradation, rows[rows["driver"] == snapshot.driver])
+                    if self.pace is None and len(rows) else 0.0)
+            self._pit_loss_cache[key] = (_queue.FieldQueue(rows, snapshot.driver, horizon, q.spacing_s, self.ref_lap_s,
+                                                           recorded, pace, lapped, own_lapped) if len(rows) else None)
         return self._pit_loss_cache[key]
 
     def pit_loss_inputs(self, snapshot: Snapshot) -> dict:

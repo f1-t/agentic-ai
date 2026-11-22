@@ -308,6 +308,19 @@ class PitStops(_Cfg):
     replay: Literal["charged", "actual"] = "charged"
     team: bool = False
     team_prior_stops: float = Field(default=3.0, ge=0)
+class ScQueue(_Cfg):
+    """The safety-car queue (sim/sc_queue.py, docs/eval.md "The safety-car queue"): at the end of
+    each SC period the field's gaps close to `spacing_s` behind the leader in the order of the
+    cars' time when it came out plus their stops under it. Off (the default): as before.
+    spacing_s 0.5: the median real consecutive gap at the end of the calibration races' SC periods."""
+
+    enabled: bool = False
+    # "single": the engine places each simulated car in the queue among the other cars' race (the
+    # judge: their recorded times; a windowed fit: the rows visible at the snapshot, projected
+    # beyond them with gaps held), sc_queue.FieldQueue; "field": the fidelity tool's whole-field
+    # replays queue every replayed car together (sc_queue.apply) and the engine does nothing
+    mode: Literal["single", "field"] = "single"
+    spacing_s: float = Field(default=0.5, ge=0)
 
 
 class WearCliff(_Cfg):
@@ -449,6 +462,8 @@ class SimConfig(_Cfg):
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
     # pit-stop durations (PitStops); left out of config_hash at its default
     pit_stops: PitStops = Field(default_factory=PitStops)
+    # the safety-car queue in whole-field replays (ScQueue); left out of config_hash at its default
+    sc_queue: ScQueue = Field(default_factory=ScQueue)
 
     @classmethod
     def from_file(cls, path):

@@ -345,9 +345,11 @@ a fallback chain, as of R's date and never R itself:
 
 The pool is `configs/sim/pit_loss_prior.json` (the six calibration races, built by `python -m
 src.sim.pit_loss build-prior`) plus every race in the FastF1 cache at run time (`real_run.cached_races`),
-whose entry is built from its whole race on first use and kept per process (a circuit with no history
-loads every earlier cached race once, about a minute): more cached seasons widen the pool with no
-code change. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
+whose entry is read from `configs/sim/pit_loss_entries.json` (the same entries, precomputed for the
+cached races outside the table by `python -m src.sim.pit_loss build-entries`; rebuild it when the
+cache or the default fit changes) or else built from its whole race on first use and kept per
+process: more cached seasons widen the pool with no code change, and a process loads no race to
+price a prior unless the cache holds a race neither file has. A wet race (any INTERMEDIATE or WET lap) is left out of the pool. A held-out race (data/eval_set.json) joins the pool only when the race being priced is
 itself held out, and then only if earlier. A circuit used once (no earlier season cached) gets tier
 2, or 3, and the estimate exists from lap 0 either way: a policy never fails for want of history and
 never falls back to the whole-race value. The SC and VSC factors (the share of a green stop paid
@@ -423,6 +425,18 @@ earlier world `--world-config configs/sim/legacy/world_pre_scorecard.yaml`.
   and `regret_se_s` carries the Monte Carlo error. The full record is not used past the period
   in progress: a reference that waits for a safety car no policy could know about would score
   luck, not strategy. A green snapshot draws exactly as `rate` does.
+
+**No dependence on scoring order.** Every draw is a function of (seed, sample index, stream) only
+(`engine.EVENT_STREAM` and the batch streams), and every per-simulator cache built from a snapshot
+(the world's and the belief's wear-cliff edges, the windowed fits, the calibrator outputs) is keyed
+by the race constants it reads (`engine._race_key`: race, total_laps, compounds). Until the fix
+the world's edges were cached once per race from the first snapshot scored; the legacy builder
+(`snapshot_at`) gives each driver their own total_laps, so on v1, dev6 and pilot sets a plan's
+score depended on the scenarios scored before it (2021 Spain: `fixed_one_stop` up to 1.4 s, the
+reference up to 0.1 s). As-of sets (`snapshot_as_of`, the scheduled distance) were not affected:
+their references are bit-identical before and after, in either order.
+`tests/test_eval_order_independence.py` pins it: alone, after others, reversed, in a second process,
+the references in two orders, and the references and baselines stages under `--jobs` 1 and 3.
 
 Events `recorded` (every recorded SC/VSC lap, for replays) and `rate` stay available.
 `configs/sim/world.yaml` names the same events with ghost traffic.
@@ -1393,20 +1407,28 @@ any scenario of any race (the lap-0 same-race guard is gone):
   argument set as that submission (the key dropped, said in the note).
 - `AGENT_TURN_REPEAT` (also `run_agent(turn_repeat=...)`) says what an evidence turn whose
   calls are exactly the previous turn's (the same set of tool and arguments; a turn with a
-  submission never counts) gets. `end` (the default): none of it runs and no budget is
+  submission never counts) gets. `run` (the default): the turn runs again like any other
+  (`AGENT_REPEAT_MODE` then applies per call). `end`: none of it runs and no budget is
   used; the model is told once that the turn repeats the previous one, with one line per
   call of what it returned (its error whole, so a rule reply's legal alternative; its gap
   reading; or a pointer to the result above) and that a different evidence call or
   `submit_recommendation` moves things forward; a second repeat in a row gets the same in
   other words and the warning that one more ends the evidence phase; the third ends it, and
-  the grace turns follow at once. `remind`: the same messages, never the early end. `run`:
-  the turn runs again like any other (the behaviour before; `AGENT_REPEAT_MODE` then applies
-  per call). The calls of an answered repeat are trajectory events with `repeat_of` and
-  `turn_repeat` (the count in the row) and count in `repeat_calls`; a submission after an
-  early end is `submitted_in_grace`. Rerun provenance records the mode. Why: in the live
-  check of 2026-11-22, two of 18 episodes re-sent their whole turn eight times with the
-  results in front of them; refusing repeated calls (#72) slowed the model and caching
-  them let it loop, since neither told it anything new.
+  the grace turns follow at once. `remind`: the same messages, never the early end. The
+  calls of an answered repeat are trajectory events with `repeat_of` and `turn_repeat` (the
+  count in the row) and count in `repeat_calls`; a submission after an early end is
+  `submitted_in_grace`. Rerun provenance records the mode in effect (the default when the
+  variable is unset). Why the switch exists: in the live check of 2026-11-22, two of 18
+  episodes re-sent their whole turn eight times with the results in front of them;
+  refusing repeated calls (#72) slowed the model and caching them let it loop, since
+  neither told it anything new. Why `run` is the default (2026-11-22, was `end`): a clean
+  three-way test on one commit, 48 development scenarios per mode, chose by a rule stated
+  in advance: fewest wasted calls and tokens without lowering voluntary submissions, regret
+  not consulted. `run`: 43 voluntary and 5 grace submissions, 78.5k input tokens, 273
+  repeated calls re-run. `remind`: 41 and 7, 92.4k, 193 re-run plus 302 not run. `end`: 32
+  and 16, 98.2k, 237 re-run plus 253 not run. Decisions agree on 46 of 48 between every
+  pair of modes. Answering or cutting off a repeated turn does not stop the model
+  repeating; it makes it use more turns and tokens. `end` and `remind` stay as options.
 
 ### Plan gaps and rule replies
 
@@ -2690,6 +2712,89 @@ The noise floor on this main (19 races, 368 close pairs, the adopted judge): jud
 laps 0.614 / 5.2 s; + lap 1 (the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]; pit laps alone
 0.755 / 12.6 s. The judge's order is at the ceiling; the room is in the gaps, almost all of it on
 the neutralised laps.
+
+Two things the floor's levels take as given. Level 4 hands the replay the recorded lap 1, which
+holds every place won or lost at the start: start-lap position changes are outside the model.
+And every level prices each stint from its recorded starting tyre age: replays (`race_stints`,
+the stint's first TyreLife less one) and snapshots (`snapshot_at` / `snapshot_as_of`, the
+current set's TyreLife) already carry used sets (36% of first stints start on a used set, mean
+age 1 lap, qualifying sets about 3), so the starting tyre state needed no change; a
+hypothetical future stint in a plan starts on a new set (start age 0) unless the plan says
+otherwise.
+
+### The safety-car queue
+
+`src/sim/sc_queue.py`, switch `SimConfig.sc_queue` (`enabled`, `mode`, `spacing_s`), off by
+default. Under a safety car the field closes up behind it: whatever the gaps were when it came
+out, at the end of its last lap the cars run nose to tail (on the calibration races the median
+consecutive gap at the line at the end of an SC period is 0.49 s and the whole field is within
+7 s, lapped cars included because they are waved past; under a VSC the gaps are held, 4.8 s
+median before and after). A replay that keeps each car's own time through the period keeps the
+gaps the race erased, which is where most of the judge's relative gap error comes from (the
+noise floor above). What the queue changes is GAPS and ORDER, so it acts on the cars' race times,
+not on any car's lap times. At each SC period S..E (S >= 2; a lap counts when most of the
+field's rows carry status 4):
+
+- order: each car's race time at the end of lap S - 1 plus the pit loss of its stops in S..E (a
+  stop under the safety car costs places in the queue, not open-air seconds);
+- the first car's time at the end of lap E is its order time plus the period's length (the judge:
+  the recorded leader's time over S..E; a drawn period or a windowed fit: the car's own simulated
+  neutralised laps);
+- every other car lands `spacing_s` (0.5 s, the measured median above, set once) behind the car
+  ahead in that order, or closer if it already was; a car that finished laps down (the recorded
+  classification, judge only) stays out of the queue; racing resumes from there.
+
+Two modes. `single` (the engine, what the judge and the belief use when scoring one car's
+plans): `sc_queue.FieldQueue` places the simulated car among the OTHER cars' race. The judge
+reads their recorded times at S - 1 and their stops under the period, the recorded period length,
+and, when the engine carries no pace term (the eval's judge), the car's whole-race pace for its
+key, since queue order is a fact about the car's real speed. The belief reads only the rows
+visible at the snapshot (`Simulator.window_rows`): for a period in progress the others' times
+at S - 1, and for a later one the field at the snapshot projected with its gaps to the car held,
+plus the car's as-of pace. A plan that pits under a recorded or drawn safety car is then charged
+the places it drops in the compressed field (spacing_s each), not the reduced open-air pit loss
+alone; a plan that pitted just before one gets its lost time back up to the queue. `field` (the
+fidelity tool's whole-race replays only): every replayed car is queued together (`sc_queue.apply`),
+the version the whole-field replay (`src/sim/field_replay.py`) would use. In the fidelity tool a
+single-mode replay runs with the car's pace in the engine (`with_pace`, a first pass's offset),
+because the queue erases the pace gaps built up before each safety car and the pace term can no
+longer be added over every lap afterwards. Ledger: `sc_queue` (judge: this race, whole; belief:
+this race, to snapshot) and `sc_queue_spacing` (history). Future blindness:
+`tests/test_sc_queue_future_blindness.py` alters every other car's rows after the cut and the
+belief's times under an SC in progress and a later one stay identical (the judge's change: the
+canary).
+
+Measured (18 calibration races, main 606b6ab with the queue branch, A/B sections without the
+hindsight variants, leave-one-stint-out or components; change against the judge with hybrid
+SC/VSC, which the default adopted after this run; race-cluster 95% intervals):
+
+| arm | close-pair order | Spearman | rel gap MAE s | abs MAE s | B2 rho | B2 regret s | pit-now agree |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| hybrid judge (reference) | 0.729 | 0.960 | 13.2 | 19.6 | 0.835 | 4.60 | 0.778 |
+| + queue (single) | 0.655 (-0.074) | 0.880 | 9.1 (-4.0) | 14.4 | 0.823 | 3.84 | 0.796 |
+| + queue in the belief too | 0.655 | 0.880 | 9.1 | 14.4 | 0.845 | 4.79 | 0.702 |
+| + traffic (earned passes), no queue | 0.699 | 0.955 | 13.1 | 19.5 | 0.827 | 4.89 | 0.774 |
+| + queue + traffic | 0.619 | 0.856 | 9.6 | 14.2 | 0.821 | 4.14 | 0.777 |
+| + queue + traffic, belief too | 0.619 | 0.856 | 9.6 | 14.2 | 0.835 | 5.40 | 0.682 |
+
+Against the judge without SC/VSC (the base then): queue (single) order -0.060 [-0.104, -0.010],
+gaps -5.3 s [-11.1, -0.6]; queue (field) order -0.027 [-0.061, 0.000], gaps -6.6 s [-12.6, -1.4].
+
+Decision: NOT adopted (off by default). The queue improves relative gaps by about 4 to 6 s but
+worsens close-pair order, and the earned-pass traffic does not recover it. Per race the order
+loss sits in two races, 2022 Bahrain (Spearman 0.75 to -0.05) and 2022 Brazil (0.97 to 0.36):
+cars close to a lap down when the safety car came out (90 s behind a 97 s lap) did not close up
+to the queue in the race (the real field at the end of the Bahrain SC spans 38 s), while the
+rule moves every car that finished on the lead lap into the train. Everywhere else gaps fall
+(2022 Canada 31.7 to 4.5 s, 2019 Britain 13.4 to 4.1 s) with order level. The pit-now loss
+when the belief runs the queue too is the two simulators' safety-car expectations, not the
+queue: the belief draws later safety cars at its as-of rates and keeps an SC in progress going
+for drawn laps, so a stop now (refunded by a later queue) or a stop under the SC (cheap in the
+queue) looks better to it than to the judge, whose SC in progress ends when it really did
+(2022 France at laps 20 to 40: the belief's pit-now plans 7 to 25 s ahead of staying, the
+judge's 0.4 to 9 s behind). Before it can be adopted the queue needs the near-lapped cars'
+rule (who joins the train, from the gap at deployment against the SC lap) and the two
+simulators' SC duration and rate models aligned.
 
 ### What the ablation says (f7be251, selection rule applied)
 
