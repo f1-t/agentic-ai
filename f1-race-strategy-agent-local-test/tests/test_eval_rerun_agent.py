@@ -17,10 +17,10 @@ from src.eval.scenarios import ScenarioSet
 ROOT = Path(__file__).resolve().parents[1]
 V1 = ROOT / "data" / "scenarios" / "v1.json"
 TIMING = ["latency_s"]
-# the world here is the pre-scorecard one: the adopted default world's results depend on the order the
-# scenarios are scored in within one process (found by this test, a simulator matter), which would
-# make the N=1 / N=3 comparison test the simulator rather than the pass
-WORLD = str(ROOT / "configs" / "sim" / "legacy" / "world_pre_scorecard.yaml")
+# the default world (hybrid SC/VSC, history-only tyre-life edge): its scores no longer depend on the
+# order scenarios are scored in within one process (engine._race_key; tests/test_eval_order_independence.py),
+# so N=1 and N=3 must agree on it
+WORLD = "default"
 pytestmark = pytest.mark.skipif(not V1.exists(), reason="committed scenario set not present")
 
 
@@ -107,7 +107,7 @@ def test_jobs_1_and_3_give_the_same_rows_in_the_set_order_and_match_the_sequenti
     import agent_pass_scripted
     prof = load_profile("local")
     old = score_set(ScenarioSet.load(one / "scenarios.json"),
-                    race_simulators(prof, SimConfig.from_file(rerun.belief_path("default")), SimConfig.from_file(WORLD)),
+                    race_simulators(prof, SimConfig.from_file(rerun.belief_path("default")), None),
                     {"agent": _per_scenario_policy(tmp_path / "old", prof, agent_pass_scripted)},
                     n_samples=prof.sim.n_samples, max_stops=prof.sim.max_stops,
                     references=ReferenceStore(one / "references", require=True))

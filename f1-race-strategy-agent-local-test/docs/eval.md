@@ -424,6 +424,18 @@ earlier world `--world-config configs/sim/legacy/world_pre_scorecard.yaml`.
   in progress: a reference that waits for a safety car no policy could know about would score
   luck, not strategy. A green snapshot draws exactly as `rate` does.
 
+**No dependence on scoring order.** Every draw is a function of (seed, sample index, stream) only
+(`engine.EVENT_STREAM` and the batch streams), and every per-simulator cache built from a snapshot
+(the world's and the belief's wear-cliff edges, the windowed fits, the calibrator outputs) is keyed
+by the race constants it reads (`engine._race_key`: race, total_laps, compounds). Until the fix
+the world's edges were cached once per race from the first snapshot scored; the legacy builder
+(`snapshot_at`) gives each driver their own total_laps, so on v1, dev6 and pilot sets a plan's
+score depended on the scenarios scored before it (2021 Spain: `fixed_one_stop` up to 1.4 s, the
+reference up to 0.1 s). As-of sets (`snapshot_as_of`, the scheduled distance) were not affected:
+their references are bit-identical before and after, in either order.
+`tests/test_eval_order_independence.py` pins it: alone, after others, reversed, in a second process,
+the references in two orders, and the references and baselines stages under `--jobs` 1 and 3.
+
 Events `recorded` (every recorded SC/VSC lap, for replays) and `rate` stay available.
 `configs/sim/world.yaml` names the same events with ghost traffic.
 
