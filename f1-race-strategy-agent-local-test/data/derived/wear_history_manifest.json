@@ -1,0 +1,43 @@
+{
+ "command": "python -m src.sim.wear_guard build",
+ "description": "The judge's own whole-race wear fit (default world, guard off) per race and dry compound; read as of the race by wear_guard.wear_prior.",
+ "races": [
+  "2019_10_united_kingdom",
+  "2021_01_bahrain",
+  "2021_04_spain",
+  "2021_09_austrian",
+  "2021_20_qatar",
+  "2021_21_saudi_arabia",
+  "2021_22_united_arab_emirates",
+  "2022_01_bahrain",
+  "2022_02_saudi_arabia",
+  "2022_04_emilia_romagna",
+  "2022_06_spain",
+  "2022_07_monaco",
+  "2022_08_azerbaijan",
+  "2022_09_canada",
+  "2022_11_austria",
+  "2022_12_france",
+  "2022_17_singapore",
+  "2022_20_mexico",
+  "2022_21_brazil",
+  "2022_22_united_arab_emirates",
+  "2023_01_bahrain",
+  "2023_07_spain",
+  "2024_07_emilia_romagna",
+  "2024_08_monaco",
+  "2024_12_united_kingdom",
+  "2025_23_qatar"
+ ],
+ "held_out_never_loaded": [
+  "2019_06_monaco",
+  "2020_16_sakhir",
+  "2021_07_france",
+  "2021_18_mexico",
+  "2022_03_australia",
+  "2022_05_miami",
+  "2022_14_belgium",
+  "2024_11_austria",
+  "2025_11_austria"
+ ]
+}

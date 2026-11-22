@@ -498,8 +498,14 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
         else:
             add("sc_queue", "safety-car queue: the car placed among the field visible at the snapshot", _K,
                 "the others' times as of the snapshot, projected with gaps held; the car's as-of pace")
+    wg = getattr(cfg, "wear_guard", None)
+    if wg is not None and wg.enabled and cfg.fit_window == "full":
+        add("wear_guard", f"thin-fit wear guard (under {wg.min_drivers} drivers or {wg.min_rows} rows: shrunk "
+                          "toward the historical wear)", _H,
+            "data/derived/wear_history.csv, races strictly before this one; which compounds are thin is read from "
+            "this race's fit rows, as the fit itself is")
     add("min_stint_two_compounds", "R1-R3: minimum stint, two dry compounds", _R)
-    covered = {"fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
+    covered = {"wear_guard","fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
                "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit", "sc_queue",
