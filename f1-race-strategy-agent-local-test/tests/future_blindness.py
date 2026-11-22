@@ -766,6 +766,8 @@ def _tools_surface(snap):
         out[f"evaluate_strategy/stay_out_{n}"] = _shown(tools.evaluate_strategy, {"action": "stay_out", "laps": n})
     # protocol v2 (src/agent.py AGENT_PROTOCOL): the ranked plans and one plan evaluated
     out["rank_plans"] = _shown(tools.rank_plans)
+    out["race_picture"] = _shown(tools.race_picture)   # protocol v2free
+    out["rank_plans/families"] = _shown(tools.rank_plans_families)
     first = snap.laps_completed + 1
     for lap in (first, first + 3):
         out[f"evaluate_plan/stop_{lap - snap.laps_completed}"] = _shown(tools.evaluate_plan, None, lap, None)
@@ -788,6 +790,10 @@ def _decisions_surface(belief, snap):
     subs.update({f"KEEP_{c}_{w}": {"decision": "PIT" if w == 1 else "STAY_OUT", "reassess_after_laps": max(1, w - 1),
                                    "compound": c, "first_stop_lap": snap.laps_completed + w, "confidence": 0.6}
                  for c in DRY for w in (1, 5)})
+    # protocol v2free's named plan (decisions.named_plan): one stop five laps on, the set drawn from the inventory
+    rest = snap.remaining_laps
+    subs.update({f"PLAN_{c}": {"decision": "STAY_OUT", "reassess_after_laps": 4, "compound": c,
+                               "plan": [[snap.compound, 5], [c, rest - 5]], "confidence": 0.6} for c in DRY})
     for k, sub in subs.items():
         out[k] = _call(lambda s=sub: decisions.to_plan(snap, s, belief, MAX_STOPS, seed=0, n_samples=N_SAMPLES).as_pairs())
     return out
