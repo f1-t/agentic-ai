@@ -614,7 +614,8 @@ prints one line naming which kind of set it scored.
 
 The cache holds 2021 Spain plus a 2018-25 sample (dataset 3): the 2023 and 2024 races already
 there and eight drawn with `random.seed(2026)` from the 173 races of 2018-25, 14 race weekends
-in all. Of these, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
+in all. (24 weekends of 2021-22 were added later, 38 in all; see "More cached weekends" below.
+They do not change this split.) Of these, 2024 Monaco (lap-1 red flag), 2024 Britain (wet) and 2024 Sao Paulo (wet and
 red flag) are not eligible.
 
 `data/eval_set.json` holds out four races: **2019 Monaco, 2020 Sakhir, 2025 Austria and 2024
@@ -715,8 +716,9 @@ loading: 2024 Austria is held out, and 2024 Sao Paulo is not eligible.
   practice session, and the Sprint alone would tie a driver's pace to where they ran in the
   train. This choice was fixed before any sprint race was evaluated.
 - 2021-2022 sprint weekends read FP1, FP2 and the Sprint by the same rule. The session
-  selection is unit-tested, but no such weekend is cached, so the loaders have not been run on
-  one.
+  selection is unit-tested. Three 2022 sprint weekends are cached now (2022 Emilia Romagna,
+  Austria and Brazil, "More cached weekends" below), but the practice prior and the pace
+  offsets have not been run on any of them yet.
 
 **2025 Qatar is used for calibration only and is never sampled into an eval set.** The
 weekend had a mandated maximum of 25 laps per tyre set. Race control messages do not state
@@ -727,6 +729,121 @@ again on lap 32, 25 laps later, to finish the 57 laps on a second 25-lap set. Ru
 no rule for a stint cap, so a recommendation scored there could break a rule the race had.
 `build_set` refuses it (`scenarios.CALIBRATION_ONLY`) in every mode, `--development`
 included.
+
+### More cached weekends (2021-22)
+
+24 race weekends of 2021-22 were added to `cache/`. They give the simulator calibration races
+beyond the 7 it had, and more than the 8 that `MIN_HISTORY_RACES` needs. They add earlier
+history at circuits already in use, for as-of tyre-life and pit-loss priors. They also give a
+pool of races that no run has loaded, from which a fresh held-out draw can be made. Each
+weekend was built with `python scripts/build_cache.py --season <y> --gp "<event name>"
+--sessions <sessions> --prune` (Sarah's builder: no telemetry, raw livetiming responses
+pruned from the sqlite, then VACUUM). The sessions are every session in the event schedule:
+FP1, FP2, FP3, Qualifying and Race on a conventional weekend, and FP1, Qualifying, FP2, Sprint
+and Race on a 2022 sprint weekend. Afterwards each weekend was checked offline: the race id
+resolves from the cached schedule (`data.schedule_race_id`), and every session loads under
+`fastf1.Cache.offline_mode(True)` (`data.load_session`). Size: 41.0 MB of session pickles
+(0.6-2.2 MB per weekend), and the sqlite grew from 524 KB to 1.25 MB with the Ergast results
+and the schedules. No file is over 5 MB. No simulator code changed, so `SIM_CODE_VERSION` and
+the references are as they were.
+
+**Which seasons load.** Without an F1TV login, `livetiming.formula1.com` now answers 401 for
+every season. FastF1 3.9 then falls back to its own mirror, `livetiming-mirror.fastf1.dev`,
+which serves 2021 and 2022 but answers 404 for 2018-2020 (checked on 2018 Bahrain, 2019
+Bahrain and Abu Dhabi, and 2020 Spain and Emilia Romagna). 2023 on needs the login. No login
+was used, so only 2021-22 could be added. The 2019 and 2020 races already in the cache were
+fetched before the login requirement.
+
+**Group A: history at circuits already in use.** The list asked for Monaco 2018; Bahrain 2018,
+2019, 2021 and 2022; Austria 2018, 2019, 2021, 2022 and 2023; Barcelona 2018, 2019, 2020 and
+2022; Silverstone 2018 and 2020; Jeddah 2021; Imola 2020, 2021 and 2022; and Lusail 2021 and
+2023. Of these, the nine 2021-22 weekends are cached. The other eleven (2018-2020 and 2023)
+could not be fetched. 2021 Emilia Romagna has no FP1 on the mirror, so FP2, FP3, Qualifying
+and Race are cached.
+
+**Group B: a seeded pool.** The pool is every round of 2021-22 (the seasons that load) that
+was neither cached nor in group A, in season and round order: 33 races. k = 15 fills the
+budget of about 24 new weekends.
+
+```python
+pool = ["2021_03_portugal", "2021_05_monaco", "2021_06_azerbaijan", "2021_07_france", "2021_08_styrian",
+        "2021_10_united_kingdom", "2021_11_hungary", "2021_12_belgium", "2021_13_netherlands", "2021_14_italian",
+        "2021_15_russia", "2021_16_turkey", "2021_17_united_states", "2021_18_mexico", "2021_19_brazil",
+        "2021_22_united_arab_emirates", "2022_03_australia", "2022_05_miami", "2022_07_monaco",
+        "2022_08_azerbaijan", "2022_09_canada", "2022_10_united_kingdom", "2022_12_france", "2022_13_hungary",
+        "2022_14_belgium", "2022_15_netherlands", "2022_16_italian", "2022_17_singapore", "2022_18_japan",
+        "2022_19_united_states", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+random.seed(2026); random.sample(pool, 15)
+# ['2021_12_belgium', '2022_09_canada', '2022_03_australia', '2022_20_mexico', '2022_21_brazil',
+#  '2022_17_singapore', '2021_07_france', '2022_22_united_arab_emirates', '2022_08_azerbaijan',
+#  '2022_14_belgium', '2022_05_miami', '2021_18_mexico', '2022_07_monaco', '2022_12_france',
+#  '2021_22_united_arab_emirates']
+```
+
+**Eligibility facts.** These come from `calibration.eligibility` on each race's lap frame and
+race control messages, with no simulator fit. The total laps are the session's. A "None" or
+"UNKNOWN" compound is a lap with no compound label, which the eligibility rule counts as a
+slick. The new races were not looked at beyond these facts: no fit, calibration, cross-race
+pass, scenario, reference, baseline or agent run.
+
+| race id | group | format | laps | eligible drivers | dry compounds | eligible, or why not | MB |
+|---|---|---|---|---|---|---|---|
+| 2021_01_bahrain | A | conventional | 56 | 16 | H M S | eligible | 1.76 |
+| 2021_02_emilia_romagna | A | conventional, no FP1 | 63 | 17 | M S | no: wet (INTERMEDIATE, WET), red flag | 1.59 |
+| 2021_09_austrian | A | conventional | 71 | 19 | H M S | eligible | 1.92 |
+| 2021_20_qatar | A | conventional | 57 | 18 | H M S | eligible | 1.71 |
+| 2021_21_saudi_arabia | A | conventional | 50 | 15 | H M S | no: red flag | 1.50 |
+| 2022_01_bahrain | A | conventional | 57 | 18 | H M S | eligible | 1.87 |
+| 2022_04_emilia_romagna | A | sprint | 63 | 18 | H M S | no: wet (INTERMEDIATE) | 1.97 |
+| 2022_06_spain | A | conventional | 66 | 18 | H M S | eligible | 1.72 |
+| 2022_11_austria | A | sprint | 71 | 17 | H M (and None) | eligible | 2.13 |
+| 2021_07_france | B | conventional | 53 | 20 | H M S | eligible | 1.74 |
+| 2021_12_belgium | B | conventional | 39 | 0 | UNKNOWN | no: red flag (lap 1), 0 eligible drivers, 1 dry compound | 0.62 |
+| 2021_18_mexico | B | conventional | 71 | 17 | H M S | eligible | 1.78 |
+| 2021_22_united_arab_emirates | B | conventional | 58 | 14 | H M S | eligible | 1.68 |
+| 2022_03_australia | B | conventional | 58 | 17 | H M S | eligible | 1.61 |
+| 2022_05_miami | B | conventional | 57 | 16 | H M S | eligible | 1.74 |
+| 2022_07_monaco | B | conventional | 77 | 0 | H M S (and None) | no: wet (INTERMEDIATE, WET), red flag (lap 1), 0 eligible drivers | 1.88 |
+| 2022_08_azerbaijan | B | conventional | 51 | 15 | H M S | eligible | 1.56 |
+| 2022_09_canada | B | conventional | 70 | 17 | H M | eligible | 1.75 |
+| 2022_12_france | B | conventional | 53 | 15 | H M | eligible | 1.63 |
+| 2022_14_belgium | B | conventional | 44 | 18 | H M S | eligible | 1.42 |
+| 2022_17_singapore | B | conventional | 61 | 12 | M S | no: wet (INTERMEDIATE) | 1.60 |
+| 2022_20_mexico | B | conventional | 71 | 18 | H M S | eligible | 1.88 |
+| 2022_21_brazil | B | sprint | 71 | 17 | H M S | eligible | 2.16 |
+| 2022_22_united_arab_emirates | B | conventional | 58 | 17 | H M S | eligible | 1.76 |
+
+Of the 24 races, 18 are eligible: 6 in group A and 12 in group B. The ineligible ones still
+give practice and partial history.
+
+**Proposed fresh held-out draw (a proposal: `data/eval_set.json` is unchanged).** The final
+test set would combine a fresh sample of these races with the later-season held-out races
+already registered (2024 and 2025 Austria). Results could then be shown across regulation
+eras: 2021 is the previous car generation, 2022 the first ground-effect season, and 2024-25
+later ground-effect seasons. The draw is stratified by season, from the eligible group-B
+races only (group A stays calibration and history), in season and round order within each
+season, with one seed. A season with fewer than 5 eligible group-B races gives 2 instead of
+3. 2021 has 3, so it gives 2:
+
+```python
+pool_2021 = ["2021_07_france", "2021_18_mexico", "2021_22_united_arab_emirates"]
+pool_2022 = ["2022_03_australia", "2022_05_miami", "2022_08_azerbaijan", "2022_09_canada", "2022_12_france",
+             "2022_14_belgium", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+random.seed(2027)
+random.sample(pool_2021, 2)   # ['2021_07_france', '2021_18_mexico']
+random.sample(pool_2022, 3)   # ['2022_05_miami', '2022_03_australia', '2022_14_belgium']
+```
+
+All five drawn races are conventional weekends. The only eligible sprint weekend in the pools
+was 2022 Brazil, and it was not drawn.
+
+The other 13 new eligible races are proposed as additional calibration data. From group A:
+2021_01_bahrain, 2021_09_austrian, 2021_20_qatar, 2022_01_bahrain, 2022_06_spain and
+2022_11_austria. From group B: 2021_22_united_arab_emirates, 2022_08_azerbaijan,
+2022_09_canada, 2022_12_france, 2022_20_mexico, 2022_21_brazil and
+2022_22_united_arab_emirates. Until the owner adopts or rejects the draw, run calibration with
+explicit `--races`. `--races auto` takes every cached race outside `data/eval_set.json`, so
+it would load the five proposed races.
 
 ## Metrics
 
