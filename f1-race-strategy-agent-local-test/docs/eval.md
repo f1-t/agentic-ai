@@ -301,7 +301,7 @@ unlabelled-compound laps load as `UNKNOWN`; the pit-loss prior table holds the n
 | proxy tier 5 (`configs/sim/compound_steps.json`) | `per_race` step rows and the forward-chained `validation_rows` (each race priced with the table of the races before it: `compound_steps validate --as-of`); `proxy.as_of_config` recomputes the steps (median), the blend weights (1 / mse per source, at least 3 rows) and the sd floor (the blend's rmse) | no step, equal weights, `proxy.PRIOR_SD_FLOOR` (pace 1.0 s, wear 0.1 s/lap) | `compound_proxy.as_of: false` |
 | base delta, fuel prior, SC lap factor, lap-1 extra (`configs/sim/race_history.csv`, `python -m src.sim.race_history build`) | the `as_of_history` calibrator (belief.yaml): median of the earlier races, sd their spread floored at `race_history.SD_FLOOR`; the fuel prior is the anchored prior ("Fuel anchoring": the lap-scaled physics slope times the earlier races' target / physics ratio; `fuel_anchor.prior: circuit_history` gives `fuel_prior`'s circuit history, #45); the sds are the base and fuel taus, the event factors are drawn per sample | `race_history.A_PRIORI`: base delta 0.5 ± 1.0 s, SC lap factor 1.4 ± 0.15, lap-1 extra 8 ± 4 s; the fuel prior is the physics prior (`fuel_practice_longrun`, -0.03 s/kg x 110 kg / laps) | `calibrator: shrinkage` (the Spain-derived config values) |
 | SC/VSC rates (`configs/sim/neutralised_history.csv`) | `events.rate` with `as_of: true`: `event_rates`' global posterior on the earlier dry races (#45's forward-chaining fits) | `race_history.EVENT_PRIOR`: p_sc 1/60 per lap, d_sc 3.5 laps; VSC 0.02, 2 laps | `as_of: false` (EventModel's Spain values) |
-| `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the tools fall back to the sampling spread) | `SimConfig.cross_race_as_of: false` |
+| `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the legacy `within_sim_error`, `AGENT_GAP_YARDSTICK=calibration`, falls back to the sampling spread; the default paired gap reading never reads it) | `SimConfig.cross_race_as_of: false` |
 | pit-loss prior, tyre-life history | as-of already (`pit_loss.pit_loss_prior`, `cliff.life_prior` / `tyre_history`) | their constant tiers | their own |
 | shrinkage taus | a priori engineering priors (base 0.5 s, wear 0.03 s/lap, hinge), fitted on no race; under `as_of_history` the base and fuel taus are the as-of sds | | |
 | learned calibrator (`trained`) | not as of the race: fitted on a fixed race set, off by default; refused for a race not after all its training races unless `force_not_as_of` | | |
@@ -923,6 +923,74 @@ noise, so the switch is kept for the rerun to decide.
 
 Per-race fuel and wear before and after are in the PR description.
 
+### Honest uncertainty
+
+The belief's stated intervals were too narrow. Its fitted factors' 90% intervals covered the judge's
+value 55-62% of the time. The residuals it drew as independent lap noise are persistent (lag-1
+autocorrelation 0.78-0.94, driver-stint offsets with sd 0.4-1.0 s/lap). Three switches address it,
+and the plan_on switch reports the alternative to planning on the draws.
+
+| switch | what it does | default |
+|---|---|---|
+| `lap_noise: persistent` | each sample draws one offset per plan stint, held over the stint, with sd the as-of driver-stint residual sd, plus the lap-to-lap part iid. Both sds come from the to_snapshot fit's `residual_components` (`degradation._residual_components`: method of moments on the rows the fit saw, so as of the snapshot). The engine draws from its own stream, `LAP_OFFSET_STREAM`, so the other draws are unchanged. | **on** (belief.yaml); `residual` is the belief before |
+| `degradation.params.sd_scale` | every sd and the posterior covariance of a kind (base, wear, fuel, hinge) times a factor, S cov S, so the correlations (fuel-wear included) are kept. The point estimate is unchanged. | off |
+| `plan_on: point` | `optimize_batch` ranks candidates on the fit's point estimate (`Simulator.point_estimate`: no parameter draw, no lap noise; events and pit-loss draws kept) instead of the mean over draws | off (`draws`) |
+
+The pit-loss sd (as-of `pit_loss`, `PIT_LOSS_STREAM`) and the tyre-life edge's sd (`cliff.sample_ages`,
+`CLIFF_STREAM`) were already drawn per sample, so nothing changed for them.
+
+**The width, chosen by coverage.** The factor is the smallest on a grid (1, 1.25, ..., 6) whose 68%
+and 90% coverage of the judge's value, pooled over the other races, is within 10 points of nominal.
+It is chosen per kind and leave-one-race-out over the 18 calibration races, on the anchored belief.
+
+| kind | before 68 / 90 | LORO factor | held-out 68 / 90 |
+|---|---|---|---|
+| base | 0.40 / 0.62 | 1.75 | 0.64 / 0.82 |
+| fuel | 0.39 / 0.60 | 1.5-1.75 | 0.62 / 0.84 |
+| wear | 0.42 / 0.57 | 1.75-2.0 | 0.62 / 0.82 |
+
+The all-race choice is 1.75 for every kind. The tools carry `interval_meaning`, one phrase for what
+their 90% ranges mean: "widened so about 9 in 10 such ranges held the full-race value on past races"
+when the fit is widened, else "from this race's laps alone; on past races such ranges held the
+full-race value far less often".
+
+**Measured** with the fidelity scorecard on the 18 calibration races, against the default judge. All
+columns are on the fuel-anchored belief. The first block uses 20 draws and 6 drivers. The second
+block uses 60 draws and 1 driver, which reduces the Monte Carlo noise in the replay.
+
+| measure | anchored | + persistent | + sd_scale 1.75 | + both | point estimate |
+|---|---|---|---|---|---|
+| plan ranking, Spearman | 0.849 | 0.839 | 0.849 | 0.840 | 0.830 |
+| judge-regret of the favourite, s | 5.29 | 5.23 | 4.89 | 4.72 | 6.76 |
+| pit-now agreement | 0.762 | 0.789 | 0.741 | 0.775 | 0.753 |
+| replay close-pair order | 0.640 | 0.635 | 0.635 | 0.629 | 0.653 |
+| replay relative gap error, s | 21.72 | 21.66 | 21.91 | 21.90 | 21.93 |
+| remaining time 68 / 90 coverage | 0.49 / 0.64 | 0.56 / 0.75 | 0.49 / 0.69 | 0.55 / 0.77 | 0.52 / 0.62 |
+| plan-vs-plan gap 68 / 90 coverage | 0.51 / 0.69 | 0.78 / 0.90 | 0.57 / 0.75 | 0.80 / 0.92 | 0.34 / 0.53 |
+| replay of real strategies vs reality, 68 / 90 coverage | 0.32 / 0.48 | 0.45 / 0.65 | 0.39 / 0.55 | 0.49 / 0.69 | 0.17 / 0.30 |
+| factor 90% coverage, fuel / wear / base | 0.60 / 0.57 / 0.62 | same | 0.85 / 0.80 / 0.82 | 0.85 / 0.80 / 0.82 | same |
+| 60 draws: replay close-pair order | 0.639 | 0.636 | 0.630 | 0.631 | |
+| 60 draws: replay relative gap error, s | 21.80 | 21.78 | 21.93 | 21.91 | |
+| 60 draws: plan-vs-plan gap 68 / 90 coverage | 0.47 / 0.68 | 0.76 / 0.92 | 0.52 / 0.74 | 0.78 / 0.93 | |
+
+**Decisions.**
+
+- **Persistent lap noise is adopted.** It brings plan-versus-plan gap coverage to nominal, raises the
+  coverage of remaining time and of the real replay, improves the replay's relative gaps and the
+  pit-now agreement, and improves regret.
+  - The cost is close-pair order: 2320 of 3650 pair-snapshots against 2332 with 60 draws (2318 against
+    2336 with 20), about 0.4 points.
+  - Spearman falls by 0.001 with 60 draws and by 0.010 with 20.
+  - The judgment call: the gains in coverage, gaps and regret outweigh a loss this small.
+- **The parameter widening stays a switch.** It fixes the factor coverage, but it consistently worsens
+  both order measures (close-pair -0.009 / -0.010, relative gap +0.13 / +0.19 s). The likely cause
+  is the wear bound: wider draws are truncated at 0 more often, and the truncated draws' mean is
+  pulled up unevenly across compounds.
+  - The tools therefore keep the unwidened factor intervals and say so ("far less often").
+- **Planning on the point estimate stays off.** Its replay order is the best of all (0.653, no draw
+  noise and no truncation bias), but the planner's ranking agreement and regret are the worst (0.830,
+  6.76 s). The draws help ranking here, unlike in the design study (D3, with oracle tyre-life edges).
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
@@ -1270,8 +1338,9 @@ any scenario of any race (the lap-0 same-race guard is gone):
 - the tools keep the contract itself (`tools.set_snapshot`) and answer from the belief
   simulator at the snapshot (`src/sim/agent_tools.py`, SPEC 0015): degradation and pit
   loss ranges, the model report, plan comparisons, and an action against its alternative,
-  with `within_sim_error` judged against the calibration error; the times include traffic
-  from the projected field, and the outputs carry it compactly ("Traffic" below);
+  with the gap between them read from the belief's paired draws ("Plan gaps and rule
+  replies" below); the times include traffic from the projected field, and the outputs
+  carry it compactly ("Traffic" below);
 - `run_agent(scenario.snapshot, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
@@ -1309,7 +1378,73 @@ any scenario of any race (the lap-0 same-race guard is gone):
   closes what is open (everything before it well nested and kept as written; never a reply
   cut off at the cap); the calls from such a reply carry a `parse_repair` note. dev6
   run 4 is the first pass with this; up to dev6 run 3 and in the held-out d4 pass these
-  turns were not logged, the reminder was the bare one and nothing was repaired.
+  turns were not logged, the reminder was the bare one and nothing was repaired. Since
+  2026-11-22 it also reads two more shapes, each with its `parse_repair` note, and guesses at
+  nothing malformed: a reply of two or more complete `{"tool_calls": [...]}` objects, each
+  valid on its own, with only whitespace or bracket-free prose around them, as their calls
+  in order (the per-turn and budget rules apply to them as to one envelope); and a bare
+  JSON object whose keys are exactly a valid `submit_recommendation` argument set (every
+  required key, nothing undeclared) as that call. Since the turn-repeat change it also
+  applies the closer repair to the LAST of several envelopes (never an earlier one), and
+  reads a submission object that carries an empty `"tool_calls": []` beside an exact
+  argument set as that submission (the key dropped, said in the note).
+- `AGENT_TURN_REPEAT` (also `run_agent(turn_repeat=...)`) says what an evidence turn whose
+  calls are exactly the previous turn's (the same set of tool and arguments; a turn with a
+  submission never counts) gets. `end` (the default): none of it runs and no budget is
+  used; the model is told once that the turn repeats the previous one, with one line per
+  call of what it returned (its error whole, so a rule reply's legal alternative; its gap
+  reading; or a pointer to the result above) and that a different evidence call or
+  `submit_recommendation` moves things forward; a second repeat in a row gets the same in
+  other words and the warning that one more ends the evidence phase; the third ends it, and
+  the grace turns follow at once. `remind`: the same messages, never the early end. `run`:
+  the turn runs again like any other (the behaviour before; `AGENT_REPEAT_MODE` then applies
+  per call). The calls of an answered repeat are trajectory events with `repeat_of` and
+  `turn_repeat` (the count in the row) and count in `repeat_calls`; a submission after an
+  early end is `submitted_in_grace`. Rerun provenance records the mode. Why: in the live
+  check of 2026-11-22, two of 18 episodes re-sent their whole turn eight times with the
+  results in front of them; refusing repeated calls (#72) slowed the model and caching
+  them let it loop, since neither told it anything new.
+
+### Plan gaps and rule replies
+
+- **Gaps between plans.** `AGENT_GAP_YARDSTICK` says how the tools judge a gap between two
+  plans. `paired` (the default since 2026-11-22): `evaluate_strategy` gives `gap_reading`, e.g.
+  "STAY_OUT 1 lap is faster than PIT MEDIUM in 82% of draws; STAY_OUT 1 lap minus PIT
+  MEDIUM: -3.1 s (90%: -6.0 to -0.2 s)". The share is `probability_improves_outcome`; the
+  gap and its interval are the median and 5th / 95th percentiles of the action's time minus
+  the alternative's over the same draws (common random numbers, R6). `compare_plans` adds
+  `gap_readings`: the lowest-mean candidate against each other valid one, with `p_beats`
+  and the interval mean -+ 1.64 x `gap_std_s`. These intervals are the model's own: they
+  cover parameter and lap-noise uncertainty under the belief and not model error. No
+  cross-race calibration of gap error exists as of a race (the fidelity scorecard's B3
+  `gap_cov_90`, the share of judge gaps to the real plan inside the belief's 90% paired
+  interval, was 0.69 pooled over 18 development races on code 3ed6e2af6d0b, so the
+  interval is likely too narrow; it is pooled over later races, so the tools do not read
+  it). `calibration_error_s`, the error of the absolute remaining time measured on one
+  race (16 to 36 s), is not used for gaps: errors common to both plans (fuel, pace offset,
+  the track) cancel in a difference. `get_model_report` still shows it, with a note
+  saying so; `evaluate_strategy` and `estimate_tyre_degradation` no longer carry it.
+  `calibration` restores the legacy outputs (`within_sim_error` against
+  max(2 sd, `calibration_error_s`), `confidence_basis`, the calibration fields and the old
+  tool and prompt text) to reproduce earlier runs. The tool descriptions follow the
+  switch as the tools are imported; any other value is an error. Rerun provenance records it.
+- **Rule replies.** A plan the belief's rules reject comes back, in `compare_plans` and
+  `evaluate_strategy`, with each minimum-stint, two-compound and lap-count message
+  restated (`agent_tools.explain_rule_errors`; `rules.py`, a physics module, is unchanged):
+  which stint and why, and the nearest legal alternative, from the snapshot and the
+  regulations only (laps so far, laps on the set, the scheduled distance, the minimum).
+  For example, a pit at lap 0 of 66 with a 3-lap minimum: "Below the 3-lap minimum stint: stopping at the end of lap 1 makes the current SOFT stint 1 lap
+  (0 run so far + 1). The earliest legal stop is at the end of lap 3 (stay out 2 laps
+  first, then pit), the latest at the end of lap 63." Three laps from the end: "the final
+  stint (MEDIUM) would be 2 laps. No stop fits in the 3 laps left: only STAY_OUT to the
+  flag is legal." A single-compound plan gets the legal stop window and the longest
+  `stay_out` that keeps a stop possible; a lap-count mismatch gets the laps that remain and
+  the last-stint length that would add up. No tool reply exists for too many stops: the
+  stop limit only bounds the optimizer's continuation, which then runs to the flag and
+  gets the single-compound reply. Other messages pass unchanged.
+- **Confidence.** The system prompt defines the submitted `confidence` in one sentence as
+  the probability that the recommended action is the better one (PIT over STAY_OUT, or the
+  reverse), which is how `p_pit` scores it.
 
 Why those defaults: in live runs on the same 50 scenarios, unprompted submissions went 43
 with neither the status line nor repeat handling, 31 with the status line and refused
@@ -2420,11 +2555,38 @@ Measures (each one line; `pace` and `fit` columns say what every number was fitt
 | B4 | `calibration.midrace` (the G measure) under the belief at the version-3 laps |
 | B5 | `tests/future_blindness.py` run on its synthetic race with this belief, when the branch has it; else "not checked" |
 | D | per component (`fidelity.COMPONENTS`: tyre life (`tyre_history.tyre_life_prior` against the oldest age run, the median stint-end age and `observed_tyre_life`'s edge), wear rate, fresh-tyre gain, compound gap, fuel, pit loss (the prior from earlier races and `pit_loss.estimate` at k against the world's whole-race median, green and SC), lap 1 and warm-up, traffic rejoin, neutralisations (rates), neutralised laps (lap time under SC/VSC)), each predictor from allowed information against the whole-race target: error, bias, coverage where an sd is stated. A branch adds one `register(Component(...))`; code absent on the branch reports "not present" |
+| noise floor | `ceiling.csv`, `ceiling_pooled.csv` and the scorecard's "Noise floor" section (`fidelity.ceiling_table`, `ceiling_bootstrap`; computed from the cached Section A tables, no simulation): the headline replay (version 1, leave-one-driver-out fit, whole-race pace offset) handed the real race step by step, cumulative: (1) each stint's own pace offset (mean clean-lap residual of the stint, five or more clean laps), (2) in- and out-laps as recorded with no charged pit loss (the real stop durations), (3) SC/VSC laps as recorded, (4) lap 1 as recorded; then (2), (3), (4) alone. Close-pair order and relative gap error per level with race-cluster bootstrap intervals. What level 4 leaves is the non-clean green laps (blue flags, incidents, off-track moments) and lap noise: the order no simulator of these inputs can beat |
 | C | the scorecard for the base, each factor overlay alone and `all_on` (configs/sim/fidelity/ablation.yaml); headline changes pooled with a race-cluster bootstrap 95% interval over the races every configuration ran, and the ledger change. A factor whose switch is not on the branch (a module or file it `requires`, or an overlay SimConfig rejects) is skipped with a note |
 
 Before numbers on main (2026-11-22, f7be251: wear cliff, R8 retired, traffic off by default) are in `reports/calibration/fidelity/main/scorecard.md`
 and the ablation in `reports/calibration/fidelity/ablation/ablation.md`, both computed on main f7be251
 over 18 calibration races (2022_11_austria did not load then).
+
+### The noise floor (9c225f5's default judge, 18 calibration races)
+
+The headline replay handed the real race step by step (`ceiling_pooled.csv`; 365 close pairs;
+race-cluster 95% intervals):
+
+| level | close-pair order | rel gap MAE s | Spearman | abs MAE s |
+| --- | --- | --- | --- | --- |
+| 0 judge (the headline) | 0.682 [0.595, 0.744] | 15.5 [10.1, 21.4] | 0.945 | 32.2 |
+| 1 + each stint's own pace | 0.677 [0.581, 0.748] | 15.1 [9.7, 21.1] | 0.946 | 32.5 |
+| 2 + in/out laps as recorded (real stop durations) | 0.693 [0.617, 0.753] | 14.5 [9.0, 20.5] | 0.951 | 28.5 |
+| 3 + SC/VSC laps as recorded | 0.608 [0.557, 0.667] | 5.2 [4.2, 6.3] | 0.943 | 8.9 |
+| 4 + lap 1 as recorded | 0.745 [0.683, 0.804] | 3.2 [2.5, 3.9] | 0.967 | 7.9 |
+| pit laps alone | 0.710 [0.635, 0.762] | 14.9 | 0.951 | 28.3 |
+| SC/VSC laps alone | 0.551 [0.506, 0.607] | 8.2 | 0.882 | 13.8 |
+| lap 1 alone | 0.685 [0.597, 0.749] | 16.0 | 0.946 | 32.6 |
+
+Reading: about 0.75 close-pair order and 3 s relative gap error is the ceiling for a judge that
+knows every stint's pace, every stop, every neutralised lap and the start; what is left sits on
+the non-clean green laps (blue flags, incidents, off-track moments). Most of today's relative gap
+error is the neutralised laps (15.5 to 5.2 s), not tyre or pace physics: per-stint pace known
+moves the headline by -0.005 order and -0.4 s, the real stops by +0.011 to +0.028 order and
+-0.6 to -1.0 s. Recorded SC/VSC laps without the cars' real positions at the restart make the
+order worse (0.55 alone): a recorded SC lap closes the real gap to the car ahead, not the
+simulated one, so the neutralised laps need the queue (whose order the earlier laps decide)
+rather than their lap times.
 
 ### What the ablation says (f7be251, selection rule applied)
 

@@ -321,4 +321,4 @@ def test_belief_config_sets_the_bound():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cfg = SimConfig.from_file(os.path.join(root, "configs", "sim", "belief.yaml"))
     assert cfg.degradation.params["wear_lower_bound"] == 0.0
-    assert cfg.degradation.params["draw"] == "posterior" and cfg.lap_noise == "residual"
+    assert cfg.degradation.params["draw"] == "posterior" and cfg.lap_noise == "persistent"
