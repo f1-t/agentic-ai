@@ -337,6 +337,114 @@ the anchor's plus a step measured elsewhere (practice, qualifying, other races),
 errors above, and its stint limit is a practice age. Read `proxied_compounds` and
 `opt_proxied_compounds` beside any result on a race with a proxied compound.
 
+## Historical tyre-life prior
+
+`src/sim/tyre_history.py` estimates where a compound's tyre life runs out at a race (the
+simulator's support edge) from **earlier races only**, instead of from the race being evaluated.
+Nothing in the simulator calls it yet (it is `NON_PHYSICS`); the `fix/tyre-life-no-hindsight`
+change will place the edge with it in both the belief (this prior, extended by tyre ages seen up
+to the snapshot) and the world (this prior, extended by tyre ages the race's laps show), and must
+then move the module to `PHYSICS_MODULES` or carry its numbers into `SimConfig`.
+
+```python
+from src.sim.tyre_history import tyre_life_prior
+p = tyre_life_prior("2023_07_spain", "SOFT")     # role: HARD / MEDIUM / SOFT
+p.edge_laps, p.sd_laps, p.n_effective, p.tier, p.sources, p.compound, p.interval(0.9)
+```
+
+**Inputs, all committed, none loaded from a race at run time.**
+`data/derived/tyre_nominations.csv` (Pirelli's nomination per weekend, public pre-race
+information, two sources per row; `data/derived/README.md`), `data/derived/compound_scale.csv`
+(every season's C-numbers on one hardness index), `data/derived/tyre_history.csv` (the per-race
+observations, built by `python -m src.sim.tyre_history build` from every cached race not held
+out; `tyre_history_manifest.json` lists them with their dates) and
+`configs/sim/tyre_history.yaml` (every constant below).
+
+**As of, and held out.** Only races strictly before the target count: earlier by (season, round)
+(`race_ids.as_of`) and, where both dates are known, by date. A race in `data/eval_set.json` (or
+the config's `held_out_extra`) is never built into the history and never feeds the prior; the
+`allow_held_out` flag (default off) lets in only a held-out race that is itself earlier.
+
+**Compound scale.** The meaning of a C-number moved: 2019-2021 C1..C5 (one set of compounds),
+2022 C1..C5 (new 18-inch compounds, same names), 2023 C0..C5 (the old C1 renamed C0, a new C1
+"much closer to the C2"), 2024 C1..C5 (C0 dropped, compounds unchanged), 2025 C1..C6 (a C6 softer
+than the C5). The common index counts steps of the 2019-2022 scale, larger is softer: Cn -> n,
+except the 2023-2025 C1 -> 1.5, the 2023 C0 -> 1 and the 2025 C6 -> 6. Sources in
+`data/derived/README.md`.
+
+**The observation** (`observed_tyre_life`), per race and compound: the stints are split by how
+they ended. A pit stop on a green in-lap and a stint run to the chequered flag are *usable*: the
+tyre lasted at least that long, and the team chose when to stop. A stop under SC / VSC / red flag
+(opportunistic), a red-flag tyre change and a retirement say nothing about tyre life and are left
+out. The edge is the **0.9 quantile of the usable stints' end ages** (at least 3 stints), in laps
+and as a share of the race distance: a high quantile, because teams stop before the tyre is
+finished, but not the maximum, so one car's gamble does not set it. A pace check is reported next
+to it (per stint with 10+ green laps, the excess of its last 3 laps over a straight line through
+its first 60%: `pace_late_excess_s`, `pace_falloff_share`) and never used. 2025 Qatar's
+observation is kept but excluded (a mandated 25-lap maximum stint); a race with more than 10% of
+its laps on intermediates or wets is down-weighted.
+
+**The prior.** Every usable earlier observation is moved onto the target and averaged with a
+weight:
+- *moved*: as a share of race distance (times the target's scheduled laps); for another
+  compound, times `life_ratio ** steps` (`steps` = target index - observed index, one step softer
+  lasting `life_ratio` as long; the ratio is the geometric mean over the earlier races' compound
+  pairs, else 0.75); for another circuit, the circuit's severity is added to the steps as Pirelli
+  judged it before both races: the mean index of the nominated trio (a circuit given a trio one
+  step softer is one step gentler). For the same role at two circuits this cancels the C-number
+  difference, which is what the validation below supports.
+- *weighted* (constants, not fitted): same circuit and same compound 1.0; same circuit, other
+  compound 0.3; other circuits, same compound 0.1; other circuits, other compound 0.03; times
+  0.5 per further index step, 0.85 per season back, 0.4 from the other regulation era (2018-2021
+  vs 2022+), 0.3 from a wet race.
+- *sd*: the weighted spread of the moved observations (Kish `n_effective`) in quadrature with a
+  floor of 0.05 / 0.08 / 0.10 / 0.20 of the race distance for tiers 1 / 2 / 3 / 4.
+
+**Fallback chain** (`tier`, always returned): 1 an earlier race at the same circuit with the same
+compound; 2 the same circuit, other compounds only; 3 other circuits only (same or neighbouring
+compound); 4 no usable earlier race at all, a constant share of race distance per role (HARD 0.65,
+MEDIUM 0.50, SOFT 0.35). The earliest cached season is tier 4. A missing nomination (the
+target's or an earlier race's) compares compounds by role and never counts as the same compound.
+
+**Validation** (`python -m src.sim.tyre_history validate`, `reports/calibration/tyre_history/`).
+As of, hence leave-one-race-out, on the 20 usable (race, role) observations of the 9 races not
+held out on main (2024 Brazil has no dry observation, 2025 Qatar is excluded). Error = prior
+edge - observed edge, in laps; coverage of the stated 68% / 90% intervals; *beyond* = share of
+the race's usable stints on that role ending later than prior edge + 3 laps (*floor*: the same
+against the race's own observed edge, what a perfect prior would give):
+
+| group | n | mean error | MAE | cover 68 | cover 90 | stints | beyond | floor |
+|---|---|---|---|---|---|---|---|---|
+| all | 20 | -1.0 | 8.2 | 0.65 | 0.90 | 343 | 0.114 | 0.029 |
+| tier 1 | 4 | +3.0 | 3.0 | 0.75 | 1.00 | 79 | 0.000 | 0.025 |
+| tier 2 | 2 | +12.1 | 12.1 | 0.50 | 1.00 | 25 | 0.040 | 0.040 |
+| tier 3 | 11 | -4.5 | 10.9 | 0.55 | 0.82 | 202 | 0.168 | 0.025 |
+| tier 4 | 3 | -2.6 | 2.9 | 1.00 | 1.00 | 37 | 0.108 | 0.054 |
+| era 2018-2021 | 5 | -3.1 | 3.2 | 1.00 | 1.00 | 90 | 0.167 | 0.033 |
+| era 2022+ | 15 | -0.4 | 9.9 | 0.53 | 0.87 | 253 | 0.095 | 0.028 |
+
+The weighting, each part switched off in turn (all 20 observations):
+
+| variant | MAE | mean error | cover 90 | beyond |
+|---|---|---|---|---|
+| full (as shipped) | 8.2 | -1.0 | 0.90 | 0.114 |
+| no circuit severity scaling | 12.6 | -3.5 | 0.75 | 0.224 |
+| no C-number (compounds compared by role) | 9.6 | -0.7 | 0.80 | 0.125 |
+| no same-circuit weighting | 8.0 | -1.7 | 0.90 | 0.125 |
+| neither C-number nor circuit | 9.0 | -1.5 | 0.85 | 0.137 |
+
+Reading it: the C-number weighting improves the MAE by 1.4 laps over comparing by role, but only
+together with the severity scaling; matching the bare C-number across circuits without it is the
+worst variant (12.6), because Pirelli nominates harder rubber for harsher circuits, so a C3 at
+Imola and a C3 at Silverstone are not run alike. The same-circuit weighting does not help yet
+(8.2 vs 8.0): only 6 of the 20 cases have an earlier race at the same circuit (Silverstone and
+Catalunya), and its four tier-1 cases are the best predicted (MAE 3.0). 11% of real stints run
+past edge + 3 laps against a 3% floor, so the prior is somewhat short, mostly at tier 3; the
+worst cases are 2024 Monaco (a lap-1 red flag let the field change tyres and run to the flag:
+medium observed 76 laps, prior 35) and 2024 Imola's hard (50 observed, 39 prior). The evidence is
+thin (20 cases, 9 races); rerun `build` and `validate` when the 2021-22 weekends of
+`data-more-races` land on main.
+
 ## The agent policy
 
 `--policies agent` is `eval.policies.AgentPolicy`, the snapshot loop of `src/agent.py`, on
