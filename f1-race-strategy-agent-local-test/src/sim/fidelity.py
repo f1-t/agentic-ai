@@ -1010,7 +1010,10 @@ def section_b(data, spec: Spec, opts: Options, belief=None, world=None, pool=())
         for k in range(opts.b_every, nlaps - data.race.min_stint_laps, opts.b_every):
             if not (g["lap"] == k).any():
                 continue
-            snap = build(data.frame, data.race, d, k)
+            try:
+                snap = build(data.frame, data.race, d, k)
+            except ValueError:   # no snapshot here (a set with no recorded compound): skipped, as sample_race does
+                continue
             # the judge scores the policy's snapshot (its pit loss comes from race_pit_loss_s), with any
             # other RaceParams the spec overrides
             other = {k: v for k, v in spec.world_race.items() if k != "pit_loss_s"}
