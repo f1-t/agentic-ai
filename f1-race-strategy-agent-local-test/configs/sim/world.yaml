@@ -1,7 +1,13 @@
 # An eval world simulator with traffic: pass it with `score --world-config`
 # (docs/eval.md "Who sees what"). The default SimConfig, full fit window, with ghost-car
-# traffic on (src/sim/traffic.py, docs/traffic.md) for position regret (SPEC 0014 D).
-# Without --world-config the world is the profile's config, with traffic off.
+# traffic on (src/sim/traffic.py, docs/traffic.md) for position regret (SPEC 0014 D), and the
+# default world's events (eval.score.WORLD_EVENTS: the SC/VSC in progress as recorded, later
+# ones drawn). Ghosts are valid until the first drawn period (traffic_recorded_with_drawn_events).
+# Without --world-config the world is the profile's config with those events and traffic off.
 fit_window: full
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
 traffic:
   name: ghost
