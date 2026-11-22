@@ -344,7 +344,134 @@ difficulty in generic words ("very hard: a faster car usually stays stuck behind
 "hard", "average", "easy"), the per-lap pass chance when close (90% band), the pace advantage
 needed, and where it comes from ("earlier races at this track" etc.). It names no circuit.
 
-RESULTS_SECTION
+**DRS trains** (`difficulty_train`). A follower passes on 4.9% of its close laps when the car
+ahead is itself within 1 s of its own car ahead (2,074 laps). It passes on 19.1% when that car
+is free (2,878 laps). At the pooled slope the train threshold is 1.8 s higher (`_train_fit`; the
+as-of version reads earlier races only). With the switch on, a ghost in a train has theta raised by
+shift x (1 - share), and a free ghost has it lowered by shift x share.
+
+**Measured (2026-11-22, calibration races only, nothing adopted).** Base: the adopted default
+world (`world_hybrid.yaml`, traffic off). Race-cluster 95% bootstrap over the 19 calibration
+races.
+
+Whole-field replay (`src/sim/field_replay.py`, leave-one-driver-out fit, as-of pace, k = 0, 10,
+20, 30, 40 pooled), change against the base:
+
+| judge | close-pair order | Spearman | position mae | relative gap s |
+|---|---|---|---|---|
+| base level | 0.667 | 0.886 | 1.42 | 19.8 |
+| traffic (`world.yaml`, one rule) | +0.007 [-0.004, +0.019] | -0.002 | -0.016 | +0.78 [+0.12, +1.31] |
+| difficulty `circuit` | -0.001 [-0.013, +0.014] | -0.002 | +0.007 | +0.78 [+0.13, +1.40] |
+| difficulty `race` | +0.002 [-0.007, +0.013] | -0.003 | +0.014 | +0.71 [+0.07, +1.31] |
+| difficulty `asof` | -0.001 [-0.014, +0.015] | -0.003 | -0.003 | +0.82 [+0.14, +1.48] |
+| `circuit` + table dirty air | +0.004 [-0.007, +0.017] | +0.001 | -0.023 | +0.80 [+0.11, +1.46] |
+| `circuit` + trains | +0.001 [-0.011, +0.016] | -0.002 | -0.009 | +0.62 [-0.06, +1.24] |
+| `asof` + trains | -0.002 [-0.012, +0.011] | -0.001 | -0.008 | +0.54 [-0.12, +1.16] |
+
+By circuit type (judge rate < 0.12 hard: Silverstone, Qatar, Imola, Canada, France; >= 0.18 easy:
+Bahrain, Spain; street: Jeddah, Baku, Canada), close-pair change:
+- `circuit`: hard -0.006, average +0.000, easy +0.002, street +0.011.
+- `circuit` + trains: hard -0.013, average +0.004, easy +0.009, street -0.011.
+- One rule: hard -0.011, average +0.015 [+0.002, +0.037], easy +0.014, street -0.004.
+
+Every interval includes 0 except where marked. No variant helps where passing is hard.
+
+Expert consistency on the dev20 scenarios (469, actual_strategy scored on 428), against each
+judge's own reference (`python -m src.eval.rerun references|baselines --set dev20`):
+
+| judge | mean regret s | p90 | worst | over 20 s | stint the reference ends 5+ laps earlier | change in mean, hard / street |
+|---|---|---|---|---|---|---|
+| default (committed dev20) | 7.02 | 19.5 | 69.2 | 0.096 | 0.086 | |
+| traffic (`world.yaml`) | 7.35 (+0.33 [+0.10, +0.62]) | 20.5 | 68.9 | 0.112 | 0.070 | +0.06 / +0.31 |
+| difficulty `circuit` | 7.36 (+0.34 [+0.09, +0.65]) | 20.6 | 69.0 | 0.110 | 0.075 | +0.25 / +0.23 |
+| difficulty `circuit` + trains | 7.37 (+0.35 [+0.10, +0.64]) | 20.4 | 68.9 | 0.110 | 0.091 | +0.41 / +0.22 |
+| no traffic, `world_edge: history` | 6.23 (-0.79 [-1.74, +0.02]) | 19.2 | 69.2 | 0.079 | 0.086 | -0.77 / -1.79 [-2.91, -1.19] |
+
+At hard circuits the default judge's mean is 7.66 s; Imola 2024 is worst at 17.8 s, with 36%
+over 20 s. With difficulty on, the share of real stints ended 5+ laps early there falls by
+-0.034 [-0.101, +0.018] (Imola 2024: 0.24 to 0.08), but the mean regret does not fall.
+
+Traffic in the judge prices the real strategy's own time in traffic as well as the
+alternatives', so the real plans' regret rises slightly everywhere. The judge's position
+regret for actual_strategy is 0.61 places under both traffic judges.
+
+**Monaco 2024, a diagnostic case** (not in dev20; 25 as-of scenarios sampled into a scratch set
+with the `rerun scenarios` builder, digest `dfb8af57c90c`; never committed as a set). It is
+the one cached non-held-out race where passing is near impossible and the field ran a managed
+pace on HARD for up to 78 laps. Expert consistency of actual_strategy against each judge's
+reference (25 scored):
+
+| judge | mean regret s | median | p90 | worst | over 20 s | reference stops / real stops |
+|---|---|---|---|---|---|---|
+| default (`history_only` edge, no traffic) | 83.6 | 90.2 | 133.8 | 147.6 | 0.88 | 1.16 / 0.32 |
+| traffic, one rule | 81.8 | 86.1 | 134.8 | 145.6 | 0.88 | 1.04 / 0.32 |
+| difficulty `circuit` | 74.5 | 77.1 | 127.3 | 138.7 | 0.84 | 1.00 / 0.32 |
+| difficulty `race` | 75.0 | 77.2 | 128.1 | 138.6 | 0.84 | 1.00 / 0.32 |
+| difficulty `asof` | 81.4 | 85.6 | 134.4 | 143.5 | 0.88 | 1.04 / 0.32 |
+| `circuit` + trains | 74.3 | 75.3 | 129.5 | 135.4 | 0.80 | 1.00 / 0.32 |
+| wear cliff `world_edge: history` | 30.4 | 24.8 | 56.7 | 59.6 | 0.72 | 1.04 / 0.32 |
+| wear cliff `world_edge: race` | 30.4 | 24.8 | 56.7 | 59.6 | 0.72 | 1.04 / 0.32 |
+| wear cliff off | 30.4 | 24.8 | 56.7 | 59.5 | 0.72 | 1.04 / 0.32 |
+| wear cliff off + difficulty `circuit` | 23.2 | 21.3 | 49.8 | 78.7 | 0.52 | 1.00 / 0.32 |
+
+Track position explains a small part: difficulty takes about 9 s off an 84 s regret. Most of the
+gap comes from the tyre-life edge. The history-only prior puts the HARD edge far below the 60-78
+laps the field really ran, so the judge charges a real 18-lap HARD run to the flag about 90 s
+against a stop. The difficulty rule also cannot hold cars at Monaco, because the recorded field
+ran several seconds a lap below the model's free-air pace. A car on fresh tyres is then more than
+the 3.6 s threshold faster than the ghosts, so it gets by.
+
+**The judge's tyre-life edge** (`wear_cliff.world_edge`, an existing switch; judge only, belief
+unchanged). `history` extends the historical edge by the tyre ages this race has laps for
+(hindsight, ledgered). On dev20, against `history_only`:
+- Expert consistency: mean regret -0.79 [-1.74, +0.02] s (7.02 to 6.23), over 20 s 0.096 to
+  0.079, the reference adding a stop the team did not make 0.121 to 0.061. Street circuits
+  -1.79 [-2.91, -1.19]; hard -0.77 [-3.17, +1.22]; Imola 2024 17.8 to 12.5 s.
+- Whole-field close-pair order: -0.014 [-0.032, -0.002]; relative gap -0.37 [-0.82, +0.02] s.
+  `race` gives the same whole-field numbers.
+- References with a stint ending beyond the oldest age raced on that compound: 0.198 to 0.299
+  (by more than 5 laps: 0.070 to 0.107). A raised edge lets plans run up to it.
+- The 25-30-lap SOFT stints at Imola 2024 (SOFT raced 8 laps) appear under both edges, in 72% of
+  that race's references either way. They come from the prior being long there, not from the
+  extension, so the two findings do not conflict.
+
+Per-car fidelity ablation (`python -m src.sim.fidelity ablate --no-hindsight-variants`, base the
+adopted configuration, 19 races, change against the base). `E_real_regret_s` is the new
+expert-consistency row: the judge's time for the real plan less its best panel plan, base 5.88 s.
+
+| factor | close pairs | Spearman | rel gap s | B2 rank rho | B2 regret s | pit-now | E_real_regret_s |
+|---|---|---|---|---|---|---|---|
+| base level | 0.753 | 0.958 | 13.17 | 0.868 | 4.11 | 0.816 | 5.88 |
+| world_traffic | -0.046 [-0.090, +0.003] | -0.010 | -0.41 | -0.009 [-0.015, -0.003] | +0.15 | -0.004 | -0.25 [-0.50, -0.02] |
+| world_difficulty | -0.052 [-0.105, -0.007] | -0.008 | +0.27 | -0.011 [-0.019, -0.004] | +0.26 [+0.09, +0.43] | -0.003 | -0.24 [-0.47, -0.03] |
+| world_difficulty_race | -0.035 [-0.078, +0.006] | -0.014 | +0.11 | -0.012 | +0.26 [+0.06, +0.45] | +0.000 | -0.25 [-0.48, -0.03] |
+| belief_traffic | 0 | 0 | 0 | -0.001 | -0.05 | +0.007 | 0 |
+| belief_difficulty | 0 | 0 | 0 | -0.005 [-0.008, -0.002] | -0.11 [-0.26, +0.02] | +0.009 | 0 |
+| difficulty_both | -0.052 [-0.105, -0.007] | -0.008 | +0.27 | -0.011 | +0.11 | +0.009 | -0.24 |
+| cliff_edge_history (no traffic) | -0.022 [-0.067, +0.006] | +0.003 | -0.38 | -0.003 | -0.40 [-0.95, +0.07] | -0.029 [-0.052, -0.007] | -0.96 [-2.46, +0.07] |
+| cliff_edge_race (no traffic) | -0.022 [-0.067, +0.006] | +0.003 | -0.38 | -0.004 | -0.09 | -0.017 | -1.49 [-3.04, -0.14] |
+
+E by circuit type, difficulty (circuit): hard -0.14, street -0.02, easy -0.31. Cliff edge
+history: hard +0.47, street -0.79, easy -1.11.
+
+**Verdict (selection rule fixed in advance).** No traffic or difficulty variant is an
+adopt-candidate:
+- The per-car close-pair order falls: -0.046 with one rule, -0.052 [-0.105, -0.007] with the
+  circuit difficulty, outside zero.
+- The whole-field order does not move.
+- Plan-ranking agreement with the belief worsens (B2 rank -0.011, regret +0.26 s).
+- Expert consistency moves only in the per-car panel (-0.24 s) and rises slightly against the
+  real reference (+0.34 s).
+- Every switch stays off.
+
+The DRS-train effect and the table are real findings about passing. They do not make the
+judge's order match reality better on these races, where the order error is dominated by pace
+error rather than by who is stuck behind whom.
+
+Compute: a dev20 reference build (469 scenarios) costs 0.81 worker-seconds per scenario for the
+no-traffic judge, against 4.7-5.4 with any traffic judge on this machine. That is about 180 s
+against 1,050-1,220 s per 225 scenarios. The hybrid events make samples differ, so traffic is
+recomputed per sample.
 
 ## Information contract
 
