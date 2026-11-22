@@ -1,0 +1,80 @@
+{
+ "command": "python -m src.sim.tyre_history build",
+ "description": "Per-race tyre-life observations (src/sim/tyre_history.py observed_tyre_life) of the races below; read at run time by tyre_life_prior, which uses only those strictly earlier than its race.",
+ "races": [
+  {
+   "race_id": "2019_10_united_kingdom",
+   "date": "2019-07-14",
+   "circuit": "silverstone"
+  },
+  {
+   "race_id": "2021_04_spain",
+   "date": "2021-05-09",
+   "circuit": "catalunya"
+  },
+  {
+   "race_id": "2022_02_saudi_arabia",
+   "date": "2022-03-27",
+   "circuit": "jeddah"
+  },
+  {
+   "race_id": "2023_01_bahrain",
+   "date": "2023-03-05",
+   "circuit": "sakhir"
+  },
+  {
+   "race_id": "2023_07_spain",
+   "date": "2023-06-04",
+   "circuit": "catalunya"
+  },
+  {
+   "race_id": "2024_07_emilia_romagna",
+   "date": "2024-05-19",
+   "circuit": "imola"
+  },
+  {
+   "race_id": "2024_08_monaco",
+   "date": "2024-05-26",
+   "circuit": "monaco"
+  },
+  {
+   "race_id": "2024_12_united_kingdom",
+   "date": "2024-07-07",
+   "circuit": "silverstone"
+  },
+  {
+   "race_id": "2024_21_brazil",
+   "date": "2024-11-03",
+   "circuit": "interlagos"
+  },
+  {
+   "race_id": "2025_23_qatar",
+   "date": "2025-11-30",
+   "circuit": "lusail"
+  }
+ ],
+ "held_out_never_loaded": [
+  "2019_06_monaco",
+  "2020_16_sakhir",
+  "2024_11_austria",
+  "2025_11_austria"
+ ],
+ "excluded_observations": {
+  "2025_23_qatar": "mandated 25-lap maximum stint (Pirelli safety limit), so its stint ends say nothing about tyre life"
+ },
+ "observation": {
+  "quantile": 0.9,
+  "min_stints": 3,
+  "neutralised_codes": [
+   "4",
+   "5",
+   "6",
+   "7"
+  ],
+  "wet_lap_share": 0.1,
+  "pace_min_green_laps": 10,
+  "pace_fit_share": 0.6,
+  "pace_late_laps": 3,
+  "pace_falloff_s": 0.5
+ }
+}
