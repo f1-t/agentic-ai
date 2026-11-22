@@ -22,3 +22,6 @@ calibrator:
   params:
     artifacts: models/calibrators/ridge_hybrid
     sha256: f57c93918dfe
+fuel_anchor:
+  prior: anchored
+  practice: anchored

@@ -251,6 +251,8 @@ class Simulator:
         self.calibration = None   # CalibrationState on a pre_race or to_snapshot instance
         self.window = None   # fitted_for cache key on a windowed instance, None on the root
         self._race_id = None   # the snapshot race of a windowed instance (as-of cross-race tables)
+        self._race = None      # its RaceParams (the anchored practice fuel, config.fuel_anchor)
+        self._judge_anchor = None   # the full fit's fuel anchor (config.fuel_anchor.full_fit), once
         self._fits, self._cliffs = {}, {}
         self._outputs, self._physics = {}, {}   # shared with the windowed copies
         self._windows = {}   # window_rows, shared with the windowed copies
@@ -293,8 +295,24 @@ class Simulator:
         kw = dict(min_samples=cfg.min_samples, fuel_prior=cfg.pre_race_fuel_slope_s_per_lap,
                   base_delta=cfg.pre_race_base_delta_s, fuel_prior_sd=cfg.shrinkage["fuel_s_per_lap"],
                   hinge_knots=cfg.hinge_knots, hinge_knot_default=cfg.hinge_knot_default, **spec.params)
+        if cfg.fuel_anchor.full_fit and cfg.fit_window == "full" and "shrinkage" not in extra:
+            kw["fuel_anchor"] = self.judge_fuel_anchor()
         kw.update(extra)
         return DEGRADATION.get(spec.name).fit(frame, **kw)
+
+    def judge_fuel_anchor(self) -> tuple[float, float]:
+        """(mean, sd) the full fit's fuel slope is shrunk toward under config.fuel_anchor.full_fit:
+        the a priori physics prior (fuel_prior.physics_prediction) on the race's laps and this
+        weekend's practice lap (the race's median clean lap without practice; the judge may read
+        the whole race). No other race is read."""
+        if self._judge_anchor is None:
+            from . import fuel_prior
+            lap_s = fuel_prior.practice_lap_s(self.practice) if self._has_practice else float("nan")
+            if not np.isfinite(lap_s):
+                lap_s = fuel_prior.practice_lap_s(self.laps)
+            p = fuel_prior.physics_prediction(int(self.laps["lap"].max()), lap_s)
+            self._judge_anchor = (float(p["mean"]), float(p["sd"]))
+        return self._judge_anchor
 
     def _free_air(self, frame):
         """(rows the fit may use, clean rows dropped). Every row unless config.fit_free_air_only;
@@ -394,13 +412,23 @@ class Simulator:
             return f[f["driver"] != drop] if drop is not None and "driver" in f else f
         return keep
 
-    def physics_prior(self, drop=None):
+    def physics_prior(self, drop=None, race=None):
         """The practice fit with no base delta (calibrators.prior_model adds the factors), None
-        without practice. Cached per excluded driver."""
-        if drop not in self._physics:
-            practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
-            self._physics[drop] = self._model(practice, base_delta=0.0) if practice is not None else None
-        return self._physics[drop]
+        without practice. Cached per excluded driver (and fuel). Under config.fuel_anchor.practice
+        "anchored" with a race (`race`, else the windowed instance's), the practice in-stint fuel
+        column is fixed at the race's anchored fuel prior (race_history.as_of_fuel "anchored")
+        instead of pre_race_fuel_slope_s_per_lap, so the practice wear is net of it."""
+        race = race if race is not None else self._race
+        practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
+        fuel = None
+        if self.config.fuel_anchor.practice == "anchored" and race is not None and practice is not None:
+            from .race_history import as_of_fuel
+            fuel = float(as_of_fuel(race, practice=practice, mode="anchored")["mean"])
+        key = drop if fuel is None else (drop, fuel)
+        if key not in self._physics:
+            extra = {} if fuel is None else {"fuel_prior": fuel}
+            self._physics[key] = self._model(practice, base_delta=0.0, **extra) if practice is not None else None
+        return self._physics[key]
 
     def cut_time(self, driver, k0: int) -> float | None:
         """The session time a windowed fit at calibration point k0 is cut at under
@@ -453,7 +481,7 @@ class Simulator:
             previous = pre
         race = self.window_rows(snapshot, k0, drop)
         practice = self._keep(drop)(self.practice.assign(lap=np.nan)) if self._has_practice else None
-        raw = self.physics_prior(drop)
+        raw = self.physics_prior(drop, snapshot.race)
         ctx = _cal.CalibrationContext(
             k=k0, config=cfg, race=snapshot.race, valid_until_lap=_cal.valid_until(k0, every, snapshot.race.total_laps),
             laps_so_far=race, practice=practice, practice_model=raw,
@@ -482,7 +510,7 @@ class Simulator:
         """
         cfg = self.config
         drop = snapshot.driver if cfg.exclude_snapshot_driver else None
-        self._race_id = snapshot.race.race_id
+        self._race_id, self._race = snapshot.race.race_id, snapshot.race
         keep = self._keep(drop)
         if cfg.fit_window == "full":
             return self._fit(keep(self.laps))
@@ -491,7 +519,7 @@ class Simulator:
         if practice is None and race.empty:
             raise ValueError("fit window needs practice laps")
         out = self._calibrate(snapshot, k0 if cfg.fit_window == "to_snapshot" else 0, drop)
-        raw = self.physics_prior(drop)
+        raw = self.physics_prior(drop, snapshot.race)
         prior, taus, fuel, held = _cal.degradation_prior(out, raw, cfg)
         if cfg.fit_window == "pre_race":
             self.calibration = _cal.CalibrationState(out, 0, True, raw)

@@ -107,6 +107,14 @@ FUEL_EFFECT_S_PER_KG = 0.03   # a priori rule of thumb, not fitted: about 0.3 s 
 FUEL_EFFECT_SD_S_PER_KG = 0.005   # its uncertainty, about one sixth of it
 EVOLUTION_SD_S_PER_LAP = 0.005    # the uncertainty of practice evolution read as race evolution
 
+# The anchored fuel prior (anchored_prediction; docs/eval.md "Fuel anchoring"), a priori:
+# the time a kilogram costs is a fixed share of the lap (a heavier car loses in every
+# acceleration and corner), so FUEL_EFFECT_S_PER_KG holds at REF_LAP_S and scales with the
+# weekend's practice lap; the fuel burned per lap is FUEL_START_KG over the scheduled laps.
+REF_LAP_S = 90.0              # a priori: the typical lap the 0.3 s per 10 kg rule of thumb is quoted for
+RATIO_PRIOR = (1.0, 0.2)      # a priori: race-pace slope / physics slope, mean 1 with a 20 % spread across circuits
+MIN_RATIO_RACES = 3           # earlier races with a target before their ratio spread replaces RATIO_PRIOR's sd
+
 PREDICTION_COLUMNS = ["race_id", "candidate", "season", "circuit", "mean", "sd", "source", "n_history", "target",
                       "target_sd", "err", "covered"]
 
@@ -300,6 +308,57 @@ def practice_longrun_prediction(race: RaceParams, practice_model=None, practice=
     return {"mean": -FUEL_EFFECT_S_PER_KG * per_lap_kg + evo, "sd": sd, "n_history": 0,
             "source": f"physics + evolution ({n} session(s))" if n else "physics (no practice evolution)",
             "physics_s_per_lap": -FUEL_EFFECT_S_PER_KG * per_lap_kg, "evolution_s_per_lap": evo}
+
+
+def practice_lap_s(practice) -> float:
+    """The weekend's median clean practice lap, s (pre-race); NaN without practice."""
+    if practice is None or not len(practice) or "lap_time_s" not in practice:
+        return math.nan
+    clean = practice[practice["clean"].astype(bool)] if "clean" in practice else practice
+    return float(clean["lap_time_s"].median()) if len(clean) else math.nan
+
+
+def physics_slope(total_laps, lap_s=math.nan) -> float:
+    """The physics fuel slope, s per race lap: -FUEL_EFFECT_S_PER_KG x (lap_s / REF_LAP_S) x
+    FUEL_START_KG / total_laps; unscaled (the practice_longrun physics term) when lap_s is NaN."""
+    scale = float(lap_s) / REF_LAP_S if lap_s is not None and np.isfinite(lap_s) and lap_s > 0 else 1.0
+    return -FUEL_EFFECT_S_PER_KG * scale * FUEL_START_KG / float(total_laps)
+
+
+def physics_prediction(total_laps, lap_s=math.nan) -> dict:
+    """The a priori anchored prior: physics_slope with sd RATIO_PRIOR's spread times its size."""
+    m = physics_slope(total_laps, lap_s)
+    return {"mean": RATIO_PRIOR[0] * m, "sd": max(RATIO_PRIOR[1] * abs(m), MIN_SD), "physics_s_per_lap": m,
+            "ratio": RATIO_PRIOR[0], "ratio_sd": RATIO_PRIOR[1], "n_history": 0,
+            "source": "physics (lap-scaled)" if np.isfinite(lap_s) else "physics (unscaled, no practice)"}
+
+
+def anchored_prediction(total_laps, lap_s, train: pd.DataFrame | None = None) -> dict:
+    """The anchored fuel prior: the physics slope times a ratio learned as of the race.
+
+    Each earlier race in `train` (rows with target, total_laps and practice_lap_s, as of the race)
+    gives its ratio target / physics_slope. The ratio's population mean is RATIO_PRIOR updated with
+    their mean (precision weighted: RATIO_PRIOR's sd against the ratios' spread over sqrt n); the
+    predictive sd of this race's ratio is sqrt(spread^2 + var(mean)), spread their sd with at least
+    MIN_RATIO_RACES races, else RATIO_PRIOR's sd. mean and sd are that ratio times the physics
+    slope. With no usable earlier race it is physics_prediction."""
+    m = physics_slope(total_laps, lap_s)
+    out = physics_prediction(total_laps, lap_s)
+    if train is None or not len(train) or "practice_lap_s" not in train:
+        return out
+    t = train[train["target"].notna()]
+    ratios = (t["target"].astype(float) / [physics_slope(n, s) for n, s in zip(t["total_laps"], t["practice_lap_s"])]
+              ).replace([np.inf, -np.inf], np.nan).dropna()
+    n = int(len(ratios))
+    if n == 0:
+        return out
+    r0, s0 = RATIO_PRIOR
+    spread = float(ratios.std(ddof=1)) if n >= MIN_RATIO_RACES else s0
+    w0, w1 = s0 ** -2, n / max(spread, 1e-6) ** 2
+    r = (w0 * r0 + w1 * float(ratios.mean())) / (w0 + w1)
+    r_sd = math.sqrt(spread ** 2 + 1.0 / (w0 + w1))
+    return {"mean": r * m, "sd": max(r_sd * abs(m), MIN_SD), "physics_s_per_lap": m, "ratio": r, "ratio_sd": r_sd,
+            "n_history": n, "source": f"physics x ratio as of {n} earlier race(s)"}
 
 
 # --- B: the calibrators --------------------------------------------------------------------------

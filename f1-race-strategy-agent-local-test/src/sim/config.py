@@ -207,6 +207,30 @@ def _load_pit_loss_prior(path=PIT_LOSS_PRIOR_FILE) -> dict:
         return json.load(f)
 
 
+class FuelAnchor(_Cfg):
+    """Fuel anchoring (docs/eval.md "Fuel anchoring"): within a stint tyre age and race lap rise
+    together, so the fuel slope and the wear slopes are confounded. The anchored prior
+    (fuel_prior.anchored_prediction: the lap-scaled physics slope times the as-of ratio of earlier
+    races) pins the fuel term.
+
+    prior     the as_of_history calibrator's fuel prior (race_history.as_of_fuel mode):
+              "circuit_history" (as before, #102) or "anchored"; a calibrator param `fuel`
+              overrides it.
+
+    practice  "config" (as before): the practice fit's in-stint fuel, the column fixed at
+              pre_race_fuel_slope_s_per_lap; "anchored": at the anchored prior of the race
+              (race_history.as_of_fuel mode "anchored"), so the practice wear the to_snapshot fit
+              shrinks toward is net of the same fuel the race fit is shrunk toward. Policy windows.
+    full_fit  the full window (the judge): the race fuel slope shrunk toward the a priori physics
+              prior (fuel_prior.physics_prediction, the race's laps and practice lap) with its sd,
+              by a penalty residual variance / sd^2 on the fuel column; False (the default) leaves
+              it unpenalised, as before. No history: the judge's prior uses no other race.
+    """
+    prior: Literal["circuit_history", "anchored"] = "circuit_history"
+    practice: Literal["config", "anchored"] = "config"
+    full_fit: bool = False
+
+
 class PitLossModel(_Cfg):
     """Where a simulation's pit loss comes from (pit_loss.py, docs/eval.md "Pit loss and track
     status"). "snapshot" (the default, as before): snapshot.race.pit_loss_s and the effects'
@@ -335,6 +359,8 @@ class SimConfig(_Cfg):
     # practice cannot identify the race fuel term; linear_fuel uses this when no race laps fit
     # it, and shrinks toward it under to_snapshot
     pre_race_fuel_slope_s_per_lap: float = -0.045
+    # fuel anchoring (FuelAnchor); left out of config_hash at its default
+    fuel_anchor: FuelAnchor = Field(default_factory=FuelAnchor)
     # practice-to-race base level, s/lap, added to every practice-derived compound base in the
     # pre_race prior (Spain: full-fit base 85.22 less practice 84.18, rounded). A config prior
     # for now (fit_report base_delta_source "prior"); the first factor SPEC H's calibrator
