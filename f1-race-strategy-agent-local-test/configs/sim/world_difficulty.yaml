@@ -1,0 +1,28 @@
+# The world with traffic ON and circuit-specific passing (docs/eval.md "Overtaking difficulty"):
+# configs/sim/world.yaml (the default world plus ghost-car traffic) with the hazard pass rule:
+# a caught car passes once its summed pass hazard reaches ln 2, the per-lap probability
+# sigmoid(slope * (pace advantage - theta)) with theta and slope from data/derived/overtaking.csv
+# (src/sim/overtaking.py): "circuit" reads every table race at the circuit, this one included,
+# which is hindsight the judge may use (fidelity ledger). Off by default; pass it with
+# `score --world-config configs/sim/world_difficulty.yaml`.
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
+    duration: history   # later periods: rates and lengths pooled over the history table (adopted 2026-11-22)
+    pooled: true
+traffic:
+  name: ghost
+  params:
+    align_neutral: true
+    own_pace: true
+    pass_mode: earned
+    dirty_air_auto: true
+    difficulty: circuit

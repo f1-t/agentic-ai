@@ -64,7 +64,10 @@ Policy-visible surfaces (observe), per snapshot:
   traffic     the belief with traffic on (configs/sim/belief_traffic.yaml, the projected
               field, src/sim/traffic.py): the projected ghost table of every variant, own pace
               and dirty air, a plan set's times and positions, get_model_report, compare_plans
-              and evaluate_strategy as shown, the belief optimum and run_to_flag planned with it
+              and evaluate_strategy as shown, the belief optimum and run_to_flag planned with it;
+              and the same belief with the as-of passing difficulty (configs/sim/
+              belief_difficulty.yaml): its threshold and source races, a plan set's times and
+              positions, get_model_report and evaluate_strategy as shown
 
 The scoring world and the hindsight reference are allowed to see the whole race and are
 not observed.
@@ -814,6 +817,35 @@ def _traffic_surface(data, snap, scenario):
     out["belief_optimizer"] = _call(lambda: decisions.belief_optimum(snap, belief, MAX_STOPS, seed=0,
                                                                     n_samples=N_SAMPLES).as_pairs())
     out["run_to_flag"] = _call(lambda: plain(policies.RULE_POLICIES["run_to_flag"](scenario, belief, MAX_STOPS).plan))
+    assert traffic.GhostTraffic(**cfg.traffic.params).reads_future is False
+    out.update(_difficulty_surface(data, snap, plans))
+    return out
+
+
+BELIEF_DIFFICULTY_CONFIG = score.BELIEF_TRAFFIC_CONFIG.parent / "belief_difficulty.yaml"
+
+
+def _difficulty_surface(data, snap, plans):
+    """The belief with traffic and the as-of passing difficulty (configs/sim/belief_difficulty.yaml,
+    src/sim/overtaking.py): the threshold it plays with and the races it read, a plan set's times and
+    positions, and the passing words the tools show."""
+    from src.sim import traffic
+    cfg = SimConfig.from_file(BELIEF_DIFFICULTY_CONFIG)
+    belief = score.race_simulators(PROFILE, belief_config=cfg)(data.race_id, "belief")
+    fit = belief.fitted_for(snap)
+    laps = np.arange(snap.laps_completed + 1, snap.race.total_laps + 1)
+    state = fit.traffic.prepare(snap, laps, fit.laps, snap.driver, ref_lap_s=fit.ref_lap_s, model=fit.degradation)
+    out = {"difficulty_state": None if state is None else {
+        "theta_s": plain(state.pass_theta_s), "slope": plain(state.pass_slope),
+        "sources": list(state.difficulty.sources) if state.difficulty is not None else None}}
+    b = belief.simulate_batch(snap, plans, seed=agent_tools.SEED, n_samples=N_SAMPLES)
+    out["difficulty_batch"] = {"times": plain(b.times), "traffic_s": plain(b.traffic_s),
+                               "final_pos": plain(b.final_pos), "rejoin_pos": plain(b.rejoin_pos)}
+    with mock.patch.dict(agent_tools._BELIEF, {"config": cfg}), \
+            mock.patch.object(agent_tools, "_SIMS", {}):
+        tools.set_snapshot(snap)
+        out["difficulty_model_report"] = _shown(tools.get_model_report, None)
+        out["difficulty_evaluate_strategy"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": _other(snap.compound)})
     assert traffic.GhostTraffic(**cfg.traffic.params).reads_future is False
     return out
 

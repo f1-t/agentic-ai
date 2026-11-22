@@ -265,6 +265,19 @@ class GhostParams(BaseModel):
     # projected: the laps up to the snapshot), clipped to [0, DIRTY_AIR_MAX_S]; dirty_air_s
     # when either side has fewer than DIRTY_AIR_MIN_LAPS laps
     dirty_air_auto: bool = False
+    # circuit-specific passing (src/sim/overtaking.py, docs/eval.md "Overtaking difficulty").
+    # "none" keeps pass_mode's rule (bit for bit). Otherwise the pass rule is the hazard rule
+    # (module docstring, "Passing difficulty"): a caught car's pass completes once its cumulative
+    # pass hazard, from P(pass on a lap) = sigmoid(slope * (advantage - theta)), reaches ln 2;
+    # theta and slope from the overtaking table: "circuit" every table race at the circuit, this
+    # one included (judge only: it reads the race), "race" this race's own count shrunk toward the
+    # pooled one (judge only), "asof" only races before this one (the belief's)
+    difficulty: Literal["none", "circuit", "race", "asof"] = "none"
+    # dirty_air_s from the same table (overrides dirty_air_s and dirty_air_auto); difficulty only
+    difficulty_dirty_air: bool = False
+    # DRS trains (difficulty only): a ghost that starts the lap within 1 s of the ghost ahead of it
+    # (same lap count) is harder to pass, theta + the table's train shift, and a free one easier
+    difficulty_train: bool = False
 
 
 @dataclass
@@ -411,6 +424,10 @@ class GhostState:
     # (_classify)
     final_idx: np.ndarray = None
     dirty_air_s: float = 0.0    # the params' dirty_air_s, or dirty_air_auto's estimate
+    # the hazard pass rule's threshold and slope (params.difficulty), NaN when it is off
+    pass_theta_s: float = float("nan")
+    pass_slope: float = float("nan")
+    difficulty: object = None   # the overtaking.Difficulty behind them
 
 
 def flag_classification(G, half_lap_s):
@@ -487,6 +504,27 @@ def _model_times(model, compound, ages, lapnums):
 OWN_PACE_MIN_LAPS = 5   # free-air laps needed for own_pace from them, else every green lap
 DIRTY_AIR_MIN_LAPS = 20   # laps on each side for dirty_air_auto
 DIRTY_AIR_MAX_S = 1.5
+# the hazard pass rule (params.difficulty): a pass completes when the summed hazard reaches ln 2
+# (the median time to pass under a per-lap probability); a passed ghost is the car ahead again
+# once it is more than HAZARD_RESET_S ahead
+HAZARD_PASS = float(np.log(2.0))
+HAZARD_P_MAX = 0.999
+HAZARD_RESET_S = 2.0
+TRAIN_GAP_S = 1.0   # overtaking.CLOSE_GAP_S: a ghost this close to the ghost ahead of it is in a train
+
+
+def _in_train(gp):
+    """(n_ghosts,) bool: the ghost's line crossing (gp, NaN when absent) is within TRAIN_GAP_S after
+    another ghost's on the same lap count."""
+    gp = np.asarray(gp, dtype=float)
+    out = np.zeros(gp.shape, dtype=bool)
+    ok = np.flatnonzero(np.isfinite(gp))
+    if len(ok) < 2:
+        return out
+    order = ok[np.argsort(gp[ok], kind="stable")]
+    gaps = np.diff(gp[order])
+    out[order[1:]] = gaps <= TRAIN_GAP_S
+    return out
 
 
 def _residuals(rows, model):
@@ -748,8 +786,30 @@ def projected_table(projections, laps, total, model, pit, variant=None, min_stin
 class GhostTraffic:
     def __init__(self, **params):
         self.params = GhostParams(**params)
-        # the recorded source replays the other cars' future laps: world model only
-        self.reads_future = self.params.source == "recorded"
+        # the recorded source replays the other cars' future laps: world model only; so does a
+        # passing difficulty read from the race itself
+        self.reads_future = self.params.source == "recorded" or self.params.difficulty in ("circuit", "race")
+        if self.params.source == "projected" and self.params.difficulty in ("circuit", "race"):
+            raise ValueError(f"difficulty {self.params.difficulty!r} reads the race itself: "
+                             "the projected (belief) source takes 'asof' or 'none'")
+
+    def _difficulty(self, state, snapshot):
+        """Set the hazard pass rule's theta and slope (and the table's dirty air) on `state`."""
+        p = self.params
+        if p.difficulty == "none" or state is None:
+            return state
+        from . import overtaking
+        rid = getattr(snapshot.race, "race_id", None)
+        d = overtaking.difficulty_for(rid, p.difficulty)
+        state.difficulty = d
+        state.pass_theta_s, state.pass_slope = float(d.theta_s), float(d.slope)
+        if p.difficulty_dirty_air and np.isfinite(d.dirty_air_s):
+            state.dirty_air_s = float(np.clip(d.dirty_air_s, 0.0, DIRTY_AIR_MAX_S))
+        for v in state.variants or []:
+            if v is not state:
+                v.difficulty, v.pass_theta_s, v.pass_slope = d, state.pass_theta_s, state.pass_slope
+                v.dirty_air_s = state.dirty_air_s
+        return state
 
     def prepare(self, snapshot, laps, frame, driver, ref_lap_s=None, model=None):
         """`ref_lap_s` is the engine's reference lap for the SC queue's half-lap guard; None
@@ -769,7 +829,7 @@ class GhostTraffic:
             state.own_offset_s = pace_offset(frame[frame["driver"] == driver], model)
         state.dirty_air_s = (dirty_air_estimate(frame, model, p.dirty_air_range_s, p.dirty_air_s)
                              if p.dirty_air_auto else p.dirty_air_s)
-        return self._finish(state, snapshot, ref_lap_s)
+        return self._difficulty(self._finish(state, snapshot, ref_lap_s), snapshot)
 
     def _prepare_projected(self, snapshot, laps, frame, driver, ref_lap_s, model):
         """The other cars projected from what was visible at the snapshot. The frame is cut to
@@ -805,7 +865,7 @@ class GhostTraffic:
             v.green_ref = _green_ref(v.g_med, v.rec_neutral, 2 * state.half_lap_s)
             _classify(v)
             state.variants.append(v)
-        return state
+        return self._difficulty(state, snapshot)
 
     def _finish(self, state, snapshot, ref_lap_s):
         """half_lap_s, green_ref and the anchor check."""
@@ -883,6 +943,20 @@ class GhostTraffic:
         dirty = state.dirty_air_s
         dirty_on = dirty > 0
         earned = p.pass_mode == "earned"
+        # the hazard pass rule (params.difficulty): per plan and ghost the pass hazard summed over
+        # the laps spent caught behind it, and the ghosts passed (no longer the car ahead until
+        # the gap reopens past HAZARD_RESET_S or we stop)
+        hz = p.difficulty != "none" and np.isfinite(state.pass_theta_s)
+        if hz:
+            n_g = st.G.shape[1]
+            H = np.zeros((n_plans, n_g))
+            gone = np.zeros((n_plans, n_g), dtype=bool)
+            theta, slope = state.pass_theta_s, state.pass_slope
+            theta_nodrs = theta + (p.pass_delta_s - p.pass_delta_drs_s)
+            d_ = state.difficulty
+            shift = float(getattr(d_, "train_shift_s", 0.0) or 0.0)
+            share = float(getattr(d_, "train_share", 0.0) or 0.0)
+            train_up, train_down = shift * (1.0 - share), shift * share
         S = 0.0   # the ghosts' common clock shift so far (neutral alignment)
         own = state.own_offset_s
         for i in range(n_laps):
@@ -920,8 +994,52 @@ class GhostTraffic:
             else:
                 d = T[:, None] - Gp
                 behind = (d > 0) & st.eligible[i]
+                if hz:
+                    gone &= (d > 0) & (d <= HAZARD_RESET_S)
+                    behind &= ~gone
                 catch = behind & (arrive[:, None] < Gf)
-                if not catch.any() and not dirty_on:
+                if hz and (catch.any() or dirty_on):
+                    out = st.out_lap[i]
+                    adv = g - ftrk[:, None]
+                    th = theta if drs[i] else theta_nodrs
+                    if p.difficulty_train:
+                        th = th + np.where(_in_train(st.G_prev[i]), train_up, -train_down)
+                    with np.errstate(over="ignore", invalid="ignore"):
+                        prob = np.where(adv > 0, 1.0 / (1.0 + np.exp(-slope * (adv - th))), 0.0)
+                    prob = np.nan_to_num(np.minimum(prob, HAZARD_P_MAX))
+                    cand = catch & ~out
+                    # the hazard is kept while the car stays within range behind, reset otherwise
+                    keep = behind & (d <= p.dirty_air_range_s + _GAP_EPS)
+                    H = np.where(cand, H - np.log1p(-prob), np.where(keep, H, 0.0))
+                    ripe = cand & (H >= HAZARD_PASS)
+                    held = (catch & out & (arrive[:, None] > G)) | (cand & ~ripe)
+                    clamp = self._clamp(held, Gf)
+                    passing = ripe & (Gs >= clamp[:, None])
+                    over = passing.sum(axis=1) > p.max_passes_per_lap
+                    if over.any():
+                        key = np.where(passing, Gp, -np.inf)
+                        rank = np.argsort(np.argsort(-key, axis=1, kind="stable"), axis=1)
+                        passing = passing & (rank < p.max_passes_per_lap)
+                    held = held | (ripe & ~passing)
+                    clamp = self._clamp(held, Gf)
+                    passing = passing & (Gs >= clamp[:, None])
+                    n_pass = passing.sum(axis=1)
+                    extra = n_pass * p.pass_cost_s
+                    if dirty_on:
+                        near = behind & (d <= p.dirty_air_range_s + _GAP_EPS) & ~passing
+                        extra = extra + dirty * near.any(axis=1)
+                    # no swap: a lap never ends earlier than the car's own arrival
+                    inc = np.maximum(clamp - arrive, extra)
+                    gone |= passing
+                    H = np.where(passing, 0.0, H)
+                    lap_s[:, i] = f + inc
+                    traffic_s += inc
+                    passes += n_pass
+                    cross = arrive + inc
+                    T = cross + pit_s_lap[:, i]
+                elif not catch.any() and not dirty_on:
+                    if hz:
+                        H = np.where(behind & (d <= p.dirty_air_range_s + _GAP_EPS), H, 0.0)
                     cross = arrive
                     T = arrive + pit_s_lap[:, i]
                 else:
@@ -970,6 +1088,11 @@ class GhostTraffic:
                     passes += n_pass
                     cross = arrive + inc
                     T = cross + pit_s_lap[:, i]
+            if hz:   # a stop or a neutralisation ends every fight
+                reset = (pit_s_lap[:, i] > 0) | bool(neutral[i])
+                if reset.any():
+                    H[reset] = 0.0
+                    gone[reset] = False
             # positions at the line at the end of lap i: 1 + the ghosts that crossed it earlier
             w = first_in == i
             if w.any():   # the cars that come by while we are in the pit lane: within the pit loss behind
