@@ -4,7 +4,8 @@
     python -m src.eval.rerun scenarios  --set dev20 [--rule as_of|stratified] [--final]
     python -m src.eval.rerun references --set dev20 --world-config default [--jobs 4]
     python -m src.eval.rerun baselines  --set dev20 --world-config default --belief-config default [--jobs 4]
-    python -m src.eval.rerun agent      --set dev20 --world-config default --belief-config default
+    python -m src.eval.rerun agent      --set dev20 --world-config default --belief-config default [--jobs 6]
+                                        [--timing-sample 24] [--resume] [--force] [--only ids.txt]
     python -m src.eval.rerun tables     --set dev20
 
 Every stage reads and writes under one directory, --out-dir (default reports/eval/rerun/<set>):
@@ -14,7 +15,9 @@ Every stage reads and writes under one directory, --out-dir (default reports/eva
     parts/references/<race>.pkl, parts/baselines/<race>.csv   per-race results: a rerun skips a
                               race whose part exists, so an interrupted stage resumes
     baselines.csv             every non-LLM policy's rows (stage baselines)
-    agent.csv, trajectories/  the live agent (stage agent; refuses to overwrite either)
+    agent.csv, trajectories/  the live agent (stage agent, src/eval/agent_pass.py: --jobs workers, resumable,
+                              never overwritten without --force); parts/agent/ its per-worker rows;
+                              timing_sample.csv, timing_sample/  the sequential timing sample; agent_run.json
     tables/                   combined rows, summaries, paired tables, chart and tail tables (stage tables)
     provenance.json           commit, tag, configs and hashes, SIM_CODE_VERSION, set digest, model
                               and loop settings, and every command run here (commands.log)
@@ -52,6 +55,8 @@ TAIL_S = (10.0, 20.0, 30.0)
 # the environment provenance.json records as the model: the backend and the model id of each backend
 # (and the voyager reply cap), never a key, token or endpoint
 MODEL_ENV = ("LLM_BACKEND", "ANTHROPIC_MODEL", "HF_MODEL", "VOYAGER_MODEL", "VOYAGER_MAX_TOKENS", "VOYAGER_TEMPERATURE")
+LOOP_ENV = ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS", "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",
+            "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK", "AGENT_TURN_REPEAT")
 ERAS = (("2019-20", 2019, 2020), ("2021", 2021, 2021), ("2022", 2022, 2022), ("2023", 2023, 2023),
         ("2024-25", 2024, 2025))
 
@@ -251,29 +256,171 @@ def stage_baselines(args) -> Path:
 
 
 # --- stage 4: agent ---------------------------------------------------------------------------------------
+def _only_ids(value) -> list[str] | None:
+    """--only: a file of scenario ids (one per line, # comments) or a comma-separated list."""
+    if not value:
+        return None
+    p = Path(value)
+    text = p.read_text() if p.is_file() else value.replace(",", "\n")
+    return [x.strip() for x in text.splitlines() if x.strip() and not x.strip().startswith("#")]
+
+
+def _agent_outputs(d: Path) -> dict:
+    return {"agent.csv": d / "agent.csv", "trajectories": d / "trajectories", "parts": d / "parts" / "agent",
+            "timing_sample.csv": d / "timing_sample.csv", "timing_sample": d / "timing_sample",
+            "agent_run.json": d / "agent_run.json"}
+
+
+def _nonempty(p: Path) -> bool:
+    return p.is_file() or (p.is_dir() and any(p.iterdir()))
+
+
 def stage_agent(args) -> Path:
-    """One sequential pass of the live agent (LLM_BACKEND), its tools on the belief config
-    (AGENT_BELIEF_CONFIG), trajectories to trajectories/; refuses to overwrite agent.csv or a
-    non-empty trajectories/."""
+    """The live agent (LLM_BACKEND) on every scenario of the set (or --only's), its tools on the belief
+    config (AGENT_BELIEF_CONFIG), with --jobs worker processes (src/eval/agent_pass.py): the rows merged
+    in the set's order into agent.csv, one trajectory per scenario in trajectories/. With
+    --timing-sample K, K scenarios first run sequentially into timing_sample.csv (timing only; the pass
+    runs them again). --resume skips finished scenarios; a finished or a started pass is never
+    overwritten without --force. agent_run.json records the passes."""
+    from . import agent_pass as ap
     from .policies import AgentPolicy
-    from .reference import ReferenceStore
     from .scenarios import ScenarioSet
-    from .score import race_simulators, score_set
+    from .score import warn_no_stop_reference
     d = out_dir(args)
-    traj, path = d / "trajectories", d / "agent.csv"
-    if path.exists() or (traj.exists() and any(traj.iterdir())):
-        raise SystemExit(f"{path} or {traj} exists: an agent pass is never overwritten; use a new --out-dir")
+    out = _agent_outputs(d)
+    resume, force = getattr(args, "resume", False), getattr(args, "force", False)
+    rerun_errors, every = getattr(args, "rerun_errors", False), int(getattr(args, "progress_every", 10) or 10)
+    jobs, k = max(int(getattr(args, "jobs", 1) or 1), 1), int(getattr(args, "timing_sample", 0) or 0)
+    seed = int(getattr(args, "timing_seed", 0) or 0)
+    if resume:
+        if out["agent.csv"].exists():
+            if not force:
+                raise SystemExit(f"{out['agent.csv']} exists: the pass is finished; --force to merge it again")
+            ap.clear([out["agent.csv"]])
+    elif any(_nonempty(p) for p in out.values()):
+        if not force:
+            raise SystemExit(f"an agent pass exists under {d} (agent.csv, trajectories/, parts/agent/ or the timing "
+                             "sample): --resume to finish it, --force to start over, or use a new --out-dir")
+        ap.clear(out.values())
     belief = belief_path(args.belief_config)
     os.environ["AGENT_BELIEF_CONFIG"] = belief
+    items = ScenarioSet.load(d / "scenarios.json").items
+    only = _only_ids(getattr(args, "only", None))
+    if only is not None:
+        missing = sorted(set(only) - {sc.scenario_id for sc in items})
+        if missing:
+            raise SystemExit(f"--only names scenarios not in {d / 'scenarios.json'}: {missing[:5]}")
+        items = [sc for sc in items if sc.scenario_id in set(only)]
+    ap.check_names(items)
     prof = _profile_for(args.profile)
-    s = ScenarioSet.load(d / "scenarios.json")
-    policy = AgentPolicy(set_name=".", profile=prof, log_dir=traj)
-    rows = score_set(s, race_simulators(prof, _sim_config(belief), _sim_config(world_path(args.world_config))),
-                     {"agent": policy}, n_samples=prof.sim.n_samples, max_stops=prof.sim.max_stops,
-                     references=ReferenceStore(d / "references", require=True))
-    rows.to_csv(path, index=False)
-    print(f"{len(rows)} agent rows -> {path}")
-    return path
+    warn_no_stop_reference({"agent": AgentPolicy}, prof.sim.max_stops)
+    cfg = {"scenarios": str(d / "scenarios.json"), "profile": args.profile, "belief": belief,
+           "world": world_path(args.world_config), "references": str(d / "references"),
+           "backend": getattr(args, "backend", None) or ap.DEFAULT_BACKEND}
+    if getattr(args, "backoff", None) is not None:   # tests
+        cfg["backoff"] = tuple(args.backoff)
+    run = json.loads(out["agent_run.json"].read_text()) if out["agent_run.json"].exists() else {"passes": []}
+
+    def save_run():
+        out["agent_run.json"].write_text(json.dumps(run, indent=1, default=str) + "\n")
+
+    def record(p):
+        # the model id and loop switches each pass ran with (provenance.json reads them later, at tables)
+        p["env"] = {k: os.environ.get(k) for k in (*MODEL_ENV, *LOOP_ENV)}
+        run["passes"].append(p)
+        save_run()
+
+    try:
+        if k:
+            sample = ap.timing_sample(items, k, seed=seed)
+            run["timing_sample"] = {"k": k, "seed": seed, "jobs": 1,
+                                    "scenarios": {sc.scenario_id: ap.phase_of(sc) for sc in sample}}
+            ts = out["timing_sample"]
+            record(ap.run_pass(sample, cfg=cfg, jobs=1, traj_dir=ts / "trajectories", parts=ts / "parts",
+                               label="timing sample", rerun_errors=rerun_errors, progress_every=every))
+            ap.merge_rows(sample, ap.read_records(ts / "parts")).to_csv(out["timing_sample.csv"], index=False)
+            print(f"{len(sample)} timing-sample rows -> {out['timing_sample.csv']} (timing only, not results)")
+        record(ap.run_pass(items, cfg=cfg, jobs=jobs, traj_dir=out["trajectories"], parts=out["parts"],
+                           label="agent", rerun_errors=rerun_errors, progress_every=every))
+    except (ap.PassStopped, KeyboardInterrupt) as exc:
+        if getattr(exc, "info", None):
+            run["passes"].append(exc.info)
+        run["stopped"] = str(exc) or type(exc).__name__
+        save_run()
+        raise
+    recs = ap.read_records(out["parts"])
+    missing = [sc.scenario_id for sc in items if sc.scenario_id not in recs]
+    if missing:
+        raise SystemExit(f"{len(missing)} scenarios have no row (first {missing[:3]}); rerun with --resume")
+    rows = ap.merge_rows(items, recs)
+    rows.to_csv(out["agent.csv"], index=False)
+    passes = run["passes"]
+    run.update(agent_jobs=jobs, scenarios=len(items), only=only is not None, headline=ap.HEADLINE,
+               latency_measured_under=f"{jobs} concurrent episode{'s' if jobs != 1 else ''} (agent_jobs) in the "
+                                      "full pass; other users of the endpoint are not controlled",
+               agent_wall_s=round(sum(p["wall_s"] for p in passes if p["label"] == "agent"), 1),
+               timing_sample_wall_s=round(sum(p["wall_s"] for p in passes if p["label"] == "timing sample"), 1),
+               retry_policy={"tries": ap.TRIES, "backoff_s": list(cfg.get("backoff", ap.BACKOFF_S)),
+                             "request_timeout_s": ap.REQUEST_TIMEOUT_S,
+                             "retried": "429, 5xx, timeouts, dropped connections; 401/403 stop the pass"},
+               rows_status={str(st): int(n) for st, n in rows["status"].value_counts().items()})
+    run.pop("stopped", None)
+    save_run()
+    print(f"{len(rows)} agent rows -> {out['agent.csv']}")
+    return out["agent.csv"]
+
+
+def agent_timing(d: Path):
+    """(per-run latency table, paired table, per-scenario pairs) from timing_sample.csv (isolated, one
+    job) and agent.csv (the pass, --jobs): latency mean, median and p90 with tokens and tool calls per
+    run; on the sampled scenarios the concurrent minus isolated latency (mean, 95% t interval, ratio
+    of means) and whether the decision was the same (two runs of one scenario: also a small
+    run-to-run check). None when either file is missing."""
+    ts, ag = d / "timing_sample.csv", d / "agent.csv"
+    if not (ts.exists() and ag.exists()):
+        return None
+    iso, con = pd.read_csv(ts), pd.read_csv(ag)
+    iso, con = iso[iso["policy"] == "agent"], con[con["policy"] == "agent"]
+    for g in (iso, con):
+        if "decision" not in g:
+            g["decision"] = None
+
+    def describe(g, name):
+        lat = pd.to_numeric(g["latency_s"], errors="coerce").dropna()
+
+        def mean(col):
+            return float(pd.to_numeric(g[col], errors="coerce").mean()) if col in g else np.nan
+        return {"run": name, "episodes": len(g), "latency_mean_s": float(lat.mean()) if len(lat) else np.nan,
+                "latency_median_s": float(lat.median()) if len(lat) else np.nan,
+                "latency_p90_s": float(lat.quantile(0.9)) if len(lat) else np.nan,
+                "input_tokens_mean": mean("input_tokens"), "output_tokens_mean": mean("output_tokens"),
+                "tool_calls_mean": mean("tool_calls"), "errors": int((g["status"] == "error").sum()),
+                "submitted": int(g["decision"].notna().sum()),
+                "api_retries": int(pd.to_numeric(g["api_retries"], errors="coerce").fillna(0).sum())
+                if "api_retries" in g else 0}
+    pairs = iso[["scenario_id", "latency_s", "decision"]].merge(
+        con[["scenario_id", "latency_s", "decision"]], on="scenario_id", suffixes=("_isolated", "_concurrent"))
+    pairs["latency_diff_s"] = pairs["latency_s_concurrent"] - pairs["latency_s_isolated"]
+    pairs["same_decision"] = (pairs["decision_isolated"].fillna("none").astype(str)
+                              == pairs["decision_concurrent"].fillna("none").astype(str))
+    runs = pd.DataFrame([describe(iso, "isolated (timing sample, 1 job)"),
+                         describe(con[con["scenario_id"].isin(pairs["scenario_id"])], "concurrent, same scenarios"),
+                         describe(con, "concurrent, all scenarios")])
+    diff = pairs["latency_diff_s"].dropna()
+    n = len(diff)
+    half = np.nan
+    if n > 1:
+        from scipy import stats
+        half = float(stats.t.ppf(0.975, n - 1) * diff.std(ddof=1) / np.sqrt(n))
+    mean_iso, mean_con = pairs["latency_s_isolated"].mean(), pairs["latency_s_concurrent"].mean()
+    paired = pd.DataFrame([{
+        "pairs": n, "mean_diff_s": float(diff.mean()) if n else np.nan,
+        "ci95_low_s": float(diff.mean() - half) if n > 1 else np.nan,
+        "ci95_high_s": float(diff.mean() + half) if n > 1 else np.nan,
+        "ratio_of_means": float(mean_con / mean_iso) if n and mean_iso else np.nan,
+        "median_ratio": float((pairs["latency_s_concurrent"] / pairs["latency_s_isolated"]).median()) if n else np.nan,
+        "same_decision": int(pairs["same_decision"].sum()), "of": len(pairs)}])
+    return runs, paired, pairs
 
 
 # --- stage 5: tables --------------------------------------------------------------------------------------
@@ -346,6 +493,10 @@ def stage_tables(args) -> Path:
         if reference in set(rows["policy"]):
             paired_table(rows, reference, metric="position_regret", cluster="driver") \
                 .to_csv(t / f"paired_{reference}_minus_x_position.csv", index=False)
+    timing = agent_timing(d)
+    if timing is not None:
+        for name, table in zip(("agent_latency.csv", "agent_latency_paired.csv", "agent_latency_pairs.csv"), timing):
+            table.to_csv(t / name, index=False)
     write_provenance(args, rows)
     print(f"tables -> {t}")
     return t
@@ -399,6 +550,16 @@ def as_of_tables(races) -> dict:
     return out
 
 
+def _timing_doc(d: Path):
+    """agent_timing's tables as records, and which latency is the headline (the isolated sample's)."""
+    timing = agent_timing(d)
+    if timing is None:
+        return None
+    runs, paired, _ = timing
+    return {"headline": "isolated (timing sample, 1 job)", "runs": runs.to_dict("records"),
+            "paired": paired.to_dict("records")[0]}
+
+
 def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
     """provenance.json beside the outputs: commit, tag, the world and belief configs with their
     file sha256 and config_hash, SIM_CODE_VERSION, the set digest, the model id and loop settings,
@@ -434,6 +595,8 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
            "builder": s.builder if s else None,
            "future_blindness": future_blindness(run=getattr(args, "harness", False)),
            "as_of_tables": as_of_tables(_races(s) if s else []),
+           "agent_run": json.loads((d / "agent_run.json").read_text()) if (d / "agent_run.json").exists() else None,
+           "agent_timing": _timing_doc(d),
            "commands": (d / "commands.log").read_text().splitlines() if (d / "commands.log").exists() else []}
     path = d / "provenance.json"
     path.write_text(json.dumps(doc, indent=1, default=str) + "\n")
@@ -461,7 +624,21 @@ def parser() -> argparse.ArgumentParser:
                     help="scenarios: required to build a report set (development false, e.g. test9), which loads the "
                          "held-out races; pass it once, on the owner's word")
     ap.add_argument("--jobs", type=int, default=1, help="references, baselines: worker processes (at most 4 on a "
-                                                         "shared machine), one race each, BLAS at one thread")
+                                                         "shared machine), one race each, BLAS at one thread; agent: "
+                                                         "worker processes running episodes concurrently, one "
+                                                         "scenario at a time each")
+    ap.add_argument("--resume", action="store_true", help="agent: finish a started pass, skipping every scenario "
+                                                           "with a row and a trajectory")
+    ap.add_argument("--rerun-errors", action="store_true", help="agent, with --resume: also rerun error rows")
+    ap.add_argument("--force", action="store_true", help="agent: start over, deleting the earlier pass's outputs "
+                                                          "(with --resume: merge a finished pass again)")
+    ap.add_argument("--timing-sample", type=int, default=0, metavar="K",
+                    help="agent: first run K scenarios (seeded, stratified by race and early/mid/late laps) "
+                         "sequentially into timing_sample.csv, the decision-time figure; timing only, the pass "
+                         "runs them again")
+    ap.add_argument("--timing-seed", type=int, default=0, help="agent: the timing sample's seed")
+    ap.add_argument("--only", help="agent: only these scenario ids (a file, one per line, or comma-separated)")
+    ap.add_argument("--progress-every", type=int, default=10, help="agent: a progress line every N scenarios")
     ap.add_argument("--profile", help="compute profile (default $SIM_PROFILE or local)")
     ap.add_argument("--harness", action="store_true",
                     help="tables: also run the future-blindness harness's default part (about 16 s) and record its "
