@@ -163,19 +163,21 @@ def test_weights_are_strictly_ordered():
     assert 0 < w["other_era"] < 1 and 0 < w["recency_per_season"] < 1
 
 
-def test_weight_of_each_category_in_the_sources():
-    p = prior("2031_01_alpha", "SOFT", use_severity=False)
-    wts = {(r, role): wt for r, role, wt in p.sources}
+def shares(p):
+    return {(r, role): wt for r, role, wt in p.sources}
+
+
+def test_weight_of_each_category_in_the_pool():
+    """The pooled estimate (use_circuit=False: no same-circuit part) weighs by compound category,
+    recency and compound distance; sources are each observation's share of the estimate."""
+    p = prior("2031_01_alpha", "SOFT", use_severity=False, use_circuit=False)
+    wts = shares(p)
     w = cfg()["weights"]
-    rec = w["recency_per_season"]
-    assert wts[("2030_01_alpha", "SOFT")] == pytest.approx(w["same_circuit_same_compound"] * rec)
-    assert wts[("2030_01_alpha", "MEDIUM")] == pytest.approx(w["same_circuit_other_compound"] * rec)
-    assert wts[("2030_02_beta", "MEDIUM")] == pytest.approx(w["other_circuit_other_compound"] * rec
-                                                         * w["compound_step_decay"])   # C2 vs C4: two steps
-    assert wts[("2030_02_beta", "SOFT")] == pytest.approx(w["other_circuit_other_compound"] * rec)
-    p2 = prior("2031_05_gamma", "HARD", use_severity=False)   # gamma's hard is C3: beta's soft, alpha's soft... C3
-    wts2 = {(r, role): wt for r, role, wt in p2.sources}
-    assert wts2[("2030_02_beta", "SOFT")] == pytest.approx(w["other_circuit_same_compound"] * rec)
+    assert sum(wts.values()) == pytest.approx(1.0)
+    ref = wts[("2030_01_alpha", "SOFT")]       # same compound (C4), one season back
+    assert wts[("2030_01_alpha", "MEDIUM")] / ref == pytest.approx(w["other_circuit_other_compound"] / w["other_circuit_same_compound"], rel=1e-4)
+    assert wts[("2030_02_beta", "MEDIUM")] / ref == pytest.approx(   # C2 vs C4: two steps
+        w["other_circuit_other_compound"] * w["compound_step_decay"] / w["other_circuit_same_compound"], rel=1e-4)
     # the heaviest source comes first
     assert [s[2] for s in p.sources] == sorted([s[2] for s in p.sources], reverse=True)
 
@@ -185,16 +187,57 @@ def test_other_era_and_recency_down_weight_but_keep():
                      + hist_rows("2022_01_alpha", "alpha", "2022-03-01", (2, 3, 4), (0.7, 0.5, 0.3)))
     n = noms({"2023_01_alpha": ("alpha", "2023-03-01", (2, 3, 4), 60)})
     p = th.tyre_life_prior("2023_01_alpha", "SOFT", history=h, nominations=n, config=cfg())
-    wts = {(r, role): wt for r, role, wt in p.sources}
+    wts = shares(p)
     w = cfg()["weights"]
-    assert wts[("2022_01_alpha", "SOFT")] == pytest.approx(w["recency_per_season"])
-    assert wts[("2021_01_alpha", "SOFT")] == pytest.approx(w["recency_per_season"] ** 2 * w["other_era"])
+    assert wts[("2021_01_alpha", "SOFT")] > 0
+    assert wts[("2021_01_alpha", "SOFT")] / wts[("2022_01_alpha", "SOFT")] == pytest.approx(
+        w["recency_per_season"] * w["other_era"], rel=1e-4)
 
 
-def test_same_circuit_same_compound_dominates():
-    # alpha (same circuit, same compound) says 0.3 of the race; gamma (other circuit) says 0.9
-    p = prior("2032_01_alpha", "SOFT")
-    assert abs(p.edge_frac - 0.31) < abs(p.edge_frac - 0.9) / 4
+# --- shrinkage of the same circuit toward the pool ----------------------------------------------
+def shrink_case(local_frac=0.3, red_flag=False, wet=0.0, seasons_back=0):
+    """One same-circuit race (alpha, same trio) and two other-circuit races; target alpha."""
+    s0 = 2031 - seasons_back
+    rows = hist_rows(f"{s0}_01_alpha", "alpha", f"{s0}-03-01", (2, 3, 4), (None, None, local_frac), wet=wet)
+    for r in rows:
+        r["red_flag"] = red_flag
+    rows += hist_rows("2031_02_beta", "beta", "2031-03-08", (2, 3, 4), (None, None, 0.5))
+    rows += hist_rows("2031_03_gamma", "gamma", "2031-03-15", (2, 3, 4), (None, None, 0.5))
+    n = noms({"2031_09_alpha": ("alpha", "2031-09-01", (2, 3, 4), 60)})
+    return th.tyre_life_prior("2031_09_alpha", "SOFT", history=pd.DataFrame(rows), nominations=n, config=cfg())
+
+
+def test_same_circuit_is_shrunk_toward_the_pool_by_its_effective_races():
+    c = cfg()
+    k0 = c["shrinkage"]["prior_strength_races"]
+    p = shrink_case()
+    pooled = (0.3 + 0.5 + 0.5) / 3            # every race as another circuit, same compound, same season
+    w_s = 1.0 / (1.0 + k0)                     # one dry, normal, same-compound race of the same season
+    assert p.tier == 1
+    assert p.edge_frac == pytest.approx(w_s * 0.3 + (1 - w_s) * pooled)
+    # one noisy race cannot override the pool: the estimate stays nearer the pool than the race
+    assert abs(p.edge_frac - pooled) < abs(p.edge_frac - 0.3)
+    # an older race counts as fewer effective races
+    old = shrink_case(seasons_back=1)
+    w_old = c["weights"]["recency_per_season"] / (c["weights"]["recency_per_season"] + k0)
+    assert any(f"weight {w_old:.2f}" in n for n in old.notes)
+
+
+def test_disagreement_widens_the_sd():
+    agree = shrink_case(local_frac=0.5)
+    disagree = shrink_case(local_frac=0.2)
+    assert disagree.sd_frac > agree.sd_frac
+
+
+def test_abnormal_same_circuit_races_leave_the_local_estimate():
+    for kw in ({"red_flag": True}, {"wet": 0.05}):
+        p = shrink_case(**kw)
+        assert p.tier == 3                                   # no same-circuit part contributed
+        assert ("2031_01_alpha", "SOFT") in shares(p)        # it stays in the pool
+        assert not any("same circuit" in n for n in p.notes)
+    assert shrink_case(wet=0.01).tier == 1                   # below damp_lap_share: normal
+    assert th.abnormal(pd.Series({"red_flag": "True", "wet_share": 0.0}))
+    assert not th.abnormal(pd.Series({"red_flag": False, "wet_share": 0.0}))
 
 
 def test_neighbouring_compound_is_moved_by_the_life_ratio():
@@ -227,11 +270,12 @@ def test_life_ratio_estimated_as_of_with_a_default():
 
 def test_wet_and_excluded_observations():
     h = HIST.copy()
+    dry = shares(prior("2031_01_alpha", "SOFT", history=h, use_circuit=False))
     h.loc[h["race_id"] == "2030_01_alpha", "wet_share"] = 0.5
-    p = prior("2031_01_alpha", "SOFT", history=h)
-    wts = {(r, role): wt for r, role, wt in p.sources}
+    wet = shares(prior("2031_01_alpha", "SOFT", history=h, use_circuit=False))
     w = cfg()["weights"]
-    assert wts[("2030_01_alpha", "SOFT")] == pytest.approx(w["same_circuit_same_compound"] * w["recency_per_season"] * w["wet_race"])
+    ratio_dry = dry[("2030_01_alpha", "SOFT")] / dry[("2030_02_beta", "SOFT")]
+    assert wet[("2030_01_alpha", "SOFT")] / wet[("2030_02_beta", "SOFT")] == pytest.approx(ratio_dry * w["wet_race"], rel=1e-4)
     h.loc[h["race_id"] == "2030_01_alpha", "excluded"] = "capped"
     assert "2030_01_alpha" not in {s[0] for s in prior("2031_01_alpha", "SOFT", history=h).sources}
 
@@ -303,8 +347,9 @@ def test_observation_is_a_high_quantile_of_usable_stint_ends():
     assert np.isnan(few.loc["SOFT", "edge_laps"])
 
 
-def test_module_is_classified_non_physics():
-    assert "tyre_history" in calibration.NON_PHYSICS and "tyre_history" not in calibration.PHYSICS_MODULES
+def test_module_is_classified_physics():
+    """The engine places the wear cliff's support edge with it (cliff.history_prior), so it moves lap times."""
+    assert "tyre_history" in calibration.PHYSICS_MODULES and "tyre_history" not in calibration.NON_PHYSICS
 
 
 def test_validation_runs_on_the_committed_tables():

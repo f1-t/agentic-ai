@@ -26,16 +26,29 @@ are left out; a stint run to the flag shows the tyre lasted at least that long, 
 high quantile rather than the maximum: one car's gamble does not set the edge. A pace check
 (the late-stint excess over each stint's own early trend) is reported next to it, never used.
 
-The prior (tyre_life_prior) is a weighted mean of every usable earlier observation, each moved
-onto the target first: as a share of race distance (so a circuit with shorter laps runs more
-laps on the same rubber), times life_ratio ** steps for a compound `steps` common-index steps
-harder (positive) or softer than the target's. The weight is the category's (same circuit and
-same compound > same circuit, other compound > other circuits, same compound > other circuits,
-other compound; configs/tyre_history.yaml), times recency_per_season per season back, times
-other_era across the 2022 regulation change, times wet_race for a wet race. Its tier is the best
-category present: 1 same circuit and compound, 2 same circuit, 3 other circuits only, 4 no
-earlier race at all (a constant share of race distance per role). The sd is the weighted spread
-of the moved observations (Kish n_effective) in quadrature with a floor that widens by tier.
+The prior (tyre_life_prior) shrinks a same-circuit estimate toward a pooled one:
+  pooled   every usable earlier observation, each treated as another circuit's and moved onto
+           the target: as a share of race distance (so a circuit with shorter laps runs more
+           laps on the same rubber), times life_ratio ** steps for a compound `steps`
+           common-index steps harder (positive) or softer than the target's, plus the severity
+           step (the difference in the mean index of the nominated trios). Weighted by the
+           category (other circuits, same compound > other circuits, other compound), times
+           recency_per_season per season back, other_era across the 2022 regulation change,
+           wet_race for a wet race.
+  local    the same circuit's earlier observations, not moved by severity, weighted same
+           compound > other compound with the same recency and era factors; a race flagged
+           abnormal (a red flag, wet or damp: known once that race is over) weighs
+           shrinkage.abnormal_same_circuit (0: left out).
+  combined w_s * local + (1 - w_s) * pooled, w_s = n / (n + k0): n the circuit's effective
+           number of dry, normal races (each race counts its heaviest observation's weight
+           relative to a same-compound race of the same season, 1.0), k0 the stated prior
+           strength shrinkage.prior_strength_races. One noisy race at a circuit (a red-flag
+           Monaco) cannot override the pooled estimate.
+Its tier is the most specific source that contributed: 1 same circuit and compound, 2 same
+circuit, other compound, 3 pooled only, 4 no earlier race at all (a constant share of race
+distance per role). The sd is the mixture's: each part's weighted spread (Kish n_effective),
+plus w_s (1 - w_s) times their squared disagreement, in quadrature with a floor blended the same
+way between the tier's and tier 3's.
 
 A missing nomination (the target's or an observation's) never fails: the compounds are then
 compared by role (HARD 0, MEDIUM 1, SOFT 2 steps), never counted as the same compound.
@@ -87,10 +100,10 @@ HISTORY_COLUMNS = [
     "race_id", "season", "round", "date", "era", "circuit", "total_laps", "role", "compound", "scale",
     "common_index", "trio_index", "n_stints", "n_pitted", "n_flag", "n_neutralised", "n_retired", "n_usable",
     "edge_laps", "edge_frac", "max_age", "median_end_age", "pace_n_stints", "pace_late_excess_s",
-    "pace_falloff_share", "wet_share", "excluded"]
+    "pace_falloff_share", "wet_share", "red_flag", "excluded"]
 OBS_COLUMNS = ["race_id", "total_laps", "role", "n_stints", "n_pitted", "n_flag", "n_neutralised", "n_retired",
                "n_usable", "edge_laps", "edge_frac", "max_age", "median_end_age", "pace_n_stints",
-               "pace_late_excess_s", "pace_falloff_share", "wet_share"]
+               "pace_late_excess_s", "pace_falloff_share", "wet_share", "red_flag"]
 
 
 @dataclass(frozen=True)
@@ -311,6 +324,7 @@ def observed_tyre_life(race, *, race_id: str | None = None, config=None, allow_h
     total = int(frame["lap"].max()) if len(frame) else 0
     comp = frame["compound"].astype(str).str.upper()
     wet_share = float(comp.isin(WET).mean()) if len(frame) else 0.0
+    red_flag = bool(frame["track_status"].astype(str).str.contains("5").any()) if len(frame) else False
     pace = _pace_excess(frame, stints, cfg) if len(stints) else {}
     rows = []
     for role in ROLES:
@@ -329,7 +343,7 @@ def observed_tyre_life(race, *, race_id: str | None = None, config=None, allow_h
                      "max_age": float(usable.max()) if len(usable) else np.nan,
                      "median_end_age": float(np.median(usable)) if len(usable) else np.nan,
                      "pace_n_stints": pn, "pace_late_excess_s": pex, "pace_falloff_share": pshare,
-                     "wet_share": wet_share})
+                     "wet_share": wet_share, "red_flag": red_flag})
     obs = pd.DataFrame(rows, columns=OBS_COLUMNS)
     if return_stints:
         return obs, stints.assign(race_id=race_id)
@@ -495,53 +509,100 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
     floors = {int(k): float(v) for k, v in cfg["sd_floor_frac"].items()}
     if use_severity is None:
         use_severity = bool((cfg.get("scaling") or {}).get("severity_from_nomination", False))
+    shrink = cfg["shrinkage"]
     trio_t = target.trio
-    rows = []
+    pooled, local = [], []     # (race_id, role, category, weight, moved edge_frac)
     for r in h.itertuples():
-        same_c = use_circuit and r.circuit == target.circuit
         idx_h = float(r.common_index) if pd.notna(r.common_index) else np.nan
         if use_compound and np.isfinite(idx_t) and np.isfinite(idx_h):
             steps = idx_t - idx_h
             same_k = abs(steps) <= w["same_compound_tolerance"]
-            trio_h = float(getattr(r, "trio_index", np.nan))
-            if use_severity and not same_c and np.isfinite(trio_t) and np.isfinite(trio_h):
-                # a circuit given a softer trio is gentler: its tyres last longer than they would
-                # at the target, by the same per-step ratio
-                steps += trio_h - trio_t
         else:
             steps = float(ROLE_RANK[role] - ROLE_RANK[r.role])
             same_k = (not use_compound) and steps == 0
-        cat = (SAME_C_SAME_K if same_k else SAME_C_OTHER_K) if same_c else (OTHER_C_SAME_K if same_k else OTHER_C_OTHER_K)
-        weight = float(w[cat])
-        if not same_k:
-            weight *= w["compound_step_decay"] ** max(0.0, abs(steps) - 1.0)
-        weight *= w["recency_per_season"] ** max(0, target.season - int(r.season))
+        base = w["recency_per_season"] ** max(0, target.season - int(r.season))
         if era(int(r.season)) != era(target.season):
-            weight *= w["other_era"]
-        if float(r.wet_share or 0.0) > cfg["observation"]["wet_lap_share"]:
-            weight *= w["wet_race"]
-        rows.append((r.race_id, r.role, cat, weight, float(r.edge_frac) * ratio ** steps))
+            base *= w["other_era"]
+        decay = 1.0 if same_k else w["compound_step_decay"] ** max(0.0, abs(steps) - 1.0)
+        edge = float(r.edge_frac)
+        # the pooled estimate: every earlier race as "another circuit", moved by its severity
+        moved = steps
+        trio_h = float(getattr(r, "trio_index", np.nan))
+        if use_compound and use_severity and np.isfinite(idx_t) and np.isfinite(idx_h) \
+                and np.isfinite(trio_t) and np.isfinite(trio_h):
+            # a circuit given a softer trio is gentler: its tyres last longer than they would at
+            # the target, by the same per-step ratio
+            moved = steps + trio_h - trio_t
+        cat = OTHER_C_SAME_K if same_k else OTHER_C_OTHER_K
+        wet = float(r.wet_share or 0.0) > cfg["observation"]["wet_lap_share"]
+        pooled.append((r.race_id, r.role, cat, w[cat] * decay * base * (w["wet_race"] if wet else 1.0),
+                       edge * ratio ** moved))
+        # the same-circuit estimate: this circuit's own earlier races, not moved by severity;
+        # a race flagged abnormal (red flag, wet or damp) weighs abnormal_same_circuit (0: left out)
+        if use_circuit and r.circuit == target.circuit:
+            cat = SAME_C_SAME_K if same_k else SAME_C_OTHER_K
+            wt = w[cat] * decay * base * (shrink["abnormal_same_circuit"] if abnormal(r, cfg) else 1.0)
+            if wt > 0:
+                local.append((r.race_id, r.role, cat, wt, edge * ratio ** steps))
 
-    if not rows:
+    if not pooled:
         frac, sd = float(cfg["tier4_frac"][role]), floors[4]
         notes.append("no usable earlier race: constant prior")
         return TyreLifePrior(frac * laps, sd * laps, 0.0, (), 4, frac, sd, int(round(laps)), compound, ratio, tuple(notes))
-    cats = {c for _, _, c, _, _ in rows}
-    tier = 1 if SAME_C_SAME_K in cats else 2 if SAME_C_OTHER_K in cats else 3
+    m_pool, v_pool = _weighted(pooled)
+    # the same circuit counts as its effective number of dry, normal races: each race its heaviest
+    # observation's weight relative to a same-compound race of the same season and era (1.0)
+    per_race = {}
+    for rid_h, _, _, wt, _ in local:
+        per_race[rid_h] = max(per_race.get(rid_h, 0.0), wt / w[SAME_C_SAME_K])
+    n_local = float(sum(per_race.values()))
+    k0 = float(shrink["prior_strength_races"])
+    w_s = n_local / (n_local + k0) if local else 0.0
+    w_p = 1.0 - w_s
+    if local:
+        m_loc, v_loc = _weighted(local)
+        tier = 1 if any(c == SAME_C_SAME_K for _, _, c, _, _ in local) else 2
+    else:
+        m_loc, v_loc, tier = 0.0, 0.0, 3
+    mean = w_p * m_pool + w_s * m_loc
+    # a two-part mixture: each part's spread, plus their disagreement
+    var = w_p * v_pool + w_s * v_loc + w_p * w_s * (m_loc - m_pool) ** 2
+    floor2 = w_s * floors[tier] ** 2 + w_p * floors[3] ** 2
+    sd = math.sqrt(var + floor2)
+    share = {}
+    for part, wt_part in ((pooled, w_p), (local, w_s)):
+        tot = sum(x[3] for x in part)
+        for rid_h, role_h, _, wt, _ in part:
+            if tot > 0 and wt_part > 0:
+                share[(rid_h, role_h)] = share.get((rid_h, role_h), 0.0) + wt_part * wt / tot
+    wts = np.array(list(share.values()))
+    n_eff = float(wts.sum() ** 2 / np.sum(wts ** 2))
+    sources = tuple((k[0], k[1], round(float(v), 6)) for k, v in sorted(share.items(), key=lambda kv: -kv[1]))
+    if local:
+        notes.append(f"same circuit: {n_local:.2f} effective races, weight {w_s:.2f} against the pooled estimate")
+    if n_pairs < cfg["life_ratio"]["min_pairs"]:
+        notes.append(f"life ratio {ratio:g} per step: config default ({n_pairs} earlier pairs)")
+    return TyreLifePrior(mean * laps, sd * laps, n_eff, sources, tier, mean, sd, int(round(laps)), compound, ratio,
+                         tuple(notes))
+
+
+def _weighted(rows) -> tuple[float, float]:
+    """(weighted mean, weighted variance with the Kish n_effective correction) of the moved edges."""
     wts = np.array([r[3] for r in rows])
     x = np.array([r[4] for r in rows])
     mean = float(np.sum(wts * x) / np.sum(wts))
     n_eff = float(np.sum(wts) ** 2 / np.sum(wts ** 2))
     var = float(np.sum(wts * (x - mean) ** 2) / np.sum(wts))
-    if n_eff > 1.0:
-        var *= n_eff / (n_eff - 1.0)
-    sd = math.sqrt(var + floors[tier] ** 2)
-    order = np.argsort(-wts, kind="stable")
-    sources = tuple((rows[i][0], rows[i][1], round(float(wts[i]), 6)) for i in order)
-    if n_pairs < cfg["life_ratio"]["min_pairs"]:
-        notes.append(f"life ratio {ratio:g} per step: config default ({n_pairs} earlier pairs)")
-    return TyreLifePrior(mean * laps, sd * laps, n_eff, sources, tier, mean, sd, int(round(laps)), compound, ratio,
-                         tuple(notes))
+    return mean, var * n_eff / (n_eff - 1.0) if n_eff > 1.0 else var
+
+
+def abnormal(row, config=None) -> bool:
+    """A history race flagged abnormal: a red flag, or more than damp_lap_share of its laps on
+    intermediates or wets. Both are known once that race is over, so before any later race."""
+    cfg = config or load_config()
+    red = getattr(row, "red_flag", False)
+    red = bool(red) if isinstance(red, (bool, np.bool_)) else str(red).strip().lower() in ("true", "1")
+    return red or float(getattr(row, "wet_share", 0.0) or 0.0) > cfg["observation"]["damp_lap_share"]
 
 
 # --- validation ----------------------------------------------------------------------------------
@@ -573,6 +634,7 @@ def validate(history: pd.DataFrame | None = None, stints: pd.DataFrame | None = 
                 if len(st) else pd.DataFrame(columns=["end_age"])
             ages = pd.to_numeric(s["end_age"], errors="coerce").dropna()
             out.append({"variant": name, "race_id": r.race_id, "era": era(int(r.season)), "role": r.role,
+                        "abnormal_race": abnormal(r, cfg),
                         "compound": r.compound, "tier": p.tier, "n_effective": p.n_effective,
                         "prior_edge": p.edge_laps, "prior_sd": p.sd_laps, "observed_edge": float(r.edge_laps),
                         "error": p.edge_laps - float(r.edge_laps), "abs_error": abs(p.edge_laps - float(r.edge_laps)),
@@ -600,6 +662,11 @@ def summarise(v: pd.DataFrame) -> pd.DataFrame:
             parts.append(agg(gt).to_frame().T.assign(variant=name, group=f"tier {t}"))
         for e, ge in g.groupby("era"):
             parts.append(agg(ge).to_frame().T.assign(variant=name, group=f"era {e}"))
+        if "abnormal_race" in g:
+            # the race being priced was itself red-flagged, wet or damp: no prior can know that
+            normal = g[~g["abnormal_race"].astype(bool)]
+            if len(normal):
+                parts.append(agg(normal).to_frame().T.assign(variant=name, group="normal races"))
     s = pd.concat(parts, ignore_index=True)
     return s[["variant", "group", "n", "mean_error", "mae", "cover68", "cover90", "stints", "beyond_share",
               "beyond_share_observed"]]

@@ -1,0 +1,17 @@
+# LEGACY, for reproducing results produced before the tyre-life change: configs/sim/belief.yaml
+# as it was, with the retired R8 hindsight stint limit on and no wear cliff (see
+# configs/sim/legacy/world_r8.yaml). Never a default.
+stint_limit_margin_laps: 3
+wear_cliff:
+  enabled: false
+fit_window: to_snapshot
+traffic:
+  name: none
+events:
+  name: rate
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+    wear_lower_bound: 0.0
+lap_noise: residual

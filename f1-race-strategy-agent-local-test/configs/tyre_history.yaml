@@ -11,6 +11,7 @@ observation:
   min_stints: 3            # fewer usable stints on a compound in a race: no observation
   neutralised_codes: ["4", "5", "6", "7"]   # FastF1 TrackStatus digits: SC, red, VSC, VSC ending
   wet_lap_share: 0.10      # a race with more than this share of its laps on INTERMEDIATE / WET is "wet"
+  damp_lap_share: 0.02     # above this share (or with a red flag) a race is abnormal for the same-circuit estimate
   # pace check (reported, never used by the prior): per usable stint with at least
   # min_green_laps green laps, a straight line on the first fit_share of them (fuel and linear
   # wear), and the median excess of its last late_laps green laps over that line
@@ -50,6 +51,15 @@ scaling:
   # step softer is one step gentler, so its tyres are taken to last life_ratio times as long at
   # the target (steps += trio_obs - trio_target). Same-circuit observations are not moved.
   severity_from_nomination: true
+
+shrinkage:
+  # the same-circuit estimate is shrunk toward the pooled (all-circuit, severity-moved) one:
+  # w_s = n / (n + prior_strength_races), n the circuit's effective number of dry, normal earlier
+  # races. Stated a priori, not fitted: the pooled estimate is worth two such races.
+  prior_strength_races: 2.0
+  # weight of a same-circuit race flagged abnormal (red flag, or above damp_lap_share of its laps
+  # on intermediates / wets) in the same-circuit estimate; 0 leaves it out (it stays in the pool)
+  abnormal_same_circuit: 0.0
 
 life_ratio:
   # the tyre life of a compound one common-index step softer, as a share of the harder one's:

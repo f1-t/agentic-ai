@@ -59,6 +59,14 @@ def _set_proxy_default(enabled):
         CompoundProxy.model_rebuild(force=True)
 
 
+def _set_cliff_default(enabled):
+    from src.sim.config import WearCliff
+    field = WearCliff.model_fields["enabled"]
+    if field.default != enabled:
+        field.default = enabled
+        WearCliff.model_rebuild(force=True)
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     """`pytest.mark.compound_proxy_off` (a module's pytestmark, or one test's): SimConfig's
@@ -72,11 +80,16 @@ def pytest_runtest_setup(item):
     compound_proxy keeps what it names. In-process only: a spawned worker sees the real
     default."""
     _set_proxy_default(item.get_closest_marker("compound_proxy_off") is None)
+    # `pytest.mark.wear_cliff_off`: likewise SimConfig's default wear_cliff.enabled is False, for
+    # tests that pin a fit's exactness on synthetic races whose real stints the cliff would price
+    # (sim/cliff.py); the cliff itself is tested with its default on
+    _set_cliff_default(item.get_closest_marker("wear_cliff_off") is None)
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_teardown(item, nextitem):
     _set_proxy_default(True)
+    _set_cliff_default(True)
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -373,12 +373,13 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     the race's frame and practice from sim.jobs.load_race. The belief runs `belief_config`,
     by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
     residual lap noise on); the world runs
-    `world_config`, by default the profile's SimConfig (full window, traffic off;
-    default_world_config, WORLD_EVENTS off by default). The world alone gets the race's
-    whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
+    `world_config`, by default the profile's SimConfig (full window, traffic off; the wear fit
+    config.WORLD_DEGRADATION; default_world_config, WORLD_EVENTS off by default). The world alone
+    gets the race's whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
     and role."""
     from ..sim import SimConfig, jobs
+    from ..sim.config import world_default
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
 
@@ -393,7 +394,8 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
             if race_id not in races:
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
-            config = belief_config if role == "belief" else world_config or default_world_config(data.config)
+            config = (belief_config if role == "belief"
+                      else world_config or default_world_config(world_default(data.config)))
             sim = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
             if role == "world":
                 sim.race_pit_loss_s = world_pit_loss(data, sim)

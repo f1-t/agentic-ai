@@ -52,10 +52,12 @@ def test_run_pipeline_offline_lap0():
     assert "greedy_crossover" in rows
     assert rows["actual_strategy"]["status"] == "ok"
     assert rows["fixed_two_stop"]["status"] == "ok"
-    # HAM starts on a 4-lap-old SOFT: S33 > M33 ends it at 37, past the R8 stint limit of 35
-    # (docs/rules.md), so the eval wrapper moves the stop to the last legal lap
+    # HAM starts on a 4-lap-old SOFT: S33 > M33 ends it at 37. R8 (retired, docs/rules.md) moved
+    # the stop to lap 31 with the whole race's limit; now the wrapper would move it inside the
+    # belief's as-of tyre-life estimates (SOFT about 23, MEDIUM about 36 laps at lap 0, from
+    # earlier races), but no one-stop fits inside both, so the plan is fixed_one_stop's own
     assert rows["fixed_one_stop"]["status"] == "ok"
-    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 31], ["MEDIUM", 35]]
+    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 33], ["MEDIUM", 33]]
     assert rows["actual_strategy"]["regret_s"] >= 0.0
 
 
@@ -73,12 +75,13 @@ def test_run_pipeline_offline_midrace():
     assert res["optimizer_reference"]["plan"] is not None
     rows = {r["policy"]: r for r in res["results"]}
     assert rows["actual_strategy"]["status"] == "ok"
-    # SOFT at age 31: the plain one stop runs it past the R8 stint limit of 35 (docs/rules.md);
-    # the eval wrapper pits it at age 35, and fixed_two_stop, not limit-aware, is invalid
+    # SOFT at age 31. Under R8 (retired, docs/rules.md) the one stop was pulled to age 35 and the
+    # two stop was invalid; now no one stop fits inside the belief's as-of tyre-life estimates, so
+    # the plan is fixed_one_stop's own, and no plan is invalid for tyre age
     assert rows["fixed_one_stop"]["status"] == "ok"
-    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 4], ["MEDIUM", 35]]
-    assert rows["fixed_two_stop"]["status"] == "invalid"
-    assert "past the stint limit of 35" in rows["fixed_two_stop"]["reason"]
+    assert json.loads(rows["fixed_one_stop"]["plan"]) == [["SOFT", 19], ["MEDIUM", 20]]
+    assert rows["fixed_two_stop"]["status"] == "ok"
+    assert rows["fixed_one_stop"]["regret_s"] > 0
 
 
 def test_run_pipeline_agent_row_carries_submitted_in_grace(monkeypatch):

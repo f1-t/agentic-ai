@@ -212,9 +212,14 @@ def test_leak_pit_loss(race_id, alteration):
     assert not diffs, report(diffs)
 
 
-@pytest.mark.parametrize("race_id", _leak_params("stint_limit", POINTS))
+# fixed (fb.FIXED_LEAKS): the scramble that moved R8's limit, with the remaining known leaks
+# neutralised, moves nothing a policy sees
+@pytest.mark.parametrize("race_id", [_race(r) for r in POINTS])
 def test_leak_stint_limit(race_id):
-    _leak("stint_limit", race_id)
+    """R8's whole-race stint limit is retired (docs/rules.md R8): the scramble that moved it moves
+    nothing a policy sees, the belief's wear cliff included."""
+    diffs = differences(race_id, "scramble", list(fb.KNOWN_LEAKS))
+    assert not diffs, report(diffs)
 
 
 @pytest.mark.parametrize("race_id", _leak_params("frame_filter", POINTS))
