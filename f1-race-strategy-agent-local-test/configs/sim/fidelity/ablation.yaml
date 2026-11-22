@@ -71,5 +71,19 @@ factors:
   r8_legacy:
     note: the retired R8 hindsight limit on and the cliff off in both (configs/sim/legacy/*_r8.yaml)
     both: {stint_limit_margin_laps: 3, wear_cliff: {enabled: false}}
+  # the safety-car queue (sim/sc_queue.py, off by default: not adopted). The base judge is hybrid SC/VSC
+  sc_queue:
+    note: the judge places each simulated car in the SC queue among the other cars' recorded race (mode single)
+    world: {sc_queue: {enabled: true, mode: single}}
+  sc_queue_field:
+    note: the judge's whole-race replays queue every replayed car together (mode field; Section A only)
+    world: {sc_queue: {enabled: true, mode: field}}
+  sc_queue_both:
+    note: the single-car queue in the judge and in the belief (the field visible at the snapshot)
+    world: {sc_queue: {enabled: true, mode: single}}
+    belief: {sc_queue: {enabled: true, mode: single}}
+  sc_queue_traffic:
+    note: the single-car queue with the earned-pass ghost traffic in the judge (the order holds in a train unless a car has the pace)
+    world: {sc_queue: {enabled: true, mode: single}, traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true}}}
 # everything on: the base holds every adopted choice, so all_on adds the rejected traffic to it
 all_on: [traffic_both]
