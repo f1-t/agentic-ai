@@ -36,9 +36,11 @@ One command does all of it (docs/eval.md, "The learned calibrator"):
      all.json fitted on every calibration race (used for any other race: the held-out races,
      which never enter training), with manifest.json (the command, the races, the commit, the
      params, the per-factor sources, the decision). calibrators.TrainedCalibrator loads the
-     right one by race id and never trains.
-  6. Report: reports/calibration/learned/{factors.csv, factors_by_compound.csv, belief.csv,
-     belief_by_race.csv, g_by_horizon.csv, fits.csv, summary.md}.
+     right one by race id and never trains. configs/sim/belief_learned.yaml is written: the
+     belief with that calibrator (artifacts and sha256), an option via --belief-config. The
+     command never edits configs/sim/belief.yaml; when the rule adopts, copy its calibrator block.
+  6. Report: reports/calibration/learned/{adoption.csv, factors.csv, factors_by_compound.csv,
+     belief.csv, belief_by_race.csv, g_by_horizon.csv, fold_fits.csv, artifact_fits.csv, summary.md}.
 
 A race data/eval_set.json holds out is refused before anything about it is loaded
 (cross_race.guard_held_out, never allowed here), and again by train_artifacts.
@@ -71,6 +73,8 @@ WORK_DIR = REPORT_DIR / "work"               # fold parquets, gitignored
 ARTIFACTS = "models/calibrators/ridge_hybrid"  # relative to ROOT; TrainedCalibrator's `artifacts`
 HYBRID_ARM = "belief_hybrid"
 HYBRID_FILE = cross_race.ARMS_DIR / f"{HYBRID_ARM}.yaml"
+BELIEF_CONFIG = ROOT / "configs" / "sim" / "belief.yaml"
+BELIEF_LEARNED = ROOT / "configs" / "sim" / "belief_learned.yaml"   # written: the belief with the trained calibrator
 COMMAND = "python -m src.sim.learned_calibrator train"
 # calibrator -> cross-race arm; every arm is the belief simulator (base_config configs/sim/belief.yaml)
 ARMS = {"none": "belief_none", "shrinkage": "belief_shrinkage", "ridge": "belief_ridge", "ridge_all": "belief_ridge_all"}
@@ -191,6 +195,23 @@ def write_hybrid_arm(adopted: list[str], path=HYBRID_FILE) -> dict:
     return params
 
 
+def write_belief_learned(artifacts, sha256: str, decision: dict, path=None) -> Path:
+    """configs/sim/belief_learned.yaml: configs/sim/belief.yaml with the trained calibrator (the
+    artifacts and their sha256), the belief as it would be with the learned calibrator; usable as
+    `--belief-config`. Rewritten by every run, as the sha256 moves with a retrain."""
+    path = BELIEF_LEARNED if path is None else Path(path)
+    cfg = yaml.safe_load(BELIEF_CONFIG.read_text()) or {}
+    cfg["calibrator"] = {"name": "trained", "params": {"artifacts": str(artifacts), "sha256": sha256}}
+    verdict = (f"ADOPTED as the default by the rule ({decision['default']})" if decision["default"] else
+               "NOT adopted by the default rule: an option; configs/sim/belief.yaml keeps shrinkage")
+    head = (f"# WRITTEN by `{COMMAND}` (src/sim/learned_calibrator.py): configs/sim/belief.yaml with the trained\n"
+            "# learned calibrator (calibrators.TrainedCalibrator: the leave-one-out model for a calibration\n"
+            f"# race, the all-races model for any other). {verdict}.\n"
+            "# Do not edit by hand; rerun the command.\n")
+    path.write_text(head + yaml.safe_dump(cfg, sort_keys=False))
+    return path
+
+
 # --- belief measures and the default rule ---------------------------------------------------------
 def _g(rows, window):
     return cross_race._g_window(rows, window, G_HORIZONS)
@@ -284,7 +305,8 @@ def _commit() -> dict:
     """The commit the command ran at, and whether src/ or configs/ differed from it (the hybrid arm
     file, which the command itself writes, aside)."""
     return {"commit": git("rev-parse", "HEAD"),
-            "dirty": bool(git("status", "--porcelain", "--", "src", "configs", f":!configs/sim/arms/{HYBRID_ARM}.yaml"))}
+            "dirty": bool(git("status", "--porcelain", "--", "src", "configs", f":!configs/sim/arms/{HYBRID_ARM}.yaml",
+                              ":!configs/sim/belief_learned.yaml"))}
 
 
 def train_artifacts(races, params: dict, profile, artifacts=ARTIFACTS, arm=HYBRID_ARM, eval_set=cross_race.EVAL_SET,
@@ -375,12 +397,21 @@ def summary_md(races, adoption, factors, belief, by_race, decision, art) -> str:
     for _, r in by_race[by_race["window"] == BELIEF_WINDOW].sort_values(["race_id", "calibrator"]).iterrows():
         md.append(f"| {r['race_id']} | {r['calibrator']} | {_f(r['g_mae_s'], 2)} | {_f(r['g_bias_s'], 2)} "
                   f"| {_f(r['g_coverage_90'], 2)} | {_f(r['sg_mae_s'], 2)} | {_f(r['sg_bias_s'], 2)} |")
-    md += ["", "## Default", ""]
+    md += ["", "## Default", "",
+           "Rule (to_snapshot, race-weighted point estimates): G mae below shrinkage's, stop-gain mae no worse, "
+           "|G coverage - nominal| no larger at 68 and 90 percent; hybrid first, then plain ridge.", ""]
+    t = belief[belief["window"] == BELIEF_WINDOW].set_index("calibrator")
     for c, chk in decision["checks"].items():
-        md.append(f"- {c}: " + ", ".join(f"{k} {'yes' if v else 'no'}" for k, v in chk.items()))
+        r, s = t.loc[c], t.loc["shrinkage"]
+        md.append(f"- {c}: G mae {r['g_mae_s']:.3f} s vs {s['g_mae_s']:.3f} ({'lower' if chk['g_mae_lower'] else 'not lower'}); "
+                  f"stop-gain mae {r['sg_mae_s']:.4f} s vs {s['sg_mae_s']:.4f} "
+                  f"({'no worse' if chk['stop_gain_no_worse'] else 'worse'}); G coverage 68/90 "
+                  f"{r['g_coverage_68']:.3f}/{r['g_coverage_90']:.3f} vs {s['g_coverage_68']:.3f}/{s['g_coverage_90']:.3f} "
+                  f"({'no worse' if chk['coverage_no_worse'] else 'worse'}): "
+                  f"{'passes' if chk['passes'] else 'does not pass'}")
     md += ["", (f"**Adopted as the belief's default: {decision['default']}.**" if decision["default"] else
-                "**Not adopted: shrinkage stays the belief's default; the hybrid ships as an option "
-                "(calibrator `trained`).**"), "",
+                "**Not adopted: shrinkage stays the belief's default; the learned calibrator ships as an option, "
+                "`--belief-config configs/sim/belief_learned.yaml` (calibrator `trained`).**"), "",
            f"Artifacts: `{ARTIFACTS}/` (sha256 {art['sha256']}): all.json and loo/<race_id>.json, manifest.json.", ""]
     return "\n".join(md)
 
@@ -409,8 +440,11 @@ def train(races=CALIBRATION_RACES, n_jobs=4, work=WORK_DIR, report_dir=REPORT_DI
     belief = belief_table(data)
     by_race = belief_by_race(data)
     decision = decide(belief)
+    if decision["default"] == "ridge":   # plain ridge passed where the hybrid did not: ship plain ridge
+        params = {"targets": "degradation"}
     art = train_artifacts(races, params, profile, artifacts, eval_set=eval_set,
                           extra={"adopted": adopted, "decision": decision})
+    write_belief_learned(artifacts, art["sha256"], decision)
     report_dir.mkdir(parents=True, exist_ok=True)
     factors.to_csv(report_dir / "factors.csv", index=False)
     factor_table(data, by="factor").to_csv(report_dir / "factors_by_compound.csv", index=False)
@@ -423,8 +457,9 @@ def train(races=CALIBRATION_RACES, n_jobs=4, work=WORK_DIR, report_dir=REPORT_DI
     art["fits"].to_csv(report_dir / "artifact_fits.csv", index=False)
     (report_dir / "summary.md").write_text(summary_md(races, adoption, factors, belief, by_race, decision, art))
     log(f"default: {decision['default'] or 'shrinkage stays'}; checks {decision['checks']}")
-    log("belief.yaml for the trained hybrid:\n  calibrator:\n    name: trained\n    params:\n"
-        f"      artifacts: {artifacts}\n      sha256: {art['sha256']}")
+    log(f"{BELIEF_LEARNED.relative_to(ROOT)} written (the belief with the trained calibrator, sha256 {art['sha256']}); "
+        + ("the rule adopts it: put its calibrator block into configs/sim/belief.yaml" if decision["default"] else
+           "the rule keeps shrinkage: configs/sim/belief.yaml stays, the learned belief is an option (--belief-config)"))
     return {"adopted": adopted, "decision": decision, "sha256": art["sha256"], "belief": belief, "factors": factors}
 
 

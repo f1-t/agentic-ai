@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.contracts import split_factor
-from src.sim import Simulator, calibration, calibrators, cross_race, learned_calibrator as lc
+from src.sim import SimConfig, Simulator, calibration, calibrators, cross_race, learned_calibrator as lc
 from src.sim.calibrators import CALIBRATORS
 from src.sim.compute import load_profile
 from src.sim.config import ComponentSpec
@@ -129,6 +129,49 @@ def test_the_default_rule_takes_the_first_candidate_that_passes():
     assert d["default"] == "ridge" and not d["checks"]["hybrid"]["g_mae_lower"]
     t.loc[t["calibrator"] == "ridge", "sg_mae_s"] = 1.01
     assert lc.decide(t)["default"] is None
+
+
+def test_the_committed_artifacts_never_saw_a_held_out_race_or_the_race_they_calibrate():
+    """Reads the committed JSON only; a held-out race id is used as a string, never loaded."""
+    out = lc.ROOT / lc.ARTIFACTS
+    m = json.loads((out / "manifest.json").read_text())
+    assert m["races"] == list(lc.CALIBRATION_RACES) and m["command"] == lc.COMMAND
+    held = set(cross_race.held_out_races())
+    cal = CALIBRATORS.get("trained")(artifacts=lc.ARTIFACTS)
+    for r in m["races"]:
+        model = calibrators.Calibrator.load(out / "loo" / f"{r}.json")
+        assert model.train_races == sorted(set(m["races"]) - {r}) and not held & set(model.train_races)
+        assert cal.artifact_for(r) == out / "loo" / f"{r}.json"
+    assert calibrators.Calibrator.load(out / "all.json").train_races == sorted(m["races"])
+    for r in held:
+        assert cal.artifact_for(r) == out / "all.json"
+    # the hybrid arm, the learned belief option and the artifacts agree
+    arm = cross_race.arm_config(lc.HYBRID_ARM)
+    assert arm.calibrator.name == "ridge"
+    if m["decision"]["default"] != "ridge":
+        assert dict(arm.calibrator.params) == m["calibrator"]["params"]
+    learned = SimConfig.from_file(lc.BELIEF_LEARNED)
+    assert learned.calibrator.name == "trained"
+    assert learned.calibrator.params == {"artifacts": lc.ARTIFACTS, "sha256": calibrators.artifact_sha256(out)}
+    belief = SimConfig.from_file(lc.BELIEF_CONFIG)
+    assert learned.model_copy(update={"calibrator": belief.calibrator}) == belief
+
+
+def test_the_learned_belief_on_2021_spain_uses_the_model_fitted_without_it():
+    from src.sim import jobs
+    data = jobs.load_race("2021_04_spain", load_profile())
+    cfg = SimConfig.from_file(lc.BELIEF_LEARNED)
+    sim = Simulator(data.frame, cfg, data.practice)
+    driver = data.frame.loc[data.frame["lap"] == 21, "driver"].iloc[0]
+    snap = calibration.snapshot_at(data.frame, data.race, driver, 20)
+    out = sim.fitted_for(snap).calibration.output
+    assert out.source == "trained" and out.diagnostics["artifact"] == "loo/2021_04_spain.json"
+    manifest = json.loads((lc.ROOT / lc.ARTIFACTS / "manifest.json").read_text())
+    sources = sim.model_report(snap).prior_sources
+    for f, src in sources.items():   # a kind not adopted is shrinkage's (an adopted one may fall back per compound)
+        if manifest["sources"][split_factor(f)[0]] == "shrinkage":
+            assert src == "shrinkage", f
+    assert "ridge" in sources.values() or not manifest["adopted"]
 
 
 def test_the_calibrator_arms_are_frozen_files():
