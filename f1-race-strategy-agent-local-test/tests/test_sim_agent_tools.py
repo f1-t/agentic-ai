@@ -294,12 +294,15 @@ def test_ham_lap_20_is_within_sim_error_on_model_error(spain):
     snap = calibration.snapshot_at(spain.frame, spain.race, "HAM", 20)
     # without the wear cliff: its uncertain age (as R8's limit did before it) spreads the gap
     # of the two continuations past the claim this test is about
-    # and with the midrace summary read whatever the race: as of 2021 Spain, which it was measured
-    # on, there is none (docs/eval.md "Cross-race tables, as of the race")
+    # and with the cross-race tables read whatever the race (the legacy switches: the midrace
+    # summary, measured on 2021 Spain itself, the Spain-derived shrinkage priors and event rates);
+    # as of 2021 Spain there is no calibration error (docs/eval.md "Cross-race tables, as of the race")
     cfg = agent_tools.belief_config()
     sim = agent_tools.belief_simulator(
         snap, config=cfg.model_copy(update={"wear_cliff": cfg.wear_cliff.model_copy(update={"enabled": False}),
-                                            "cross_race_as_of": False}))
+                                            "cross_race_as_of": False, "calibrator": ComponentSpec(name="shrinkage"),
+                                            "events": ComponentSpec(name="rate"),
+                                            "compound_proxy": cfg.compound_proxy.model_copy(update={"as_of": False})}))
     assert agent_tools.calibration_error_s(agent_tools.belief_simulator(snap), snap) != \
         agent_tools.calibration_error_s(agent_tools.belief_simulator(snap), snap)   # NaN
     out = agent_tools.evaluate_action(snap, {"action": "stay", "laps": 1}, sim=sim)
