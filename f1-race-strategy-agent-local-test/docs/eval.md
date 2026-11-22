@@ -793,6 +793,7 @@ Which committed table is current. Every current file has its `*_summary.csv` bes
 | d4, rule baselines, scored once after the d4 results (**report set**) | `reports/eval/d4_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, frozen at `5a2bc41`); `d4_combined_rules.csv` (`d4_combined.csv`'s rows plus these) and `d4_rules_compare_*` ("Rule baselines added after the held-out run") | `d4_combined.csv` stays as committed |
 | dev6, rule baselines (development, calibration races) | `reports/eval/dev6_rule_baselines.csv` (`run_to_flag`, `one_stop_total`, reference `fbb33ef732dd`); `dev6_run2_combined_rules.csv` (run 2's rows plus these) and `dev6_run2_rules_compare_*` ("Rule baselines added after the held-out run") | |
 | dev6, live agent run 2 (development, calibration races) | `reports/eval/dev6_run2_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run2/`; `dev6_run2_combined.csv` (agent + baseline + belief_optimizer rows, the input to `dev6_run2_compare_regret_s_*` with driver clusters and `dev6_run2_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run2_compare_per_race_regret_s_paired.csv`; figure table `dev6_run2_chart.csv` | pass 1 stays as the record of the earlier loop and world |
+| dev6, live agent run 3 (variance repeat of run 2; development, calibration races) | `reports/eval/dev6_run3_agent.csv`, trajectories in `reports/eval/trajectories/dev6_run3/`; `dev6_run3_combined.csv` (run 3's agent rows + run 2's baseline and belief_optimizer rows, the input to `dev6_run3_compare_regret_s_*` with driver clusters and `dev6_run3_compare_race_regret_s_*` with race clusters); per-race paired table `dev6_run3_compare_per_race_regret_s_paired.csv`; figure table `dev6_run3_chart.csv` | not a replacement: run 2 stays the cited dev6 result; run 3 only measures run-to-run variation |
 
 Only the files whose rows carry `stint_limit_rank` and `stint_limit_margin_laps` were scored
 under R8.
@@ -1093,6 +1094,32 @@ ties of 150). 119 submissions were voluntary and 31 came in a grace turn (pass 1
 at 72k mean input tokens (pass 1: 100k). The PIT / STAY_OUT decision is the same as pass 1's on
 142 of 150 scenarios. No row of any policy is invalid for anything but its own plan's R8 stint
 limit. dev6 is a development set on calibration races, not a held-out result.
+
+**dev6, run 3 (variance repeat).** `reports/eval/dev6_run3_agent.csv` is an identical repeat of
+run 2, made only to measure run-to-run variation; **run 2 stays the cited development result**.
+Same command, scenarios, reference (`fbb33ef732dd`), sim_code_version `58b50a00e0e3`, world and
+belief config (`ccb08edf391b` / `0002e90cb6fe`), model (qwen3-30b-a3b on Voyager, default
+temperature, seed 0) and agent loop (main's defaults, the four `AGENT_*` / `VOYAGER_TEMPERATURE`
+overrides checked unset), at commit c685349 (no change under `src/` or `configs/` since run 2's
+55a67ee or tag `d4-final-eval`), one sequential pass, 60.9 minutes wall time, nothing else calling
+the model. Trajectories were moved from `trajectories/dev6/` to `trajectories/dev6_run3/`;
+`dev6_run3_combined.csv` is the new agent rows plus run 2's baseline and belief_optimizer rows
+(30 reference and stamp columns match row for row). Every episode submitted (110 voluntary, 40 in
+a grace turn; run 2: 119 and 31) and there were no API errors; one row is invalid
+(2021_04_spain:OCO:00, a lap-0 PIT whose plan has a 1-lap first stint, R2), so 149 of 150 scored.
+Between the two passes the PIT / STAY_OUT decision agrees on 145 of 150 scenarios and the final
+plan on 119; on the 149 scenarios scored in both, run 3 minus run 2 regret is +0.41 s per
+scenario (sd 2.62, 95% interval [0.05, 0.90] with driver clusters), 121 of them identical. Pooled
+mean regret moves 3.95 to 4.36 s, and the paired agent-minus-X differences move by +0.27
+(fixed_one_stop: -5.28 to -5.01), +0.46 (actual_strategy: -3.25 to -2.79) and +0.40 s
+(belief_optimizer: -0.16 to +0.24, interval [-0.21, 0.79]). So a headline number moves by about
+0.3 to 0.5 s between identical passes: small against the agent's lead over fixed_one_stop and
+actual_strategy, but as large as the agent-versus-belief_optimizer difference, which is a tie in
+both passes and changes sign. Per race the movement is concentrated in 2023 Bahrain (+1.66 s),
+2023 Spain (+0.60) and 2021 Spain (+0.39); four episodes there (the invalid one and three
+STAY_OUT to PIT flips worth +4.4, +15.1 and +21.3 s) made three tool calls in the first turn, no
+logged call in the next nine, and then pitted onto MEDIUM in a grace turn without evaluating a
+plan. Without those four the per-scenario difference is +0.13 s [-0.06, 0.42].
 
 ### d4, the held-out result
 
