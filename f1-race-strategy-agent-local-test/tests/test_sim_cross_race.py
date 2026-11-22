@@ -357,7 +357,8 @@ def test_the_belief_is_incumbent_first_the_bound_stays_unless_removing_it_passes
 
 def test_current_defaults_name_each_windows_incumbent_and_match_the_config():
     t = cross_race.current_defaults().set_index("window")
-    # belief.yaml's arm since #102: the bound plus the as_of_history calibrator, fuel anchoring, as-of pit loss
+    # belief.yaml's arm: the bound, driver effects (#114), the as_of_history calibrator, fuel anchoring,
+    # as-of pit loss (#102)
     assert t.loc["to_snapshot", "incumbent"] == "as_of_history" and t.loc["to_snapshot", "source"] == "a priori"
     assert "belief.yaml" in t.loc["to_snapshot", "set by"]
     assert t.loc["pre_race", "incumbent"] == BASELINE and t.loc["pre_race", "source"] == "default"

@@ -978,8 +978,8 @@ BELIEF_ARM = "as_of_history"   # the arm belief.yaml carries: the to_snapshot in
 INCUMBENTS = {
     "to_snapshot": (BELIEF_ARM, "a priori",
                     "configs/sim/belief.yaml: the as_of_history calibrator, fuel anchoring and the as-of pit "
-                    "loss (#102) on the wear bound 0 (SPEC 0017b, #40: the physical argument and the "
-                    "stop-gain check)"),
+                    "loss (#102) and driver effects (#114, the fidelity scorecard) on the wear bound 0 "
+                    "(SPEC 0017b, #40: the physical argument and the stop-gain check)"),
     "full": ("driver_effects", "selected",
              "config.WORLD_DEGRADATION, the eval world (score.race_simulators): driver effects, by the "
              "fidelity scorecard's finishing-order measure (the G rule does not separate it from "

@@ -1,11 +1,13 @@
-# Belief arm "as_of_history": the belief configs/sim/belief.yaml carries since #102, the wear bound 0
-# (wear_nonneg, SPEC 0017b) plus every number estimated from other races read as of the race: the
-# as_of_history calibrator (race_history.csv, races strictly before), fuel anchoring and the as-of
-# pit loss. The to_snapshot incumbent (cross_race.INCUMBENTS); wear_nonneg stays the bound arm.
+# Belief arm "as_of_history": the belief configs/sim/belief.yaml carries, the wear bound 0
+# (wear_nonneg, SPEC 0017b) and driver effects (#114) plus every number estimated from other races
+# read as of the race (#102): the as_of_history calibrator (race_history.csv, races strictly before),
+# fuel anchoring and the as-of pit loss. The to_snapshot incumbent (cross_race.INCUMBENTS);
+# wear_nonneg stays the bound arm. test_current_defaults fails when belief.yaml moves away from it.
 degradation:
   name: linear_fuel
   params:
     wear_lower_bound: 0.0
+    driver_effects: race
 calibrator:
   name: as_of_history
 fuel_anchor:
