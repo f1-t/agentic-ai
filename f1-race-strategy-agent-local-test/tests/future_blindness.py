@@ -767,6 +767,7 @@ def _tools_surface(snap):
     # protocol v2 (src/agent.py AGENT_PROTOCOL): the ranked plans and one plan evaluated
     out["rank_plans"] = _shown(tools.rank_plans)
     out["race_picture"] = _shown(tools.race_picture)   # protocol v2free
+    out["rank_plans/families"] = _shown(tools.rank_plans_families)
     first = snap.laps_completed + 1
     for lap in (first, first + 3):
         out[f"evaluate_plan/stop_{lap - snap.laps_completed}"] = _shown(tools.evaluate_plan, None, lap, None)

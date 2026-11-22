@@ -372,6 +372,26 @@ def test_v2_and_v1_drop_a_named_plan(snaps, monkeypatch):
 
 
 @pytest.mark.agent_protocol_v2free
+@pytest.mark.parametrize("name", ["mid", "lap0"])
+def test_v2free_rank_plans_spans_the_strategy_families(snaps, name):
+    prof = load_profile("local")
+    belief = race_simulators(prof)(RACE, "belief")
+    snap = snaps[name]
+    with agent_tools.belief_config_as(belief.config):
+        tools.set_snapshot(snap)
+        out = tools.rank_plans_families()
+    opt = belief_optimum(snap, belief, prof.sim.max_stops, seed=0, n_samples=prof.sim.n_samples).as_pairs()
+    plans = out["plans"]
+    assert plans[0]["plan"] == agent_tools.plan_text(opt)
+    fams = [p["family"] for p in plans]
+    assert len(plans) <= agent_tools.FAMILY_TOP + 1 and isinstance(out["families_dropped"], int)
+    assert all(p.get("gap_s", 0) <= agent_tools.FAMILY_GAP_S for p in plans if not p["immediate"].startswith("PIT"))
+    assert len(set(fams)) >= len(fams) - 1   # one family per row, the PIT-now plan aside
+    assert len(json.dumps(out)) < 700 * len(plans) + 600   # about 700 characters a family
+    assert [t["name"] for t in agent._api_tools("v2free")][:3] == ["rank_plans", "evaluate_plan", "race_picture"]
+
+
+@pytest.mark.agent_protocol_v2free
 def test_race_picture_is_compact_anonymous_and_says_the_sets_wear(snaps):
     tools.set_snapshot(snaps["mid"])
     out = tools.present(tools.race_picture())

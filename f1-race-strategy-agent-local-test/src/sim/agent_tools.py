@@ -1154,7 +1154,17 @@ def uncertainty_flags(snapshot: Snapshot, sim, plans, *, profile=None) -> tuple[
     return general, per_plan
 
 
-def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) -> dict:
+FAMILY_TOP = 8      # rank_plans(families=True): at most this many strategy families shown
+FAMILY_GAP_S = 25.0  # ... and none more than this far behind plan 1 (the rest are counted as dropped)
+
+
+def family(pairs) -> str:
+    """A plan's strategy family: its stops left and the compounds after the current set, in words."""
+    later = [p[0] for p in pairs[1:]]
+    return "no more stops" if not later else f"{len(later)} stop{'s' if len(later) > 1 else ''}: {' > '.join(later)}"
+
+
+def rank_plans(snapshot: Snapshot, *, families=False, n_samples=None, sim=None, profile=None) -> dict:
     """The optimizer's best distinct plans from the snapshot (protocol v2's first call), compact.
 
     The search is the belief_optimizer policy's (_ranked), so plans[0] is that policy's plan. At most
@@ -1166,7 +1176,12 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
     (the first-stop laps over which a plan of the same shape stays within FLEX_S of it), flags (the
     plan's uncertainty_flags) and extrapolates (the fit's support warnings: a note, not a flag).
     `decision` is plan 1's immediate action with the best PIT-now plan read against the best STAY_OUT
-    plan (gap_reading, the choice the submission makes); `flags` are uncertainty_flags. Nothing after the snapshot enters."""
+    plan (gap_reading, the choice the submission makes); `flags` are uncertainty_flags. Nothing after the snapshot enters.
+
+    With `families` (protocol v2free) the plans shown span the strategy space instead: the best plan of
+    each family (family(): stops left and compound sequence), in the order of their best plans, at most
+    FAMILY_TOP and none more than FAMILY_GAP_S behind plan 1, plus the best PIT-now plan when it is in
+    none of them; each entry names its family, and families_dropped counts the families left out."""
     from ..baselines.domain import NoFeasiblePlan
     sim, profile = _setup(snapshot, sim, profile)
     n = n_samples or profile.sim.n_samples
@@ -1187,11 +1202,23 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
             seen.add(sh)
             shown.append(i)
     best_of = {k: next((i for i, sh in enumerate(shapes) if sh[0] == k), None) for k in ("PIT", "STAY")}
-    top = shown[:RANK_TOP]
-    for k in ("PIT", "STAY"):   # both immediate actions on show when both are legal
-        if best_of[k] is not None and best_of[k] not in top:
-            top[-1] = best_of[k]
-            top = sorted(set(top))
+    dropped = None
+    if families:
+        fams, seen = [], set()
+        for i, pp in enumerate(pairs):
+            if (f := family(pp)) not in seen:
+                seen.add(f)
+                fams.append(i)
+        top = [i for i in fams if means[i] - means[0] <= FAMILY_GAP_S][:FAMILY_TOP]
+        dropped = len(fams) - len(top)
+        if best_of["PIT"] is not None and best_of["PIT"] not in top:   # pitting now is always on show
+            top = sorted({*top, best_of["PIT"]})
+    else:
+        top = shown[:RANK_TOP]
+        for k in ("PIT", "STAY"):   # both immediate actions on show when both are legal
+            if best_of[k] is not None and best_of[k] not in top:
+                top[-1] = best_of[k]
+                top = sorted(set(top))
     sub = times[top]
     win = sub == sub.min(axis=0)
     share = (win / win.sum(axis=0)).mean(axis=1)
@@ -1201,9 +1228,12 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
         same = [j for j, sh in enumerate(shapes) if sh == shapes[i] and means[j] <= means[i] + FLEX_S]
         stops = sorted({snapshot.laps_completed + int(pairs[j][0][1]) for j in same if len(pairs[j]) > 1})
         act = immediate_action(snapshot, pairs[i])
-        entry = {"rank": r, "plan": plan_text(pairs[i]), "stops": len(pairs[i]) - 1,
+        entry = {"rank": r, **({"family": family(pairs[i])} if families else {}),
+                 "plan": plan_text(pairs[i]), "stops": len(pairs[i]) - 1,
                  "first_stop": describe_plan(snapshot, pairs[i]), "immediate": act["action"],
                  "submit": act["submit"]}
+        if families:   # the family and the submit fields say it; kept compact
+            del entry["stops"], entry["first_stop"]
         entry.update(_gap(times[i] - times[0]) if i else {"gap_s": 0.0})
         entry["best_share"] = round(float(sh_share), 2)
         if len(stops) > 1:
@@ -1231,8 +1261,9 @@ def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) ->
         decision = {"favoured": favoured, "share": 1.0, "reading": f"no PIT now is legal or modelled: {window['summary']}"}
     else:
         decision = {"favoured": favoured, "share": 1.0, "reading": "every legal plan pits now"}
+    more = {"families_dropped": dropped} if families else {}
     return _jsonable({"plans": out, "decision": decision, "flags": general, "pit_window": window["summary"],
-                      "n_draws": int(times.shape[1]),
+                      **more, "n_draws": int(times.shape[1]),
                       "note": "gaps: plan minus the best plan over shared draws (negative: faster); shares cover "
                               "parameter and lap noise under this model, not model error"})
 
