@@ -1033,6 +1033,270 @@ def submission_error(snapshot: Snapshot, decision: dict, *, sim=None, profile=No
     return None
 
 
+# --- protocol v2 (src/agent.py AGENT_PROTOCOL): ranked plans, one plan evaluated -----------------------
+RANK_TOP = 4        # distinct plans rank_plans shows
+FLEX_S = 1.0        # a shown plan's first stop may move over the laps whose plan of the same shape is within this
+GENERIC_LIFE_TIER = 3   # tyre_history tiers from here on are generic priors (cliff.life_prior: no circuit history)
+_RANKED: dict = {}  # (snapshot, n, stops, config) -> optimize_batch result with times, per snapshot
+
+
+def _ranked(snapshot: Snapshot, fit, n: int, max_stops: int):
+    """optimize_batch from the snapshot exactly as the belief_optimizer policy calls it
+    (eval.decisions.belief_optimum: the belief fit, SEED, n samples, max_stops), with every legal plan
+    in tie-break order (return_times). The first plan is that policy's plan. Cached per snapshot."""
+    from .optimizer_bridge import optimize_batch
+    key = (snapshot.model_dump_json(), n, max_stops)
+    hit = _RANKED.get(key)
+    if hit is None or hit[0] is not fit:   # the fit itself is held, so a cached result is never another fit's
+        if len(_RANKED) > 32:
+            _RANKED.clear()
+        hit = _RANKED[key] = (fit, optimize_batch(snapshot, fit, seed=SEED, n_samples=n, max_stops=max_stops,
+                                                  return_times=True))
+    return hit[1]
+
+
+def plan_text(pairs) -> str:
+    """A plan compactly: "MEDIUM 11 > SOFT 26"."""
+    return " > ".join(f"{c} {int(n)}" for c, n in [list(p)[:2] for p in pairs])
+
+
+def immediate_action(snapshot: Snapshot, pairs) -> dict:
+    """What a plan from the snapshot does now and the submission that keeps it: a first stint of one
+    lap is PIT onto the next compound now; a longer one is STAY_OUT with reassess_after_laps one
+    less than the laps to its first stop (a STAY_OUT of k laps allows no stop before the end of lap
+    laps_completed + k + 1, eval.decisions); no stop is STAY_OUT to the flag."""
+    pairs = [list(p) for p in pairs]
+    done = snapshot.laps_completed
+    if len(pairs) < 2:
+        k = snapshot.remaining_laps
+        return {"action": "STAY_OUT", "first_stop_lap": None,
+                "submit": {"decision": "STAY_OUT", "reassess_after_laps": k}}
+    w = int(pairs[0][1])
+    if w == 1:
+        return {"action": f"PIT {pairs[1][0]}", "first_stop_lap": done + 1,
+                "submit": {"decision": "PIT", "compound": pairs[1][0]}}
+    return {"action": "STAY_OUT", "first_stop_lap": done + w,
+            "submit": {"decision": "STAY_OUT", "reassess_after_laps": w - 1}}
+
+
+def _shape(snapshot, pairs) -> tuple:
+    """Plans of one shape differ only in their stop laps: the immediate action kind and the compounds."""
+    return ("PIT" if len(pairs) > 1 and int(pairs[0][1]) == 1 else "STAY", tuple(p[0] for p in pairs[1:]))
+
+
+def _gap(d) -> dict:
+    """A paired difference over the draws (plan minus reference): mean, 90% interval, share faster."""
+    d = np.asarray(d, dtype=float)
+    lo, hi = np.percentile(d, [5, 95])
+    return {"gap_s": round(float(d.mean()), 1), "gap_90": [round(float(lo), 1), round(float(hi), 1)],
+            "faster_share": round(float((d < 0).mean() + 0.5 * (d == 0).mean()), 2)}
+
+
+def _stint_ages(snapshot: Snapshot, plan) -> list[tuple[str, float]]:
+    """(compound, age at the end of the stint) per stint of a contract plan from the snapshot."""
+    out = []
+    for i, s in enumerate(plan.stints):
+        start = snapshot.tyre_age if i == 0 else (s.start_age or 0)
+        out.append((s.compound, float(start + s.laps)))
+    return out
+
+
+def uncertainty_flags(snapshot: Snapshot, sim, plans, *, profile=None) -> tuple[list[str], list[list[str]]]:
+    """(general flags, per plan flags) in words, from what the belief knows at the snapshot: a compound
+    of the plans priced without race laps (the compound proxy), a compound whose estimate leans on the
+    prior (prior_dominated), a stint run past the compound's longest run seen so far when the tyre
+    life beyond it is a generic prior (cliff tiers GENERIC_LIFE_TIER on) or past the life estimate
+    itself, and a safety car or VSC in progress. Nothing after the snapshot enters."""
+    fit = sim.fitted_for(snapshot)
+    rep = sim.model_report(snapshot)
+    fit_report = getattr(fit.degradation, "fit_report", None) or {}
+    proxy = fit_report.get("proxy") or {}
+    cliffs = sim.cliffs_for(snapshot)
+    used = sorted({s.compound for p in plans for s in p.stints})
+    general = []
+    for c in used:
+        tiers = proxy.get(c)
+        if tiers is not None and (tiers.get("pace_source") != "race" or tiers.get("wear_source") != "race"):
+            general.append(f"{c} has no race laps so far: pace from {tiers.get('pace_source')}, wear from "
+                           f"{tiers.get('wear_source')} (a proxy)")
+        elif f"prior_dominated:{c}" in rep.flags:
+            general.append(f"{c}: few race laps so far, its estimate leans on the prior")
+    if snapshot.track_status != "green":
+        n = _neutralised_for(snapshot)
+        general.append(f"{snapshot.track_status.upper()} in progress ({_laps(n)} so far): a stop now is cheaper; "
+                       f"how long it lasts is drawn by the model")
+    per_plan = []
+    for p in plans:
+        flags = []
+        for c, age in _stint_ages(snapshot, p):
+            life = cliffs.get(c)
+            if life is None:
+                continue
+            seen = life.lower if life.prior is not None else life.age
+            est = life.prior if life.prior is not None else life.age
+            tier = str(life.source or "")
+            generic = life.prior is not None and any(f"tier{t}" in tier for t in range(GENERIC_LIFE_TIER, 10))
+            if est is not None and age > est:
+                flags.append(f"runs {c} to age {age:.0f}, past its estimated life of {est:.0f} laps")
+            elif seen and age > seen and generic:
+                flags.append(f"runs {c} to age {age:.0f}, past the longest run seen ({seen:.0f}); the life "
+                             f"beyond that is a generic prior")
+        per_plan.append(flags)
+    return general, per_plan
+
+
+def rank_plans(snapshot: Snapshot, *, n_samples=None, sim=None, profile=None) -> dict:
+    """The optimizer's best distinct plans from the snapshot (protocol v2's first call), compact.
+
+    The search is the belief_optimizer policy's (_ranked), so plans[0] is that policy's plan. At most
+    RANK_TOP plans, the best of each shape (_shape: the immediate action kind and the compounds),
+    with the best PIT-now and the best STAY_OUT plan always among them when both are legal. Per plan:
+    its stints, first stop, the immediate action and the submission that keeps it (immediate_action),
+    gap_to_best (mean, 90% interval over the paired draws, share of draws faster than the best),
+    best_share (the share of draws in which it is the fastest of those shown), first_stop_range
+    (the first-stop laps over which a plan of the same shape stays within FLEX_S of it) and flags.
+    `decision` reads the best PIT-now plan against the best STAY_OUT plan (gap_reading), the choice
+    the submission makes; `flags` are uncertainty_flags. Nothing after the snapshot enters."""
+    from ..baselines.domain import NoFeasiblePlan
+    sim, profile = _setup(snapshot, sim, profile)
+    n = n_samples or profile.sim.n_samples
+    fit = sim.fitted_for(snapshot)
+    window = pit_window(snapshot, sim.config)
+    try:
+        res = _ranked(snapshot, fit, n, profile.sim.max_stops)
+    except NoFeasiblePlan as exc:
+        return {"error": f"No legal plan within the stop limit: {exc}", "recoverable": False,
+                "pit_window": window["summary"]}
+    s = res.diagnostics["searched"]
+    plans, means, times = s["plans"], np.asarray(s["mean_time_s"]), np.asarray(s["times"])
+    pairs = [p.as_pairs() for p in plans]
+    shapes = [_shape(snapshot, p) for p in pairs]
+    shown, seen = [], set()
+    for i, sh in enumerate(shapes):
+        if sh not in seen:
+            seen.add(sh)
+            shown.append(i)
+    best_of = {k: next((i for i, sh in enumerate(shapes) if sh[0] == k), None) for k in ("PIT", "STAY")}
+    top = shown[:RANK_TOP]
+    for k in ("PIT", "STAY"):   # both immediate actions on show when both are legal
+        if best_of[k] is not None and best_of[k] not in top:
+            top[-1] = best_of[k]
+            top = sorted(set(top))
+    sub = times[top]
+    win = sub == sub.min(axis=0)
+    share = (win / win.sum(axis=0)).mean(axis=1)
+    general, per_plan = uncertainty_flags(snapshot, sim, [plans[i] for i in top], profile=profile)
+    out = []
+    for r, (i, sh_share, flags) in enumerate(zip(top, share, per_plan), start=1):
+        same = [j for j, sh in enumerate(shapes) if sh == shapes[i] and means[j] <= means[i] + FLEX_S]
+        stops = sorted({snapshot.laps_completed + int(pairs[j][0][1]) for j in same if len(pairs[j]) > 1})
+        act = immediate_action(snapshot, pairs[i])
+        entry = {"rank": r, "plan": plan_text(pairs[i]), "stops": len(pairs[i]) - 1,
+                 "first_stop": describe_plan(snapshot, pairs[i]), "immediate": act["action"],
+                 "submit": act["submit"]}
+        entry.update(_gap(times[i] - times[0]) if i else {"gap_s": 0.0})
+        entry["best_share"] = round(float(sh_share), 2)
+        if len(stops) > 1:
+            entry["first_stop_range"] = [stops[0], stops[-1]]
+        warn = _report.support_warnings(fit.degradation, snapshot, plans[i])
+        if warn or flags:
+            entry["flags"] = [*flags, *(f"extrapolates: {w}" for w in warn)]
+        out.append(entry)
+    decision = None
+    a, b = best_of["PIT"], best_of["STAY"]
+    if a is not None and b is not None:
+        d = times[a] - times[b]
+        lo, hi = np.percentile(d, [5, 95])
+        p = float((d < 0).mean() + 0.5 * (d == 0).mean())
+        pit = immediate_action(snapshot, pairs[a])["action"]
+        decision = {"favoured": pit if p >= 0.5 else "STAY_OUT", "share": round(max(p, 1 - p), 2),
+                    "reading": gap_reading(f"{pit} (best plan)", "STAY_OUT (best plan)", p, float(d.mean()),
+                                           float(lo), float(hi))}
+    elif b is not None:
+        decision = {"favoured": "STAY_OUT", "share": 1.0, "reading": f"no PIT now is legal or modelled: {window['summary']}"}
+    elif a is not None:
+        decision = {"favoured": immediate_action(snapshot, pairs[a])["action"], "share": 1.0,
+                    "reading": "every legal plan pits now"}
+    return _jsonable({"plans": out, "decision": decision, "flags": general, "pit_window": window["summary"],
+                      "n_draws": int(times.shape[1]),
+                      "note": "gaps: plan minus the best plan over shared draws (negative: faster); shares cover "
+                              "parameter and lap noise under this model, not model error"})
+
+
+def evaluate_plan(snapshot: Snapshot, plan=None, first_stop_lap=None, compound=None, *, n_samples=None,
+                  sim=None, profile=None) -> dict:
+    """One plan against the optimizer's best (rank_plans' plan 1) under the same draws: a full plan
+    [[compound, laps], ...] whose first stint continues the current set, or a first stop at the end of
+    lap first_stop_lap onto compound (every legal modelled compound when None, the fastest shown) with
+    the best continuation after it (_stop_at). Returns the plan, its gap to the best (_gap), the
+    immediate action and submission that keep it (immediate_action), what the scorer would play for
+    that submission (scored_plan: eval.decisions.to_plan on this belief; a STAY_OUT only forbids an
+    earlier stop, the rest is planned again) and flags; rule replies say what is legal instead."""
+    from ..baselines.domain import NoFeasiblePlan
+    from ..eval import decisions
+    sim, profile = _setup(snapshot, sim, profile)
+    n = n_samples or profile.sim.n_samples
+    fit = sim.fitted_for(snapshot)
+    window = pit_window(snapshot, sim.config)
+    if (plan is None) == (first_stop_lap is None):
+        raise ValueError("give either plan or first_stop_lap (with compound), not both")
+    try:
+        best = _ranked(snapshot, fit, n, profile.sim.max_stops)
+    except NoFeasiblePlan as exc:
+        return {"error": f"No legal plan within the stop limit: {exc}", "recoverable": False}
+    best_plan = best.plan
+    if plan is not None:
+        cands = [plan]
+    else:
+        lap = int(first_stop_lap)
+        if not (window["earliest_stop_lap"] or 0) <= lap <= (window["latest_stop_lap"] or -1):
+            return {"error": f"No legal stop at the end of lap {lap}: {window['summary']}.", "recoverable": True}
+        pits = [c for c in legal_compounds(snapshot, sim.config) if c in fit.modelled]
+        comps = [str(compound).upper()] if compound else pits
+        bad = [c for c in comps if c not in pits]
+        if bad:
+            return {"error": f"Compound {bad[0]} cannot be fitted; choose from {pits}.", "recoverable": True}
+        cont = _continuation(fit, n, profile.sim.max_stops)
+        cands = []
+        for c in comps:
+            p, errors = _stop_at(fit, snapshot, lap, c, cont)
+            if p is None or errors:
+                errs = explain_rule_errors(snapshot, p, errors, sim.config) if p is not None else list(errors)
+                return {"error": f"A stop at the end of lap {lap} onto {c}: {'; '.join(errs)}", "recoverable": True}
+            cands.append(p)
+    res = fit.compare(snapshot, [*cands, best_plan], seed=SEED, n_samples=n)
+    k = len(cands)
+    ok = [i for i in range(k) if res.valid[i]]
+    if not ok:
+        errors = explain_rule_errors(snapshot, res.candidates[0], res.errors[0], sim.config)
+        return _jsonable({"valid": False, "error": "; ".join(errors) or "not a legal plan", "recoverable": True,
+                          "pit_window": window["summary"]})
+    i = min(ok, key=lambda j: res.summaries[j].mean_s)
+    pairs = res.candidates[i].as_pairs()
+    times = fit.simulate_batch(snapshot, [res.candidates[i], best_plan], seed=SEED, n_samples=n).times
+    act = immediate_action(snapshot, pairs)
+    out = {"plan": plan_text(pairs), "stops": len(pairs) - 1, "first_stop": describe_plan(snapshot, pairs),
+           "vs_best": {"best_plan": plan_text(best_plan.as_pairs()), **_gap(times[0] - times[1])},
+           "immediate": act["action"], "submit": act["submit"]}
+    if k > 1:
+        out["other_compounds"] = {res.candidates[j].stints[1].compound: round(float(res.gap_mean_s[j][i]), 1)
+                                  for j in ok if j != i}
+    try:
+        scored = decisions.to_plan(snapshot, {**act["submit"], "confidence": 0.5}, sim, profile.sim.max_stops,
+                                   seed=0, n_samples=profile.sim.n_samples)
+        if scored.as_pairs() != pairs:
+            out["scored_plan"] = (f"the scorer plays {plan_text(scored.as_pairs())} for this submission (after a "
+                                  f"STAY_OUT the rest is planned again)")
+    except decisions.InvalidDecision as exc:
+        out["scored_plan"] = f"this submission has no legal plan: {exc}"
+    general, per_plan = uncertainty_flags(snapshot, sim, [res.candidates[i]], profile=profile)
+    warn = res.support_warnings[i]
+    flags = [*general, *per_plan[0], *(f"extrapolates: {w}" for w in warn)]
+    if flags:
+        out["flags"] = flags
+    return _jsonable(out)
+
+
 def recommendation_fields(snapshot: Snapshot, decision: dict) -> dict:
     """The decision (PIT or STAY_OUT, None when malformed) and p_pit, the stated probability
     that pitting now is right, for the Brier column (eval.decisions.p_pit)."""

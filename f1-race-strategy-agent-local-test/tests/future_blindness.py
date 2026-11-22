@@ -764,6 +764,14 @@ def _tools_surface(snap):
         out[f"evaluate_strategy/pit_{c}"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": c})
     for n in (1, 3):
         out[f"evaluate_strategy/stay_out_{n}"] = _shown(tools.evaluate_strategy, {"action": "stay_out", "laps": n})
+    # protocol v2 (src/agent.py AGENT_PROTOCOL): the ranked plans and one plan evaluated
+    out["rank_plans"] = _shown(tools.rank_plans)
+    first = snap.laps_completed + 1
+    for lap in (first, first + 3):
+        out[f"evaluate_plan/stop_{lap - snap.laps_completed}"] = _shown(tools.evaluate_plan, None, lap, None)
+    for k in script:
+        if k.startswith(("one_stop", "too_")):
+            out[f"evaluate_plan/{k}"] = _shown(tools.evaluate_plan, script[k])
     out["race_state"] = _call(agent_tools.race_state, snap)
     for k, p in script.items():
         if k.startswith(("too_", "single")):

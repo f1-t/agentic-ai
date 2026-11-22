@@ -50,6 +50,36 @@ If a tool reports an invalid plan or arguments, use its error/hint to correct th
 
 Finish by calling submit_recommendation. Its confidence is your probability (0 to 1) that the recommended action is the better one: that pitting now beats staying out if you recommend PIT, and the reverse if you recommend STAY_OUT. Never finish with prose alone."""
 
+# AGENT_PROTOCOL: "v2" (the default since 2026-11-22) gives the model the ranked plans and one-plan
+# evaluation (tools.TOOL_SPECS_V2), the decision protocol below, unknown arguments refused with the
+# valid ones named, and one consistency check at submission (_consistency_note); "v1" is the prompt,
+# tool surface and loop before it, unchanged (docs/eval.md "Agent protocol v2").
+PROTOCOLS = ("v1", "v2")
+DEFAULT_PROTOCOL = "v2"
+CHECK_SHARE = 0.8   # the consistency check fires when the evidence favours the other action in more draws than this
+
+SYSTEM_PROMPT_V2 = """You are a Formula 1 race strategist making a MID-RACE decision from a snapshot in time.
+
+The snapshot is the only current race state. The race is not named and cars are labelled (your car is Car A); decide from the snapshot and the tools, not from memory of any real race.
+
+Your decision is the immediate action: PIT now onto a compound, or STAY_OUT for k laps. It is scored as a whole plan: after your action the same optimizer the tools use plans the rest of the race.
+
+The tools are a simulator fitted only on the laps so far. Its numbers are estimates: a share of draws covers parameter and lap noise under this model, not model error. """ + GAP_SENTENCE + """
+
+Decision protocol:
+1. Call rank_plans first, once. It lists the optimizer's best distinct plans: the stints, the first stop, the immediate action each implies and the submission that keeps it, gap_s to the best plan with its 90% interval, best_share (the share of draws in which that plan is the fastest of those shown) and flags; decision reads the best PIT-now plan against the best STAY_OUT plan.
+2. The optimizer's ranking is the default. If the top plans agree on the immediate action, submit it.
+3. Depart from plan 1 only for a stated reason tied to a flag: a compound priced without race laps, a tyre-life estimate from a generic prior, a stint past the estimated tyre life, a safety car or VSC in progress. Then prefer the plan that does not rest on the weak estimate, if its gap is small. To check one plan or a stop at lap L onto compound C, call evaluate_plan; for one estimate, estimate_tyre_degradation or estimate_pit_loss. Do not probe one lap count after another: rank_plans already searched every stop lap.
+4. Before submitting, write one line in the rationale with the evidence for your action: which plan, its gap to the best and its share of draws. If that evidence favours the other action, revise.
+
+STAY_OUT k forbids a stop before the end of lap (current lap + k + 1); after it the optimizer plans again. To keep a plan whose first stop is at the end of lap L use k = L - current lap - 1, as its submit field says; a larger k delays that stop.
+
+Confidence is your probability (0 to 1) that your immediate action beats the other one (PIT now against STAY_OUT). Start from decision.share, and move it toward 0.5 when a flag makes the estimate weak; do not copy a tool number without that judgement.
+
+Replies are capped at 1,024 tokens: reply with JSON only, at most 3 tool calls per turn, and keep the rationale under 60 words. Most decisions need 1 to 3 evidence calls; the budget is 24. If a tool reports an error, it names what is valid: correct the call rather than repeating it.
+
+Finish by calling submit_recommendation. Never finish with prose alone."""
+
 SUBMIT_TOOL = {
     "name": "submit_recommendation",
     "description": "Submit the final immediate mid-race strategy decision.",
@@ -69,24 +99,66 @@ SUBMIT_TOOL = {
 }
 
 
-def _api_tools():
-    specs = [{k: t[k] for k in ("name", "description", "input_schema")} for t in tools.TOOL_SPECS]
-    return specs + [SUBMIT_TOOL]
+# v2: the same arguments, a description that says what reassess_after_laps does to the plan
+SUBMIT_TOOL_V2 = {**SUBMIT_TOOL, "input_schema": {**SUBMIT_TOOL["input_schema"], "properties": {
+    **SUBMIT_TOOL["input_schema"]["properties"],
+    "reassess_after_laps": {"type": "integer", "description": (
+        "STAY_OUT: the laps to stay out; no stop before the end of lap (current lap + this + 1), then the "
+        "optimizer plans again (rank_plans' submit field gives it per plan). PIT: when to reassess after the stop.")},
+}}}
 
 
-def _dispatch(name, args):
+def protocol(value=None) -> str:
+    """AGENT_PROTOCOL (or `value`), DEFAULT_PROTOCOL when unset; anything but PROTOCOLS is an error."""
+    mode = (value or os.environ.get("AGENT_PROTOCOL", "")).strip().lower() or DEFAULT_PROTOCOL
+    if mode not in PROTOCOLS:
+        raise ValueError(f"AGENT_PROTOCOL must be one of {', '.join(PROTOCOLS)}; got {mode!r}")
+    return mode
+
+
+def _specs(proto="v1"):
+    return tools.TOOL_SPECS_V2 if proto == "v2" else tools.TOOL_SPECS
+
+
+def _api_tools(proto="v1"):
+    specs = [{k: t[k] for k in ("name", "description", "input_schema")} for t in _specs(proto)]
+    return specs + [SUBMIT_TOOL_V2 if proto == "v2" else SUBMIT_TOOL]
+
+
+def _dispatch(name, args, proto="v1"):
     """The tool's output (or error) as the model is shown it: tools.present maps the real race
     and driver names to the active snapshot's pseudonyms unless AGENT_SHOW_IDENTITY is on."""
-    return tools.present(_call(name, args))
+    return tools.present(_call(name, args, proto))
 
 
-def _call(name, args):
-    for spec in tools.TOOL_SPECS:
+def _unknown_args(spec, args):
+    """Under v2: an error naming the arguments `args` has that the tool's schema does not, and the
+    valid ones (nested too: evaluate_strategy's action); None when there are none."""
+    props = spec.get("input_schema", {}).get("properties", {})
+    extra = sorted(k for k in args if k not in props)
+    where = spec["name"]
+    if not extra:
+        for k, sub in props.items():
+            inner = sub.get("properties")
+            if inner and isinstance(args.get(k), dict) and (extra := sorted(set(args[k]) - set(inner))):
+                where, props = f"{spec['name']}.{k}", inner
+                break
+    if not extra:
+        return None
+    valid = ", ".join(props) or "none"
+    return {"error": f"Unknown argument(s) for {where}: {', '.join(extra)}; nothing was run. Valid arguments: "
+                     f"{valid}.", "recoverable": True}
+
+
+def _call(name, args, proto="v1"):
+    for spec in _specs(proto):
         if spec["name"] != name:
             continue
         schema = spec.get("input_schema", {})
         props = schema.get("properties", {})
         required = schema.get("required", [])
+        if proto == "v2" and (refused := _unknown_args(spec, args)):
+            return refused
         clean = {k: v for k, v in args.items() if k in props}
         missing = [k for k in required if k not in clean]
         if missing:
@@ -95,7 +167,45 @@ def _call(name, args):
             return spec["fn"](**clean)
         except (TypeError, ValueError) as exc:
             return {"error": f"Invalid arguments for {name}: {exc}", "recoverable": True}
+    if proto == "v2":
+        return {"error": f"Unknown tool '{name}'. Tools: {', '.join(s['name'] for s in _specs(proto))}, "
+                         f"submit_recommendation.", "recoverable": True}
     return {"error": f"Unknown tool '{name}'", "recoverable": True}
+
+
+def _evidence_of(name, out):
+    """The decision evidence a v2 tool result carries for the consistency check: rank_plans' decision
+    (the favoured immediate action, its share of draws, the reading) and its plan 1; None otherwise."""
+    if name != "rank_plans" or not isinstance(out, dict) or out.get("error"):
+        return None
+    plans = out.get("plans") or []
+    return {"decision": out.get("decision"), "best": plans[0] if plans else None}
+
+
+def _consistency_note(rec, evidence, laps_completed):
+    """What the harness says once when a submission does not match the evidence the model itself
+    gathered (the latest rank_plans): the other action favoured in more than CHECK_SHARE of the
+    draws, or a STAY_OUT whose k forbids plan 1's first stop. None when nothing contradicts it."""
+    if not evidence:
+        return None
+    lines = []
+    dec, best = evidence.get("decision") or {}, evidence.get("best") or {}
+    favoured, share = str(dec.get("favoured") or ""), dec.get("share")
+    kind = "PIT" if favoured.startswith("PIT") else "STAY_OUT" if favoured else None
+    if kind and kind != rec["decision"] and isinstance(share, (int, float)) and share > CHECK_SHARE:
+        lines.append(f"you submitted {rec['decision']}, but your rank_plans evidence favours {favoured}: "
+                     f"{dec.get('reading')}.")
+    sub = best.get("submit") or {}
+    k, keep = rec.get("reassess_after_laps"), sub.get("reassess_after_laps")
+    if (rec["decision"] == "STAY_OUT" and sub.get("decision") == "STAY_OUT" and isinstance(k, int)
+            and isinstance(keep, int) and k > keep and best.get("stops")):
+        lines.append(f"plan 1 ({best.get('plan')}) makes its first stop at the end of lap {laps_completed + keep + 1}, "
+                     f"but STAY_OUT {k} allows no stop before the end of lap {laps_completed + k + 1}; "
+                     f"reassess_after_laps {keep} keeps that stop.")
+    if not lines:
+        return None
+    return ("Not final yet: " + " Also, ".join(lines) + " Call submit_recommendation again: the same submission "
+            "to confirm it (with your reason), or a revised one. The next submission is final.")
 
 
 def _normalise_submission(args: dict[str, Any]):
@@ -209,7 +319,7 @@ def _turn_repeat_message(n, recap, ended, warn=False):
 
 def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=None,
               max_tool_calls=None, log_path=None, stats=None, submit_grace_steps=None,
-              turn_status=None, repeat_mode=None, turn_repeat=None):
+              turn_status=None, repeat_mode=None, turn_repeat=None, protocol_mode=None):
     """Run one decision episode. Returns ``(recommendation, trajectory)``.
 
     ``snapshot`` may be a RaceSnapshot, a JSON-compatible dict, or a contracts.Snapshot.
@@ -247,7 +357,16 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     backend reports usage, the summed ``input_tokens`` and ``output_tokens`` (None when it
     does not), and ``identity`` (tools.identity(): the real race id and the driver labels the
     model saw in their place; the model is shown pseudonyms unless AGENT_SHOW_IDENTITY is on).
+    ``protocol_mode`` (AGENT_PROTOCOL, default DEFAULT_PROTOCOL) picks the prompt and tools: "v1"
+    is everything above unchanged; "v2" uses SYSTEM_PROMPT_V2 and tools.TOOL_SPECS_V2, refuses a
+    call with an argument its schema does not name (the valid ones said), and holds the first
+    accepted submission that contradicts the latest rank_plans evidence (_consistency_note) when a
+    turn is left: the model is told the evidence once and its next accepted submission is final.
+    ``stats`` then also gets ``protocol``, ``check_fired`` and ``check_changed`` (the final
+    decision, compound or reassess laps differ from the held one), and the log a
+    ``consistency_check`` event.
     """
+    proto = protocol(protocol_mode)
     if turn_status is None:
         turn_status = os.environ.get("AGENT_TURN_STATUS", "").strip().lower() in {"1", "true", "on"}
     repeat_mode = repeat_mode or os.environ.get("AGENT_REPEAT_MODE") or DEFAULT_REPEAT_MODE
@@ -262,6 +381,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     stats = {} if stats is None else stats
     stats.update(steps=0, evidence_calls=0, repeat_calls=0, turn_repeats=0, evidence_ended_at=None,
                  input_tokens=None, output_tokens=None, identity=tools.identity())
+    if proto == "v2":
+        stats.update(protocol=proto, check_fired=False, check_changed=None)
     backend = backend or create_backend()
     max_steps = max_steps or int(os.environ.get("AGENT_MAX_STEPS", DEFAULT_MAX_STEPS))
     max_tool_calls = max_tool_calls or int(os.environ.get("AGENT_MAX_TOOL_CALLS", DEFAULT_MAX_TOOL_CALLS))
@@ -269,9 +390,13 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
         submit_grace_steps = int(os.environ.get("AGENT_SUBMIT_GRACE_STEPS", DEFAULT_SUBMIT_GRACE_STEPS))
     log_path = log_path or os.environ.get("AGENT_TRAJECTORY_LOG")
     episode_id = os.environ.get("AGENT_EPISODE_ID") or f"ep_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}"
-    api_tools = _api_tools()
-    system_prompt = (SYSTEM_PROMPT if tools.agent_tools.gap_yardstick() == "paired"
-                     else SYSTEM_PROMPT.replace(GAP_SENTENCE, ""))
+    api_tools = _api_tools(proto)
+    submit_tool = api_tools[-1]
+    base_prompt = SYSTEM_PROMPT_V2 if proto == "v2" else SYSTEM_PROMPT
+    system_prompt = (base_prompt if tools.agent_tools.gap_yardstick() == "paired"
+                     else base_prompt.replace(GAP_SENTENCE, ""))
+    evidence = None   # v2: the latest rank_plans evidence (_evidence_of)
+    held = None       # v2: the submission the consistency check held, until the final one
     prompt = question or "Decide the best immediate strategy action from this snapshot."
     # the view plus the pit window (whether pitting now is legal, the earliest and latest legal stop)
     messages = [{"role": "user", "content": prompt + "\n\nRace snapshot:\n" + json.dumps(tools.shown_snapshot(), ensure_ascii=False)}]
@@ -299,7 +424,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
         step += 1
         phase = "evidence" if step <= evidence_end else "grace"
         turn = backend.run_turn(system_prompt=system_prompt, messages=messages,
-                                tools=api_tools if phase == "evidence" else [SUBMIT_TOOL], max_tokens=4000)
+                                tools=api_tools if phase == "evidence" else [submit_tool], max_tokens=4000)
         stats["steps"] = step
         used = _usage(turn.raw)
         if used is not None:
@@ -410,8 +535,19 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                     stats["repeat_calls"] += 1
                 tool_calls_used += 1
                 stats["evidence_calls"] = tool_calls_used
-                out = _dispatch(call.name, args)
+                out = _dispatch(call.name, args, proto) if proto == "v2" else _dispatch(call.name, args)
                 run_calls.setdefault(key, (len(trajectory) + 1, out))
+                if proto == "v2" and (seen := _evidence_of(call.name, out)):
+                    evidence = seen
+
+            note_held = None
+            if (proto == "v2" and rec is not None and held is None
+                    and step < evidence_end + submit_grace_steps
+                    and (note_held := _consistency_note(rec, evidence, snapshot.lap))):
+                # one look at its own evidence before the submission is final; the model keeps the say
+                held, rec = dict(rec), None
+                stats["check_fired"] = True
+                out = {"accepted": False, "held": note_held}
 
             event = {"episode_id": episode_id, "step": step, "phase": phase, "call_index": len(trajectory) + 1,
                      "tool": call.name, "input": args, "output": out,
@@ -426,7 +562,20 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
             if verbose:
                 print(f"  [tool {tool_calls_used}/{max_tool_calls}] {call.name} -> {json.dumps(out)[:240]}")
 
+            if note_held:
+                _append_log(log_path, {"episode_id": episode_id, "step": step, "phase": phase,
+                                       "event": "consistency_check", "held": held, "note": note_held,
+                                       "timestamp": datetime.now(timezone.utc).isoformat(), "backend": backend.name})
             if call.name == "submit_recommendation" and rec is not None:
+                if held is not None:
+                    fields = ("decision", "compound", "reassess_after_laps")
+                    changed = any(str(rec.get(f)).upper() != str(held.get(f)).upper() for f in fields
+                                  if not (f == "reassess_after_laps" and rec["decision"] == "PIT"))
+                    stats["check_changed"] = changed
+                    _append_log(log_path, {"episode_id": episode_id, "step": step, "phase": phase,
+                                           "event": "consistency_check", "final": rec, "changed": changed,
+                                           "timestamp": datetime.now(timezone.utc).isoformat(),
+                                           "backend": backend.name})
                 return rec, trajectory
 
             if backend.name == "anthropic":
