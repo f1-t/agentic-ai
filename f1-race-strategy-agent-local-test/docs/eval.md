@@ -358,7 +358,7 @@ information, two sources per row; `data/derived/README.md`), `data/derived/compo
 (every season's C-numbers on one hardness index), `data/derived/tyre_history.csv` (the per-race
 observations, built by `python -m src.sim.tyre_history build` from every cached race not held
 out; `tyre_history_manifest.json` lists them with their dates) and
-`configs/sim/tyre_history.yaml` (every constant below).
+`configs/tyre_history.yaml` (every constant below).
 
 **As of, and held out.** Only races strictly before the target count: earlier by (season, round)
 (`race_ids.as_of`) and, where both dates are known, by date. A race in `data/eval_set.json` (or

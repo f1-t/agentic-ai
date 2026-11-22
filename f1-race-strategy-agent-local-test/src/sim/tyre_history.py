@@ -31,7 +31,7 @@ onto the target first: as a share of race distance (so a circuit with shorter la
 laps on the same rubber), times life_ratio ** steps for a compound `steps` common-index steps
 harder (positive) or softer than the target's. The weight is the category's (same circuit and
 same compound > same circuit, other compound > other circuits, same compound > other circuits,
-other compound; configs/sim/tyre_history.yaml), times recency_per_season per season back, times
+other compound; configs/tyre_history.yaml), times recency_per_season per season back, times
 other_era across the 2022 regulation change, times wet_race for a wet race. Its tier is the best
 category present: 1 same circuit and compound, 2 same circuit, 3 other circuits only, 4 no
 earlier race at all (a constant share of race distance per role). The sd is the weighted spread
@@ -68,7 +68,7 @@ SCALE = DERIVED / "compound_scale.csv"
 HISTORY = DERIVED / "tyre_history.csv"
 STINTS = DERIVED / "tyre_history_stints.csv"
 MANIFEST = DERIVED / "tyre_history_manifest.json"
-CONFIG = ROOT / "configs" / "sim" / "tyre_history.yaml"
+CONFIG = ROOT / "configs" / "tyre_history.yaml"   # not under configs/sim/, whose every yaml is read as a SimConfig
 REPORT_DIR = ROOT / "reports" / "calibration" / "tyre_history"
 EVAL_SET = ROOT / "data" / "eval_set.json"
 CACHE_DIR = ROOT / "cache"

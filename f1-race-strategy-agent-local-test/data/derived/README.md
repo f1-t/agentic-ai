@@ -45,10 +45,10 @@ The C-numbers changed meaning between seasons, so every (scale, compound) maps t
 The 2023 C1 is placed half a step above the old C1: Pirelli calls it "much closer to the C2",
 which would argue for more than 0.5; 0.5 is the plain midpoint, stated rather than tuned. The
 index is ordinal: a C3 of 2019 and a C3 of 2024 share an index but are not the same rubber
-(the regulation-era weight in configs/sim/tyre_history.yaml covers the 2022 change).
+(the regulation-era weight in configs/tyre_history.yaml covers the 2022 change).
 
 ## tyre_history.csv, tyre_history_stints.csv, tyre_history_manifest.json
 
 Built by `python -m src.sim.tyre_history build` from every cached race not held out
-(data/eval_set.json plus `held_out_extra` in configs/sim/tyre_history.yaml); the manifest lists
+(data/eval_set.json plus `held_out_extra` in configs/tyre_history.yaml); the manifest lists
 the races and their dates. Rerun it when races are added to the cache.
