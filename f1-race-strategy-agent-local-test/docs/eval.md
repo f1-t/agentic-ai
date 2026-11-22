@@ -2863,8 +2863,12 @@ a priori prior (an SC may end on any lap, so a stop now looks less certain to be
 2022 Brazil, where the value is within 2 s of zero either way. What is left under an SC is the
 judge knowing the real end of the period in progress (it often ends at the next lap, so a stop
 now is a green stop): no as-of model can know that, and the remaining gap is that hindsight.
-Both switches are off by default: adopting them changes the judge's scored references (the
-later periods) and is the coordinator's call; the belief's switch alone touches no reference.
+Adopted 2026-11-22 as the default on both sides (the current configuration below; the earlier
+pair is `configs/sim/legacy/world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`, the
+ablation toggle `sc_alignment_off`). Limitation, stated and not chased: under an SC in progress
+pit-now agreement is lower than with the geometric (six of 47 snapshots), mostly a race with no
+earlier history (2019 Britain, on the a priori prior) and values within 2 s of zero; the value
+gap that remains under an SC is the judge's knowledge of when the real period ends.
 
 ### What the ablation says (f7be251, selection rule applied)
 
@@ -2891,17 +2895,30 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
 - **Judge (world):** linear_fuel with driver effects, no hinge (`config.WORLD_DEGRADATION`); the
   wear cliff with the tyre-life edge from history only (`config.WORLD_EDGE` `history_only`); hybrid
   SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
-  policy's plan and the reference see the same periods for a seed; no traffic; R8 retired. As a
-  file: `configs/sim/world_hybrid.yaml`. config_hash `abc455a9bbb6` (before: `d230d3a56b0b`).
+  policy's plan and the reference see the same periods for a seed, the later periods at rates and
+  lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
+  2026-11-22); no traffic; R8 retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash
+  `5069228b35e7` (before the SC alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
   ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
-  `sd_scale`. config_hash `f7b872d14c0c` (before: `d479652b0fe7`). `belief_traffic.yaml` and
-  `belief_learned.yaml` are it plus one block.
+  `sd_scale`, SC/VSC lengths from the as-of history of period lengths, a period in progress
+  continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22).
+  config_hash `351f4124ff22` (before the SC alignment `f7b872d14c0c`, before the scorecard
+  `d479652b0fe7`). `belief_traffic.yaml` and `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
   `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
-  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`. The whole earlier pair:
-  `configs/sim/legacy/world_pre_scorecard.yaml` and `belief_pre_scorecard.yaml`.
+  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue (`sc_queue`), the
+  pit-stop durations (`pit_stops`). The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
+  and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`.
+
+Confirmation after the SC alignment on 997d69d (`reports/calibration/fidelity/sc-align-997d69d/`,
+all 19 calibration races, none failed; SIM_CODE_VERSION `938d268003fa`): close pairs out of sample
+0.753, Spearman 0.958, relative gap 13.17 s, absolute 18.9 s, plan-rank agreement 0.868,
+judge-regret of the belief's favourite 4.11 s, pit-now agreement 0.816, belief replay close pairs
+0.664, B1 MAE 42.9 s, plan 90 % coverage 0.991. Noise floor (`ceiling_pooled.csv` there): judge
+0.753 / 13.2 s, + per-stint pace 0.696 / 11.9 s, + pit laps 0.739 / 11.4 s, + SC/VSC laps
+0.614 / 5.2 s, + lap 1 (the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9].
 
 SIM_CODE_VERSION `096753d89c0f` (before `ba80a54af80b`): `config.py` is a physics module. Every
 reference built on the earlier world is stale (its key holds the world's config_hash and
