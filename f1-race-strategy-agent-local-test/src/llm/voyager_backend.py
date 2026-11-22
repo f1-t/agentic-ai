@@ -72,6 +72,65 @@ def _extract_json(text: str):
         raise
 
 
+def _reclose_tail(text: str):
+    """(text, old tail, new tail) with the reply's final run of closing brackets replaced by
+    the one run that closes what is still open; None when that run is already right or the
+    text before it is not well nested.
+
+    qwen3-30b-a3b miscounts the closers that end its JSON after a nested argument (dev6
+    run 3: '"laps": 3}]}}}]}', one brace too many after compare_plans' candidates; now and
+    then one too few, or a stray one after the end). Only that final run changes: everything
+    before it is kept as written and must be well nested, and nothing but closers follows,
+    so exactly one run of closers completes it and no key or value can change level.
+    """
+
+    pairs = {"}": "{", "]": "["}
+    end = len(text)
+    while end and text[end - 1] in "}] \t\r\n":
+        end -= 1
+    stack, in_string, escaped = [], False, False
+
+    for ch in text[:end]:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in pairs:
+            if not stack or stack.pop() != pairs[ch]:
+                return None
+
+    old = "".join(text[end:].split())
+    new = "".join("}" if c == "{" else "]" for c in reversed(stack))
+    if in_string or old == new:
+        return None
+    return text[:end] + new, old, new
+
+
+def _parse_reclosed(text: str, exc: json.JSONDecodeError):
+    """(payload, note) of the reply's JSON after _reclose_tail; raises `exc`, the original
+    error, when that does not apply or the result still does not parse."""
+
+    body = re.sub(r"\s*```$", "", text[text.find("{"):]) if "{" in text else ""
+    fixed = _reclose_tail(body)
+
+    if fixed is None:
+        raise exc
+
+    try:
+        payload = json.loads(fixed[0])
+    except json.JSONDecodeError:
+        raise exc from None
+
+    return payload, f"final closing brackets {fixed[1]!r} read as {fixed[2]!r}"
+
+
 class VoyagerBackend(ModelBackend):
     """Model backend for ASU Research Computing Voyager."""
 
@@ -188,9 +247,16 @@ class VoyagerBackend(ModelBackend):
         # ------------------------------------------------------------------
 
         payload = None
+        parse_error = repair = None
 
         try:
-            payload = _extract_json(text)
+            try:
+                payload = _extract_json(text)
+            except json.JSONDecodeError as exc:
+                # a reply cut off at the token cap is unfinished, not mis-closed: never repaired
+                if response.choices[0].finish_reason == "length":
+                    raise
+                payload, repair = _parse_reclosed(text, exc)
 
             raw_calls = payload.get(
                 "tool_calls",
@@ -216,6 +282,11 @@ class VoyagerBackend(ModelBackend):
         ) as exc:
 
             calls = []
+            parse_error = f"{type(exc).__name__}: {exc}"
+            if isinstance(exc, json.JSONDecodeError):
+                # where it failed, so the model can see what to correct
+                parse_error += (f"; the reply up to there ends {exc.doc[max(exc.pos - 60, 0):exc.pos]!r}, "
+                                f"followed by {exc.doc[exc.pos:exc.pos + 20]!r}")
 
             text = (
                 f"{text}\n"
@@ -230,4 +301,6 @@ class VoyagerBackend(ModelBackend):
             text=text,
             tool_calls=calls,
             raw=response,
+            parse_error=parse_error,
+            parse_repair=repair,
         )
