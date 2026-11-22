@@ -30,7 +30,10 @@ def _spec():
     """Judge and belief on the generating model: linear wear and fuel with a pace per driver
     (driver_effects), full window."""
     cfg = SimConfig(degradation={"name": "linear_fuel", "params": {"driver_effects": "race"}}).model_dump()
-    return fidelity.Spec(label="t", world=cfg, belief=copy.deepcopy(cfg))
+    # the judge charges the generating model's pit loss (the whole-race estimate is a median of
+    # stops that carry each driver's pace, so it is near, not at, the truth)
+    return fidelity.Spec(label="t", world=cfg, belief=copy.deepcopy(cfg),
+                         world_race={"pit_loss_s": cross_race.SYN_PIT_LOSS_S})
 
 
 FAST = fidelity.Options(b_drivers=3, b_every=10, samples=1, n_one=3, n_two=2, loso=False, grid_references=False,
@@ -38,7 +41,7 @@ FAST = fidelity.Options(b_drivers=3, b_every=10, samples=1, n_one=3, n_two=2, lo
 
 
 # --- refusal ------------------------------------------------------------------------------------
-@pytest.mark.parametrize("race", ["2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria"])
+@pytest.mark.parametrize("race", cross_race.held_out_races())
 def test_held_out_races_are_refused_before_loading(race, monkeypatch, tmp_path):
     def no_load(*a, **k):
         raise AssertionError("a held-out race was loaded")
@@ -90,11 +93,11 @@ def test_ledger_traffic_declared_and_unclassified(tmp_path):
 
 
 def test_substitutes_follow_the_ledger():
-    spec = _spec()
+    spec = fidelity.Spec(label="t", world=SimConfig().model_dump(), belief=SimConfig().model_dump())
     subs = fidelity.substitutes_for(spec)
     assert {"pre_race_fit", "pit_loss_prior", "r8_off", "proxy_off"} <= set(subs)
     v = fidelity.substituted(spec, ["pit_loss_prior", "pre_race_fit"])
-    assert v.world_race["pit_loss_s"] == fidelity.calibrate.DEFAULT_PIT_LOSS_S
+    assert v.world_race["pit_loss_s"] == "prior"
     assert v.world_config().fit_window == "pre_race"
     assert "pit_loss_prior" not in fidelity.substitutes_for(v)
 
@@ -223,3 +226,45 @@ def test_scorecard_on_spain(tmp_path):
     assert 0 <= h["A_close_pair_acc"] <= 1 and np.isfinite(h["B2_regret_s"])
     led = pd.read_csv(out / "ledger.csv")
     assert ((led["role"] == "judge") & (led["tag"] == "this race, whole")).any()
+
+
+def test_hybrid_judge_replays_recorded_and_offers_the_rate_substitute():
+    cfg = SimConfig(events={"name": "hybrid", "params": {"lap_times": "recorded"}})
+    assert fidelity._replay_config(cfg).events.name == "recorded"
+    assert fidelity.replay_events(fidelity._replay_config(cfg)) == "recorded"
+    rows = _by_id(fidelity.ledger(cfg, "judge"))
+    assert rows["events"]["tag"] == "this race, whole" and rows["events"]["substitute"] == "events_rate"
+    belief = _by_id(fidelity.ledger(SimConfig.from_file(fidelity.BELIEF_FILE), "predictive"))
+    assert belief["clean_flag"]["tag"] == "this race, to snapshot"
+    assert belief["race_length"]["tag"] == "regulation" and belief["compound_list"]["tag"] == "regulation"
+
+
+def test_absent_switches_are_skipped():
+    ab = {"factors": {"ok": {"both": {"degradation": {"name": "linear_fuel_hinge"}}},
+                      "later": {"both": {"not_a_field_yet": {"x": 1}}},
+                      "module": {"requires": ["src.sim.no_such_module"], "both": {}}},
+          "all_on": ["ok", "later"]}
+    skipped = []
+    specs = fidelity.ablation_specs(_spec(), ab, skipped)
+    assert [s.label for s in specs] == ["base", "ok", "all_on"]
+    assert {x["factor"] for x in skipped} == {"later", "module"}
+
+
+def test_recorded_judge_replays_its_own_model_exactly(noiseless):
+    cfg = SimConfig(degradation={"name": "linear_fuel", "params": {"driver_effects": "race"}},
+                    events={"name": "recorded", "params": {"lap_times": "factor"}}).model_dump()
+    spec = fidelity.Spec(label="t", world=cfg, belief=copy.deepcopy(cfg),
+                         world_race={"pit_loss_s": cross_race.SYN_PIT_LOSS_S})
+    a = fidelity.section_a(noiseless, spec, FAST)
+    assert a["a_drivers"]["err_pace_s"].abs().max() < 1e-6
+
+
+def _blas_threads(_):
+    import os
+    return os.environ.get("OPENBLAS_NUM_THREADS"), os.environ.get("OMP_NUM_THREADS")
+
+
+def test_workers_run_one_blas_thread():
+    assert fidelity.DEFAULT_JOBS <= 6
+    with fidelity.ProcessPoolExecutor(1) as ex:   # the pool run_specs uses: spawned, one BLAS thread
+        assert list(ex.map(_blas_threads, [0])) == [("1", "1")]

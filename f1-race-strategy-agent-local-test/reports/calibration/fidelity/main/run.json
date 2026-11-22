@@ -2,19 +2,38 @@
   "label": "main",
   "races": [
     "2019_10_united_kingdom",
+    "2021_01_bahrain",
     "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
     "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
     "2023_01_bahrain",
     "2023_07_spain",
     "2024_07_emilia_romagna"
   ],
-  "code_version": "58b50a00e0e3-d2360f4838af",
+  "failed": [
+    {
+      "label": "main",
+      "race_id": "2022_11_austria",
+      "error": "ValueError: cannot convert float NaN to integer"
+    }
+  ],
+  "code_version": "f7415672be70-134c5546de2d",
   "world": "race default (jobs.load_race)",
   "world_overlay": {},
   "belief_overlay": {},
   "world_race": {},
-  "world_config_hash": "872d3a71bc43",
-  "belief_config_hash": "8f32db455cfb",
+  "world_config_hash": "ba21b60fc268",
+  "belief_config_hash": "9e7580bde6f9",
   "options": {
     "b_drivers": 6,
     "b_every": 5,
@@ -30,28 +49,41 @@
     "max_stops": 2
   },
   "headline": {
-    "A_close_pair_acc": 0.6442307692307693,
-    "A_spearman": 0.9669173877378211,
-    "A_rel_gap_mae_s": 8.883168251424658,
-    "B2_rank_rho": 0.7482706793250422,
-    "B2_regret_s": 2.0023664454744936,
-    "B2_pit_now_agree": 0.8457142857142858,
-    "P_close_pair_acc": 0.6019230769230769,
-    "P_spearman": 0.8878917569259603,
-    "A_abs_mae_s": 27.055619220017746,
-    "A_abs_bias_s": -16.96654305758584,
-    "A_stop_gain_bias_s": -0.3359138454771676,
-    "B1_mae_s": 95.34956979802057,
-    "B1_bias_s": 95.34076703277537,
-    "B1_green_mae_s": 21.419043662790315,
-    "B2_rank_rho_green": 0.7655650693350864,
-    "B3_cov_90": 0.3017786708342636,
-    "B3_factor_cov_90": 0.5328798185941043,
-    "B4_mae_offset_s": 27.821022999061046
+    "A_close_pair_acc": 0.7041095890410959,
+    "A_spearman": 0.9465412210768248,
+    "A_rel_gap_mae_s": 15.576746538734957,
+    "B2_rank_rho": 0.7186558811106625,
+    "B2_regret_s": 3.1952867712179738,
+    "B2_pit_now_agree": 0.8302919708029197,
+    "P_close_pair_acc": 0.6350684931506849,
+    "P_spearman": 0.8767019567680167,
+    "A_abs_mae_s": 32.23981383288813,
+    "A_abs_bias_s": -4.1339009635002135,
+    "A_stop_gain_bias_s": -0.25029473804765706,
+    "B1_mae_s": 94.3885044090755,
+    "B1_bias_s": 94.28080327828897,
+    "B1_green_mae_s": 21.262169655971483,
+    "B2_rank_rho_green": 0.7221535887372122,
+    "B3_cov_90": 0.48201387055746203,
+    "B3_factor_cov_90": 0.5136258096052793,
+    "B4_mae_offset_s": 34.98795151934516
   },
   "future_blindness": {
-    "status": "not checked",
-    "detail": "tests/future_blindness.py is not on this branch"
+    "status": "pass",
+    "new_leak_differences": 0,
+    "differences_with_known_leaks": 8,
+    "known_leaks": [
+      "stint_limit"
+    ],
+    "fixed_leaks": [
+      "compound_list",
+      "frame_filter",
+      "gap_behind",
+      "lap_window",
+      "pit_loss",
+      "race_length"
+    ],
+    "detail": ""
   },
-  "run_seconds": 2.345477819442749
+  "run_seconds": 177.5918653011322
 }

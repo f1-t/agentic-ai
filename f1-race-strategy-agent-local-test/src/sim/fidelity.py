@@ -44,6 +44,7 @@ import argparse
 import copy
 import hashlib
 import importlib
+import importlib.util
 import json
 import math
 import os
@@ -70,9 +71,15 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 OUT_DIR = ROOT / "reports" / "calibration" / "fidelity"
 BELIEF_FILE = ROOT / "configs" / "sim" / "belief.yaml"
 ABLATION_SPEC = ROOT / "configs" / "sim" / "fidelity" / "ablation.yaml"
+# the calibration races: the six of the first run, and the eligible, non-held-out 2021-22 weekends
+# cached since (never `auto`: a race is added here on purpose)
 CALIBRATION_RACES = ["2021_04_spain", "2023_07_spain", "2023_01_bahrain", "2019_10_united_kingdom",
-                     "2022_02_saudi_arabia", "2024_07_emilia_romagna"]
-# never loaded, run or inspected here, whatever data/eval_set.json says (the d4 races)
+                     "2022_02_saudi_arabia", "2024_07_emilia_romagna",
+                     "2021_01_bahrain", "2021_09_austrian", "2021_20_qatar", "2021_22_united_arab_emirates",
+                     "2022_01_bahrain", "2022_06_spain", "2022_11_austria", "2022_08_azerbaijan", "2022_09_canada",
+                     "2022_12_france", "2022_20_mexico", "2022_21_brazil", "2022_22_united_arab_emirates"]
+# never loaded, run or inspected here, whatever data/eval_set.json says (the d4 races); every race
+# data/eval_set.json lists is refused too (guard)
 NEVER = frozenset({"2019_06_monaco", "2020_16_sakhir", "2025_11_austria", "2024_11_austria"})
 DEFAULT_WORLD = "default"   # the race's own config from jobs.load_race (the eval's default world)
 X_LEDGER = "x_ledger"       # config-file key declaring ledger entries; removed before SimConfig sees it
@@ -151,9 +158,11 @@ def merge(base: dict, overlay: dict) -> dict:
 
 @dataclass
 class Spec:
-    """One simulator configuration under test. `world` None is the race's own config (jobs.load_race,
-    the eval's default world); `world_race` overrides RaceParams fields on the judge's snapshots
-    (a no-hindsight substitute for pit loss, say)."""
+    """One simulator configuration under test. `world` None is the eval's default world
+    (score.default_world_config of the race's own config). `world_race` overrides the judge's
+    race constants: "pit_loss_s" is the pit loss the judge charges (a number, or "prior" for the
+    pre-race prior from earlier races; absent: the world's whole-race value, score.world_pit_loss),
+    any other key a RaceParams field on the judge's snapshots."""
     label: str = "main"
     world: dict | None = None
     belief: dict = field(default_factory=dict)
@@ -163,8 +172,9 @@ class Spec:
     declared: dict = field(default_factory=lambda: {"judge": [], "predictive": []})
 
     def world_config(self, data=None) -> SimConfig:
-        base = self.world if self.world is not None else (data.config.model_dump() if data is not None
-                                                          else SimConfig().model_dump())
+        from ..eval.score import default_world_config
+        base = self.world if self.world is not None else default_world_config(
+            data.config if data is not None else SimConfig()).model_dump()
         return SimConfig.model_validate(merge(base, self.world_overlay))
 
     def belief_config(self) -> SimConfig:
@@ -223,9 +233,15 @@ def _finishers(frame) -> list[str]:
     return calibration._finisher_ids(frame, 0.9)
 
 
-def _sample_drivers(data, n) -> list[str]:
+def _sample_drivers(data, n, full_distance=False) -> list[str]:
+    """`n` of the eligible drivers (eval.scenarios.eligible_drivers), seeded by race id. With
+    `full_distance`, only cars that ran the scheduled distance, so a snapshot's remaining laps
+    (scheduled, snapshot_as_of) match their real remaining strategy."""
     from ..eval.scenarios import eligible_drivers
     pool = eligible_drivers(data.frame, data.race.total_laps)
+    if full_distance:
+        laps = data.frame.groupby("driver")["lap"].max()
+        pool = [d for d in pool if int(laps.get(d, 0)) == int(data.race.total_laps)]
     if n is None or n >= len(pool):
         return pool
     rng = np.random.default_rng(int(_sha12(data.race_id), 16))
@@ -233,12 +249,50 @@ def _sample_drivers(data, n) -> list[str]:
 
 
 def _judge_race(data, spec: Spec):
-    return data.race.model_copy(update=spec.world_race) if spec.world_race else data.race
+    update = {k: v for k, v in spec.world_race.items() if k != "pit_loss_s"}
+    return data.race.model_copy(update=update) if update else data.race
 
 
-def _sim(data, cfg: SimConfig, calibrator=None) -> Simulator:
-    return Simulator(data.frame, cfg, data.practice, qualifying=getattr(data, "qualifying", None),
-                     calibrator=calibrator)
+def _sim(data, cfg: SimConfig, calibrator=None, frame=None) -> Simulator:
+    return Simulator(data.frame if frame is None else frame, cfg, data.practice,
+                     qualifying=getattr(data, "qualifying", None), calibrator=calibrator)
+
+
+def judge_pit_loss(data, spec: Spec, world: Simulator) -> float:
+    """The pit loss the judge charges: spec.world_race["pit_loss_s"] when set ("prior": the
+    pre-race prior from earlier races, calibration.pre_race_pit_loss), else the world's
+    whole-race value as the eval gives it (score.world_pit_loss)."""
+    from ..eval.score import world_pit_loss
+    v = spec.world_race.get("pit_loss_s")
+    if v == "prior":
+        return float(calibration.pre_race_pit_loss(data.race_id))
+    if v is not None:
+        return float(v)
+    return float(world_pit_loss(data, world))
+
+
+def _judge(data, spec: Spec, cfg: SimConfig | None = None, frame=None, pit_loss_s=None) -> Simulator:
+    """The judge as the eval builds it: the world config with the race's whole-race pit loss
+    (Simulator.race_pit_loss_s), unless the spec substitutes it."""
+    world = _sim(data, cfg or spec.world_config(data), frame=frame)
+    world.race_pit_loss_s = judge_pit_loss(data, spec, world) if pit_loss_s is None else float(pit_loss_s)
+    return world
+
+
+def replay_events(cfg: SimConfig) -> str:
+    """How a whole-race replay gets its neutralisations: "recorded" (the judge's own recorded
+    events, with their recorded lap times) when the judge models them (events recorded or
+    hybrid: from lap 0 a hybrid world is the recorded one for the periods that happened), else
+    "scenario" (the car's recorded SC/VSC laps as a fixed scenario, priced by the factors)."""
+    return "recorded" if cfg.events.name in ("recorded", "hybrid") else "scenario"
+
+
+def _replay_config(cfg: SimConfig) -> SimConfig:
+    """A hybrid judge replays as "recorded" (whole race from lap 0, so every period is a recorded
+    one); others as they are."""
+    if cfg.events.name == "hybrid":
+        return cfg.model_copy(update={"events": cfg.events.model_copy(update={"name": "recorded"})})
+    return cfg
 
 
 # --- options and the cache ------------------------------------------------------------------------
@@ -313,19 +367,41 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
         out.append({"role": role, "id": id_, "input": inp, "tag": tag, "note": note, "substitute": substitute,
                     "source": "derived"})
     wt = _window_tag(cfg)
+    windowed = cfg.fit_window != "full"
+    pv = getattr(cfg, "policy_view", None)
+    cut = getattr(pv, "window_cut", "lap")
     add("fit_window", f"degradation fit rows (fit_window {cfg.fit_window})", wt,
-        {"full": "every race lap of every car", "to_snapshot": "race laps up to the calibration point (cut by lap "
-         "number), shrunk toward the practice prior", "pre_race": "practice long runs only"}[cfg.fit_window],
+        {"full": "every race lap of every car",
+         "to_snapshot": f"race rows visible at the snapshot (cut by {'session time' if cut == 'time' else 'lap number'}), "
+                        "shrunk toward the practice prior",
+         "pre_race": "practice long runs only"}[cfg.fit_window],
         "pre_race_fit" if cfg.fit_window == "full" else None)
-    add("clean_flag", "lap filter (data.lap_frame clean flag)", _W,
-        "one robust pace fit over every lap of the race decides which laps any window may fit on")
+    # the lap filter: the full window reads the lap frame's whole-race robust filter; a windowed fit
+    # recomputes it on the visible rows under policy_view.clean "as_of" (data.as_of_columns)
+    as_of_clean = windowed and getattr(pv, "clean", "race") == "as_of"
+    add("clean_flag", "lap filter (clean flag, pace residual, driver offset)",
+        _K if as_of_clean else (_WE if cfg.fit_window == "pre_race" else _W),
+        "recomputed on the rows visible at the snapshot" if as_of_clean else
+        "data.lap_frame's robust pace fit over every lap of the race")
     add("ref_lap_s", "SC lap time base ref_lap_s (median clean lap of the fit rows)",
-        wt if cfg.fit_window != "pre_race" else _WE)
-    add("pit_loss", "pit loss (RaceParams.pit_loss_s)", _W,
-        "mean in+out-lap residual over every green stop of the race, against a full-window fit "
-        "(calibrate._pit_loss)", "pit_loss_prior")
-    add("race_length", "race length (snapshot total_laps = the driver's own completed laps)", _W)
-    add("compound_list", "compound list (RaceParams.compounds: every compound in the race frame)", _W)
+        _K if as_of_clean else (_WE if cfg.fit_window == "pre_race" else _W))
+    if role == "judge":
+        add("pit_loss", "pit loss (Simulator.race_pit_loss_s, eval.score.world_pit_loss)", _W,
+            f"the race's whole-race value: pit_loss.whole_race, the median green stop against the full fit "
+            f"(pit_loss.world {cfg.pit_loss.world!r})", "pit_loss_prior")
+    else:
+        src = getattr(cfg.pit_loss, "source", "snapshot")
+        add("pit_loss", f"pit loss (pit_loss.source {src})", _K if src == "asof" else _H,
+            "the prior from earlier races (configs/sim/pit_loss_prior.json and the cache) updated with this race's "
+            "green stops seen by the snapshot" if src == "asof" else
+            "the snapshot's pre-race prior from earlier races (calibration.pre_race_pit_loss)")
+        add("pit_loss_prior", "pit loss prior table (configs/sim/pit_loss_prior.json, earlier races only)", _H)
+    add("race_length", "race length (scheduled distance: session.total_laps in the scenario snapshots, "
+        "calibration.snapshot_as_of)", _R,
+        "the scorecard's own whole-race replays run each car's real laps: a measurement, not an input")
+    comp_src = getattr(calibrate, "DEFAULT_COMPOUND_SOURCE", "raced")
+    add("compound_list", f"compound list (RaceParams.compounds: {comp_src})", _R if comp_src == "nominated" else _W,
+        "the nominated dry three" if comp_src == "nominated" else "every compound in the race frame")
     if "stint_limit" in cfg.rules and cfg.stint_limit_margin_laps is not None:
         add("stint_limit", f"R8 stint limit (rank-{cfg.stint_limit_rank} oldest age per compound + "
             f"{cfg.stint_limit_margin_laps})", _W, "Simulator.stint_limits from the full race frame", "r8_off")
@@ -342,10 +418,14 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
             "the recorded field replayed as ghost cars", "traffic_off")
     ev = cfg.events.name
     add("events", f"neutralisations (events {ev})",
-        {"none": _P, "fixed": _W}.get(ev, _H),
+        {"none": _P, "fixed": _W, "recorded": _W, "hybrid": _W}.get(ev, _H),
         {"none": "none modelled: every remaining lap is green",
          "fixed": "a fixed scenario, the recorded one in replays",
-         "rate": "EventModel rates (provisional, 2021 Spain) or RaceParams circuit rates"}.get(ev, ""))
+         "recorded": "the race's own SC/VSC laps (and their recorded lap times)",
+         "hybrid": "the SC/VSC in progress at the snapshot as recorded (its end, its recorded lap times); later "
+                   "ones drawn at the rate model's rates",
+         "rate": "EventModel rates (provisional, 2021 Spain) or RaceParams circuit rates"}.get(ev, ""),
+        "events_rate" if ev in ("recorded", "hybrid") else None)
     add("event_effects", "SC/VSC lap factors, SC pit-loss factor, lap-1 extra, neutralised tyre ageing "
         "(EventEffects)", _H, "provisional, 2021 Spain")
     add("practice", "practice long runs and qualifying (this weekend)", _WE)
@@ -353,9 +433,10 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
         add("priors", "pre_race base delta, fuel prior, shrinkage taus", _H, "Spain-derived constants")
         cal = cfg.calibrator.name
         from . import calibrators
-        learned = calibrators.CALIBRATORS.get(cal).learned
+        learned = calibrators.CALIBRATORS.get(cal).learned or cal == "trained"   # trained: committed artifacts
         add("calibrator", f"calibrator {cal}", _H if learned else _P,
-            "trained on other calibration races" if learned else "")
+            ("trained on calibration races (committed artifacts; leave-one-out for a calibration race)"
+             if cal == "trained" else "trained on other calibration races") if learned else "")
     dp = cfg.degradation.params
     if dp.get("driver_effects", "off") not in ("off", False, None):
         add("driver_effects", f"driver effects ({dp['driver_effects']}) in the degradation fit", wt)
@@ -369,7 +450,8 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
     add("min_stint_two_compounds", "R1-R3: minimum stint, two dry compounds", _R)
     covered = {"fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
-               "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples"}
+               "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
+               "pit_loss", "exclude_snapshot_driver"}
     default = SimConfig().model_dump(mode="json")
     mine = cfg.model_dump(mode="json")
     for k in sorted(mine):
@@ -390,9 +472,15 @@ def ledger_frame(spec: Spec, data=None) -> pd.DataFrame:
         ledger(spec.belief_config(), "predictive", spec.declared.get("predictive"))
     if spec.world_race:
         for k, v in spec.world_race.items():
+            if k == "pit_loss_s":
+                rows = [r for r in rows if not (r["role"] == "judge" and r["id"] == "pit_loss")]
+                rows.append({"role": "judge", "id": "pit_loss", "input": f"pit loss = {v}",
+                             "tag": _H if v == "prior" else _P, "note": "no-hindsight substitute"
+                             + (": the pre-race prior from earlier races" if v == "prior" else ""),
+                             "substitute": None, "source": "spec"})
+                continue
             rows.append({"role": "judge", "id": f"race:{k}", "input": f"RaceParams.{k} = {v}", "tag": _P,
                          "note": "no-hindsight substitute", "substitute": None, "source": "spec"})
-            rows = [r for r in rows if not (r["role"] == "judge" and r["id"] == "pit_loss" and k == "pit_loss_s")]
     return pd.DataFrame(rows, columns=["role", "id", "input", "tag", "note", "substitute", "source"])
 
 
@@ -400,9 +488,11 @@ def ledger_frame(spec: Spec, data=None) -> pd.DataFrame:
 SUBSTITUTES: dict[str, dict] = {
     "pre_race_fit": {"world": {"fit_window": "pre_race"}, "race": {},
                      "replaces": "fit_window", "with": "practice long runs plus the pre_race base delta (no race laps)"},
-    "pit_loss_prior": {"world": {}, "race": {"pit_loss_s": calibrate.DEFAULT_PIT_LOSS_S},
-                       "replaces": "pit_loss",
-                       "with": f"the code's constant prior, {calibrate.DEFAULT_PIT_LOSS_S} s (no circuit history on this branch)"},
+    "pit_loss_prior": {"world": {}, "race": {"pit_loss_s": "prior"}, "replaces": "pit_loss",
+                       "with": "the pre-race prior from earlier races (pit_loss.pit_loss_prior: same circuit, else "
+                               "across circuits, else 22 s)"},
+    "events_rate": {"world": {"events": {"name": "rate", "params": {}}}, "race": {}, "replaces": "events",
+                    "with": "SC/VSC drawn at the rate model's rates (no recorded periods or lap times)"},
     "r8_off": {"world": {"stint_limit_margin_laps": None}, "race": {}, "replaces": "stint_limit",
                "with": "no stint limit (A4 only: replays do not apply R8)"},
     "proxy_off": {"world": {"compound_proxy": {"enabled": False}}, "race": {}, "replaces": "proxy_raced",
@@ -449,8 +539,22 @@ def _bucket(age) -> str:
 
 
 def _replay(sim, data, race, d):
-    """(g, SimResult, predicted lap times) of driver d's real strategy from lap 0, recorded SC/VSC."""
-    g, res = calibration.replay_driver(sim, data.frame, race, d)
+    """(g, SimResult, predicted lap times) of driver d's real strategy from lap 0 under the
+    recorded SC/VSC: as a fixed scenario (calibration.replay_driver), or through the judge's own
+    recorded events when it models them (replay_events)."""
+    if replay_events(sim.config) == "scenario":
+        g, res = calibration.replay_driver(sim, data.frame, race, d)
+        return g, res, np.asarray(res.lap_times_s, dtype=float)
+    from ..contracts import Snapshot
+    frame = data.frame
+    g = frame[frame["driver"] == d].sort_values("lap")
+    stints = calibration.race_stints(frame, d)
+    snap = Snapshot.at_start(race.model_copy(update={"total_laps": len(g)}), d, stints[0][0],
+                             tyre_age=stints[0][2]).model_copy(update={"elapsed_s": 0.0})
+    res = sim.simulate(snap, Plan.of([[c, k, a] for c, k, a, _ in stints]), rules=calibration.REPLAY_RULES,
+                       return_laps=True)
+    if not res.valid:
+        raise ValueError(f"{d}: replay plan rejected: {res.errors}")
     return g, res, np.asarray(res.lap_times_s, dtype=float)
 
 
@@ -565,8 +669,10 @@ def _beyond(snap, plan, raced, margin) -> dict:
 def _reference_row(world, snap, raced, opts, **extra):
     from ..baselines.domain import NoFeasiblePlan
     from .optimizer_bridge import optimize_batch
+    # one draw for a judge that draws nothing; its own events' draws (opts.samples) otherwise
+    n = 1 if world.config.events.name in ("none", "fixed", "recorded") else max(1, opts.samples or COVERAGE_SAMPLES)
     try:
-        res = optimize_batch(snap, world, seed=opts.seed, n_samples=1, max_stops=opts.max_stops, return_times=True)
+        res = optimize_batch(snap, world, seed=opts.seed, n_samples=n, max_stops=opts.max_stops, return_times=True)
     except (NoFeasiblePlan, ValueError) as exc:   # no legal plan, or the start compound is not modelled
         return {**extra, "ref_stops": np.nan, "ref_plan": None, "ref_error": f"{type(exc).__name__}: {exc}"}
     plan = res.plan
@@ -578,9 +684,11 @@ def _reference_row(world, snap, raced, opts, **extra):
 def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) -> dict[str, pd.DataFrame]:
     """A1-A5 for one race: driver, lap, stint, stop-gain and lap-0 reference tables, each row
     tagged variant (in / lodo / loso) and fit (what the tyre parameters saw)."""
-    cfg = spec.world_config(data)
+    from . import pit_loss as _pl
+    cfg_as = spec.world_config(data)
+    cfg = _replay_config(cfg_as)
     race = _judge_race(data, spec)
-    world = _sim(data, cfg)
+    world = _judge(data, spec, cfg)
     fins = _finishers(data.frame)
     drivers, laps, stints, errors = [], [], [], []
     insample_cost = {}
@@ -590,25 +698,33 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
         except ValueError as exc:
             errors.append({"driver": d, "variant": "in", "error": str(exc)})
             continue
-        row, lp, st = _driver_tables(d, g, res, pred, "in", "in-sample", pit_loss_used=race.pit_loss_s)
+        row, lp, st = _driver_tables(d, g, res, pred, "in", "in-sample", pit_loss_used=world.race_pit_loss_s)
         drivers.append(row)
         laps.append(lp)
         stints += st
         insample_cost[d] = _stop_cost(g, pred, row["pace_offset_s"])
     gains = _stop_gain_rows(lambda d: world.degradation, data, fins, "in", "in-sample")
     if opts.lodo and "lodo" in variants:
-        lodo = _sim(data, cfg.model_copy(update={"exclude_snapshot_driver": True}))
+        lodo = _judge(data, spec, cfg.model_copy(update={"exclude_snapshot_driver": True}),
+                      pit_loss_s=world.race_pit_loss_s)
+        # the whole-race pit loss without d's stops: the world's estimand (pit_loss.whole_race, the
+        # median green stop against the full fit; the mean under pit_loss.world "replay_mean")
+        stops = _pl.stop_table(data.frame)
+        green = stops[stops["kind"] == "green"]
+        losses = _pl.stop_losses(green, world.degradation, _pl._field_medians(data.frame))
+        center = np.mean if cfg.pit_loss.world == "replay_mean" else np.median
         for d in fins:
-            others = [c for o, cs in insample_cost.items() if o != d for _, c in cs]
-            pl = _mean(others) if others else race.pit_loss_s
-            # the judge's own pit loss when the spec substitutes it; else re-estimated without d's stops
-            r = race if "pit_loss_s" in spec.world_race else race.model_copy(update={"pit_loss_s": pl})
+            if "pit_loss_s" not in spec.world_race:   # a substituted pit loss stays as substituted
+                others = losses[(green["driver"] != d).to_numpy()].dropna()
+                lodo.race_pit_loss_s = (float(center(others)) if len(others) >= cfg.pit_loss.min_green_stops
+                                        else world.race_pit_loss_s)
             try:
-                g, res, pred = _replay(lodo, data, r, d)
+                g, res, pred = _replay(lodo, data, race, d)
             except ValueError as exc:
                 errors.append({"driver": d, "variant": "lodo", "error": str(exc)})
                 continue
-            row, lp, st = _driver_tables(d, g, res, pred, "lodo", "leave-one-driver-out", pit_loss_used=r.pit_loss_s)
+            row, lp, st = _driver_tables(d, g, res, pred, "lodo", "leave-one-driver-out",
+                                         pit_loss_used=lodo.race_pit_loss_s)
             drivers.append(row)
             laps.append(lp)
             stints += st
@@ -622,7 +738,7 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
             for j in sorted(g0["stint"].unique()):
                 held = (data.frame["driver"] == d) & (data.frame["stint"] == j)
                 frame = data.frame.assign(clean=data.frame["clean"].astype(bool) & ~held)
-                sim = Simulator(frame, cfg, data.practice, qualifying=getattr(data, "qualifying", None))
+                sim = _judge(data, spec, cfg, frame=frame, pit_loss_s=world.race_pit_loss_s)
                 try:
                     g, res, pred = _replay(sim, replace(data, frame=frame), race, d)
                 except ValueError as exc:
@@ -638,6 +754,7 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
     # A4: the judge's reference at lap 0 for every field car, against the field's stop counts
     raced = _raced_ages(data.frame)
     field = cross_race.field_stops(data.frame, data.race)
+    judge = world if cfg_as == cfg else _judge(data, spec, cfg_as, pit_loss_s=world.race_pit_loss_s)
     refs, seen = [], {}
     for d in field["driver"]:
         snap = calibration.snapshot_at(data.frame, race, d, 0)
@@ -645,10 +762,10 @@ def section_a(data, spec: Spec, opts: Options, variants=("in", "lodo", "loso")) 
         # at lap 0 without traffic or pace the reference depends on the start set and race length only
         key = (snap.compound, snap.tyre_age, snap.race.total_laps) if cfg.traffic.name == "none" else d
         if key not in seen:
-            seen[key] = _reference_row(world, snap, raced, opts)
+            seen[key] = _reference_row(judge, snap, raced, opts)
         refs.append({**seen[key], **extra})
     out["a_refs"] = pd.DataFrame(refs)
-    out["a_meta"] = pd.DataFrame([{"race_id": data.race_id, "pit_loss_s": race.pit_loss_s,
+    out["a_meta"] = pd.DataFrame([{"race_id": data.race_id, "pit_loss_s": world.race_pit_loss_s,
                                    "field_mode": cross_race.stop_mode(field["stops"]),
                                    "world_config": config_key(cfg)}])
     return out
@@ -703,7 +820,9 @@ def order_rows_from_a(a_drivers, data, pace_practice, version, label) -> pd.Data
     """Version (1)/(2) rows: per car the judge's whole-race total with a pace term; `pace` says
     what it was fitted on."""
     rows = []
-    real_rank = _real_rank(data, list(a_drivers["driver"].unique())) if len(a_drivers) else pd.Series(dtype=float)
+    if not len(a_drivers) or "variant" not in a_drivers:   # every replay of this variant was rejected
+        return pd.DataFrame()
+    real_rank = _real_rank(data, list(a_drivers["driver"].unique()))
     for (variant, fit), part in a_drivers[a_drivers["variant"].isin(["in", "lodo"])].groupby(["variant", "fit"]):
         paces = {"insample": part.set_index("driver")["pace_offset_s"].fillna(0.0),
                  "none": pd.Series(0.0, index=part["driver"])}
@@ -843,24 +962,26 @@ def section_b(data, spec: Spec, opts: Options, belief=None, world=None, pool=())
     """B1-B3 on the plan panel at the snapshot grid, the grid references (A4), and the order
     version-3 rows with B4 (the G measure). `belief` / `world` may be prebuilt Simulators."""
     from .agent_tools import BELIEF_SEED_OFFSET
-    wcfg = spec.world_config(data)
-    world = world or _sim(data, wcfg)
+    world = world or _judge(data, spec)
     if belief is None:
         bcfg = spec.belief_config()
         belief = _sim(data, bcfg, calibrator=learned_calibrator(bcfg, data.race_id, pool))
-    jrace = _judge_race(data, spec)
     raced = _raced_ages(data.frame)
+    build = getattr(calibration, "snapshot_as_of", calibration.snapshot_at)   # what a policy sees
     n = COVERAGE_SAMPLES if opts.samples == 0 else max(1, opts.samples)
     rows, snaps, refs, factors = [], [], [], []
     fac_done = set()
-    for d in _sample_drivers(data, opts.b_drivers):
+    for d in _sample_drivers(data, opts.b_drivers, full_distance=True):
         g = data.frame[data.frame["driver"] == d]
         nlaps = len(g)
         for k in range(opts.b_every, nlaps - data.race.min_stint_laps, opts.b_every):
             if not (g["lap"] == k).any():
                 continue
-            snap = calibration.snapshot_at(data.frame, data.race, d, k)
-            snap_w = snap.model_copy(update={"race": jrace.model_copy(update={"total_laps": snap.race.total_laps})})
+            snap = build(data.frame, data.race, d, k)
+            # the judge scores the policy's snapshot (its pit loss comes from race_pit_loss_s), with any
+            # other RaceParams the spec overrides
+            other = {k: v for k, v in spec.world_race.items() if k != "pit_loss_s"}
+            snap_w = snap.model_copy(update={"race": snap.race.model_copy(update=other)}) if other else snap
             bfit = belief.fitted_for(snap)
             comps = sorted(set(bfit.modelled) & set(world.fitted_for(snap_w).modelled))
             panel = plan_panel(snap, comps, calibration.remaining_plan(data.frame, d, k), opts.n_one, opts.n_two)
@@ -963,6 +1084,7 @@ def future_blindness(spec: Spec) -> dict:
                 allp = fb.check(inp, orig, points, "scramble", neutralise=())
         return {"status": "pass" if not new else "fail", "new_leak_differences": len(new),
                 "differences_with_known_leaks": len(allp), "known_leaks": sorted(fb.KNOWN_LEAKS),
+                "fixed_leaks": sorted(getattr(fb, "FIXED_LEAKS", {})),
                 "detail": "; ".join(map(str, new[:5]))}
     except Exception as exc:
         return {"status": "error", "detail": f"{type(exc).__name__}: {exc}"}
@@ -987,7 +1109,8 @@ class Ctx:
     _cache: dict = field(default_factory=dict)
 
     def snap(self, k):
-        return calibration.snapshot_at(self.data.frame, self.data.race, self.ref_driver, k)
+        build = getattr(calibration, "snapshot_as_of", calibration.snapshot_at)
+        return build(self.data.frame, self.data.race, self.ref_driver, k)
 
     def belief_at(self, k):
         return self.belief.fitted_for(self.snap(k))
@@ -1017,42 +1140,29 @@ def register(c: Component) -> Component:
     return c
 
 
-def _tyre_life_prior_fn():
-    for mod in ("src.sim.tyre_life", "src.sim.tyre_history", "src.sim.tyre_prior", "src.sim.tyre_sets", "src.sim.rules",
-                "src.sim.proxy"):
-        try:
-            m = importlib.import_module(mod)
-        except ImportError:
-            continue
-        if hasattr(m, "tyre_life_prior"):
-            return m.tyre_life_prior
-    return None
-
-
-def _as_number(v):
-    if isinstance(v, dict):
-        for k in ("edge", "support_edge", "age", "value", "life", "mean"):
-            if k in v:
-                return _as_number(v[k])
-        return float("nan")
-    for attr in ("edge", "support_edge", "age", "value"):
-        if hasattr(v, attr):
-            return _as_number(getattr(v, attr))
+def _tyre_history():
+    """src/sim/tyre_history.py (tyre_life_prior, observed_tyre_life), None where the branch lacks it."""
     try:
-        return float(v)
-    except (TypeError, ValueError):
-        return float("nan")
+        return importlib.import_module("src.sim.tyre_history")
+    except ImportError:
+        return None
 
 
 def _tyre_life_predict(ctx):
     rows = []
-    fn = _tyre_life_prior_fn()
-    if fn is not None:
-        for role in ("judge", "belief"):
-            prior = fn(ctx.data.race_id, role)
-            items = prior.items() if isinstance(prior, dict) else getattr(prior, "items", lambda: [])()
-            for c, v in items:
-                rows.append({"key": str(c), "source": f"history prior ({role})", "pred": _as_number(v)})
+    th = _tyre_history()
+    if th is not None:
+        for role in th.ROLES:
+            try:
+                pr = th.tyre_life_prior(ctx.data.race_id, role)
+            except Exception as exc:   # a race the history table cannot place: reported, not fatal
+                rows.append({"key": role, "source": f"history prior (tyre_life_prior): {type(exc).__name__}",
+                             "pred": np.nan})
+                continue
+            rows.append({"key": role, "source": "history prior (tyre_life_prior)", "pred": float(pr.edge_laps),
+                         "sd": float(pr.sd_laps)})
+    else:
+        rows.append({"key": "*", "source": "history prior (tyre_life_prior)", "pred": np.nan, "not_present": True})
     for k in ctx.ks:
         lim = getattr(ctx.belief_at(k), "stint_limits", None) or {}
         rows += [{"key": c, "source": f"belief support edge @k{k}", "pred": float(v)} for c, v in lim.items()]
@@ -1062,8 +1172,6 @@ def _tyre_life_predict(ctx):
         for c in sorted(set(seen.index) | set(prac.index)):
             rows.append({"key": c, "source": f"as-of data (race to k{k}, practice)",
                          "pred": float(np.nanmax([seen.get(c, np.nan), prac.get(c, np.nan)]))})
-    if fn is None:
-        rows.append({"key": "*", "source": "history prior", "pred": np.nan, "not_present": True})
     return rows
 
 
@@ -1074,11 +1182,20 @@ def _tyre_life_target(ctx):
     ends = f.groupby(["driver", "stint"]).agg(compound=("compound", "first"), age=("tyre_age", "max"))
     for c, part in ends.groupby("compound"):
         rows.append({"key": c, "target_kind": "median stint-end age", "target": _median(part["age"])})
+    th = _tyre_history()
+    if th is not None:
+        try:   # the history's own whole-race observation: the quantile of usable stint-end ages
+            obs = th.observed_tyre_life(f, race_id=ctx.data.race_id)
+            rows += [{"key": str(r["role"]), "target_kind": "observed edge (tyre_history.observed_tyre_life)",
+                      "target": float(r["edge_laps"])} for _, r in obs.iterrows()]
+        except Exception:   # the frame lacks a column the observation needs: the two above stand
+            pass
     return rows
 
 
 register(Component("tyre_life", _tyre_life_predict, _tyre_life_target,
-                   "support edge / fall-off age per compound (history prior: branch feat/tyre-history-prior)"))
+                   "support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the "
+                   "belief's R8 edge and the as-of data edge, against the whole race"))
 
 
 def _within_stint(ctx):
@@ -1177,56 +1294,63 @@ register(Component("fuel", _fuel_predict,
                    "fuel/track-evolution slope s per lap"))
 
 
-def _charged_pit(sim, snap, sc=False):
-    """What `sim` charges for one stop at the end of lap k + 1 (green, or under SC)."""
+def _charged_pit(sim, snap, sc=False, n=20):
+    """What `sim` charges for one stop at the end of lap k + 1 (green, or under SC), the mean over
+    `n` draws (an as-of pit loss is drawn per sample with its sd)."""
     other = next((c for c in sorted(sim.fitted_for(snap).modelled) if c != snap.compound), snap.compound)
     plan = Plan.of([[snap.compound, 1, snap.tyre_age], [other, snap.remaining_laps - 1, 0]])
     scen = EventScenario(sc_laps=[snap.laps_completed + 1] if sc else [])
-    b = sim.simulate_batch(snap, [plan], scenario=scen, rules=["lap_sum", "known_compounds"])
+    b = sim.simulate_batch(snap, [plan], scenario=scen, rules=["lap_sum", "known_compounds"], n_samples=n)
     return float(b.pit_loss[0].mean()) if b.valid[0] else np.nan
 
 
+def _pit_module():
+    try:
+        return importlib.import_module("src.sim.pit_loss")
+    except ImportError:
+        raise NotPresent("src/sim/pit_loss.py is not on this branch")
+
+
 def _pit_predict(ctx):
-    rows = [{"key": "green", "source": "prior (code constant)", "pred": calibrate.DEFAULT_PIT_LOSS_S}]
+    pl = _pit_module()
+    cfg = ctx.belief.config.pit_loss
+    pr = pl.pit_loss_prior(ctx.data.race_id, cfg)
+    rows = [{"key": "green", "source": f"prior from earlier races ({pr['source']})", "pred": pr["mean_s"], "sd": pr["sd_s"]},
+            {"key": "green", "source": "constant (calibrate.DEFAULT_PIT_LOSS_S)", "pred": calibrate.DEFAULT_PIT_LOSS_S}]
     for k in ctx.ks:
         s = ctx.snap(k)
         if s.remaining_laps < 2:
             continue
+        est = pl.estimate(ctx.data.frame, ctx.data.race_id, ctx.ref_driver, k, ctx.belief_at(k).degradation, cfg)
+        rows.append({"key": "green", "source": f"as-of estimate @k{k} (pit_loss.estimate)", "pred": est["pit_loss_s"],
+                     "sd": est["sd_s"]})
+        rows.append({"key": "sc", "source": f"as-of estimate @k{k} (pit_loss.estimate)",
+                     "pred": est["pit_loss_s"] * est["sc_factor"], "sd": est["pit_loss_s"] * est["sc_factor_sd"]})
         rows.append({"key": "green", "source": f"belief charged @k{k}", "pred": _charged_pit(ctx.belief, s)})
         rows.append({"key": "sc", "source": f"belief charged @k{k}", "pred": _charged_pit(ctx.belief, s, sc=True)})
-        bfit = ctx.belief_at(k)
-        costs = []
-        for d in _finishers(ctx.data.frame):
-            g = ctx.data.frame[(ctx.data.frame["driver"] == d)].sort_values("lap")
-            seen = g[g["lap"] <= k]
-            if seen["pit_in"].astype(bool).any():
-                pred = np.empty(len(seen))
-                for comp, idx in seen.groupby("compound").indices.items():
-                    sub = seen.iloc[idx]
-                    pred[idx] = (bfit.degradation.lap_times(comp, sub["tyre_age"].to_numpy(dtype=float),
-                                                             sub["lap"].to_numpy(dtype=float))
-                                 if comp in bfit.modelled else np.nan)
-                costs += [c for in_lap, c in _stop_cost(seen, pred, calibration._pace_offset(bfit, g, k)) if in_lap + 1 <= k]
-        rows.append({"key": "green", "source": f"as-of data (green stops to k{k}, n={len(costs)})", "pred": _median(costs)})
     return rows
 
 
 def _pit_target(ctx):
-    table, summary, _ = ctx.world_run()
-    costs, sc_costs = [], []
-    for d in _finishers(ctx.data.frame):
-        g, res, pred = _replay(ctx.world, ctx.data, ctx.data.race, d)
-        off = float(table.loc[d, "pace_offset_s"])
-        costs += [c for _, c in _stop_cost(g, pred, off)]
-    rows = [{"key": "green", "target_kind": "whole race, robust (median of green stops)", "target": _median(costs)},
-            {"key": "green", "target_kind": "whole race, mean (RaceParams.pit_loss_s)", "target": float(ctx.data.race.pit_loss_s)}]
-    if summary.get("n_sc_stops"):
-        rows.append({"key": "sc", "target_kind": "whole race, SC stops", "target":
-                     float(summary["observed_sc_pit_loss_factor"]) * float(ctx.data.race.pit_loss_s)})
+    from .config import PitLossModel
+    pl = _pit_module()
+    model = ctx.world.degradation
+    stops = pl.stop_table(ctx.data.frame)
+    med = pl._field_medians(ctx.data.frame)
+    whole = pl.whole_race(ctx.data.frame, model, ctx.data.race_id, PitLossModel())
+    rows = [{"key": "green", "target_kind": "whole race, robust (pit_loss.whole_race: median green stop)",
+             "target": float(whole["pit_loss_s"])},
+            {"key": "green", "target_kind": "whole race, replay mean (calibrate._pit_loss)",
+             "target": float(ctx.data.race.pit_loss_s)}]
+    sc = pl.stop_losses(stops[stops["kind"] == "sc"], model, med).dropna()
+    if len(sc):
+        rows.append({"key": "sc", "target_kind": "whole race, median SC stop", "target": float(sc.median())})
     return rows
 
 
-register(Component("pit_loss", _pit_predict, _pit_target, "time lost to a stop over the green lap prediction"))
+register(Component("pit_loss", _pit_predict, _pit_target,
+                   "time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the "
+                   "world's whole-race value, green and under SC"))
 
 
 def _lap1_predict(ctx):
@@ -1299,8 +1423,12 @@ def _neutral_predict(ctx):
         ev = sim.config.events
         if ev.name == "none":
             vals = {"sc_periods": 0.0, "vsc_periods": 0.0, "sc_laps": 0.0, "vsc_laps": 0.0}
-        elif ev.name == "rate":
-            em = EventModel(**ev.params)
+        elif ev.name == "recorded":   # the race's own periods: the hindsight target itself
+            _, summary, _ = ctx.world_run()
+            vals = {"sc_periods": float(summary["sc_count"]), "vsc_periods": float(summary["vsc_count"]),
+                    "sc_laps": float(summary["sc_laps"]), "vsc_laps": float(summary["vsc_laps"])}
+        elif ev.name in ("rate", "hybrid"):   # hybrid from lap 0: every period drawn at the rates
+            em = EventModel(**{k: v for k, v in ev.params.items() if k in EventModel.model_fields})
             r = ctx.data.race
             p_sc = r.sc_rate_per_lap if r.sc_rate_per_lap is not None else em.p_sc
             d_sc = r.sc_mean_laps if r.sc_mean_laps is not None else em.d_sc
@@ -1332,8 +1460,51 @@ register(Component("neutralisations", _neutral_predict, _neutral_target,
                    "event rate (expected periods and laps over the race) and lap time under SC/VSC"))
 
 
+def _neutral_lap_rows(ctx, which):
+    """Per neutralised kind, the replays' mean predicted (which "pred") or real ("real") lap time
+    on the cars' SC and VSC laps (pit laps left out), judge and belief alike."""
+    key = f"neutral_laps_{which}"
+    if key not in ctx._cache:
+        out = {}
+        for name, sim in (("judge", ctx.world), ("belief", ctx.belief)):
+            pred, real = {"sc": [], "vsc": []}, {"sc": [], "vsc": []}
+            for d in _finishers(ctx.data.frame):
+                try:
+                    g, _, p = _replay(sim, ctx.data, ctx.data.race, d)
+                except ValueError:
+                    continue
+                kind = calibration._lap_kind(g)
+                for kd in ("sc", "vsc"):
+                    m = kind == kd
+                    pred[kd] += list(p[m])
+                    real[kd] += list(_actual(g)[m])
+            out[name] = (pred, real)
+        ctx._cache["neutral_laps_pred"] = {n: v[0] for n, v in out.items()}
+        ctx._cache["neutral_laps_real"] = out["judge"][1]
+    return ctx._cache[key]
+
+
+def _neutral_laps_predict(ctx):
+    rows = []
+    for name, pred in _neutral_lap_rows(ctx, "pred").items():
+        sim = ctx.world if name == "judge" else ctx.belief
+        how = "recorded lap times" if (sim.config.events.name in ("recorded", "hybrid") and name == "judge"
+                                       and sim.config.events.params.get("lap_times", "recorded") == "recorded") else "factors"
+        rows += [{"key": kd, "source": f"{name} replay ({how})", "pred": _mean(v)} for kd, v in pred.items() if v]
+    return rows
+
+
+def _neutral_laps_target(ctx):
+    return [{"key": kd, "target_kind": "mean real lap time on the cars' neutralised laps", "target": _mean(v)}
+            for kd, v in _neutral_lap_rows(ctx, "real").items() if v]
+
+
+register(Component("neutralised_laps", _neutral_laps_predict, _neutral_laps_target,
+                   "lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge)"))
+
+
 def section_d(data, spec: Spec, opts: Options, world=None, belief=None, pool=()) -> dict[str, pd.DataFrame]:
-    world = world or _sim(data, spec.world_config(data))
+    world = world or _judge(data, spec, _replay_config(spec.world_config(data)))
     if belief is None:
         bcfg = spec.belief_config()
         belief = _sim(data, bcfg, calibrator=learned_calibrator(bcfg, data.race_id, pool))
@@ -1431,8 +1602,10 @@ def _job(item):
         return race_id, spec.label, None, time.time() - t0, traceback.format_exc()
 
 
-def run_specs(specs: list[Spec], races, opts: Options, cache_dir, n_jobs=None, log=print) -> dict:
-    """{label: {race_id: tables}} for every (spec, race), in a process pool."""
+def run_specs(specs: list[Spec], races, opts: Options, cache_dir, n_jobs=None, log=print, failures=None) -> dict:
+    """{label: {race_id: tables}} for every (spec, race), in a process pool. A (spec, race) that
+    fails (a race that does not load, a configuration the race cannot run) is reported in the
+    log and in `failures` ([{label, race_id, error}]) and left out, never fatal."""
     races = guard(races)
     items = [(r, s, opts, str(cache_dir) if cache_dir else None, races) for s in specs for r in races]
     n_jobs = n_jobs or min(len(items), max(1, (os.cpu_count() or 2) // 2))
@@ -1445,7 +1618,11 @@ def run_specs(specs: list[Spec], races, opts: Options, cache_dir, n_jobs=None, l
         results = [_job(i) for i in items]
     for race_id, label, tables, secs, err in results:
         if err:
-            raise RuntimeError(f"{label} {race_id} failed:\n{err}")
+            last = err.strip().splitlines()[-1]
+            log(f"  {label:<28} {race_id:<26} FAILED, skipped: {last}")
+            if failures is not None:
+                failures.append({"label": label, "race_id": race_id, "error": last})
+            continue
         log(f"  {label:<28} {race_id:<26} {secs:6.1f} s")
         out[label][race_id] = tables
     return out
@@ -1843,7 +2020,8 @@ error is a tie-breaker. A factor that improves order or relative gaps while wors
 counts as an improvement."""
 
 
-def write_scorecard(label: str, per_race: dict, spec: Spec, opts: Options, out_dir: Path, b5=None, secs=None) -> Path:
+def write_scorecard(label: str, per_race: dict, spec: Spec, opts: Options, out_dir: Path, b5=None, secs=None,
+                    failures=()) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     o = order_table(concat(per_race, "o_rows"))
     tables = {"order.csv": o, "three_distances.csv": three_distances(per_race), "a_summary.csv": a_summary(per_race),
@@ -1862,13 +2040,16 @@ def write_scorecard(label: str, per_race: dict, spec: Spec, opts: Options, out_d
             t.to_csv(out_dir / name, index=False,
                      compression={"method": "gzip", "mtime": 0} if name.endswith(".gz") else None)
     h = headline(per_race)
-    meta = {"label": label, "races": sorted(per_race), "code_version": CODE_VERSION,
+    meta = {"label": label, "races": sorted(per_race), "failed": list(failures), "code_version": CODE_VERSION,
             "world": "race default (jobs.load_race)" if spec.world is None else "file", "world_overlay": spec.world_overlay,
             "belief_overlay": spec.belief_overlay, "world_race": spec.world_race,
             "world_config_hash": config_key(spec.world_config()), "belief_config_hash": config_key(spec.belief_config()),
             "options": asdict(opts), "headline": h, "future_blindness": b5, "run_seconds": secs}
     (out_dir / "run.json").write_text(json.dumps(meta, indent=2, default=str))
-    (out_dir / "scorecard.md").write_text(scorecard_md(label, per_race, spec, opts, b5, secs))
+    md = scorecard_md(label, per_race, spec, opts, b5, secs)
+    if failures:
+        md += "\nFailed and left out: " + "; ".join(f"{x['race_id']} ({x['error']})" for x in failures) + "\n"
+    (out_dir / "scorecard.md").write_text(md)
     return out_dir
 
 
@@ -1953,20 +2134,57 @@ def load_ablation(path=ABLATION_SPEC) -> dict:
     return yaml.safe_load(Path(path).read_text())
 
 
-def ablation_specs(base: Spec, ab: dict) -> list[Spec]:
+def _factor_overlays(f: dict) -> tuple[dict, dict]:
+    """(world overlay, belief overlay) of an ablation factor: `both`, then `world` / `belief`, and
+    `world_file` / `belief_file` (a config file read as an overlay)."""
+    both = f.get("both") or {}
+    w, b = merge(both, f.get("world") or {}), merge(both, f.get("belief") or {})
+    if f.get("world_file"):
+        w = merge(w, read_config_file(ROOT / f["world_file"])[0])
+    if f.get("belief_file"):
+        b = merge(b, read_config_file(ROOT / f["belief_file"])[0])
+    return w, b
+
+
+def factor_absent(f: dict) -> str | None:
+    """Why a factor's switch is not on this branch (None when it is): a module in `requires` that
+    does not import, a file it names that does not exist, or an overlay SimConfig rejects (an
+    unknown field: the branch that adds it has not merged)."""
+    for mod in f.get("requires") or ():
+        if importlib.util.find_spec(mod) is None:
+            return f"module {mod} not on this branch"
+    for key in ("world_file", "belief_file"):
+        if f.get(key) and not (ROOT / f[key]).exists():
+            return f"{f[key]} not on this branch"
+    try:
+        w, b = _factor_overlays(f)
+        SimConfig.model_validate(merge(SimConfig().model_dump(), w))
+        SimConfig.model_validate(merge(SimConfig().model_dump(), b))
+    except Exception as exc:
+        return f"switch not on this branch ({type(exc).__name__}: {str(exc).splitlines()[0][:120]})"
+    return None
+
+
+def ablation_specs(base: Spec, ab: dict, skipped=None) -> list[Spec]:
+    """The base, each factor present on this branch alone, and all_on (its present factors). A
+    factor whose switch is absent (factor_absent) is skipped and listed in `skipped`."""
     specs = [replace(base, label="base")]
     factors = ab.get("factors") or {}
+    absent = {n: why for n, f in factors.items() if (why := factor_absent(f))}
+    if skipped is not None:
+        skipped.extend({"factor": n, "reason": why} for n, why in absent.items())
 
     def apply(spec, name):
         f = factors[name]
-        both = f.get("both") or {}
-        return spec.with_factor(spec.label, world=merge(both, f.get("world") or {}),
-                                belief=merge(both, f.get("belief") or {}), world_race=f.get("world_race"))
+        w, b = _factor_overlays(f)
+        return spec.with_factor(spec.label, world=w, belief=b, world_race=f.get("world_race"))
     for name in factors:
-        specs.append(replace(apply(base, name), label=name))
-    if ab.get("all_on"):
+        if name not in absent:
+            specs.append(replace(apply(base, name), label=name))
+    on = [n for n in ab.get("all_on") or () if n not in absent]
+    if on:
         s = base
-        for name in ab["all_on"]:
+        for name in on:
             s = apply(s, name)
         specs.append(replace(s, label="all_on"))
     return specs
@@ -1990,19 +2208,57 @@ def ablation_table(results: dict, specs: list[Spec], n_boot=N_BOOT) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def ablation_md(table: pd.DataFrame, ab: dict, races, secs=None) -> str:
+def ablation_md(table: pd.DataFrame, ab: dict, races, secs=None, skipped=(), failures=()) -> str:
     lines = ["# Simulator fidelity ablation", "", FRAMEWORK, "",
              f"Races: {', '.join(races)}. Rows: the base, each factor switched alone, and all_on "
              f"({', '.join(ab.get('all_on') or [])}). Cells: change against the base, pooled, with a race-cluster "
-             f"bootstrap 95% interval ({N_BOOT} draws over {len(races)} races, so intervals are wide)."
+             f"bootstrap 95% interval ({N_BOOT} draws over the {len(races)} races every configuration ran)."
              + (f" Run time {secs:.0f} s." if secs else ""), "",
              "Factors:", ""]
     for name, f in (ab.get("factors") or {}).items():
         lines.append(f"- `{name}`: {f.get('note', '')} {json.dumps({k: v for k, v in f.items() if k != 'note'})}")
+    if skipped:
+        lines += ["", "Skipped (switch not on this branch):", ""]
+        lines += [f"- `{x['factor']}`: {x['reason']}" for x in skipped]
+    if failures:
+        lines += ["", "Failed and left out (configuration, race, error):", ""]
+        lines += [f"- {x['label']} {x['race_id']}: {x['error']}" for x in failures]
     lines += ["", "Measures (primary first; direction: + better for acc/rho/agree, - better for errors):", ""]
     lines += [f"- `{k}`: {HEADLINE_DEF[k]}" for k, _ in HEADLINES]
     lines += ["", _md(table, 3)]
     return "\n".join(lines) + "\n"
+
+
+# =================================================================================================
+# worker processes
+# =================================================================================================
+# Every worker runs one BLAS thread: the races are the parallelism, and N workers each spinning up
+# a full BLAS pool oversubscribe a shared machine. Workers are spawned (not forked) with these set
+# in the environment, so each one imports numpy fresh under them; the initialiser sets them again.
+from concurrent.futures import ProcessPoolExecutor as _ProcessPool   # noqa: E402
+
+THREAD_ENV = {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+DEFAULT_JOBS = min(6, max(1, (os.cpu_count() or 2) // 2))
+
+
+def _worker_init():
+    os.environ.update(THREAD_ENV)
+
+
+class _OneThreadPool(_ProcessPool):
+    """The process pool run_specs uses (it reads the module name ProcessPoolExecutor, bound to this
+    class below): spawned workers, one BLAS thread each, at most DEFAULT_JOBS unless asked."""
+
+    def __init__(self, max_workers=None, **kw):
+        import multiprocessing
+        os.environ.update(THREAD_ENV)   # inherited by the spawned workers before numpy loads
+        super().__init__(max_workers=max_workers or DEFAULT_JOBS, mp_context=multiprocessing.get_context("spawn"),
+                         initializer=_worker_init, **kw)
+
+
+# bound here, below the cache key's code (CODE_VERSION), so the pool can change without invalidating
+# cached results: it changes how races are scheduled, never what a race computes
+ProcessPoolExecutor = _OneThreadPool
 
 
 # =================================================================================================
@@ -2036,7 +2292,8 @@ def _common(ap):
     ap.add_argument("--no-components", action="store_true")
     ap.add_argument("--no-future-blindness", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--jobs", type=int, default=None)
+    ap.add_argument("--jobs", type=int, default=DEFAULT_JOBS,
+                    help=f"worker processes, one BLAS thread each (default min(6, cpu_count // 2) = {DEFAULT_JOBS})")
 
 
 def _cache_dir(args):
@@ -2082,16 +2339,21 @@ def main(argv=None):
     t0 = time.time()
     if args.cmd == "run":
         print(f"fidelity run {spec.label}: {len(races)} races")
-        res = run_specs([spec], races, opts, cache, args.jobs)
+        failures = []
+        res = run_specs([spec], races, opts, cache, args.jobs, failures=failures)
         b5 = None if args.no_future_blindness else future_blindness(spec)
-        path = write_scorecard(spec.label, res[spec.label], spec, opts, Path(args.out) / spec.label, b5, time.time() - t0)
+        path = write_scorecard(spec.label, res[spec.label], spec, opts, Path(args.out) / spec.label, b5, time.time() - t0,
+                               failures=failures)
         print((path / "scorecard.md").read_text())
         print(f"wrote {path} in {time.time() - t0:.0f} s")
         return 0
     ab = load_ablation(args.spec)
-    specs = ablation_specs(replace(spec, label="base"), ab)
+    skipped, failures = [], []
+    specs = ablation_specs(replace(spec, label="base"), ab, skipped)
+    for sk in skipped:
+        print(f"  factor {sk['factor']} skipped: {sk['reason']}")
     print(f"fidelity ablate: {len(specs)} configurations x {len(races)} races")
-    res = run_specs(specs, races, opts, cache, args.jobs)
+    res = run_specs(specs, races, opts, cache, args.jobs, failures=failures)
     out = Path(args.out) / "ablation"
     out.mkdir(parents=True, exist_ok=True)
     table = ablation_table(res, specs, n_boot=args.n_boot)
@@ -2101,7 +2363,8 @@ def main(argv=None):
         rows.append({"factor": s.label, **headline(res[s.label])})
     pd.DataFrame(rows).to_csv(out / "headlines.csv", index=False)
     secs = time.time() - t0
-    (out / "ablation.md").write_text(ablation_md(table, ab, races, secs))
+    used = sorted(set.intersection(*(set(res[s.label]) for s in specs)) if specs else set())
+    (out / "ablation.md").write_text(ablation_md(table, ab, used, secs, skipped=skipped, failures=failures))
     print((out / "ablation.md").read_text())
     return 0
 

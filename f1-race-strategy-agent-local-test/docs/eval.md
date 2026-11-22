@@ -1735,15 +1735,26 @@ python -m src.sim.fidelity report [--out ...] [--label main]
 python -m src.sim.fidelity ledger [--world ...] [--belief ...]
 ```
 
-Defaults: the six calibration races, the race's own config as the judge (as `score` uses it),
-`configs/sim/belief.yaml` as the predictive simulator. Options: `--drivers` (B drivers per
+Defaults: the calibration races (`fidelity.CALIBRATION_RACES`: the first six, 2021 and 2023 Spain,
+2023 Bahrain, 2019 Britain, 2022 Saudi Arabia, 2024 Imola, and thirteen eligible, non-held-out
+2021-22 weekends; never `auto`), the eval's default world as the judge
+(`score.default_world_config` of the race's config, with the race's whole-race pit loss,
+`score.world_pit_loss`, as `score.race_simulators` builds it), `configs/sim/belief.yaml` as the
+predictive simulator. A judge with `recorded` or `hybrid` SC/VSC replays whole races as
+`recorded` (every period with its recorded lap times; from lap 0 a hybrid world's periods are
+all recorded ones) and scores the plan panel as configured. The B snapshots are the policy's
+(`calibration.snapshot_as_of`: scheduled distance, nominated compounds), for drivers who ran the
+scheduled distance. Options: `--drivers` (B drivers per
 race, 6), `--every` (B snapshot spacing, 5 laps), `--samples` (draws, 20), `--coverage` (100
 draws), `--n-one` / `--n-two` (panel density), `--no-lodo`, `--no-loso`,
 `--no-grid-references`, `--no-hindsight-variants`, `--no-components`, `--no-future-blindness`,
 `--jobs`, `--cache` (default `<out>/.cache`, keyed by race, section, config hash, code version
 and options, so an ablation reuses the base and a belief-only change reuses the judge's
-Section A). A race in `data/eval_set.json` is refused before anything is loaded, with no
-override. The six races run in about 45 s on 6 processes.
+Section A). Every race in `data/eval_set.json` is refused before anything is loaded, with no
+override. A race or configuration that fails is reported and left out, never fatal. Races run
+in spawned worker processes, `--jobs` of them (default min(6, cpu_count // 2)), each with one
+BLAS thread (`OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS` = 1, set before numpy
+loads in the worker): the races are the parallelism, so a shared machine is not oversubscribed.
 
 Selection rule, stated before any result: finishing ORDER matters more than exact time. Primary
 = close-pair order accuracy of the judge out of sample (`A_close_pair_acc`); then relative gap
@@ -1770,17 +1781,17 @@ Measures (each one line; `pace` and `fit` columns say what every number was fitt
 | A3 neutral | error on SC and VSC laps |
 | A4 | the judge's lap-0 reference (optimize_batch) per field car: its stop count against the field's mode and the car's own; the share of reference plans (lap 0 and every B snapshot) with a stint past the oldest age any car ran on that compound (`beyond_raced`), or past it plus the R8 margin |
 | A6 ledger | every input of the judge and the predictive config, tagged this race whole / this race to snapshot / weekend / history / regulation / a priori / unclassified; derived from the config and this branch's code paths, extended or overridden by an `x_ledger:` list in a config file; a non-default config field without a rule shows as unclassified |
-| A paired | per whole-race ledger input with a substitute (`fidelity.SUBSTITUTES`: pre_race fit for the full-window fit, the 22 s prior for the pit loss, R8 off, the proxy off, traffic off), the change in order, gaps, time, stop gain, pit error and A4 against the judge as configured |
+| A paired | per whole-race ledger input with a substitute (`fidelity.SUBSTITUTES`: pre_race fit for the full-window fit, the pre-race prior from earlier races (`pit_loss.pit_loss_prior`) for the whole-race pit loss, the rate model for recorded/hybrid SC/VSC, R8 off, the proxy off, traffic off), the change in order, gaps, time, stop gain, pit error and A4 against the judge as configured |
 | B panel | per snapshot (every 5 laps, 6 sampled drivers): the real remaining strategy, stay out, one stop at 4 laps on every compound, two stops at 3 first-stop laps on every compound pair |
 | B2 | over the plans legal under both configs' own rules: Spearman of predictive against judge times, the judge time the predictive favourite loses to the judge favourite (regret), agreement on pit-now against stay; `_green` the same with no SC/VSC on either side |
 | B1 | predictive less judge remaining time per panel plan (under R1-R3), by horizon, phase and plan kind; `green` without SC/VSC |
 | B3 | share of plans whose judge time lies in the predictive 68% / 90% interval, the same for gaps to the real plan; per fitted factor (base, wear, fuel) whether the judge's value is within 1 / 1.645 predictive sds |
 | B4 | `calibration.midrace` (the G measure) under the belief at the version-3 laps |
 | B5 | `tests/future_blindness.py` run on its synthetic race with this belief, when the branch has it; else "not checked" |
-| D | per component (`fidelity.COMPONENTS`: tyre life, wear rate, fresh-tyre gain, compound gap, fuel, pit loss, lap 1 and warm-up, traffic rejoin, neutralisations), each predictor from allowed information against the whole-race target: error, bias, coverage where an sd is stated. A branch adds one `register(Component(...))`; code absent on the branch reports "not present" |
-| C | the scorecard for the base, each factor overlay alone and `all_on`; headline changes pooled with a race-cluster bootstrap 95% interval, and the ledger change |
+| D | per component (`fidelity.COMPONENTS`: tyre life (`tyre_history.tyre_life_prior` against the oldest age run, the median stint-end age and `observed_tyre_life`'s edge), wear rate, fresh-tyre gain, compound gap, fuel, pit loss (the prior from earlier races and `pit_loss.estimate` at k against the world's whole-race median, green and SC), lap 1 and warm-up, traffic rejoin, neutralisations (rates), neutralised laps (lap time under SC/VSC)), each predictor from allowed information against the whole-race target: error, bias, coverage where an sd is stated. A branch adds one `register(Component(...))`; code absent on the branch reports "not present" |
+| C | the scorecard for the base, each factor overlay alone and `all_on` (configs/sim/fidelity/ablation.yaml); headline changes pooled with a race-cluster bootstrap 95% interval over the races every configuration ran, and the ledger change. A factor whose switch is not on the branch (a module or file it `requires`, or an overlay SimConfig rejects) is skipped with a note |
 
-Before numbers on main (2026-11-21) are in `reports/calibration/fidelity/main/scorecard.md`
+Before numbers on main (2026-11-22, 42abdb5) are in `reports/calibration/fidelity/main/scorecard.md`
 and the ablation in `reports/calibration/fidelity/ablation/ablation.md`.
 
 ## Tests
