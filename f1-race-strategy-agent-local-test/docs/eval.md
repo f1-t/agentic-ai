@@ -1552,9 +1552,63 @@ stands as it is.
   plan 1 of the model's latest `rank_plans` is held once when a turn is left: the model is shown plan
   1's submit fields and the PIT/STAY_OUT reading, and its next accepted submission is final, changed
   or not (`consistency_check` events in the trajectory; `check_fired`, `check_changed` in the stats).
-- **Prompt.** A decision protocol: rank_plans first, plan 1 is the default, a departure only for a
-  plan close to it and only for a named uncertainty flag; one line of evidence in the rationale; the
-  1,024-token reply cap and at most 3 calls per turn.
+- **Prompt.** A decision protocol: rank_plans first, plan 1 is the default (copy its submit object),
+  a departure only for a plan close to it and only for a named uncertainty flag; one line of
+  evidence in the rationale; the 1,024-token reply cap and at most 3 calls per turn. If a named stop
+  is refused on the very last turn, the submission is scored without it (`kept_stop_dropped`).
+
+**Why.** The 469 dev20 trajectories at `eval-v2-dev2` (v1): agent minus `belief_optimizer` +0.143 s
+(cluster CI +0.025, +0.275), +67 s in all. 33 s came from 45 immediate actions other than the
+optimizer's; 35 s from 55 STAY_OUTs that agreed with it but whose `reassess_after_laps` was at
+least the laps to its first stop (STAY_OUT k forbids a stop before the end of lap
+`laps_completed + k + 1`, which nothing told the model); 8.5 s from 9 PITs onto another compound.
+348 episodes swept STAY_OUT k one value at a time, 116 hit the 24-call budget, 132 calls had
+invented arguments, 79 turns had no tool call (52 cut off at the reply cap), and in 386 the
+confidence was a probability some tool had returned. Mean result sizes: `get_model_report` 6.4k
+characters, `compare_plans` 2.9k, `evaluate_strategy` 2.5k (`rank_plans` 2.3k, `evaluate_plan`
+0.5k).
+
+**The format's ceiling.** Over all 469 dev20 scenarios (belief side, then the judge's times): the
+natural old-format submission for the optimizer's plan (PIT c, or STAY_OUT with k one less than
+the laps to its first stop, or to the flag) is scored on that plan in 228 (49%; green 44%, SC 94%,
+VSC 100%), and some old-format submission is in 341 (73%). Its judge time differs from the
+optimizer's by more than 0.1 s in 45% of scenarios (mean +0.087 s, mean absolute 0.46 s, p95 1.7 s,
+max 20.9 s). Naming the first stop scores the optimizer's plan in 469 of 469, judge gap 0.
+
+**Development samples** (seeded, disjoint; scratch lists, not committed). Design: 100 dev20
+scenarios, every one where the dev20 agent's immediate action differed from the optimizer's (45),
+every SC/VSC one (40), a lap-0 one per race, the rest spread over races. Check: 103 of the
+remaining green scenarios, stratified by race and lap. The design sample took four versions (v2a
+tools and prompt; v2b the named stop and plan-1 default; v2c the copy instruction and extrapolation
+as a note; v2d the last-turn fallback); the check sample ran once, v2c against `origin/main` (v1) as
+control, concurrently, `--jobs 8` each, on a loaded machine (load 28-36 on 16 threads), so latency
+is comparable between the two only.
+
+| check sample (103) | main (v1) | v2 |
+| --- | --- | --- |
+| valid / voluntary submissions | 103 / 100 | 102 / 103 (1 named stop never fixed; the fallback above came after) |
+| judge regret mean / median / p90 (s) | 3.92 / 0.87 / 13.53 | 3.65 / 0.50 / 12.61 |
+| agent minus belief_optimizer (s, cluster CI) | +0.258 (-0.004, +0.558) | 0.000 (0.000, 0.000) on 102 |
+| belief_optimizer's own regret (s) | 3.66 | 3.66 |
+| scored plan = optimizer's plan | 44 | 102 |
+| immediate action = optimizer's | 98 | 102 (+1 invalid) |
+| worst departure (s) | +9.98 | 0.00 |
+| tool calls / evidence calls per episode | 17.4 / 15.5 | 8.0 / 6.8 |
+| repeated calls per episode; budget hits | 3.69; 28 | 0.41; 2 |
+| turns with no tool call (cut off) | 17 (4) | 0 |
+| input / output tokens per episode | 81.8k / 877 | 23.6k / 364 |
+| latency mean / median (s) | 54.0 / 45.3 | 21.6 / 19.6 |
+
+v2 minus main, paired on 102: -0.249 s (cluster CI -0.547, +0.005), 33 better, 48 the same, 21
+worse. The invalid episode repeated a `first_stop_lap` without its compound until its turns ran
+out; the clearer refusal and the last-turn fallback came after the check run, and that one
+scenario rerun once with them (post hoc, not in the table) corrected the compound and scored the
+optimizer's plan. On the design sample v2b's model departed from plan 1 eleven times: 8 citing a
+flag (+0.016 s each against the optimizer), 3 not (+0.27 s); v2c, with the copy instruction,
+departed none of 100 times; v2d (the shipped code) 3 times, all citing a flag (-0.37, -0.37,
++0.45 s), with agent minus optimizer -0.003 s (-0.016, +0.010) and 8.4 calls and 25k input tokens
+per episode. So the language model now adds nothing to the look-ahead and takes nothing
+away: v2's regret is the optimizer's, and what remains is the predictive simulator's error.
 
 `src.grade.grade_decision(snapshot, submission)` grades one submission the same way (valid,
 regret against the optimizer from that snapshot) for `tests/test_case.py`, which reports
