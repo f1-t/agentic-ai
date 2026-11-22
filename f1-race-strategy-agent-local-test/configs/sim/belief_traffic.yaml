@@ -19,6 +19,7 @@ events:
   name: rate
   params:
     as_of: true
+    duration: history   # as belief.yaml
 degradation:
   name: linear_fuel
   params:

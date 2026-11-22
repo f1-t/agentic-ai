@@ -363,7 +363,11 @@ def score_set(scenario_set, sim_for, policies: dict, *, seed: int = 0, n_samples
 # it; later periods are drawn at the rate model's rates, the same draws for every plan and the
 # reference (common random numbers). The replay accuracy that chose the recorded lap times over
 # the lap factors is in reports/calibration/neutralised (src/sim/neutral_report.py).
-WORLD_EVENTS = {"name": "hybrid", "params": {"lap_times": "recorded"}}
+# Later periods (after the one in progress) are drawn at the rates and with the period lengths
+# pooled over the dry races of configs/sim/neutralised_history.csv (events.RateEvents duration
+# "history", pooled; docs/eval.md "Safety-car duration and rates: the belief against the judge",
+# adopted 2026-11-22). The world before: configs/sim/legacy/world_pre_sc_alignment.yaml.
+WORLD_EVENTS = {"name": "hybrid", "params": {"lap_times": "recorded", "duration": "history", "pooled": True}}
 # ON by default since the fidelity scorecard chose it (docs/eval.md "What the ablation says": close
 # pairs +0.016 [+0.000, +0.038], Spearman +0.011, relative gap -2.4 s, belief-favourite regret
 # -0.36 s on 18 races). The world without neutralisations: `default_world_config(c, on=False)`, or

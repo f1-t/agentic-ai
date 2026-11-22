@@ -1,0 +1,26 @@
+# LEGACY, for reproducing results produced before the SC alignment (docs/eval.md "Safety-car
+# duration and rates: the belief against the judge", adopted 2026-11-22): configs/sim/belief.yaml
+# with memoryless geometric SC/VSC lengths (a period in progress always expected to run about four
+# more laps). Pair it with configs/sim/legacy/world_pre_sc_alignment.yaml.
+# tests/test_eval_default_config.py checks it is belief.yaml with the alignment off and nothing else.
+calibrator:
+  name: as_of_history
+fuel_anchor:
+  prior: anchored
+  practice: anchored
+pit_loss:
+  source: asof
+fit_window: to_snapshot
+traffic:
+  name: none
+events:
+  name: rate
+  params:
+    as_of: true
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+    wear_lower_bound: 0.0
+    driver_effects: race
+lap_noise: persistent

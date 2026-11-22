@@ -13,8 +13,10 @@ from src.sim.config import WORLD_DEGRADATION, WORLD_EDGE, world_default
 from src.sim.engine import Simulator
 
 ROOT = fidelity.ROOT
-DEFAULT_WORLD_HASH = "abc455a9bbb6"       # driver effects, edge history_only, hybrid SC/VSC
-DEFAULT_BELIEF_HASH = "f7b872d14c0c"      # belief.yaml with driver effects
+DEFAULT_WORLD_HASH = "5069228b35e7"       # driver effects, edge history_only, hybrid SC/VSC, later periods pooled history
+DEFAULT_BELIEF_HASH = "351f4124ff22"      # belief.yaml with driver effects, SC/VSC lengths from as-of history
+PRE_SC_ALIGNMENT_WORLD_HASH = "abc455a9bbb6"   # the default world from the adoption (#114) to the SC alignment
+PRE_SC_ALIGNMENT_BELIEF_HASH = "f7b872d14c0c"
 PRE_SCORECARD_WORLD_HASH = "d230d3a56b0b"   # the default world from PR #108 until the adoption
 PRE_SCORECARD_BELIEF_HASH = "d479652b0fe7"
 
@@ -30,7 +32,7 @@ def belief():
 def test_the_default_world_is_the_scorecard_choice():
     w = default_world()
     assert score.WORLD_EVENTS_DEFAULT is True and WORLD_EDGE == "history_only"
-    assert (w.events.name, w.events.params) == ("hybrid", {"lap_times": "recorded"})
+    assert (w.events.name, w.events.params) == ("hybrid", {"lap_times": "recorded", "duration": "history", "pooled": True})
     assert w.wear_cliff.enabled and w.wear_cliff.world_edge == "history_only"
     assert w.degradation.model_dump() == {"name": "linear_fuel", "params": {"driver_effects": "race"}} \
         == {"name": WORLD_DEGRADATION["name"], "params": WORLD_DEGRADATION["params"]}
@@ -49,6 +51,7 @@ def test_the_default_belief_is_the_scorecard_choice_and_the_tools_read_it():
     assert b.lap_noise == "persistent" and b.plan_on == "draws" and b.traffic.name == "none"
     assert (b.fuel_anchor.prior, b.fuel_anchor.practice) == ("anchored", "anchored")
     assert b.calibrator.name == "as_of_history" and b.wear_cliff.enabled
+    assert (b.events.name, b.events.params) == ("rate", {"as_of": True, "duration": "history"})
     assert calibration.config_hash(b) == DEFAULT_BELIEF_HASH
     assert agent_tools.BELIEF_CONFIG == score.BELIEF_CONFIG == fidelity.BELIEF_FILE
     assert rerun.belief_path("default") == str(score.BELIEF_CONFIG)
@@ -67,11 +70,19 @@ def test_every_earlier_choice_stays_available_as_a_file():
     assert calibration.config_hash(old_w) == PRE_SCORECARD_WORLD_HASH
     assert calibration.config_hash(old_b) == PRE_SCORECARD_BELIEF_HASH
     assert (old_w.events.name, old_w.wear_cliff.world_edge) == ("none", "history")
-    # the earlier belief is the default without its driver effects, nothing else
+    # the earlier belief is the one before the SC alignment without its driver effects, nothing else
     b = belief()
+    pre = SimConfig.from_file(ROOT / "configs/sim/legacy/belief_pre_sc_alignment.yaml")
     assert "driver_effects" not in old_b.degradation.params
     assert old_b.degradation.params == {k: v for k, v in b.degradation.params.items() if k != "driver_effects"}
-    assert {k for k, v in b.model_dump().items() if v != old_b.model_dump()[k]} == {"degradation"}
+    assert {k for k, v in pre.model_dump().items() if v != old_b.model_dump()[k]} == {"degradation"}
+    # before the SC alignment: the same configs with geometric lengths and the provisional rates
+    pre_w = SimConfig.from_file(ROOT / "configs/sim/legacy/world_pre_sc_alignment.yaml")
+    assert calibration.config_hash(pre_w) == PRE_SC_ALIGNMENT_WORLD_HASH
+    assert calibration.config_hash(pre) == PRE_SC_ALIGNMENT_BELIEF_HASH
+    assert pre_w.events.params == {"lap_times": "recorded"} and pre.events.params == {"as_of": True}
+    assert pre_w.model_copy(update={"events": default_world().events}) == default_world()
+    assert pre.model_copy(update={"events": b.events}) == b
     # the traffic world is the default world plus traffic only (test_traffic_eval_params too)
     assert SimConfig.from_file(score.WORLD_TRAFFIC_CONFIG).model_copy(
         update={"traffic": default_world().traffic}) == default_world()
@@ -92,6 +103,9 @@ def test_the_ablation_toggles_each_adopted_choice_back_off():
     assert w["world_hinge"].degradation.name == "linear_fuel_hinge"
     assert w["world_hinge"].degradation.params["driver_effects"] == "race"
     assert specs["belief_no_driver_effects"].belief_config().degradation.params["driver_effects"] == "off"
+    off = specs["sc_alignment_off"]
+    assert off.world_config().events.params["duration"] == "geometric" and not off.world_config().events.params["pooled"]
+    assert off.belief_config().events.params["duration"] == "geometric"
     tb = specs["traffic_both"]
     assert tb.world_config().traffic.name == "ghost" and tb.belief_config().traffic.params["source"] == "projected"
     # traffic aside, traffic_both keeps every adopted choice
