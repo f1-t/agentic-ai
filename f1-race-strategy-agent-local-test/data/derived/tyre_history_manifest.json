@@ -172,6 +172,7 @@
    "7"
   ],
   "wet_lap_share": 0.1,
+  "damp_lap_share": 0.02,
   "pace_min_green_laps": 10,
   "pace_fit_share": 0.6,
   "pace_late_laps": 3,
