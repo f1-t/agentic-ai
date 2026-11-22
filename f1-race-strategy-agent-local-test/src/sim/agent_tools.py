@@ -42,6 +42,7 @@ from __future__ import annotations
 import copy
 import math
 import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -51,6 +52,7 @@ from . import calibrators, jobs
 from . import cliff as _cliff
 from . import model_report as _report
 from . import proxy as _proxy
+from . import rules as _rules
 from .compute import load_profile
 from .config import SimConfig
 from .engine import DEGRADATION_RETRY_STREAM, DEGRADATION_STREAM, Simulator, batch_normals
@@ -80,6 +82,28 @@ TRAFFIC_BASIS = ("other cars projected from what is known at this lap only (thei
                  "life so far; the bands cover that projection's spread, not cars reacting to us")
 CALIBRATION_NOTE = ("mean absolute error of the remaining race time for this fit window and horizon; "
                     "a conservative tolerance for a gap between plans, since the fuel error cancels between them")
+# The yardstick for a gap between two plans (AGENT_GAP_YARDSTICK). "paired" (the default): the
+# belief's own spread of the difference between the two plans over shared draws (common random
+# numbers), reported as the gap, its 90% interval and the share of draws each side wins
+# (gap_reading). "calibration": the legacy within_sim_error, the gap against max(2 sd, the
+# remaining-time calibration error), kept to reproduce runs made before the switch.
+GAP_YARDSTICK_ENV = "AGENT_GAP_YARDSTICK"
+GAP_YARDSTICKS = ("paired", "calibration")
+CALIBRATION_NOTE_PAIRED = ("mean absolute error of the absolute remaining race time for this fit window and "
+                           "horizon; not a yardstick for the gap between two plans, whose common errors cancel "
+                           "(read gaps from compare_plans or evaluate_strategy)")
+
+
+def gap_yardstick() -> str:
+    """AGENT_GAP_YARDSTICK, "paired" when unset; any other value than GAP_YARDSTICKS is an error."""
+    mode = os.environ.get(GAP_YARDSTICK_ENV, "").strip().lower() or GAP_YARDSTICKS[0]
+    if mode not in GAP_YARDSTICKS:
+        raise ValueError(f"{GAP_YARDSTICK_ENV} must be one of {', '.join(GAP_YARDSTICKS)}; got {mode!r}")
+    return mode
+
+
+def calibration_note() -> str:
+    return CALIBRATION_NOTE if gap_yardstick() == "calibration" else CALIBRATION_NOTE_PAIRED
 
 _SIMS: dict = {}
 _RACES: dict = {}
@@ -320,6 +344,100 @@ def calibration_error_s(sim: Simulator, snapshot: Snapshot) -> float:
     return _report.calibration_error(sim.config.fit_window, snapshot.remaining_laps, race_id=race_id)
 
 
+# --- rule replies -----------------------------------------------------------------------------
+# rules.py's messages (a physics module, unchanged): matched here and restated for the agent
+_MIN_STINT = re.compile(r"^Stint of \d+ laps(?: \(\d+ already run on the set\))? is below the \d+-lap minimum\.$")
+_TWO_COMPOUNDS = "A valid dry strategy must use at least two different compounds."
+_LAP_SUM = re.compile(r"^Stint laps sum to (\d+), must equal remaining laps (\d+)\.$")
+
+
+def stop_window(snapshot: Snapshot) -> tuple[int, int]:
+    """(first, last): the laps at whose end a stop may be made under the minimum stint (R2):
+    the current set must reach race.min_stint_laps (laps already run on it counted) and the
+    stint after the stop must too. first > last when no stop fits in the laps left. Only the
+    snapshot and the regulations enter (laps so far, the scheduled distance, the minimum)."""
+    floor, done = snapshot.race.min_stint_laps, snapshot.laps_completed
+    first = done + max(1, floor - _rules.laps_on_set(snapshot))
+    return first, snapshot.race.total_laps - floor
+
+
+def _laps(n: int) -> str:
+    return f"{n} lap{'s' if n != 1 else ''}"
+
+
+def _window_text(snapshot: Snapshot, config=None) -> str:
+    """The legal alternative in words: the earliest and latest stop, or that only staying out
+    to the flag is left (or that nothing is, when that leaves one dry compound)."""
+    first, last = stop_window(snapshot)
+    done = snapshot.laps_completed
+    if first > last:
+        to_flag = Plan.of([[snapshot.compound, snapshot.remaining_laps]])
+        if _rules.two_compounds(_rules.RuleContext(snapshot, to_flag, set(), config)):
+            return (f"no stop fits in the {_laps(snapshot.remaining_laps)} left, and running to the flag leaves "
+                    f"a single dry compound: no legal plan remains")
+        return f"no stop fits in the {_laps(snapshot.remaining_laps)} left: only STAY_OUT to the flag is legal"
+    wait = first - done - 1
+    now = "pitting now is legal" if wait == 0 else f"stay out {_laps(wait)} first, then pit"
+    return f"the earliest legal stop is at the end of lap {first} ({now}), the latest at the end of lap {last}"
+
+
+def explain_rule_errors(snapshot: Snapshot, plan, errors, config=None) -> list[str]:
+    """`errors` (a plan's rule replies) as the agent is shown them: the minimum-stint, two-compound
+    and lap-count messages of rules.py restated with which stint and why, and the nearest legal
+    alternative (_window_text); any other message unchanged. `plan` is the plan the errors are
+    about (a contracts.Plan; None when it did not parse, and then nothing changes). Only the
+    snapshot, the plan and the regulations enter, never a lap after the snapshot."""
+    errors = list(errors or [])
+    if not errors or plan is None or not hasattr(plan, "stints"):
+        return errors
+    floor, run, done = snapshot.race.min_stint_laps, _rules.laps_on_set(snapshot), snapshot.laps_completed
+    stints = plan.stints
+    ctx = _rules.RuleContext(snapshot, plan, set(), config)
+    window = _window_text(snapshot, config)
+    window = window[0].upper() + window[1:]
+    stated = []
+    for i, s in enumerate(stints):   # rules.min_stint's test, stint by stint
+        laps = run + s.laps if i == 0 else s.laps
+        if (i == 0 and len(stints) == 1) or laps >= floor or _rules._class_change(ctx, i):
+            continue
+        if i == 0:
+            cause = (f"stopping at the end of lap {done + s.laps} makes the current {s.compound} stint "
+                     f"{_laps(laps)} ({run} run so far + {s.laps})")
+        elif i == len(stints) - 1:
+            cause = f"the final stint ({s.compound}) would be {_laps(laps)}"
+        else:   # a stint between two stops: the window is not the fix
+            stated.append(f"Below the {floor}-lap minimum stint: stint {i + 1} ({s.compound}) would be "
+                          f"{_laps(laps)}. Make it at least {floor} laps or drop one of the stops around it.")
+            continue
+        stated.append(f"Below the {floor}-lap minimum stint: {cause}. {window}.")
+    # restated in order when the count agrees with rules.py's; otherwise as written plus the window
+    restate = sum(bool(_MIN_STINT.match(e)) for e in errors) == len(stated)
+    out = []
+    for e in errors:
+        if _MIN_STINT.match(e):
+            out.append(stated.pop(0) if restate else f"{e} {window}.")
+        elif e == _TWO_COMPOUNDS:
+            used = sorted(snapshot.compounds_used | {s.compound for s in stints})
+            first, last = stop_window(snapshot)
+            if first <= last:
+                fix = f"so it needs a stop onto another dry compound. {window}"
+                if (stay := last - done - 1) >= 1:
+                    fix += f"; a stay_out of at most {_laps(stay)} keeps that stop possible"
+            else:
+                fix = f"and no stop fits in the {_laps(snapshot.remaining_laps)} left: no legal dry plan remains"
+            out.append(f"Single compound: this plan runs only {', '.join(used)} over the race; a dry race must use "
+                       f"at least two different compounds, {fix}.")
+        elif (m := _LAP_SUM.match(e)):
+            have, need = int(m.group(1)), int(m.group(2))
+            last_laps = stints[-1].laps + need - have
+            fix = f"e.g. make the last stint {_laps(last_laps)}" if last_laps >= 1 else "shorten the stints"
+            out.append(f"Lap count: the stints sum to {_laps(have)} but {need} remain ({done} of "
+                       f"{snapshot.race.total_laps} done); they must sum to exactly {need}, {fix}.")
+        else:
+            out.append(e)
+    return out
+
+
 # --- the functions --------------------------------------------------------------------------
 def race_state(snapshot: Snapshot, *, config: SimConfig | None = None) -> dict:
     """The snapshot dump plus legal_compounds, remaining_laps and event_rates."""
@@ -373,8 +491,10 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
     and fuel_s_per_lap_interval (-+ 1.64 sd, its fuel_interval_basis and
     fuel_point_estimate) for models with a
     fuel term, a no_sd:fuel_s_per_lap_interval flag when its sd is NaN. flags and
-    calibration_error_s are the report's; calibration_error_s is a conservative tolerance
-    for gaps between plans (calibration_error_s()). This is estimate_tyre_degradation's body."""
+    calibration_error_s are the report's; calibration_error_note (calibration_note()) says how
+    to read it: under the paired gap yardstick (the default) an error of the absolute remaining
+    time, not a tolerance for gaps between plans; under the legacy one a conservative tolerance
+    for them (calibration_error_s()). This is estimate_tyre_degradation's body."""
     sim, profile = _setup(snapshot, sim, profile)
     rep = sim.model_report(snapshot, ages)
     deg = sim.fitted_for(snapshot).degradation
@@ -417,7 +537,7 @@ def model_report(snapshot: Snapshot, ages=None, *, n_samples=None, sim=None, pro
         out["fuel_point_estimate"] = rep.fuel_s_per_lap.value
         if basis == BASIS_NO_SD:
             out["flags"] = [*out["flags"], "no_sd:fuel_s_per_lap_interval"]
-    out["calibration_error_note"] = CALIBRATION_NOTE
+    out["calibration_error_note"] = calibration_note()
     out["event_rates"] = event_rates(snapshot, sim.config)
     out["traffic"] = traffic_report(snapshot, sim)
     return _jsonable(out)
@@ -574,12 +694,40 @@ def compare_plans(snapshot: Snapshot, candidates, n_samples=None, *, sim=None, p
     res = fit.compare(snapshot, cands, seed=SEED, n_samples=n,
                       continuation=_continuation(fit, n, profile.sim.max_stops))
     out = res.model_dump()
+    out["errors"] = [explain_rule_errors(snapshot, p, e, sim.config) for p, e in zip(res.candidates, res.errors)]
+    if gap_yardstick() == "paired" and res.best is not None:
+        # the fastest candidate (lowest mean) against each other valid one, over the shared draws
+        i = res.best
+        out["gap_readings"] = [
+            gap_reading(f"candidates[{i}]", f"candidates[{j}]", res.p_beats[i][j], res.gap_mean_s[i][j],
+                        res.gap_mean_s[i][j] - Z90 * res.gap_std_s[i][j], res.gap_mean_s[i][j] + Z90 * res.gap_std_s[i][j])
+            for j in range(len(res.candidates)) if j != i and res.valid[j]]
     if res.traffic is not None:   # traffic on: compact per-candidate views and the basis
         out["traffic"] = [traffic_view(t) for t in res.traffic]
         out["traffic_basis"] = TRAFFIC_BASIS
     else:
         out["traffic"] = TRAFFIC_NOTE
     return _jsonable(out)
+
+
+def action_label(raw) -> str:
+    """An action in the agent's words: "PIT MEDIUM", "STAY_OUT 3 laps"."""
+    act = _action(raw)
+    if act.get("action") == "pit":
+        return f"PIT {act.get('compound')}"
+    return f"STAY_OUT {_laps(int(act.get('laps', 1)))}"
+
+
+def gap_reading(a: str, b: str, p_a, gap, lo, hi) -> str | None:
+    """The gap between a and b in words: which is faster in what share of the shared draws, then
+    a minus b and its 90% interval (lo, hi), e.g. "STAY_OUT 1 lap is faster than PIT MEDIUM in 82%
+    of draws; STAY_OUT 1 lap minus PIT MEDIUM: -3.1 s (90%: -6.0 to -0.2 s)". None when a number
+    is missing."""
+    if any(v is None or _nan(v) for v in (p_a, gap, lo, hi)):
+        return None
+    fav, other, p = (a, b, p_a) if p_a >= 0.5 else (b, a, 1 - p_a)
+    return (f"{fav} is faster than {other} in {p:.0%} of draws; {a} minus {b}: {gap:+.1f} s "
+            f"(90%: {lo:+.1f} to {hi:+.1f} s)")
 
 
 def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, profile=None) -> dict:
@@ -594,9 +742,14 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
       probability_improves_outcome p_beats, the share of samples where the action is faster;
                                    it covers parameter and lap-noise uncertainty under this
                                    model and does not include model error (probability_covers)
-      within_sim_error             |gap_mean| < max(2 gap_std, calibration_error_s)
+      gap_reading                  (AGENT_GAP_YARDSTICK "paired", the default) the gap in words
+                                   (gap_reading): which side is faster in what share of the
+                                   shared draws, the median gap and its 5-95 percentile
+                                   interval, the model's own paired spread
+      within_sim_error             (AGENT_GAP_YARDSTICK "calibration", legacy) |gap_mean| <
+                                   max(2 gap_std, calibration_error_s), with
       confidence_basis             "model error" when calibration_error_s exceeds 2 gap_std,
-                                   else "sampling spread"
+                                   else "sampling spread", and
       calibration_error_s          a conservative tolerance for gaps (calibration_error_s())
       dominated, support_warnings  the action's, from the compare
       alternative                  its action, plan and remaining-time summary
@@ -606,7 +759,8 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
                                    the pit window, time lost in traffic, final position) and
                                    basis (TRAFFIC_BASIS); TRAFFIC_NOTE with it off
 
-    The numbers are None when no alternative is legal; an illegal action returns {"error": ...}."""
+    The numbers are None when no alternative is legal; an illegal action returns {"error": ...}.
+    Rule replies are explain_rule_errors'."""
     sim, profile = _setup(snapshot, sim, profile)
     n = _compare_n(profile, n_samples)
     fit = sim.fitted_for(snapshot)
@@ -618,16 +772,20 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
     res = fit.compare(snapshot, [_candidate(snapshot, a) for a in [act, *alts]], seed=SEED, n_samples=n,
                       continuation=_continuation(fit, n, profile.sim.max_stops))
     if not res.valid[0]:
-        return _jsonable({"action": act, "valid": False, "errors": res.errors[0], "error": "; ".join(res.errors[0])})
+        errors = explain_rule_errors(snapshot, res.candidates[0], res.errors[0], sim.config)
+        return _jsonable({"action": act, "valid": False, "errors": errors, "error": "; ".join(errors)})
     ok = [i for i in range(1, len(res.candidates)) if res.valid[i]]
     j = (max(ok, key=lambda i: (res.p_best[i], -res.summaries[i].mean_s, -i)) if ok
          else 1 if len(res.candidates) > 1 else None)
+    legacy = gap_yardstick() == "calibration"
+    gap_fields = ({"within_sim_error": None, "confidence_basis": None,
+                   "calibration_error_s": calibration_error_s(sim, snapshot), "calibration_error_note": CALIBRATION_NOTE}
+                  if legacy else {"gap_reading": None})
     out = {"action": act, "plan": res.candidates[0].as_pairs(), "remaining": res.summaries[0].model_dump(),
            "relative_race_time_delta_s": {"optimistic": None, "median": None, "pessimistic": None},
            "gap_mean_s": None, "gap_std_s": None, "probability_improves_outcome": None,
            "probability_covers": PROBABILITY_COVERS, "interval_meaning": interval_meaning(fit.degradation),
-           "within_sim_error": None, "confidence_basis": None,
-           "calibration_error_s": calibration_error_s(sim, snapshot), "calibration_error_note": CALIBRATION_NOTE,
+           **gap_fields,
            "dominated": res.dominated[0], "support_warnings": res.support_warnings[0],
            "traffic": TRAFFIC_NOTE, "alternative": None, "n_samples": res.n_samples, "seed": res.seed,
            "assumptions": [f"SC and VSC rates: {event_rates(snapshot, sim.config)['source']}"]}
@@ -639,19 +797,24 @@ def evaluate_action(snapshot: Snapshot, action, n_samples=None, *, sim=None, pro
         return _jsonable(out)
     alt = alts[j - 1]
     if not res.valid[j]:
-        out["alternative"] = {"action": alt, "valid": False, "errors": res.errors[j]}
+        out["alternative"] = {"action": alt, "valid": False,
+                              "errors": explain_rule_errors(snapshot, res.candidates[j], res.errors[j], sim.config)}
         return _jsonable(out)
     out["alternative"] = {"action": alt, "valid": True, "plan": res.candidates[j].as_pairs(),
                           "remaining": res.summaries[j].model_dump()}
     # the gap's percentiles: the two expanded plans again under the same draws (R6)
     times = fit.simulate_batch(snapshot, [res.candidates[0], res.candidates[j]], seed=SEED, n_samples=n).times
     lo, med, hi = np.percentile(times[0] - times[1], [5, 50, 95])
-    gap, std, cal = res.gap_mean_s[0][j], res.gap_std_s[0][j], out["calibration_error_s"]
-    model_error = not _nan(cal) and cal > 2 * std
+    gap, std, p = res.gap_mean_s[0][j], res.gap_std_s[0][j], res.p_beats[0][j]
     out.update(relative_race_time_delta_s={"optimistic": float(lo), "median": float(med), "pessimistic": float(hi)},
-               gap_mean_s=gap, gap_std_s=std, probability_improves_outcome=res.p_beats[0][j],
-               within_sim_error=bool(abs(gap) < (cal if model_error else 2 * std)),
-               confidence_basis="model error" if model_error else "sampling spread")
+               gap_mean_s=gap, gap_std_s=std, probability_improves_outcome=p)
+    if legacy:
+        cal = out["calibration_error_s"]
+        model_error = not _nan(cal) and cal > 2 * std
+        out.update(within_sim_error=bool(abs(gap) < (cal if model_error else 2 * std)),
+                   confidence_basis="model error" if model_error else "sampling spread")
+    else:
+        out["gap_reading"] = gap_reading(action_label(act), action_label(alt), p, float(med), float(lo), float(hi))
     return _jsonable(out)
 
 

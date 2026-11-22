@@ -2,6 +2,7 @@ import itertools
 import json
 import os
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +19,7 @@ def default_loop_options(monkeypatch):
     # the loop options take their defaults unless a test sets them, whatever a local .env says
     monkeypatch.delenv("AGENT_TURN_STATUS", raising=False)
     monkeypatch.delenv("AGENT_REPEAT_MODE", raising=False)
+    monkeypatch.delenv("AGENT_GAP_YARDSTICK", raising=False)
 
 
 @pytest.fixture
@@ -656,14 +658,19 @@ def test_run_3s_stalled_episode_now_runs_its_plan_evaluation(tmp_path):
     assert json.loads(backend.seen[2][-2]["content"]) == json.loads(FIXED)
 
 
-# run 3-like, 2022_02_saudi_arabia:OCO:05 before the fix: two whole envelopes in one reply
+# run 3-like, 2022_02_saudi_arabia:OCO:05: two whole envelopes in one reply
 TWO_ENVELOPES = ('{"tool_calls": [{"name": "evaluate_strategy", "arguments": {"action": {"action": "pit", '
                  '"compound": "MEDIUM"}}}]}\n\n{"tool_calls": [{"name": "compare_plans", "arguments": '
                  '{"candidates": [{"action": "pit", "compound": "MEDIUM"}, {"action": "stay_out", "laps": 3}]}}]}')
+# the same with a comma missing in the second envelope: not two complete envelopes, so not read
+BROKEN_SECOND = TWO_ENVELOPES.replace('"pit", "compound": "MEDIUM"}, {"action": "stay_out"',
+                                      '"pit" "compound": "MEDIUM"}, {"action": "stay_out"')
+# real replies from the live runs of 2026-11-21 and 22 (several envelopes, a bare submission, malformed)
+REAL = json.loads((Path(__file__).parent / "fixtures" / "voyager_replies.json").read_text())
 
 
 def test_an_unparsed_reply_is_logged_and_the_model_is_told_what_was_wrong(tmp_path):
-    backend = voyager([openai_reply(EVIDENCE), openai_reply(TWO_ENVELOPES), openai_reply(FIXED),
+    backend = voyager([openai_reply(EVIDENCE), openai_reply(BROKEN_SECOND), openai_reply(FIXED),
                        openai_reply(SUBMIT_JSON)])
     path = tmp_path / "t.jsonl"
     rec, traj = run_agent(snap(), backend=backend, verbose=False, log_path=path)
@@ -678,7 +685,101 @@ def test_an_unparsed_reply_is_logged_and_the_model_is_told_what_was_wrong(tmp_pa
     empty = [json.loads(x) for x in path.read_text().splitlines()][3]
     assert empty["event"] == "no_tool_call" and empty["step"] == 2 and empty["finish_reason"] == "stop"
     assert empty["output_tokens"] == 101 and empty["parse_error"].startswith("JSONDecodeError: Extra data")
-    assert empty["text"].startswith(TWO_ENVELOPES)   # the backend's text, its parse-error note after it
+    assert empty["text"].startswith(BROKEN_SECOND)   # the backend's text, its parse-error note after it
+
+
+# --- several complete envelopes in one reply, and a bare submission ----------------------------
+def test_several_complete_envelopes_run_as_one_turn(tmp_path):
+    backend = voyager([openai_reply(EVIDENCE), openai_reply(TWO_ENVELOPES), openai_reply(SUBMIT_JSON)])
+    path = tmp_path / "t.jsonl"
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, log_path=path)
+    assert rec is not None and [(t["step"], t["tool"]) for t in traj][3:] == [
+        (2, "evaluate_strategy"), (2, "compare_plans"), (3, "submit_recommendation")]
+    assert [t.get("parse_repair") for t in traj[3:]] == ["2 complete tool_calls envelopes read as one"] * 2 + [None]
+    assert not any(json.loads(x).get("event") for x in path.read_text().splitlines())
+    # the model's history holds the calls as they ran: one envelope
+    assert len(json.loads(backend.seen[2][-2]["content"])["tool_calls"]) == 2
+
+
+def test_several_envelopes_keep_the_per_turn_budget(monkeypatch):
+    stub_dispatch(monkeypatch)
+    backend = voyager([openai_reply(TWO_ENVELOPES), openai_reply(SUBMIT_JSON)])
+    rec, traj = run_agent(snap(), backend=backend, verbose=False, max_tool_calls=1)
+    assert rec is not None and [t["tool"] for t in traj] == ["evaluate_strategy", "compare_plans",
+                                                             "submit_recommendation"]
+    assert traj[1]["error"].startswith("Tool-call budget exhausted")
+
+
+@pytest.mark.parametrize("i", range(5))
+def test_the_real_replies_with_several_envelopes_are_read_in_order(i):
+    from src.llm.voyager_backend import _parse_envelopes
+    text = REAL["several_envelopes"][i]
+    with pytest.raises(json.JSONDecodeError, match="Extra data"):
+        json.loads(text[text.find("{"):text.rfind("}") + 1])
+    payload, note = _parse_envelopes(text)
+    parts = [json.loads(p) for p in text.split("\n\n")]
+    assert payload == {"tool_calls": [c for p in parts for c in p["tool_calls"]]}
+    assert note == f"{len(parts)} complete tool_calls envelopes read as one"
+
+
+def test_a_real_reply_of_evidence_then_a_submission_submits_after_the_evidence(monkeypatch):
+    stub_dispatch(monkeypatch)
+    text = REAL["several_envelopes"][3]   # evaluate_strategy, then submit_recommendation
+    rec, traj = run_agent(snap(), backend=voyager([openai_reply(text)]), verbose=False)
+    assert rec["decision"] == "STAY_OUT" and [t["tool"] for t in traj] == ["evaluate_strategy",
+                                                                            "submit_recommendation"]
+
+
+@pytest.mark.parametrize("text", [
+    BROKEN_SECOND,                                                  # the second envelope is malformed
+    TWO_ENVELOPES + "\nthen {maybe} more",                          # a brace outside the envelopes
+    TWO_ENVELOPES + '\n{"note": 1}',                                # an object that is not an envelope
+    TWO_ENVELOPES.replace('\n\n{"tool_calls"', '\n\n{"calls"'),     # a second object of another shape
+    '{"tool_calls": [], "x": 1}\n{"tool_calls": []}',               # an envelope with another key
+    TWO_ENVELOPES.split("\n\n")[0],                                 # one envelope is not "several"
+    *REAL["malformed"],
+])
+def test_anything_but_several_complete_envelopes_is_not_guessed(text):
+    from src.llm.voyager_backend import _parse_envelopes
+    assert _parse_envelopes(text) is None
+
+
+def test_a_real_bare_submission_is_read_as_its_call(tmp_path):
+    text = REAL["bare_submission"][0]
+    assert "tool_calls" not in json.loads(text)
+    path = tmp_path / "t.jsonl"
+    rec, traj = run_agent(snap(), backend=voyager([openai_reply(text)]), verbose=False, log_path=path)
+    assert rec is not None and rec["decision"] == "STAY_OUT" and rec["rationale"] == json.loads(text)["rationale"]
+    assert traj[0]["parse_repair"] == "a bare submit_recommendation argument object read as its call"
+
+
+@pytest.mark.parametrize("args", [
+    {**SUBMIT, "extra": 1},                                      # a key the schema does not declare
+    {k: v for k, v in SUBMIT.items() if k != "confidence"},      # a required key missing
+    {"tool_calls": [], **SUBMIT},                                # an envelope, not a bare object
+    {"decision": "STAY_OUT"},
+])
+def test_only_an_exact_submission_argument_set_is_read_bare(args):
+    from src.llm.voyager_backend import _bare_submission
+    assert _bare_submission(args, agent._api_tools()) is None
+    assert _bare_submission(SUBMIT, agent._api_tools())[0] == {
+        "tool_calls": [{"name": "submit_recommendation", "arguments": SUBMIT}]}
+    assert _bare_submission(SUBMIT, [t for t in agent._api_tools() if t["name"] != "submit_recommendation"]) is None
+
+
+def test_the_prompt_defines_the_confidence_and_how_to_read_a_gap(monkeypatch):
+    assert "probability (0 to 1) that the recommended action is the better one" in agent.SYSTEM_PROMPT
+    assert agent.GAP_SENTENCE in agent.SYSTEM_PROMPT
+    seen = []
+
+    class Seen(ScriptedBackend):
+        def run_turn(self, **kwargs):
+            seen.append(kwargs["system_prompt"])
+            return super().run_turn(**kwargs)
+    stub_dispatch(monkeypatch)
+    monkeypatch.setenv("AGENT_GAP_YARDSTICK", "calibration")   # the legacy yardstick: no gap sentence
+    run_agent(snap(), backend=Seen([submit_turn()]), verbose=False)
+    assert seen == [agent.SYSTEM_PROMPT.replace(agent.GAP_SENTENCE, "")]
 
 
 def test_a_reply_cut_off_at_the_output_limit_is_told_so_and_not_completed(tmp_path):

@@ -429,7 +429,7 @@ def write_provenance(args, rows: pd.DataFrame | None = None) -> Path:
            "loop": {"max_steps": prof.agent.max_steps,
                     **{k: os.environ.get(k) for k in ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS",
                                                        "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",
-                                                       "AGENT_SHOW_IDENTITY")}},
+                                                       "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK")}},
            "row_stamps": stamps,
            "builder": s.builder if s else None,
            "future_blindness": future_blindness(run=getattr(args, "harness", False)),
