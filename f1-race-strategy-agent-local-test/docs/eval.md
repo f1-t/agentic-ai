@@ -301,7 +301,7 @@ unlabelled-compound laps load as `UNKNOWN`; the pit-loss prior table holds the n
 | proxy tier 5 (`configs/sim/compound_steps.json`) | `per_race` step rows and the forward-chained `validation_rows` (each race priced with the table of the races before it: `compound_steps validate --as-of`); `proxy.as_of_config` recomputes the steps (median), the blend weights (1 / mse per source, at least 3 rows) and the sd floor (the blend's rmse) | no step, equal weights, `proxy.PRIOR_SD_FLOOR` (pace 1.0 s, wear 0.1 s/lap) | `compound_proxy.as_of: false` |
 | base delta, fuel prior, SC lap factor, lap-1 extra (`configs/sim/race_history.csv`, `python -m src.sim.race_history build`) | the `as_of_history` calibrator (belief.yaml): median of the earlier races, sd their spread floored at `race_history.SD_FLOOR`; the fuel prior is the anchored prior ("Fuel anchoring": the lap-scaled physics slope times the earlier races' target / physics ratio; `fuel_anchor.prior: circuit_history` gives `fuel_prior`'s circuit history, #45); the sds are the base and fuel taus, the event factors are drawn per sample | `race_history.A_PRIORI`: base delta 0.5 ± 1.0 s, SC lap factor 1.4 ± 0.15, lap-1 extra 8 ± 4 s; the fuel prior is the physics prior (`fuel_practice_longrun`, -0.03 s/kg x 110 kg / laps) | `calibrator: shrinkage` (the Spain-derived config values) |
 | SC/VSC rates (`configs/sim/neutralised_history.csv`) | `events.rate` with `as_of: true`: `event_rates`' global posterior on the earlier dry races (#45's forward-chaining fits) | `race_history.EVENT_PRIOR`: p_sc 1/60 per lap, d_sc 3.5 laps; VSC 0.02, 2 laps | `as_of: false` (EventModel's Spain values) |
-| `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the tools fall back to the sampling spread) | `SimConfig.cross_race_as_of: false` |
+| `calibration_error_s` (`reports/calibration/midrace_summary.csv`, measured on 2021 Spain) | the summary's value for a race after 2021 Spain | NaN (the legacy `within_sim_error`, `AGENT_GAP_YARDSTICK=calibration`, falls back to the sampling spread; the default paired gap reading never reads it) | `SimConfig.cross_race_as_of: false` |
 | pit-loss prior, tyre-life history | as-of already (`pit_loss.pit_loss_prior`, `cliff.life_prior` / `tyre_history`) | their constant tiers | their own |
 | shrinkage taus | a priori engineering priors (base 0.5 s, wear 0.03 s/lap, hinge), fitted on no race; under `as_of_history` the base and fuel taus are the as-of sds | | |
 | learned calibrator (`trained`) | not as of the race: fitted on a fixed race set, off by default; refused for a race not after all its training races unless `force_not_as_of` | | |
@@ -1263,8 +1263,9 @@ any scenario of any race (the lap-0 same-race guard is gone):
 - the tools keep the contract itself (`tools.set_snapshot`) and answer from the belief
   simulator at the snapshot (`src/sim/agent_tools.py`, SPEC 0015): degradation and pit
   loss ranges, the model report, plan comparisons, and an action against its alternative,
-  with `within_sim_error` judged against the calibration error; the times include traffic
-  from the projected field, and the outputs carry it compactly ("Traffic" below);
+  with the gap between them read from the belief's paired draws ("Plan gaps and rule
+  replies" below); the times include traffic from the projected field, and the outputs
+  carry it compactly ("Traffic" below);
 - `run_agent(scenario.snapshot, verbose=False, max_steps=profile.agent.max_steps, log_path=...)` logs
   the trajectory to `reports/eval/trajectories/<set version>/<scenario_id>.jsonl` (":" in
   the id written "_"; a rerun replaces the file);
@@ -1302,7 +1303,54 @@ any scenario of any race (the lap-0 same-race guard is gone):
   closes what is open (everything before it well nested and kept as written; never a reply
   cut off at the cap); the calls from such a reply carry a `parse_repair` note. dev6
   run 4 is the first pass with this; up to dev6 run 3 and in the held-out d4 pass these
-  turns were not logged, the reminder was the bare one and nothing was repaired.
+  turns were not logged, the reminder was the bare one and nothing was repaired. Since
+  2026-11-22 it also reads two more shapes, each with its `parse_repair` note, and guesses at
+  nothing malformed: a reply of two or more complete `{"tool_calls": [...]}` objects, each
+  valid on its own, with only whitespace or bracket-free prose around them, as their calls
+  in order (the per-turn and budget rules apply to them as to one envelope); and a bare
+  JSON object whose keys are exactly a valid `submit_recommendation` argument set (every
+  required key, nothing undeclared) as that call.
+
+### Plan gaps and rule replies
+
+- **Gaps between plans.** `AGENT_GAP_YARDSTICK` says how the tools judge a gap between two
+  plans. `paired` (the default since 2026-11-22): `evaluate_strategy` gives `gap_reading`, e.g.
+  "STAY_OUT 1 lap is faster than PIT MEDIUM in 82% of draws; STAY_OUT 1 lap minus PIT
+  MEDIUM: -3.1 s (90%: -6.0 to -0.2 s)". The share is `probability_improves_outcome`; the
+  gap and its interval are the median and 5th / 95th percentiles of the action's time minus
+  the alternative's over the same draws (common random numbers, R6). `compare_plans` adds
+  `gap_readings`: the lowest-mean candidate against each other valid one, with `p_beats`
+  and the interval mean -+ 1.64 x `gap_std_s`. These intervals are the model's own: they
+  cover parameter and lap-noise uncertainty under the belief and not model error. No
+  cross-race calibration of gap error exists as of a race (the fidelity scorecard's B3
+  `gap_cov_90`, the share of judge gaps to the real plan inside the belief's 90% paired
+  interval, was 0.69 pooled over 18 development races on code 3ed6e2af6d0b, so the
+  interval is likely too narrow; it is pooled over later races, so the tools do not read
+  it). `calibration_error_s`, the error of the absolute remaining time measured on one
+  race (16 to 36 s), is not used for gaps: errors common to both plans (fuel, pace offset,
+  the track) cancel in a difference. `get_model_report` still shows it, with a note
+  saying so; `evaluate_strategy` and `estimate_tyre_degradation` no longer carry it.
+  `calibration` restores the legacy outputs (`within_sim_error` against
+  max(2 sd, `calibration_error_s`), `confidence_basis`, the calibration fields and the old
+  tool and prompt text) to reproduce earlier runs. The tool descriptions follow the
+  switch as the tools are imported; any other value is an error. Rerun provenance records it.
+- **Rule replies.** A plan the belief's rules reject comes back, in `compare_plans` and
+  `evaluate_strategy`, with each minimum-stint, two-compound and lap-count message
+  restated (`agent_tools.explain_rule_errors`; `rules.py`, a physics module, is unchanged):
+  which stint and why, and the nearest legal alternative, from the snapshot and the
+  regulations only (laps so far, laps on the set, the scheduled distance, the minimum).
+  For example, a pit at lap 0 of 66 with a 3-lap minimum: "Below the 3-lap minimum stint: stopping at the end of lap 1 makes the current SOFT stint 1 lap
+  (0 run so far + 1). The earliest legal stop is at the end of lap 3 (stay out 2 laps
+  first, then pit), the latest at the end of lap 63." Three laps from the end: "the final
+  stint (MEDIUM) would be 2 laps. No stop fits in the 3 laps left: only STAY_OUT to the
+  flag is legal." A single-compound plan gets the legal stop window and the longest
+  `stay_out` that keeps a stop possible; a lap-count mismatch gets the laps that remain and
+  the last-stint length that would add up. No tool reply exists for too many stops: the
+  stop limit only bounds the optimizer's continuation, which then runs to the flag and
+  gets the single-compound reply. Other messages pass unchanged.
+- **Confidence.** The system prompt defines the submitted `confidence` in one sentence as
+  the probability that the recommended action is the better one (PIT over STAY_OUT, or the
+  reverse), which is how `p_pit` scores it.
 
 Why those defaults: in live runs on the same 50 scenarios, unprompted submissions went 43
 with neither the status line nor repeat handling, 31 with the status line and refused

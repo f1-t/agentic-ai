@@ -131,6 +131,57 @@ def _parse_reclosed(text: str, exc: json.JSONDecodeError):
     return payload, f"final closing brackets {fixed[1]!r} read as {fixed[2]!r}"
 
 
+def _parse_envelopes(text: str):
+    """(payload, note) for a reply made of two or more complete {"tool_calls": [...]} objects, each
+    valid JSON on its own, with only whitespace or prose (no bracket or brace) around and between
+    them: one payload whose tool_calls are theirs in order. None for anything else, malformed
+    included: nothing is guessed.
+
+    qwen3-30b-a3b now and then writes a second envelope after the first (smoke test 2026-11-22:
+    evaluate_strategy calls, then a compare_plans envelope), which reads as "Extra data"."""
+
+    decoder = json.JSONDecoder()
+    calls, pos, n = [], 0, 0
+
+    while True:
+        start = text.find("{", pos)
+        gap = text[pos:] if start < 0 else text[pos:start]
+        if any(c in gap for c in "{}[]"):
+            return None
+        if start < 0:
+            break
+        try:
+            obj, pos = decoder.raw_decode(text, start)
+        except json.JSONDecodeError:
+            return None
+        if not (isinstance(obj, dict) and set(obj) == {"tool_calls"} and isinstance(obj["tool_calls"], list)):
+            return None
+        calls += obj["tool_calls"]
+        n += 1
+
+    if n < 2:
+        return None
+    return {"tool_calls": calls}, f"{n} complete tool_calls envelopes read as one"
+
+
+def _bare_submission(payload, tools):
+    """(payload, note) wrapping a bare submit_recommendation argument object as its call: a JSON
+    object with no tool_calls whose keys are exactly a valid argument set of the offered
+    submit_recommendation (every required key, nothing undeclared). None otherwise."""
+
+    if not isinstance(payload, dict) or "tool_calls" in payload:
+        return None
+    spec = next((t for t in tools or [] if t.get("name") == "submit_recommendation"), None)
+    if spec is None:
+        return None
+    schema = spec.get("input_schema", {})
+    keys = set(payload)
+    if not (set(schema.get("required", [])) <= keys <= set(schema.get("properties", {}))):
+        return None
+    return ({"tool_calls": [{"name": "submit_recommendation", "arguments": payload}]},
+            "a bare submit_recommendation argument object read as its call")
+
+
 class VoyagerBackend(ModelBackend):
     """Model backend for ASU Research Computing Voyager."""
 
@@ -256,7 +307,11 @@ class VoyagerBackend(ModelBackend):
                 # a reply cut off at the token cap is unfinished, not mis-closed: never repaired
                 if response.choices[0].finish_reason == "length":
                     raise
-                payload, repair = _parse_reclosed(text, exc)
+                several = _parse_envelopes(text)
+                payload, repair = several if several else _parse_reclosed(text, exc)
+
+            if (bare := _bare_submission(payload, tools)):
+                payload, repair = bare
 
             raw_calls = payload.get(
                 "tool_calls",

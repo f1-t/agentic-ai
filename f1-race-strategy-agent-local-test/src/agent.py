@@ -20,17 +20,23 @@ DEFAULT_SUBMIT_GRACE_STEPS = 2
 DEFAULT_REPEAT_MODE = "run"
 REPEAT_MODES = ("run", "cache")
 
+# how to read a gap between plans (AGENT_GAP_YARDSTICK "paired", the default); left out of the prompt
+# under the legacy "calibration" yardstick, whose within_sim_error the tools then return
+GAP_SENTENCE = ("A gap between two plans is much more certain than either plan's absolute time, because errors "
+                "common to both cancel: read it from gap_reading and p_beats (the share of draws in which one plan "
+                "is faster). ")
+
 SYSTEM_PROMPT = """You are a Formula 1 race strategist making a MID-RACE decision from a snapshot in time.
 
 The snapshot is the only current race state. The race is not named and cars are labelled (your car is Car A); decide from the snapshot and the tools, not from memory of any real race. Do not assume a fixed race, driver, lap, or starting tyre. Use tools when they reduce decision uncertainty.
 
-IMPORTANT: tool outputs are estimates. Ranges, probabilities, confidence labels and assumptions represent uncertainty; the simulator is NOT ground truth. Compare plausible outcomes and downside risk rather than blindly choosing the smallest median number.
+IMPORTANT: tool outputs are estimates. Ranges, probabilities, confidence labels and assumptions represent uncertainty; the simulator is NOT ground truth. """ + GAP_SENTENCE + """Compare plausible outcomes and downside risk rather than blindly choosing the smallest median number.
 
 Your task is to choose the immediate action: PIT now (and which compound) or STAY OUT for a stated number of laps. Consider position, gaps/traffic, tyre age/degradation and the estimated tyre life (a set run past it loses time quickly; there is no fixed stint limit), the pit-loss range (cheaper under a safety car or VSC), weather/track status and nearby competitors. When the tools model traffic, other cars are projected from what is known now and the tools report the expected rejoin position and time lost behind other cars. Prefer a small number of informative tool calls.
 
 If a tool reports an invalid plan or arguments, use its error/hint to correct the call. Do not repeat the same invalid call. You have a finite step/tool budget, so submit once the evidence is sufficient.
 
-Finish by calling submit_recommendation. Never finish with prose alone."""
+Finish by calling submit_recommendation. Its confidence is your probability (0 to 1) that the recommended action is the better one: that pitting now beats staying out if you recommend PIT, and the reverse if you recommend STAY_OUT. Never finish with prose alone."""
 
 SUBMIT_TOOL = {
     "name": "submit_recommendation",
@@ -41,7 +47,7 @@ SUBMIT_TOOL = {
             "decision": {"type": "string", "description": "PIT or STAY_OUT"},
             "compound": {"type": ["string", "null"], "description": "Compound if pitting; otherwise null."},
             "reassess_after_laps": {"type": "integer", "description": "When to reassess if staying out, or after the pit."},
-            "confidence": {"type": "number", "description": "0-1 confidence in this decision."},
+            "confidence": {"type": "number", "description": "0-1: the probability that the recommended action is the better one."},
             "rationale": {"type": "string", "description": "Short evidence-based rationale acknowledging material uncertainty."},
             "key_risks": {"type": "array", "items": {"type": "string"}},
         },
@@ -194,6 +200,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     log_path = log_path or os.environ.get("AGENT_TRAJECTORY_LOG")
     episode_id = os.environ.get("AGENT_EPISODE_ID") or f"ep_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}"
     api_tools = _api_tools()
+    system_prompt = (SYSTEM_PROMPT if tools.agent_tools.gap_yardstick() == "paired"
+                     else SYSTEM_PROMPT.replace(GAP_SENTENCE, ""))
     prompt = question or "Decide the best immediate strategy action from this snapshot."
     messages = [{"role": "user", "content": prompt + "\n\nRace snapshot:\n" + json.dumps(snapshot.to_dict(), ensure_ascii=False)}]
     trajectory = []
@@ -215,7 +223,7 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
 
     for step in range(1, max_steps + submit_grace_steps + 1):
         phase = "evidence" if step <= max_steps else "grace"
-        turn = backend.run_turn(system_prompt=SYSTEM_PROMPT, messages=messages,
+        turn = backend.run_turn(system_prompt=system_prompt, messages=messages,
                                 tools=api_tools if phase == "evidence" else [SUBMIT_TOOL], max_tokens=4000)
         stats["steps"] = step
         used = _usage(turn.raw)
