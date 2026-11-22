@@ -474,6 +474,8 @@ PHYSICS_MODULES = (
     "fuel_prior",
     # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their R8 limit
     "proxy",
+    # the as-of pit loss and SC/VSC pit-loss factors a belief prices stops with
+    "pit_loss",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -572,6 +574,27 @@ def _track_status(ts):
     return "sc" if "4" in ts else "vsc" if ("6" in ts or "7" in ts) else "green"
 
 
+_PRE_RACE_PIT_LOSS: dict = {}
+
+
+def pre_race_pit_loss(race_id: str) -> float:
+    """The pit loss a snapshot carries: the pre-race prior of pit_loss.pit_loss_prior (earlier
+    races only, never this one), so no snapshot holds the race's whole-race value. The belief
+    and the tools refine it with this race's stops seen by the snapshot (pit_loss.estimate)."""
+    if race_id not in _PRE_RACE_PIT_LOSS:
+        from . import pit_loss
+        from .config import PitLossModel
+        _PRE_RACE_PIT_LOSS[race_id] = round(pit_loss.pit_loss_prior(race_id, PitLossModel())["mean_s"], 3)
+    return _PRE_RACE_PIT_LOSS[race_id]
+
+
+def with_race(snap: Snapshot, race: RaceParams) -> Snapshot:
+    """`snap` carrying `race`'s constants (its pit loss included) with the snapshot's race length:
+    for the hindsight replays (midrace, the rejoin window, reference stop counts), which price
+    stops at the race's whole-race pit loss as the world does."""
+    return snap.model_copy(update={"race": race.model_copy(update={"total_laps": snap.race.total_laps})})
+
+
 def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> Snapshot:
     """The driver's state after lap k, read off the lap frame.
 
@@ -601,7 +624,8 @@ def snapshot_at(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -> S
         recent = [float(x) for x in last if pd.notna(x)]
     hist = _scenario(g[g["lap"] <= k])
     return Snapshot(
-        race=race.model_copy(update={"total_laps": len(g)}), driver=driver, laps_completed=k,
+        race=race.model_copy(update={"total_laps": len(g), "pit_loss_s": pre_race_pit_loss(race.race_id)}),
+        driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=n, start_lap=first, start_age=a) for c, n, a, first in stints[:j]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=status, elapsed_s=elapsed,
@@ -617,6 +641,7 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
     It differs from snapshot_at in what it may read:
       race.total_laps  the scheduled distance, race.total_laps as given (snapshot_at: the laps
                        this driver ran, which tells a policy the car will be lapped or retire)
+      race.pit_loss_s  pre_race_pit_loss, as snapshot_at since the pit-loss fix
       race.compounds   race.compounds (the nominated dry three, calibrate.race_compounds) plus
                        any other compound a car had run on a lap completed by t (a wet start)
       gaps             gap_ahead_s and car_ahead at the end of lap k against the cars that had
@@ -637,7 +662,8 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
         row = first.iloc[0]
         age = int(row["tyre_age"]) - 1 if pd.notna(row["tyre_age"]) else 0
         return Snapshot(
-            race=race, driver=driver, laps_completed=0, compound=row["compound"], tyre_age=max(0, age),
+            race=race.model_copy(update={"pit_loss_s": pre_race_pit_loss(race.race_id)}), driver=driver,
+            laps_completed=0, compound=row["compound"], tyre_age=max(0, age),
             stints=[], sc_laps=[], vsc_laps=[], track_status="green", elapsed_s=0.0, position=None,
             sets_available=None, standing_start=True, field=FieldState(nearby=[]), recent_lap_times_s=[])
     at = g_all[g_all["lap"] == k]
@@ -655,7 +681,8 @@ def snapshot_as_of(frame: pd.DataFrame, race: RaceParams, driver: str, k: int) -
     last = g[g["lap"] > k - RECENT_LAPS]["lap_time_s"]
     hist = _scenario(g)
     return Snapshot(
-        race=race.model_copy(update={"compounds": compounds}), driver=driver, laps_completed=k,
+        race=race.model_copy(update={"compounds": compounds, "pit_loss_s": pre_race_pit_loss(race.race_id)}),
+        driver=driver, laps_completed=k,
         compound=comp, tyre_age=_set_age(g, k, start_age, done),
         stints=[StintRecord(compound=c, laps=m, start_lap=f, start_age=a) for c, m, a, f in stints[:-1]],
         sc_laps=hist.sc_laps, vsc_laps=hist.vsc_laps, track_status=_track_status(str(row["track_status"])),
@@ -861,7 +888,7 @@ def midrace(sim_factory, frame: pd.DataFrame, race: RaceParams, laps_k=None, win
             for d, g in groups.items():
                 if k >= len(g) or (k > 0 and not (g["lap"] == k).any()):
                     continue
-                snap = snapshot_at(frame, race, d, k)
+                snap = with_race(snapshot_at(frame, race, d, k), race)   # the replay prices stops at race's
                 s = sim.fitted_for(snap)
                 interval = {}
                 if n_samples > 1:
@@ -1133,7 +1160,7 @@ def _replay_window(sim: Simulator, frame: pd.DataFrame, race: RaceParams, driver
     """The driver's real strategy over laps k + 1 to `upto` from snapshot_at(k), under the
     real SC and VSC laps. Returns (snapshot, SimResult, our clock after lap `upto`)."""
     g = frame[frame["driver"] == driver].sort_values("lap")
-    snap = snapshot_at(frame, race, driver, k)
+    snap = with_race(snapshot_at(frame, race, driver, k), race)
     snap = snap.model_copy(update={"race": snap.race.model_copy(update={"total_laps": upto})})
     stints, left = [], upto - k
     for s in remaining_plan(frame, driver, k).stints:
