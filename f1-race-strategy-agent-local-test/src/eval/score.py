@@ -144,6 +144,29 @@ def _on_proxy(plan, borrowed) -> str:
     return ";".join(sorted({s.compound for s in plan.stints} & set(borrowed)))
 
 
+class HindsightPitLossWarning(UserWarning):
+    """Policies are handed a frozen scenario's whole-race pit loss (a belief without the as-of one)."""
+
+
+def policy_scenario(scenario, belief):
+    """The scenario a policy is handed: its snapshot's race.pit_loss_s replaced by the pit loss
+    the belief prices stops with at that snapshot (Simulator.pit_loss_inputs: the as-of
+    estimate under SimConfig.pit_loss.source "asof"). A frozen scenario set carries the
+    whole-race value, which no policy may read (docs/eval.md "Pit loss and track status").
+    Unchanged when the belief reads the snapshot's own value."""
+    if not hasattr(belief, "pit_loss_inputs"):
+        return scenario
+    snap = scenario.snapshot
+    pl = belief.fitted_for(snap).pit_loss_inputs(snap) if hasattr(belief, "fitted_for") else belief.pit_loss_inputs(snap)
+    if pl.get("source") == "snapshot":
+        warnings.warn("the belief reads the snapshot's pit loss (SimConfig.pit_loss.source 'snapshot'): a frozen "
+                      "scenario carries the whole-race value, so policies see hindsight", HindsightPitLossWarning,
+                      stacklevel=2)
+        return scenario
+    race = snap.race.model_copy(update={"pit_loss_s": round(float(pl["pit_loss_s"]), 3)})
+    return scenario.model_copy(update={"snapshot": snap.model_copy(update={"race": race})})
+
+
 def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 0,
                    n_samples: int | None = None, max_stops: int = 2, ref_worlds=(),
                    reference: Reference | None = None) -> list[dict]:
@@ -188,11 +211,15 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
                 opt_final_position_mean=float(ref_pos.mean()) if ref_pos is not None else np.nan,
                 **near_ties(opt, snap))
     rows = []
+    # what the policies see: the scenario with the belief's as-of pit loss in its snapshot
+    # (policy_scenario); the world and the reference keep the frozen scenario
+    seen = policy_scenario(scenario, belief)
+    psnap = seen.snapshot
     for name, policy in policies.items():
         row = {**base, "policy": name}
         started = perf_counter()
         try:
-            decision = policy(scenario, belief, max_stops)
+            decision = policy(seen, belief, max_stops)
         except PolicyUnavailable as exc:
             rows.append({**row, "status": "unavailable", "reason": str(exc)})
             continue
@@ -210,13 +237,13 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
             row.update(decision=str(sub.get("decision", "")).strip().upper() or None,
                        p_pit=decisions.p_pit(sub))
             try:
-                plan = decisions.to_plan(snap, sub, belief, max_stops, seed=seed, n_samples=n)
+                plan = decisions.to_plan(psnap, sub, belief, max_stops, seed=seed, n_samples=n)
             except decisions.InvalidDecision as exc:
                 rows.append({**row, "status": "invalid", "reason": str(exc)})
                 continue
         if plan is None and decision.belief_optimum:
             try:
-                plan = decisions.belief_optimum(snap, belief, max_stops, seed=seed, n_samples=n)
+                plan = decisions.belief_optimum(psnap, belief, max_stops, seed=seed, n_samples=n)
             except decisions.InvalidDecision as exc:
                 rows.append({**row, "status": "invalid", "reason": str(exc)})
                 continue
@@ -308,7 +335,10 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     by default configs/sim/belief.yaml (to_snapshot window, traffic off, posterior draws and
     residual lap noise on); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off, as before
-    the split). Cached per race and role."""
+    the split). The world alone gets the race's
+    whole-race pit loss (Simulator(pit_loss_s=...)); the belief prices stops with the as-of
+    estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race
+    and role."""
     from ..sim import SimConfig, jobs
     from ..sim.compute import load_profile
     from ..sim.engine import Simulator
@@ -325,7 +355,9 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
                 races[race_id] = jobs.load_race(race_id, profile)
             data = races[race_id]
             config = belief_config if role == "belief" else world_config or data.config
-            cache[race_id, role] = Simulator(data.frame, config, data.practice, qualifying=getattr(data, "qualifying", None))
+            hindsight = {"pit_loss_s": data.race.pit_loss_s} if role == "world" else {}
+            cache[race_id, role] = Simulator(data.frame, config, data.practice,
+                                             qualifying=getattr(data, "qualifying", None), **hindsight)
         return cache[race_id, role]
     return sim_for
 

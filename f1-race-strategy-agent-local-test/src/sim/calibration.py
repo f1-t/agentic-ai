@@ -474,6 +474,8 @@ PHYSICS_MODULES = (
     "fuel_prior",
     # prices the dry compounds the race laps do not model (tiers 2, 3 and 5) and their R8 limit
     "proxy",
+    # the as-of pit loss and SC/VSC pit-loss factors a belief prices stops with
+    "pit_loss",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
