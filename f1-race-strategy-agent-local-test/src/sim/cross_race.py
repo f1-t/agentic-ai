@@ -1033,8 +1033,11 @@ def selection_tables(out, races, profile, n_boot=N_BOOT, arms=ARMS) -> dict:
         if w == BELIEF_WINDOW:
             t, bound, chosen[w] = belief_selection(arm_data, n_boot)
         else:
-            t = compare_arms(arm_data, incumbent(w), [w], n_boot)
-            chosen[w] = choose(t, w, incumbent(w))
+            # a run of a subset of the arms (pipeline tests) without the incumbent compares
+            # against the baseline
+            inc = incumbent(w) if incumbent(w) in arm_data else BASELINE
+            t = compare_arms(arm_data, inc, [w], n_boot)
+            chosen[w] = choose(t, w, inc)
         parts.append(t)
     return {"table": pd.concat(parts, ignore_index=True), "chosen": chosen, "bound": bound, "arm_data": arm_data}
 
