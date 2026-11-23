@@ -331,6 +331,18 @@ class ScQueue(_Cfg):
     held_behind_laps: float | None = Field(default=None, gt=0)
 
 
+class WearGuard(_Cfg):
+    """The judge's thin-fit wear guard (sim/wear_guard.py): whole-race fits only (fit_window full);
+    a compound with at least one but fewer than min_drivers drivers or min_rows clean race rows."""
+
+    enabled: bool = False
+    min_drivers: int = Field(default=3, ge=1)
+    min_rows: int = Field(default=40, ge=1)
+    # the fit's standard error of a thin compound's wear counts only the laps, not the cars: with
+    # this on it is scaled by sqrt(min_drivers / n_drivers) when fewer cars than min_drivers ran it
+    scale_sd_by_drivers: bool = False
+
+
 class WearCliff(_Cfg):
     """Tyre life as physics (sim/cliff.py): past a compound's support edge E a lap costs
     min(kappa (age - E)^2, cap_s_per_lap) more. Both simulators start from the same historical
@@ -472,6 +484,11 @@ class SimConfig(_Cfg):
     # proxy rather than fitted from a handful of laps (Simulator._thin_dropped); None (the default)
     # fits every compound with min_samples rows, as before
     min_race_rows_to_fit: int | None = Field(default=None, ge=1)
+    # the judge's thin-fit wear guard (sim/wear_guard.py): in the whole-race fit, a compound whose
+    # wear rests on fewer than min_drivers drivers or min_rows clean race rows is shrunk by precision
+    # toward the as-of historical wear, keeping its mean lap; off by default, left out of config_hash
+    # at its default
+    wear_guard: WearGuard = Field(default_factory=lambda: WearGuard())
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
     # pit-stop durations (PitStops); left out of config_hash at its default

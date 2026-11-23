@@ -84,6 +84,16 @@ factors:
   cliff_edge_race:
     note: the judge's edge from this race alone (the oldest age raced, the earlier design)
     world: {wear_cliff: {world_edge: race}}
+  # the judge's thin-fit wear guard (sim/wear_guard.py; off by default): fewer than 3 drivers or 40
+  # clean race rows on a compound shrinks its wear by precision toward the as-of historical wear
+  judge_wear_guard:
+    note: the judge's thin wear fits shrunk toward the as-of history by precision (SimConfig.wear_guard)
+    world: {wear_guard: {enabled: true}}
+    requires: [src.sim.wear_guard]
+  judge_wear_guard_scaled:
+    note: the same with the thin fit's standard error scaled by sqrt(3 / drivers) below 3 drivers
+    world: {wear_guard: {enabled: true, scale_sd_by_drivers: true}}
+    requires: [src.sim.wear_guard]
   wear_cliff_off:
     note: no wear cliff in either simulator (and no R8), linear wear past every edge
     both: {wear_cliff: {enabled: false}}

@@ -407,6 +407,8 @@ class Simulator:
         """
         cfg = self.config
         if self.window is not None or (cfg.fit_window == "full" and not cfg.exclude_snapshot_driver):
+            if cfg.fit_window == "full" and cfg.wear_guard.enabled:
+                self._wear_guarded(snapshot)
             return self
         k0 = (_cal.calibration_point(snapshot, cfg.calibration_every, self.weather, cfg.recalibrate_temp_delta_c)
               if cfg.fit_window == "to_snapshot" else None)
@@ -423,9 +425,23 @@ class Simulator:
                 del self._fits[next(iter(self._fits))]
             fit = copy.copy(self)
             fit.window, fit._fits, fit._cliffs = key, {}, {}
+            fit._guard_race = None
             fit._fit_window(snapshot, k0 or 0)
+            if cfg.fit_window == "full" and cfg.wear_guard.enabled:
+                fit._wear_guarded(snapshot)
             self._fits[cache_key] = fit
         return self._fits[cache_key]
+
+    def _wear_guarded(self, snapshot):
+        """The thin-fit wear guard on this whole-race fit, once per race (wear_guard.guarded):
+        SimConfig.wear_guard, the judge only. The race id comes from the snapshot, which is why
+        it is applied here rather than in _fit."""
+        rid = snapshot.race.race_id
+        if getattr(self, "_guard_race", None) == rid:
+            return
+        from . import wear_guard as _wg
+        self.degradation, _ = _wg.guarded(self.degradation, self.laps, rid, self.config.wear_guard)
+        self._guard_race = rid
 
     def point_estimate(self) -> "Simulator":
         """A shallow copy that simulates the point estimate: no posterior parameter draw and no

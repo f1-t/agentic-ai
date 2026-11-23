@@ -1106,6 +1106,94 @@ SOFT (8 laps raced, a slightly negative fitted wear from 11 race laps) is planne
 Spain turns one-stop on the proxied HARD (lap-0 stop mode 4 of 7). That is the trade the fidelity
 scorecard measures; (b) is the default until it does.
 
+### Thin wear fits: the judge's guard (`wear_guard`, off by default)
+
+Some of the judge's whole-race wear slopes rest on a handful of laps:
+- 2022 Brazil HARD: 0.160 s/lap from 10 clean rows of one driver, at ages 2-11.
+- 2023 Bahrain MEDIUM: 0.313 from 8 rows.
+- 2024 Imola SOFT: -0.015 from 11 rows of two drivers.
+
+An over-steep HARD at Brazil charges a 42-lap HARD stint about 80 s. That is the regret of
+run_to_flag / one_stop_total at lap 5 there. A negative SOFT at Imola makes 30-lap SOFT stints
+look free.
+
+`SimConfig.wear_guard` (`src/sim/wear_guard.py`) works on the judge's whole-race fit only.
+Thresholds were fixed before measuring:
+- A compound qualifies when it has at least one, but fewer than `min_drivers` 3 drivers or
+  `min_rows` 40 clean race rows.
+- Its wear w (fit sd s) is shrunk by precision toward the historical wear p (sd s_p):
+  w' = (w/s^2 + p/s_p^2) / (1/s^2 + 1/s_p^2).
+- The base moves by (w - w') x the compound's mean fit age, so its mean lap is kept.
+- `scale_sd_by_drivers` also widens s by sqrt(3 / drivers) when fewer than 3 cars ran the compound.
+- A compound with no race rows is the proxy's and is left alone.
+
+p comes from `data/derived/wear_history.csv` (`python -m src.sim.wear_guard build`): the judge's
+own fits (default world, guard off) of 27 non-held-out cached races. `wear_prior` reads it as of
+the race:
+- strictly earlier races only;
+- well-supported fits only (5+ drivers, 60+ rows; no wet race, no 2025 Qatar);
+- wear regressed on the compound's common hardness index;
+- with fewer than 8 such fits, a priori `ROLE_PRIOR` (sd 0.05).
+
+It is registered in `provenance.py` as `wear_history`. The guard is off by default and left out
+of `config_hash` at its default; with it off, the whole-field replay rows are byte-identical to
+main.
+
+The fits it changes on the calibration races (wear s/lap, guarded; rows / drivers):
+
+| race | compound | fit (sd) | history (sd) | guard | scaled | rows / drivers |
+|---|---|---|---|---|---|---|
+| 2023 Bahrain | MEDIUM | 0.313 (0.068) | 0.063 (0.048) | 0.146 | 0.098 | 8 / 1 |
+| 2022 Brazil | HARD | 0.160 (0.042) | 0.062 (0.050) | 0.119 | 0.093 | 10 / 1 |
+| 2022 Baku | SOFT | 0.129 (0.048) | 0.023 (0.058) | 0.086 | 0.058 | 10 / 1 |
+| 2024 Imola | SOFT | -0.015 (0.067) | 0.042 (0.048) | 0.023 | 0.028 | 11 / 2 |
+| 2021 Austria | SOFT | 0.042 (0.021) | 0.080 (0.050, a priori) | 0.047 | 0.047 | 36 / 4 |
+| 2022 Spain | HARD | 0.166 (0.009) | 0.071 (0.057) | 0.164 | 0.159 | 29 / 1 |
+| 2022 Abu Dhabi | SOFT | 0.178 (0.014) | 0.034 (0.048) | 0.167 | 0.167 | 37 / 3 |
+
+**Measured** (2026-11-22, the 19 calibration races, guard against off; base the adopted default;
+race-cluster 95%).
+
+Per-car fidelity ablation:
+
+| factor | close pairs | rel gap s | B2 rank rho | B2 regret s | pit-now |
+|---|---|---|---|---|---|
+| base level | 0.753 | 13.17 | 0.868 | 4.11 | 0.816 |
+| `wear_guard` | +0.000 [+0.000, +0.000] | +0.015 [+0.001, +0.043] | +0.009 [+0.001, +0.019] | -0.46 [-1.15, -0.00] | +0.014 [+0.000, +0.039] |
+| `wear_guard` + `scale_sd_by_drivers` | +0.000 [+0.000, +0.000] | +0.015 [+0.001, +0.043] | +0.009 [-0.001, +0.021] | -0.56 [-1.31, -0.00] | +0.015 [+0.000, +0.043] |
+
+Whole-field replay (k 0-40): close pairs +0.001 [+0.000, +0.003], relative gap +0.002 s, the
+same for both variants.
+
+dev20 rescore of regret against the judge's own reference. Affected = the 7 races in the table
+above.
+
+| policy | guard, all | guard, affected | scaled, all | scaled, affected |
+|---|---|---|---|---|
+| belief_optimizer | -0.34 [-0.97, +0.01] | -0.91 [-2.55, +0.01] | -0.38 [-1.08, +0.01] | -1.03 [-2.82, +0.00] |
+| run_to_flag | -0.64 [-1.45, +0.02] | -1.70 [-3.49, -0.26] | -0.81 [-1.83, +0.03] | -2.16 [-4.32, -0.18] |
+| one_stop_total | -0.63 [-1.42, +0.02] | -1.69 [-3.46, -0.28] | -0.80 [-1.78, +0.02] | -2.14 [-4.27, -0.26] |
+| actual_strategy (expert consistency) | -0.39 [-1.15, +0.00] | -1.01 [-2.84, +0.00] | -0.44 [-1.29, +0.00] | |
+
+- **Brazil 2022 at lap 5** (run_to_flag / one_stop_total on [SOFT 24, HARD 42]): 79.1 s off, 54.9 s
+  guarded, 43.2 s scaled.
+- **Imola 2024:** actual_strategy 17.8 to 11.6 (11.0 scaled), belief_optimizer -5.7 s. This is
+  the negative SOFT wear fixed.
+- **Expert consistency at hard circuits:** -1.34 [-3.96, +0.00]. Easy and street circuits are level.
+- **References with a stint beyond anything raced:** 0.198 to 0.190.
+- **With the guard off,** every dev20 baseline row (plans, times, references, regrets) is identical
+  to the committed `reports/eval/rerun/dev20/baselines.csv`.
+
+**Reading under the selection rule.** The order measures hold: per-car close pairs are unchanged
+and the whole-field moves +0.001. The relative gap moves +0.015 s. Belief-judge agreement improves:
+rank +0.009, the regret of the belief's favourite -0.46 / -0.56 s with intervals excluding 0, and
+pit-now +0.014. Expert consistency improves.
+
+Both variants are adopt-candidates for the judge. `scale_sd_by_drivers` is the stronger of the two
+pre-stated forms, so it is the recommended one: `wear_guard: {enabled: true, scale_sd_by_drivers: true}`
+in the judge's config. Adopting it changes the judge, so every reference and result scored on the
+old judge would need rebuilding.
+
 ### Fuel identification (measured, not adopted)
 
 The fuel slope's stated interval was far too tight: the config prior (-0.045 s/lap, tau 0.008)
