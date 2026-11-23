@@ -116,6 +116,16 @@ def _learned_recorded():
     return sorted(out)
 
 
+def _wear_recorded():
+    from . import wear_guard
+    return wear_guard.recorded()
+
+
+def _wear_for(race_id):
+    from . import wear_guard
+    return wear_guard.races_for(race_id)
+
+
 def _overtaking_recorded():
     from . import overtaking
     return overtaking.recorded()
@@ -127,6 +137,11 @@ def _overtaking_for(race_id):
 
 
 POLICY_SIDE = {
+    "wear_history": Artifact(
+        "data/derived/wear_history.csv: the historical wear per compound the judge's thin-fit wear guard shrinks "
+        "toward (wear_guard.wear_prior; SimConfig.wear_guard, judge only today), races strictly before the race; "
+        "no earlier history: wear_guard.ROLE_PRIOR", "as_of", _wear_recorded, _wear_for,
+        ("data/derived/wear_history.csv",)),
     "overtaking_difficulty": Artifact(
         "data/derived/overtaking.csv and overtaking_pairs.csv: the passing difficulty of the belief's traffic "
         "(traffic difficulty \"asof\", overtaking.difficulty_prior), races strictly before the race; no earlier "

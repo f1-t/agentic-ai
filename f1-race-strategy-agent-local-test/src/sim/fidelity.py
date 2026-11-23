@@ -498,8 +498,14 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
         else:
             add("sc_queue", "safety-car queue: the car placed among the field visible at the snapshot", _K,
                 "the others' times as of the snapshot, projected with gaps held; the car's as-of pace")
+    wg = getattr(cfg, "wear_guard", None)
+    if wg is not None and wg.enabled and cfg.fit_window == "full":
+        add("wear_guard", f"thin-fit wear guard (under {wg.min_drivers} drivers or {wg.min_rows} rows: shrunk "
+                          "toward the historical wear)", _H,
+            "data/derived/wear_history.csv, races strictly before this one; which compounds are thin is read from "
+            "this race's fit rows, as the fit itself is")
     add("min_stint_two_compounds", "R1-R3: minimum stint, two dry compounds", _R)
-    covered = {"fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
+    covered = {"wear_guard","fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
                "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit", "sc_queue",
@@ -2582,7 +2588,7 @@ def _options(args) -> Options:
     return Options(b_drivers=args.drivers, b_every=args.every, samples=0 if args.coverage else args.samples,
                    n_one=args.n_one, n_two=args.n_two, lodo=not args.no_lodo, loso=not args.no_loso,
                    grid_references=not args.no_grid_references, hindsight_variants=not args.no_hindsight_variants,
-                   components=not args.no_components, seed=args.seed, field_replay=args.field_replay)
+                   components=not args.no_components, seed=args.seed, field_replay=args.field_replay, max_stops=getattr(args, "max_stops", 2))
 
 
 def _common(ap):
@@ -2608,6 +2614,8 @@ def _common(ap):
     ap.add_argument("--field-replay", action="store_true",
                     help="also run src/sim/field_replay.py's whole-field replay and report its summary")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--max-stops", type=int, default=2, choices=(1, 2, 3),
+                    help="future stops the judge's reference search allows (A4, grid references); 3 is the switch")
     ap.add_argument("--jobs", type=int, default=DEFAULT_JOBS,
                     help=f"worker processes, one BLAS thread each (default min(6, cpu_count // 2) = {DEFAULT_JOBS})")
 

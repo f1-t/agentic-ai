@@ -126,6 +126,28 @@ def score_batch(snapshot: Snapshot, plans, sim, *, seed=0, n_samples=None, scena
     return evaluations, contract_plans, assignments, batch
 
 
+# a candidate list longer than this (only a three-stop search, max_stops 3: about 0.3 to 1 million
+# plans at lap 0) is scored in chunks of SCORE_CHUNK plans, each one simulate_batch call under the
+# same draws, so memory stays bounded; shorter lists are scored in one call, as before
+SCORE_ONE_CALL = 60_000
+SCORE_CHUNK = 20_000
+
+
+def _score_chunked(snapshot, plans, sim, *, seed, n_samples, scenario, state):
+    """score_batch over `plans`, in one call up to SCORE_ONE_CALL plans, else in chunks; the
+    evaluations, contract plans and assignments concatenated, and the last chunk's batch."""
+    if len(plans) <= SCORE_ONE_CALL:
+        return score_batch(snapshot, plans, sim, seed=seed, n_samples=n_samples, scenario=scenario, state=state)
+    evals, contract, assign, batch = [], [], [], None
+    for i in range(0, len(plans), SCORE_CHUNK):
+        e, c, a, batch = score_batch(snapshot, plans[i:i + SCORE_CHUNK], sim, seed=seed, n_samples=n_samples,
+                                     scenario=scenario, state=state)
+        evals += e
+        contract += c
+        assign += a
+    return evals, contract, assign, batch
+
+
 def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops=2,
                    scenario=None, return_times=False, min_first_laps=1, max_first_laps=None,
                    next_compound=None) -> BatchOptimizationResult:
@@ -165,7 +187,7 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
                    and (max_first_laps is None or p.stints[0].laps <= max_first_laps)
                    and (next_compound is None or (len(p.stints) > 1 and p.stints[1].compound == next_compound))]
     plans, limit = _stint_limit_filter(snapshot, sim, allowed)
-    evals, contract_plans, assignments, batch = score_batch(
+    evals, contract_plans, assignments, batch = _score_chunked(
         snapshot, plans, sim, seed=seed, n_samples=n_samples, scenario=scenario, state=state)
     scored = [i for i, e in enumerate(evals) if e is not None]
     if not scored:
