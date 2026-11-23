@@ -1,0 +1,21 @@
+# LEGACY, for reproducing results produced before the judge's safety-car queue was adopted
+# (docs/eval.md "The current configuration", adopted 2026-11-22): the eval's default world from
+# v3 (#138) to the queue's adoption, without config.WORLD_SC_QUEUE. The belief is unchanged by the
+# adoption (configs/sim/belief.yaml). tests/test_eval_default_config.py checks it is the default
+# world with the queue off and nothing else.
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
+wear_guard:
+  enabled: true
+  scale_sd_by_drivers: true
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
+    duration: history
+    pooled: true

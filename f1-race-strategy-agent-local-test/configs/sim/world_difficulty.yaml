@@ -15,6 +15,11 @@ wear_cliff:
 wear_guard:   # as world.yaml
   enabled: true
   scale_sd_by_drivers: true
+sc_queue:
+  enabled: true
+  mode: single
+  held_behind_laps: 1.25
+  placement: record
 events:
   name: hybrid
   params:

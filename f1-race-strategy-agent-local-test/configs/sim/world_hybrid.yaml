@@ -5,7 +5,8 @@
 # (with the field's recorded lap times), later ones drawn at the rate model's rates, the same draws
 # for every plan and the reference. Opt-in until the fidelity scorecard chose it; now the default,
 # so `score` without --world-config runs this world. The thin-fit wear guard config.WORLD_WEAR_GUARD
-# (adopted 2026-11-22, v3; before: configs/sim/legacy/world_pre_v3.yaml). tests/test_eval_default_config.py
+# (adopted 2026-11-22, v3; before: configs/sim/legacy/world_pre_v3.yaml). The safety-car queue
+# config.WORLD_SC_QUEUE (adopted 2026-11-22; before: configs/sim/legacy/world_pre_sc_queue.yaml). tests/test_eval_default_config.py
 # checks it equals score.default_world_config(config.world_default(SimConfig())).
 fit_window: full
 degradation:
@@ -17,6 +18,11 @@ wear_cliff:
 wear_guard:
   enabled: true
   scale_sd_by_drivers: true
+sc_queue:
+  enabled: true
+  mode: single
+  held_behind_laps: 1.25
+  placement: record
 events:
   name: hybrid
   params:
