@@ -1,0 +1,13 @@
+{
+  "format": 2,
+  "hindsight": false,
+  "key": "db5ae10bb254",
+  "max_stops": 2,
+  "n_samples": 50,
+  "n_scenarios": 225,
+  "scenario_set": "test9",
+  "seed": 0,
+  "set_digest": "663f59b88d5f90804ef4c5b7f816bc0abf355114c84d7acc298abeb7aa1ba1b8",
+  "sim_code_version": "16e496eb8153",
+  "world_config_hash": "9b98afd55974"
+}
