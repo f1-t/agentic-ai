@@ -1497,6 +1497,27 @@ badly timed plans of the expected stop count. Against the rule baselines the loo
 overall (base: -5.56 s against `run_to_flag`) and behind at the low-wear four (+1.95 base, +1.65 at
 L = 2, +1.73 at L = 5).
 
+Live agent (v2free, 100 dev20 scenarios, 70 at laps 0-15; judge regret in s; race:driver cluster
+intervals):
+
+| arm | agent | look-ahead | agent - look-ahead |
+|---|---|---|---|
+| prior off, `AGENT_PRERACE` off | 5.87 | 5.91 | -0.03 [-0.14, +0.05] |
+| prior off, block on | 5.91 | 5.91 | +0.00 [-0.10, +0.07] |
+| L = 5, block off | 5.92 | 5.72 | +0.20 [-0.02, +0.50] |
+| L = 5, block on | 6.03 | 5.72 | +0.32 [-0.11, +0.85] |
+
+Block on minus off: +0.04 [-0.01, +0.08] with the prior off (laps 0-15 +0.075 [+0.025, +0.130],
+worse), +0.11 [-0.25, +0.57] with it on. The model cites the block in 1 to 4 departures of 100. The
+guidance as text adds nothing measurable, with or without the prior in the look-ahead. With the
+prior on, the model gives back the look-ahead's gain: `rank_plans` shows plans faster in time below
+the prior-ranked plan 1, and the model departs toward them.
+
+**Decision (2026-11-22).** Not adopted for the rerun. `prerace.stops_prior_s` stays 0 and
+`AGENT_PRERACE` stays off. Both remain switches, and the tables stay in the repo. The scorecard's
+gain at L = 5 does not carry to the look-ahead's full search on dev20, and the agent gives back
+what remains.
+
 Tested and not adopted (no interval excludes 0 in the useful direction):
 - tyre-life prior against each race's observed edge (63 observations, as of each race; base MAE 6.96
   laps): ratings replacing the trio shift +0.43 [-0.99, +1.73]; ratings supplementing it -0.03
