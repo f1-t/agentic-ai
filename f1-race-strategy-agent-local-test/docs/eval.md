@@ -1513,6 +1513,11 @@ guidance as text adds nothing measurable, with or without the prior in the look-
 prior on, the model gives back the look-ahead's gain: `rank_plans` shows plans faster in time below
 the prior-ranked plan 1, and the model departs toward them.
 
+**Decision (2026-11-22).** Not adopted for the rerun. `prerace.stops_prior_s` stays 0 and
+`AGENT_PRERACE` stays off. Both remain switches, and the tables stay in the repo. The scorecard's
+gain at L = 5 does not carry to the look-ahead's full search on dev20, and the agent gives back
+what remains.
+
 Tested and not adopted (no interval excludes 0 in the useful direction):
 - tyre-life prior against each race's observed edge (63 observations, as of each race; base MAE 6.96
   laps): ratings replacing the trio shift +0.43 [-0.99, +1.73]; ratings supplementing it -0.03
