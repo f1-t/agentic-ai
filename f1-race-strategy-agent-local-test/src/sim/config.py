@@ -386,10 +386,20 @@ class PreRace(_Cfg):
                         traction) as covariates of tyre life, a ridge fit on earlier races, in place
                         of the nominated-trio severity shift; "supplement": on top of it
     tyre_life_guidance  the guidance's implied stint lengths combined by precision with the
-                        historical tyre-life prior (bias and sd as of the race)"""
+                        historical tyre-life prior (bias and sd as of the race): "windows" from
+                        stated pit-window laps only, "stated" also from the fastest expected
+                        strategy's compound sequence where no laps are stated
+    stops_prior_s       the guidance's expected stop count as a prior on the belief's RANKING of plans
+                        (optimizer_bridge.optimize_batch: the look-ahead, belief_optimizer, the
+                        continuations of a decision, rank_plans): a plan ranks on its mean time plus
+                        this many seconds per stop by which its stops left differ from the expected
+                        stops left (prerace.expected_stops_left). 0 (the default) is off; a race with
+                        no guidance stop count ranks as before; the reported times never change and the
+                        judge (fit_window full) never reads it"""
 
     tyre_life_ratings: Literal["off", "replace", "supplement"] = "off"
     tyre_life_guidance: Literal["off", "windows", "stated"] = "off"
+    stops_prior_s: float = Field(default=0.0, ge=0)
 
 
 class SimConfig(_Cfg):

@@ -158,6 +158,13 @@ def expected_stops(race_id) -> int | None:
     return s[0]["stops"] if s else None
 
 
+def expected_stops_left(race_id, stops_made: int) -> int | None:
+    """max(0, expected_stops - stops_made): the stops the guidance's fastest strategy leaves after
+    `stops_made`; None without a guidance stop count."""
+    e = expected_stops(race_id)
+    return None if e is None else max(0, int(e) - int(stops_made))
+
+
 # the share of a stated strategy's distance each role runs when no laps are stated ("stated" mode):
 # proportional to a role's life weight, one life-ratio step (0.75, configs/tyre_history.yaml's
 # default_per_step) per role step; stated a priori

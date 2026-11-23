@@ -518,7 +518,9 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
                     earlier rated races) or no ratings for a race: the trio shift alone.
     guidance:       combine, by precision, with the supplier's pre-race guidance (the longest stint
                     its expected strategies imply on the role, prerace.guidance_life), its bias and
-                    sd from the earlier races' guidance against their observed edges
+                    sd from the earlier races' guidance against their observed edges; "off" (as
+                    before), "windows" (stated pit-window laps only) or "stated" (also the fastest
+                    strategy's compound sequence where no laps are stated, prerace.ROLE_LIFE_WEIGHT)
     Always returns; never reads a race that started on or after `race_id`."""
     role = str(role).upper()
     if role not in ROLES:

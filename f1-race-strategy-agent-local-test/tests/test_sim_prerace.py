@@ -109,6 +109,27 @@ def test_agent_block_names_no_race(monkeypatch):
         assert not re.search(r"\b(19|20)\d\d\b", text), rid
 
 
+def _snap(race_id, stops_made):
+    from types import SimpleNamespace
+    return SimpleNamespace(race=SimpleNamespace(race_id=race_id), stints=[None] * stops_made)
+
+
+def test_stops_prior_only_on_a_windowed_belief_with_guidance():
+    from types import SimpleNamespace
+    from src.sim.optimizer_bridge import _stops_prior
+    on = SimConfig(prerace=PreRace(stops_prior_s=2.0), fit_window="to_snapshot")
+    assert _stops_prior(_snap("2021_04_spain", 0), SimpleNamespace(config=on)) == (2.0, 2)
+    assert _stops_prior(_snap("2021_04_spain", 1), SimpleNamespace(config=on)) == (2.0, 1)
+    assert _stops_prior(_snap("2021_04_spain", 3), SimpleNamespace(config=on)) == (2.0, 0)
+    # off, the judge, a race with no guidance row, a synthetic race: the ranking as before
+    off = SimConfig(fit_window="to_snapshot")
+    judge = on.model_copy(update={"fit_window": "full"})
+    assert _stops_prior(_snap("2021_04_spain", 0), SimpleNamespace(config=off)) is None
+    assert _stops_prior(_snap("2021_04_spain", 0), SimpleNamespace(config=judge)) is None
+    assert _stops_prior(_snap("2018_05_spain", 0), SimpleNamespace(config=on)) is None
+    assert _stops_prior(_snap("1990_01_synthetic", 0), SimpleNamespace(config=on)) is None
+
+
 def test_agent_block_off_by_default(monkeypatch):
     monkeypatch.delenv("AGENT_PRERACE", raising=False)
     assert not agent_tools.prerace_shown()

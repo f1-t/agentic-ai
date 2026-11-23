@@ -1285,6 +1285,10 @@ def rank_plans(snapshot: Snapshot, *, families=False, n_samples=None, sim=None, 
     else:
         decision = {"favoured": favoured, "share": 1.0, "reading": "every legal plan pits now"}
     more = {"families_dropped": dropped} if families else {}
+    from .optimizer_bridge import _stops_prior
+    if _stops_prior(snapshot, fit) is not None:   # SimConfig.prerace.stops_prior_s: the order is not time alone
+        more["ranking"] = ("plan 1 ranks on mean time plus a pre-race prior on the number of stops; gap_s is "
+                           "time alone, so a plan below plan 1 can show a negative gap")
     return _jsonable({"plans": out, "decision": decision, "flags": general, "pit_window": window["summary"],
                       **more, "n_draws": int(times.shape[1]),
                       "note": "gaps: plan minus the best plan over shared draws (negative: faster); shares cover "
