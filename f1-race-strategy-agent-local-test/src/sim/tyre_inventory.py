@@ -70,11 +70,8 @@ def weekend(race_id: str):
 
 
 def visible_race_laps(race: pd.DataFrame, driver: str, k: int) -> pd.DataFrame:
-    """Race laps completed by the end of `driver`'s lap k (session time), every car; k = 0 is the
-    start: no lap is complete yet, but the first stints are known (the grid), so the cars' lap-1
-    rows are kept for their compound and TyreLife only."""
-    if k <= 0:
-        return race[race["LapNumber"] == 1]
+    """Race laps completed by the end of `driver`'s lap k (session time, data.visible_rows), every
+    car. k >= 1; the start (k = 0) reads no race lap (start_laps)."""
     own = race[(race["Driver"] == driver) & (race["LapNumber"] == k)]
     t = own["Time"].dt.total_seconds().to_numpy(dtype=float)
     if not len(t) or not np.isfinite(t[0]):
@@ -84,18 +81,53 @@ def visible_race_laps(race: pd.DataFrame, driver: str, k: int) -> pd.DataFrame:
     return seen.drop(columns="end_s")
 
 
-def sets_at(race_id: str, driver: str, k: int):
+def start_laps(sessions: dict, driver: str, compound: str, tyre_age: int) -> pd.DataFrame:
+    """The race at the start, from what the snapshot carries and the weekend before it, no race
+    lap: one lap-1 row for `driver` on his starting set (the snapshot's compound and tyre age,
+    known on the grid), and a row with no compound for each teammate the weekend's sessions name
+    (tyre_sets reads the team's regular drivers from the race laps, for reserve stand-ins)."""
+    team, mates = None, set()
+    # the team's drivers in qualifying when it ran (a reserve seen only in practice is not a regular)
+    named = [sessions["Q"]] if sessions.get("Q") is not None else list(sessions.values())
+    for laps in [*named, *sessions.values()]:
+        if laps is None or "Team" not in laps or team is not None:
+            continue
+        mine = laps.loc[laps["Driver"] == driver, "Team"].dropna()
+        if len(mine):
+            team = mine.iloc[0]
+    for laps in named:
+        if laps is not None and "Team" in laps and team is not None:
+            mates |= set(laps.loc[laps["Team"] == team, "Driver"].dropna()) - {driver}
+    rows = [{"Driver": driver, "LapNumber": 1.0, "Stint": 1.0, "Compound": compound,
+             "TyreLife": float(int(tyre_age) + 1), "FreshTyre": int(tyre_age) == 0, "Team": team}]
+    rows += [{"Driver": m, "LapNumber": 1.0, "Stint": 1.0, "Compound": None, "TyreLife": np.nan,
+              "FreshTyre": None, "Team": team} for m in sorted(mates)]
+    return pd.DataFrame(rows)
+
+
+def sets_at(race_id: str, driver: str, k: int, start=None, weekend_data=None):
     """The driver's held sets at the end of his lap k ([{compound, laps_run, source, set_id}]),
-    the fitted one left out; None when the race stays unconstrained."""
-    w = weekend(race_id)
+    the fitted one left out; None when the race stays unconstrained. At the start (k = 0) the
+    starting set is `start` = (compound, tyre age), the snapshot's, and no race lap is read.
+    `weekend_data` = (sessions, race laps, allocation) stands in for weekend(race_id) (the
+    future-blindness harness passes its altered race)."""
+    w = weekend_data if weekend_data is not None else weekend(race_id)
     if w is None:
         return None
     sessions, race, allocation = w
-    season = parse_race_id(race_id)[0]
-    laps = visible_race_laps(race, driver, k)
+    try:
+        season = int(parse_race_id(race_id)[0])
+    except (ValueError, TypeError):
+        season = FIRST_FIXED_SEASON
+    if int(k) <= 0:
+        if start is None:
+            return None
+        laps = start_laps(sessions, driver, *start)
+    else:
+        laps = visible_race_laps(race, driver, k)
     if not (laps["Driver"] == driver).any():
         return None
-    kw = dict(race_laps=laps, upto_lap=max(int(k), 1), q2_start_rule=int(season) <= Q2_START_RULE_LAST_SEASON)
+    kw = dict(race_laps=laps, upto_lap=max(int(k), 1), q2_start_rule=season <= Q2_START_RULE_LAST_SEASON)
     first = tyre_sets.weekend_report(sessions, driver, allocation, {}, **kw)
     extra = phantoms(first["notes"])
     if not extra:
@@ -116,13 +148,14 @@ def phantoms(notes) -> dict:
     return out
 
 
-def with_sets(snapshot, race_id: str | None = None):
+def with_sets(snapshot, race_id: str | None = None, weekend_data=None):
     """`snapshot` with sets_available filled from sets_at (unchanged when the race stays
     unconstrained or the snapshot already carries an inventory)."""
     if snapshot.sets_available is not None:
         return snapshot
     rid = race_id or snapshot.race.race_id
-    sets = sets_at(rid, snapshot.driver, int(snapshot.laps_completed))
+    sets = sets_at(rid, snapshot.driver, int(snapshot.laps_completed),
+                   start=(snapshot.compound, snapshot.tyre_age), weekend_data=weekend_data)
     if sets is None:
         return snapshot
     from ..contracts import TyreSet

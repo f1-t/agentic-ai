@@ -896,12 +896,38 @@ def serving(data: jobs.RaceData, extra=()):
         yield
 
 
+def inventory_laps(frame: pd.DataFrame) -> pd.DataFrame:
+    """The race frame as the raw laps tyre_inventory reads (Driver, LapNumber, Stint, Compound,
+    TyreLife, FreshTyre, Time, Team): the recorded or the altered race, as the harness built it.
+    FreshTyre is TyreLife 1, as the frame does not carry it."""
+    life = pd.to_numeric(frame["tyre_age"], errors="coerce")
+    return pd.DataFrame({"Driver": frame["driver"].to_numpy(), "LapNumber": frame["lap"].to_numpy(dtype=float),
+                         "Stint": frame["stint"].to_numpy(dtype=float), "Compound": frame["compound"].to_numpy(),
+                         "TyreLife": life.to_numpy(dtype=float), "FreshTyre": (life == 1).to_numpy(),
+                         "Time": pd.to_timedelta(pd.to_numeric(frame["end_s"], errors="coerce"), unit="s").to_numpy(),
+                         "Team": frame["team"].to_numpy()})
+
+
+def with_inventory(data: jobs.RaceData, snap):
+    """The snapshot with the tyre sets (SimConfig.tyre_inventory in the belief), read from the
+    race as the harness built it (recorded or altered) and the weekend's sessions (before the race,
+    never altered; a synthetic race has none and takes the standard allocation): the inventory, and
+    everything that reads it (race_picture's sets_left, the look-ahead, the baselines), is observed."""
+    from src.sim import tyre_inventory
+    if not agent_tools.belief_config().tyre_inventory:
+        return snap
+    w = tyre_inventory.weekend(data.race_id)
+    sessions, allocation = (w[0], w[2]) if w is not None else ({}, dict(tyre_inventory.ALLOCATION_STANDARD))
+    return tyre_inventory.with_sets(snap, data.race_id, weekend_data=(sessions, inventory_laps(data.frame), allocation))
+
+
 def observe(data: jobs.RaceData, driver: str, lap: int, *, snapshot_fix=None, patches=()) -> dict:
     """Every policy-visible surface (SURFACES) at (driver, lap) of `data`. `snapshot_fix`
     rewrites the built snapshot first (a known leak's neutraliser)."""
     snap = BUILDER(data.frame, data.race, driver, lap)
     if snapshot_fix is not None:
         snap = snapshot_fix(snap)
+    snap = with_inventory(data, snap)
     view = RaceSnapshot.from_contract(snap)
     shown = tools.set_snapshot(snap)   # what the model is shown (anonymised unless AGENT_SHOW_IDENTITY)
     scenario = Scenario(scenario_id=f"{data.race_id}:{driver}:{lap:02d}", race_id=data.race_id, driver=driver,
