@@ -530,6 +530,12 @@ class SimConfig(_Cfg):
     # the supplier's pre-race publications in the belief's priors (PreRace); left out of
     # config_hash at its default
     prerace: PreRace = Field(default_factory=PreRace)
+    # the driver's tyre sets at the snapshot (sim/tyre_inventory.py): off, every later stint is a new
+    # set; on, snapshots carry the as-of inventory (weekend allocation minus the sets opened before
+    # the race and fitted in it so far) and a later stint takes the best set of its compound left (new
+    # when one remains, else the least used, at its laps run); a compound with no set left makes the
+    # plan infeasible. Left out of config_hash at its default
+    tyre_inventory: bool = False
 
     @classmethod
     def from_file(cls, path):

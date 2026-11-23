@@ -61,7 +61,7 @@ import numpy as np
 import pandas as pd
 
 from ..contracts import Plan
-from . import calibrate, calibration, cross_race, rules
+from . import calibrate, calibration, cross_race, rules, tyre_inventory
 from .config import SimConfig
 from .engine import Simulator
 from .events import Scenario as EventScenario
@@ -1140,6 +1140,8 @@ def section_b(data, spec: Spec, opts: Options, belief=None, world=None, pool=())
                 snap = build(data.frame, data.race, d, k)
             except ValueError:   # no snapshot here (a set with no recorded compound): skipped, as sample_race does
                 continue
+            if tyre_inventory.on(belief.config, world.config):   # the as-of sets, read by both simulators
+                snap = tyre_inventory.with_sets(snap, data.race_id)
             # the judge scores the policy's snapshot (its pit loss comes from race_pit_loss_s), with any
             # other RaceParams the spec overrides
             other = {k: v for k, v in spec.world_race.items() if k != "pit_loss_s"}

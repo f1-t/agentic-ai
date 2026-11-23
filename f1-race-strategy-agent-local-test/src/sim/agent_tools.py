@@ -1491,6 +1491,15 @@ def race_picture(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
     out = {"car": car, "nearby": nearby, "rejoin": rejoin, "compounds": compounds,
            "note": "observed wear: s/lap of tyre age from clean laps so far, fuel-corrected; compare with "
                    "model_wear (the simulator's value and sd); race_laps are the laps behind the fit"}
+    if snapshot.sets_available is not None:   # SimConfig.tyre_inventory: the sets left, by compound
+        left = {}
+        for t in snapshot.sets_available:
+            left.setdefault(t.compound, []).append(int(t.laps_run))
+        out["sets_left"] = {c: {"new": sum(a == 0 for a in ages), "used_ages": sorted(a for a in ages if a > 0)}
+                            for c, ages in sorted(left.items())}
+        out["sets_note"] = ("sets_left: the sets still held, besides the one fitted (new, and the laps already run "
+                            "on each used one); a later stint takes a new set of its compound when one is left, "
+                            "else the least used; a compound with no set left cannot be fitted")
     if prerace_shown():
         block = prerace_block(snapshot.race.race_id)
         if block is not None:
