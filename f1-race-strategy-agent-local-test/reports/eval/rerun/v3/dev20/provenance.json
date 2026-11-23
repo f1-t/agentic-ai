@@ -1,0 +1,2843 @@
+{
+ "commit": "f53d5458a46dd1ef30fd0ed190a61a7e0fb812ce",
+ "tag": "eval-v3",
+ "dirty": false,
+ "set": "dev20",
+ "set_digest": "a269f07b5b76c78fb96ad0fd7588ad10955c3d9b353d3c426ea446db7aca99cd",
+ "set_kind": "development set",
+ "sampling": {
+  "races": [
+   "2019_10_united_kingdom",
+   "2021_01_bahrain",
+   "2021_04_spain",
+   "2021_09_austrian",
+   "2021_20_qatar",
+   "2021_22_united_arab_emirates",
+   "2022_01_bahrain",
+   "2022_02_saudi_arabia",
+   "2022_06_spain",
+   "2022_08_azerbaijan",
+   "2022_09_canada",
+   "2022_11_austria",
+   "2022_12_france",
+   "2022_20_mexico",
+   "2022_21_brazil",
+   "2022_22_united_arab_emirates",
+   "2023_01_bahrain",
+   "2023_07_spain",
+   "2024_07_emilia_romagna"
+  ],
+  "rule": "as_of",
+  "seed": 0,
+  "max_per_race": 25,
+  "eval_set_digest": "4f96f7f3c37a892e003e7fa191b428d3cb0f1c06ec2909dbfb7dacf1a4041e4a",
+  "reporting_sha256": "7bf04ee516bd0b271d69759431719e0b60489540b183d98f23e92efb4b01d88a"
+ },
+ "world": {
+  "path": "default (score.default_world_config(config.world_default(SimConfig())))",
+  "file_sha256": null,
+  "config_hash": "9b98afd55974",
+  "choices": {
+   "wear_fit": "linear_fuel",
+   "driver_effects": "race",
+   "hinge": false,
+   "wear_lower_bound": null,
+   "sd_scale": null,
+   "wear_cliff": true,
+   "stint_limit_margin_laps (R8)": null,
+   "events": "hybrid",
+   "events_params": {
+    "lap_times": "recorded",
+    "duration": "history",
+    "pooled": true
+   },
+   "traffic": "none",
+   "lap_noise": "none",
+   "plan_on": "draws",
+   "fit_window": "full",
+   "tyre_inventory": true,
+   "tyre_life_edge": "as_of",
+   "tyre_life_edge_basis": "history extended by the tyre ages run up to the scored snapshot: the same information as the predictive simulator",
+   "wear_guard": {
+    "enabled": true,
+    "min_drivers": 3,
+    "min_rows": 40,
+    "scale_sd_by_drivers": true
+   },
+   "sc_queue": {
+    "enabled": true,
+    "mode": "single",
+    "spacing_s": 0.5,
+    "held_behind_laps": 1.25,
+    "placement": "record"
+   }
+  }
+ },
+ "belief": {
+  "path": "configs/sim/belief.yaml",
+  "file_sha256": "8e36b0ea7686",
+  "config_hash": "b9891459af63",
+  "choices": {
+   "wear_fit": "linear_fuel",
+   "driver_effects": "race",
+   "hinge": false,
+   "wear_lower_bound": 0.0,
+   "sd_scale": null,
+   "wear_cliff": true,
+   "stint_limit_margin_laps (R8)": null,
+   "events": "rate",
+   "events_params": {
+    "as_of": true,
+    "duration": "history"
+   },
+   "traffic": "none",
+   "lap_noise": "persistent",
+   "plan_on": "draws",
+   "fit_window": "to_snapshot",
+   "tyre_inventory": true,
+   "tyre_life_edge": "as_of_snapshot (history extended by the tyre ages seen so far)",
+   "calibrator": "as_of_history",
+   "fuel_anchor": {
+    "prior": "anchored",
+    "practice": "anchored",
+    "full_fit": false
+   },
+   "pit_loss": "asof",
+   "belief_cliff_edge": "point",
+   "belief_guard": {
+    "enabled": true,
+    "mode": "pace_wear",
+    "min_drivers": 3,
+    "min_rows": 40,
+    "scale_sd_by_drivers": true
+   }
+  }
+ },
+ "sim_code_version": "16e496eb8153",
+ "profile": {
+  "name": "local",
+  "sim": {
+   "n_samples": 50,
+   "max_stops": 2,
+   "min_stint": null,
+   "compare_n_samples": null
+  },
+  "parallel": {
+   "n_jobs": 8,
+   "eval_chunk_size": 50
+  },
+  "g": {
+   "laps_every": 5,
+   "sc_adjacent": true,
+   "windows": [
+    "full",
+    "to_snapshot",
+    "pre_race"
+   ],
+   "n_boot": 200,
+   "cadences": [
+    1,
+    5,
+    null
+   ]
+  },
+  "h": {
+   "loro_folds": 20,
+   "loso": false,
+   "mlp": {
+    "ensemble": 3,
+    "epochs": 200,
+    "batch_size": 64,
+    "patience": 20,
+    "hidden_sizes": [
+     32,
+     32
+    ],
+    "weight_decay": 0.0001,
+    "device": "auto"
+   },
+   "gbm": {
+    "n_estimators": 200,
+    "max_depth": 3
+   },
+   "seed": 0
+  },
+  "build": {
+   "workers": 4,
+   "retries": 3,
+   "rate_pause_s": 1.0
+  },
+  "wandb": {
+   "mode": "online",
+   "project": "f1-strategy-sim",
+   "tags": [
+    "local"
+   ]
+  },
+  "agent": {
+   "max_steps": 10
+  },
+  "scheduler": "local"
+ },
+ "model": {
+  "LLM_BACKEND": "voyager",
+  "ANTHROPIC_MODEL": null,
+  "HF_MODEL": null,
+  "VOYAGER_MODEL": "qwen3-30b-a3b",
+  "VOYAGER_MAX_TOKENS": "1024",
+  "VOYAGER_TEMPERATURE": null
+ },
+ "loop": {
+  "max_steps": 10,
+  "AGENT_MAX_TOOL_CALLS": null,
+  "AGENT_SUBMIT_GRACE_STEPS": null,
+  "AGENT_REPEAT_MODE": null,
+  "AGENT_TURN_STATUS": null,
+  "AGENT_SHOW_IDENTITY": null,
+  "AGENT_GAP_YARDSTICK": null,
+  "AGENT_TURN_REPEAT": "run",
+  "AGENT_PROTOCOL": "v2free",
+  "AGENT_PRERACE": null
+ },
+ "row_stamps": {
+  "world_config_hash": [
+   "9b98afd55974"
+  ],
+  "belief_config_hash": [
+   "b9891459af63"
+  ],
+  "sim_code_version": [
+   "16e496eb8153"
+  ],
+  "scenario_digest": [
+   "a269f07b5b76"
+  ],
+  "belief_window": [
+   "to_snapshot"
+  ]
+ },
+ "builder": "src.sim.calibration.snapshot_as_of",
+ "future_blindness": {
+  "fixed_leaks": [
+   "compound_list",
+   "frame_filter",
+   "gap_behind",
+   "lap_window",
+   "pit_loss",
+   "race_length",
+   "stint_limit"
+  ],
+  "known_leaks": [],
+  "default_part": {
+   "passed": 43,
+   "deselected": 57
+  },
+  "default_part_summary": "43 passed, 57 deselected, 516 warnings in 41.52s",
+  "returncode": 0
+ },
+ "as_of_tables": {
+  "circuit_ratings": {
+   "kind": "pre_race",
+   "files": {
+    "data/derived/circuit_ratings.csv": "beaf35823138"
+   },
+   "recorded": [],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [],
+    "2021_09_austrian": [],
+    "2021_20_qatar": [],
+    "2021_22_united_arab_emirates": [],
+    "2022_01_bahrain": [],
+    "2022_02_saudi_arabia": [],
+    "2022_06_spain": [],
+    "2022_08_azerbaijan": [],
+    "2022_09_canada": [],
+    "2022_11_austria": [],
+    "2022_12_france": [],
+    "2022_20_mexico": [],
+    "2022_21_brazil": [],
+    "2022_22_united_arab_emirates": [],
+    "2023_01_bahrain": [],
+    "2023_07_spain": [],
+    "2024_07_emilia_romagna": []
+   }
+  },
+  "prerace_guidance": {
+   "kind": "pre_race",
+   "files": {
+    "data/derived/prerace_guidance.csv": "cfaf297b16c6"
+   },
+   "recorded": [],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [],
+    "2021_09_austrian": [],
+    "2021_20_qatar": [],
+    "2021_22_united_arab_emirates": [],
+    "2022_01_bahrain": [],
+    "2022_02_saudi_arabia": [],
+    "2022_06_spain": [],
+    "2022_08_azerbaijan": [],
+    "2022_09_canada": [],
+    "2022_11_austria": [],
+    "2022_12_france": [],
+    "2022_20_mexico": [],
+    "2022_21_brazil": [],
+    "2022_22_united_arab_emirates": [],
+    "2023_01_bahrain": [],
+    "2023_07_spain": [],
+    "2024_07_emilia_romagna": []
+   }
+  },
+  "wear_history": {
+   "kind": "as_of",
+   "files": {
+    "data/derived/wear_history.csv": "163eb8885128"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_21_saudi_arabia",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_04_emilia_romagna",
+    "2022_06_spain",
+    "2022_07_monaco",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_17_singapore",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2024_08_monaco",
+    "2024_12_united_kingdom",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "overtaking_difficulty": {
+   "kind": "as_of",
+   "files": {
+    "data/derived/overtaking.csv": "c10e15cf87be",
+    "data/derived/overtaking_pairs.csv": "e72c71e47027"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_02_emilia_romagna",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_21_saudi_arabia",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_04_emilia_romagna",
+    "2022_06_spain",
+    "2022_07_monaco",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_17_singapore",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2024_08_monaco",
+    "2024_12_united_kingdom",
+    "2024_21_brazil",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "compound_steps": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/compound_steps.json": "cc7f1c13776e"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "calibration_summary": {
+   "kind": "as_of",
+   "files": {
+    "reports/calibration/midrace_summary.csv": "9408c453d41d"
+   },
+   "recorded": [
+    "2021_04_spain"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [],
+    "2021_09_austrian": [
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2021_04_spain"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2021_04_spain"
+    ],
+    "2022_01_bahrain": [
+     "2021_04_spain"
+    ],
+    "2022_02_saudi_arabia": [
+     "2021_04_spain"
+    ],
+    "2022_06_spain": [
+     "2021_04_spain"
+    ],
+    "2022_08_azerbaijan": [
+     "2021_04_spain"
+    ],
+    "2022_09_canada": [
+     "2021_04_spain"
+    ],
+    "2022_11_austria": [
+     "2021_04_spain"
+    ],
+    "2022_12_france": [
+     "2021_04_spain"
+    ],
+    "2022_20_mexico": [
+     "2021_04_spain"
+    ],
+    "2022_21_brazil": [
+     "2021_04_spain"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2021_04_spain"
+    ],
+    "2023_01_bahrain": [
+     "2021_04_spain"
+    ],
+    "2023_07_spain": [
+     "2021_04_spain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2021_04_spain"
+    ]
+   }
+  },
+  "event_rates": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/neutralised_history.csv": "88edf88ec426"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "pre_race_base_delta": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/race_history.csv": "16f0c615c296"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "fuel_prior": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/race_history.csv": "16f0c615c296"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "fuel_physics": {
+   "kind": "a_priori",
+   "files": {},
+   "recorded": [],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [],
+    "2021_09_austrian": [],
+    "2021_20_qatar": [],
+    "2021_22_united_arab_emirates": [],
+    "2022_01_bahrain": [],
+    "2022_02_saudi_arabia": [],
+    "2022_06_spain": [],
+    "2022_08_azerbaijan": [],
+    "2022_09_canada": [],
+    "2022_11_austria": [],
+    "2022_12_france": [],
+    "2022_20_mexico": [],
+    "2022_21_brazil": [],
+    "2022_22_united_arab_emirates": [],
+    "2023_01_bahrain": [],
+    "2023_07_spain": [],
+    "2024_07_emilia_romagna": []
+   }
+  },
+  "event_effects": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/race_history.csv": "16f0c615c296"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_06_spain",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "shrinkage": {
+   "kind": "a_priori",
+   "files": {
+    "src/sim/config.py": "3be0fc50dd1b"
+   },
+   "recorded": [],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [],
+    "2021_09_austrian": [],
+    "2021_20_qatar": [],
+    "2021_22_united_arab_emirates": [],
+    "2022_01_bahrain": [],
+    "2022_02_saudi_arabia": [],
+    "2022_06_spain": [],
+    "2022_08_azerbaijan": [],
+    "2022_09_canada": [],
+    "2022_11_austria": [],
+    "2022_12_france": [],
+    "2022_20_mexico": [],
+    "2022_21_brazil": [],
+    "2022_22_united_arab_emirates": [],
+    "2023_01_bahrain": [],
+    "2023_07_spain": [],
+    "2024_07_emilia_romagna": []
+   }
+  },
+  "pit_loss_prior": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/pit_loss_prior.json": "1ac02c86900a",
+    "configs/sim/pit_loss_entries.json": "b0375334c415"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_21_saudi_arabia",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_04_emilia_romagna",
+    "2022_06_spain",
+    "2022_07_monaco",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_17_singapore",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2024_08_monaco",
+    "2024_12_united_kingdom",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia"
+    ],
+    "2022_01_bahrain": [
+     "2021_01_bahrain"
+    ],
+    "2022_02_saudi_arabia": [
+     "2021_21_saudi_arabia"
+    ],
+    "2022_06_spain": [
+     "2021_04_spain"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2021_22_united_arab_emirates"
+    ],
+    "2023_01_bahrain": [
+     "2021_01_bahrain",
+     "2022_01_bahrain"
+    ],
+    "2023_07_spain": [
+     "2021_04_spain",
+     "2022_06_spain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_06_spain",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "tyre_history": {
+   "kind": "as_of",
+   "files": {
+    "configs/sim/tyre_life_history.json": "19d5918503aa",
+    "data/derived/tyre_history.csv": "30bf505a042d"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_01_bahrain",
+    "2021_02_emilia_romagna",
+    "2021_04_spain",
+    "2021_09_austrian",
+    "2021_20_qatar",
+    "2021_21_saudi_arabia",
+    "2021_22_united_arab_emirates",
+    "2022_01_bahrain",
+    "2022_02_saudi_arabia",
+    "2022_04_emilia_romagna",
+    "2022_06_spain",
+    "2022_07_monaco",
+    "2022_08_azerbaijan",
+    "2022_09_canada",
+    "2022_11_austria",
+    "2022_12_france",
+    "2022_17_singapore",
+    "2022_20_mexico",
+    "2022_21_brazil",
+    "2022_22_united_arab_emirates",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2024_08_monaco",
+    "2024_12_united_kingdom",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [
+     "2019_10_united_kingdom"
+    ],
+    "2021_04_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna"
+    ],
+    "2021_09_austrian": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain"
+    ],
+    "2021_20_qatar": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian"
+    ],
+    "2021_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia"
+    ],
+    "2022_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates"
+    ],
+    "2022_02_saudi_arabia": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain"
+    ],
+    "2022_06_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna"
+    ],
+    "2022_08_azerbaijan": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco"
+    ],
+    "2022_09_canada": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan"
+    ],
+    "2022_11_austria": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada"
+    ],
+    "2022_12_france": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria"
+    ],
+    "2022_20_mexico": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore"
+    ],
+    "2022_21_brazil": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico"
+    ],
+    "2022_22_united_arab_emirates": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil"
+    ],
+    "2023_01_bahrain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates"
+    ],
+    "2023_07_spain": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain"
+    ],
+    "2024_07_emilia_romagna": [
+     "2019_10_united_kingdom",
+     "2021_01_bahrain",
+     "2021_02_emilia_romagna",
+     "2021_04_spain",
+     "2021_09_austrian",
+     "2021_20_qatar",
+     "2021_21_saudi_arabia",
+     "2021_22_united_arab_emirates",
+     "2022_01_bahrain",
+     "2022_02_saudi_arabia",
+     "2022_04_emilia_romagna",
+     "2022_06_spain",
+     "2022_07_monaco",
+     "2022_08_azerbaijan",
+     "2022_09_canada",
+     "2022_11_austria",
+     "2022_12_france",
+     "2022_17_singapore",
+     "2022_20_mexico",
+     "2022_21_brazil",
+     "2022_22_united_arab_emirates",
+     "2023_01_bahrain",
+     "2023_07_spain"
+    ]
+   }
+  },
+  "learned_calibrator": {
+   "kind": "not_as_of",
+   "files": {
+    "models/calibrators/ridge_hybrid/manifest.json": "529eb2ec8074"
+   },
+   "recorded": [
+    "2019_10_united_kingdom",
+    "2021_04_spain",
+    "2022_02_saudi_arabia",
+    "2023_01_bahrain",
+    "2023_07_spain",
+    "2024_07_emilia_romagna",
+    "2025_23_qatar"
+   ],
+   "reads": {
+    "2019_10_united_kingdom": [],
+    "2021_01_bahrain": [],
+    "2021_04_spain": [],
+    "2021_09_austrian": [],
+    "2021_20_qatar": [],
+    "2021_22_united_arab_emirates": [],
+    "2022_01_bahrain": [],
+    "2022_02_saudi_arabia": [],
+    "2022_06_spain": [],
+    "2022_08_azerbaijan": [],
+    "2022_09_canada": [],
+    "2022_11_austria": [],
+    "2022_12_france": [],
+    "2022_20_mexico": [],
+    "2022_21_brazil": [],
+    "2022_22_united_arab_emirates": [],
+    "2023_01_bahrain": [],
+    "2023_07_spain": [],
+    "2024_07_emilia_romagna": []
+   }
+  }
+ },
+ "reporting": {
+  "path": "configs/eval/reporting.yaml",
+  "sha256": "7bf04ee516bd0b271d69759431719e0b60489540b183d98f23e92efb4b01d88a",
+  "text": "# Pre-registered reporting choices for the evaluation rerun (src/eval/reporting.py, docs/eval.md\n# \"Pre-registered reporting\"). Committed before the held-out set exists. The tables stage reads\n# this file and copies it verbatim, with its sha256, into provenance.json; the scenarios stage\n# records its sha256 in a report set's sampling, and the tables stage refuses a report set\n# (development false) whose recorded sha256 differs from this file's. Editing this file after a\n# report set is built therefore stops its tables.\n\nquestion: does the agent beat the simple rules?\n\ncomparisons:\n  # agent minus each comparator, in this order\n  lead: [run_to_flag, one_stop_total]\n  secondary:\n    actual_strategy: the teams\n    belief_optimizer: what the language model adds over its tools\n  reference_only: [fixed_one_stop, fixed_two_stop]\n  footnote:\n    greedy_crossover: unavailable on about 80% of scenarios (the plan stops immediately)\n\nstatistic:\n  value: mean paired difference in regret_s, agent minus comparator, on scenarios both scored\n  sign: negative means the agent is better\n  interval: 95% percentile cluster bootstrap\n  primary_cluster: race_driver      # (race_id, driver) clusters\n  beside_cluster: race              # race_id clusters, reported beside (the held-out set has nine races)\n  resamples: 2000\n  seed: 0\n  level: 0.95\n  verdict:                          # from the primary interval\n    ahead: the interval excludes zero on the agent's side (entirely below zero)\n    behind: the interval excludes zero on the other side (entirely above zero)\n    level: otherwise\n\ntail:\n  threshold_s: 20                   # the stated threshold: share of decisions more than 20 s from the reference\n  beside_s: [10, 30]\n  also: [median, worst]\n\nheld_out:\n  # reported three ways, in this order; each race named by season and event\n  groups:\n    - name: fresh five\n      label: the five races never examined before this run, the primary test of the corrected system\n      races:\n        - {season: 2021, event: france}\n        - {season: 2021, event: mexico}\n        - {season: 2022, event: miami}\n        - {season: 2022, event: australia}\n        - {season: 2022, event: belgium}\n    - name: earlier four\n      label: a second look, the four races scored once under the superseded protocol\n      races:\n        - {season: 2019, event: monaco}\n        - {season: 2020, event: sakhir}\n        - {season: 2024, event: austria}\n        - {season: 2025, event: austria}\n    - name: all nine\n      label: every held-out race\n      races: all\n  by_era: true\n  development_beside: dev20, reported beside the held-out results and labelled development\n\nrun_settings:\n  agent_passes: 1\n  model: qwen3-30b-a3b\n  AGENT_TURN_REPEAT: run\n  timing_sample: 24                 # isolated, sequential: the reported decision time\n  jobs: 10\n  configs: the default world and belief configs at the tagged commit\n  per_race: 25\n  seed: 0\n  sampling_rule: as_of\n\nhandling:\n  - invalid and unavailable rows are counted and shown per policy\n  - a comparison uses only the scenarios both policies scored\n  - no scenario, race or row is dropped after the fact\n  - nothing is rerun; a resumed pass skips finished scenarios\n\nfidelity_context: >-\n  The judge orders close finishers correctly 0.753 of the time (ceiling 0.745) and its gap between\n  two cars is off by 13.2 s on average (floor 3.2 s); absolute regrets of 4-10 s sit inside that,\n  so paired differences carry the claims.\n"
+ },
+ "agent_run": {
+  "passes": [
+   {
+    "label": "agent",
+    "jobs": 10,
+    "started": "2026-11-23T03:37:22.393061+00:00",
+    "ended": "2026-11-23T03:49:19.408380+00:00",
+    "wall_s": 717.0,
+    "to_run": 469,
+    "ran": 469,
+    "skipped": 0,
+    "errors": 0,
+    "retries": 0,
+    "retry_event_counts": {},
+    "crashed": 0,
+    "env": {
+     "LLM_BACKEND": "voyager",
+     "ANTHROPIC_MODEL": null,
+     "HF_MODEL": null,
+     "VOYAGER_MODEL": "qwen3-30b-a3b",
+     "VOYAGER_MAX_TOKENS": "1024",
+     "VOYAGER_TEMPERATURE": null,
+     "AGENT_MAX_TOOL_CALLS": null,
+     "AGENT_SUBMIT_GRACE_STEPS": null,
+     "AGENT_REPEAT_MODE": null,
+     "AGENT_TURN_STATUS": null,
+     "AGENT_SHOW_IDENTITY": null,
+     "AGENT_GAP_YARDSTICK": null,
+     "AGENT_TURN_REPEAT": "run",
+     "AGENT_PROTOCOL": "v2free",
+     "AGENT_PRERACE": null
+    }
+   }
+  ],
+  "agent_jobs": 10,
+  "scenarios": 469,
+  "only": false,
+  "headline": "the decision time reported is the isolated timing sample's (timing_sample.csv: K episodes run sequentially, one job, before the pass); the full pass's per-episode latency_s was measured with agent_jobs episodes running concurrently and is reported beside it, not as the decision time",
+  "latency_measured_under": "10 concurrent episodes (agent_jobs) in the full pass; other users of the endpoint are not controlled",
+  "agent_wall_s": 717.0,
+  "timing_sample_wall_s": 0,
+  "retry_policy": {
+   "tries": 3,
+   "backoff_s": [
+    5.0,
+    20.0
+   ],
+   "request_timeout_s": 180.0,
+   "retried": "429, 5xx, timeouts, dropped connections; 401/403 stop the pass"
+  },
+  "rows_status": {
+   "ok": 469
+  }
+ },
+ "agent_timing": {
+  "headline": "isolated (timing sample, 1 job)",
+  "runs": [
+   {
+    "run": "isolated (timing sample, 1 job)",
+    "episodes": 24,
+    "latency_mean_s": 8.463971421500295,
+    "latency_median_s": 8.593529658501211,
+    "latency_p90_s": 10.91749756460049,
+    "input_tokens_mean": 22621.083333333332,
+    "output_tokens_mean": 327.2916666666667,
+    "tool_calls_mean": 7.625,
+    "errors": 0,
+    "submitted": 24,
+    "api_retries": 0
+   },
+   {
+    "run": "concurrent, same scenarios",
+    "episodes": 24,
+    "latency_mean_s": 14.277134933584117,
+    "latency_median_s": 14.317603210511152,
+    "latency_p90_s": 19.40838995339727,
+    "input_tokens_mean": 23514.416666666668,
+    "output_tokens_mean": 308.6666666666667,
+    "tool_calls_mean": 7.5,
+    "errors": 0,
+    "submitted": 24,
+    "api_retries": 0
+   },
+   {
+    "run": "concurrent, all scenarios",
+    "episodes": 469,
+    "latency_mean_s": 13.367581583733546,
+    "latency_median_s": 13.06387474499934,
+    "latency_p90_s": 18.20439096240443,
+    "input_tokens_mean": 23050.765458422175,
+    "output_tokens_mean": 306.78464818763325,
+    "tool_calls_mean": 7.272921108742004,
+    "errors": 0,
+    "submitted": 469,
+    "api_retries": 0
+   }
+  ],
+  "paired": {
+   "pairs": 24,
+   "mean_diff_s": 5.813163512083823,
+   "ci95_low_s": 4.618541285750405,
+   "ci95_high_s": 7.00778573841724,
+   "ratio_of_means": 1.6868127528546641,
+   "median_ratio": 1.684764422514807,
+   "same_decision": 24,
+   "of": 24
+  }
+ },
+ "commands": [
+  "python -m src.eval.rerun scenarios --set dev20 --out-dir <out-dir>",
+  "python -m src.eval.rerun references --set dev20 --out-dir <out-dir> --world-config default --jobs 4",
+  "python -m src.eval.rerun baselines --set dev20 --out-dir <out-dir> --world-config default --belief-config default --jobs 4",
+  "python -m src.eval.rerun agent --set dev20 --out-dir <out-dir> --world-config default --belief-config default --jobs 10",
+  "python -m src.eval.rerun tables --set dev20 --out-dir <out-dir> --harness",
+  "python -m src.eval.rerun tables --set dev20 --out-dir <out-dir> --harness"
+ ]
+}

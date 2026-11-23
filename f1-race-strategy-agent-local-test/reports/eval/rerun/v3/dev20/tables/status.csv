@@ -1,0 +1,12 @@
+policy,status,reason,rows
+actual_strategy,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,16
+actual_strategy,unavailable,The plan uses an unavailable compound.,13
+actual_strategy,unavailable,New stints must reach the minimum stint length.,8
+actual_strategy,unavailable,The complete dry race must use at least two compounds.,4
+fixed_one_stop,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,12
+fixed_one_stop,unavailable,No tyre set for the rule's plan: Stint 2: no HARD set with 0 laps run; no HARD set left.,2
+fixed_two_stop,unavailable,No tyre set for the rule's plan: Stint 3: no HARD set with 0 laps run; no HARD set left.,30
+fixed_two_stop,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,19
+fixed_two_stop,unavailable,There are too few laps for exactly 2 future stops.,18
+fixed_two_stop,unavailable,No tyre set for the rule's plan: Stint 2: no HARD set with 0 laps run; no HARD set left.,1
+greedy_crossover,unavailable,The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).,389
