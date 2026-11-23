@@ -302,6 +302,9 @@ class FieldQueue:
         k = first_lap - 1
         if S < 2 or E < first_lap or self.own_lapped:
             return zero
+        asof = self.placement == "asof"
+        if asof and (self.held_laps is None or S - 1 > self.horizon):   # a drawn later period: not queued
+            return zero
         i0, iE = max(S - first_lap, 0), E - first_lap
         base = elapsed_s + self.own_offset
         run = np.cumsum(lap_s + pit_lap, axis=1) + base
@@ -315,7 +318,8 @@ class FieldQueue:
             return zero
         dep = self.deployment(S) if self.held_laps is not None and S - 1 <= self.horizon else None
         t_key = t_before   # the car's time at S - 1 that places it in the train
-        if (self.placement == "record" and self.recorded and dep is not None and self.driver in dep[0].index):
+        if (((self.placement == "record" and self.recorded) or asof) and dep is not None
+                and self.driver in dep[0].index):
             own_eq = float(dep[0][self.driver]) - self.start   # its recorded green time at S - 1
             if S - 1 > k:
                 real = np.array([(L in self.own_in_laps) for L in range(first_lap, S)])

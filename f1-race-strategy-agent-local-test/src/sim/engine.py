@@ -313,6 +313,8 @@ class Simulator:
                   hinge_knots=cfg.hinge_knots, hinge_knot_default=cfg.hinge_knot_default, **spec.params)
         if cfg.fuel_anchor.full_fit and cfg.fit_window == "full" and "shrinkage" not in extra:
             kw["fuel_anchor"] = self.judge_fuel_anchor()
+        if kw.get("driver_prior", "off") != "off":   # "qualifying": the weekend's qualifying pace offsets
+            kw["driver_prior"] = self.quali_driver_offsets()
         kw.update(extra)
         return DEGRADATION.get(spec.name).fit(frame, **kw)
 
@@ -383,6 +385,13 @@ class Simulator:
         if self._quali_gaps is None and self.qualifying is not None:
             self._quali_gaps = _proxy.qualifying_gaps(self.qualifying) or {}
         return self._quali_gaps or None
+
+    def quali_driver_offsets(self) -> dict:
+        """proxy.qualifying_driver_offsets of `qualifying` ({driver: s}), computed once; {} without."""
+        if getattr(self, "_quali_drivers", None) is None:
+            got = _proxy.qualifying_driver_offsets(self.qualifying) if self.qualifying is not None else None
+            self._quali_drivers = got or {}
+        return self._quali_drivers
 
     def _proxied(self, model, prior=None):
         """proxy.apply on a fitted model: the tier-2 steps from `prior` (the to_snapshot fit's

@@ -73,3 +73,27 @@ def test_near_lapped_rule_ignores_the_other_cars_after_the_cut(pair, sc):
     a, b = (Simulator(f, HELD, synthetic_practice()).simulate_batch(snap, _plans(df, snap), scenario=scen,
                                                                      n_samples=N, seed=3) for f in (df, alt))
     assert np.array_equal(a.times, b.times, equal_nan=True)
+
+
+ASOF = BELIEF.model_copy(update={"sc_queue": SimConfig.model_validate(
+    {"sc_queue": {"enabled": True, "mode": "single", "held_behind_laps": 1.25, "placement": "asof"}}).sc_queue})
+
+
+@pytest.mark.parametrize("sc", [[K - 1, K, K + 1, K + 2], [K + 8, K + 9, K + 10]])
+def test_asof_placement_ignores_the_other_cars_after_the_cut(pair, sc):
+    # placement "asof" reads the deployment and the car's place from the visible rows only
+    df, alt, snap = pair
+    scen = Scenario(sc_laps=sc, vsc_laps=[])
+    a, b = (Simulator(f, ASOF, synthetic_practice()).simulate_batch(snap, _plans(df, snap), scenario=scen,
+                                                                     n_samples=N, seed=3) for f in (df, alt))
+    assert np.array_equal(a.times, b.times, equal_nan=True)
+
+
+def test_asof_placement_leaves_a_later_period_unqueued(pair):
+    # only a period running at the snapshot is queued: a drawn later one is priced as with no queue
+    df, _, snap = pair
+    scen = Scenario(sc_laps=[K + 8, K + 9, K + 10], vsc_laps=[])
+    off = BELIEF.model_copy(update={"sc_queue": SimConfig().sc_queue})
+    a, b = (Simulator(df, c, synthetic_practice()).simulate_batch(snap, _plans(df, snap), scenario=scen,
+                                                                   n_samples=N, seed=3) for c in (ASOF, off))
+    assert np.array_equal(a.times, b.times, equal_nan=True)

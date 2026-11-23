@@ -333,8 +333,11 @@ class ScQueue(_Cfg):
     # "clock" (the default) by its simulated time at S - 1 among the others' recorded times, so a
     # drift of its simulated clock by then costs or gains it places it keeps; "record" (the judge
     # only, fit_window full: hindsight, ledgered) by its recorded place at the deployment, each plan
-    # moved by its simulated time difference at S - 1 to the plans that stopped where the car did
-    placement: Literal["clock", "record"] = "clock"
+    # moved by its simulated time difference at S - 1 to the plans that stopped where the car did.
+    # "asof" (a windowed fit, the belief): only a period whose deployment the visible rows show (one
+    # running at the snapshot) is queued, the car placed by its green time at S - 1 from its own
+    # crossings before the deployment; a drawn later period is not queued
+    placement: Literal["clock", "record", "asof"] = "clock"
 
 
 class WearGuard(_Cfg):
