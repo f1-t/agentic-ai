@@ -4,6 +4,7 @@
 with fonts embedded. `build_poster.py` builds it from the committed evaluation outputs at tag `eval-v3`.
 
 The build reads files only. It imports nothing from `src`, runs no pipeline stage or lint, and loads no race data.
+The simulator figure reads `sim_curve.csv`, written once by `sim_curve.py` (see Files).
 
 ## Rebuild (one command), then the layout check
 
@@ -77,6 +78,7 @@ Other checks:
 | `poster_stats.py` | every number, its file and its computation; the cross-checks |
 | `numbers.md` | generated: every printed number with file and computation |
 | `check_layout.py` | layout check in headless Chromium |
+| `sim_curve.py` / `sim_curve.csv` | the simulator figure's data: the belief's predicted lap time per lap for the example's two top plans at its snapshot (a development race), the pit loss per stop and the number of plans the look-ahead scores there. The only poster script that imports `src`; rerun it (`python poster/sim_curve.py`) only when the belief changes. The build checks the CSV's plans against the example's trajectory |
 | `PITWALL_poster_24x36in.html` / `.pdf` / `_300ppi.png` / `_preview.png` | the poster |
 | `2023_F1_CourseLayout_Spain.svg` | circuit map, unmodified from Wikimedia Commons ([file page](https://commons.wikimedia.org/wiki/File:2023_F1_CourseLayout_Spain.svg)), by ごひょううべこ, CC BY-SA 4.0 |
 

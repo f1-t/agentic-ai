@@ -581,7 +581,8 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
     extra(N, put, pend, D, H, groups)
     v3(N, put, pend, D, H)
     example(N, put, D)
-    pl = json.loads((PROJECT / "configs" / "sim" / "pit_loss_prior.json").read_text())["races"]
+    approach(N, put, D, H)
+    pl =json.loads((PROJECT / "configs" / "sim" / "pit_loss_prior.json").read_text())["races"]
     vals = sorted(float(r["pit_loss_s"]) for r in pl.values())
     med = float(np.median(vals))
     put("pit_loss_median", med, f"{med:.0f} s", "configs/sim/pit_loss_prior.json",
@@ -728,6 +729,40 @@ def example(N, put, D, scenario=EXAMPLE):
     put("ex_regret", float(a["regret_s"]), s(float(a["regret_s"]), 1), D.f("tables/combined.csv"),
         f"agent regret_s at {scenario}")
     put("ex_n_calls", len(ev), str(len(ev)), src, "tool calls in the episode, the submission included")
+
+
+SIM_CURVE = Path(__file__).resolve().parent / "sim_curve.csv"
+
+
+def approach(N, put, D, H):
+    """The simulator and agent panels: run settings from both sets' provenance (they must agree) and the simulator
+    figure's per-lap times, written by poster/sim_curve.py at the example's snapshot."""
+    for key, path, how in (("sim_n_samples", ("profile", "sim", "n_samples"),
+                            "profile.sim.n_samples: simulated races per plan (the profile configs/compute/local.yaml)"),
+                           ("agent_max_turns", ("loop", "max_steps"), "loop.max_steps: model turns per decision")):
+        vals = []
+        for S in (D, H):
+            v = S.prov
+            for k in path:
+                v = v[k]
+            vals.append(v)
+        if vals[0] != vals[1]:
+            raise SystemExit(f"{key}: development {vals[0]} and test {vals[1]} differ")
+        put(key, int(vals[0]), f"{int(vals[0])}", "provenance.json (development and test, equal)", how)
+    c = pd.read_csv(SIM_CURVE)
+    src = "poster/sim_curve.csv (poster/sim_curve.py)"
+    for k, nk in (("plan1", "ex_p1"), ("plan2", "ex_p2")):
+        if c[k].iloc[0] != N[nk].value:
+            raise SystemExit(f"sim_curve.csv {k} {c[k].iloc[0]!r} is not the example's {nk} {N[nk].value!r}")
+    if int(c["n_samples_profile"].iloc[0]) != N["sim_n_samples"].value or not bool(c["sc_free"].all()):
+        raise SystemExit("sim_curve.csv: profile n_samples differs from the runs, or its sample drew a safety car")
+    n = int(c["plans_scored"].iloc[0])
+    put("sim_plans", n, f"{n:,}", src, "plans_scored: optimize_batch candidates scored at the example snapshot "
+        "(belief, max_stops 2, zero-lap first stints left out)")
+    stop = float(c["plan1_pit_loss_s"].iloc[0]) / 2
+    put("sim_stop_s", stop, f"{stop:.0f} s", src, "plan1_pit_loss_s / 2: the belief's pit loss per stop at the snapshot")
+    put("sim_curve", c, "figure", src, "plan1_s and plan2_s: the belief's point-estimate lap time per lap (seed 0, "
+        "no parameter draw, no lap noise, no safety car), plans " + c["plan1"].iloc[0] + " and " + c["plan2"].iloc[0])
 
 
 def ps_race(r):
