@@ -702,6 +702,16 @@ def example(N, put, D, scenario=EXAMPLE):
     put("ex_p1_now", p1["immediate"], p1["immediate"].replace("_", " ").lower(), src, "rank_plans plans[0].immediate")
     put("ex_p2", p2["plan"], p2["plan"].replace(">", "›"), src, "rank_plans plans[1].plan")
     put("ex_p2_gap", p2["gap_s"], s(p2["gap_s"], 1, sign=True), src, "rank_plans plans[1].gap_s (minus the top plan)")
+    def words(plan, immediate):
+        st = [x.strip().split() for x in plan.split(">")]
+        first = "pit now" if str(immediate).startswith("PIT") else f"stay {st[0][1]} laps"
+        return ", ".join([first] + [f"{c} {n} laps" for c, n in st[1:]])
+    put("ex_p1_words", p1["plan"], words(p1["plan"], p1["immediate"]), src,
+        "rank_plans plans[0] in words: the current set's laps as 'pit now' (immediate PIT) or 'stay N laps', then each "
+        "later stint's compound and laps; plan " + p1["plan"])
+    put("ex_p2_words", p2["plan"], words(p2["plan"], p2["immediate"]), src,
+        "rank_plans plans[1] in words, as above; plan " + p2["plan"])
+    put("ex_p2_slower", p2["gap_s"], f"{p2['gap_s']:.1f} s slower", src, "rank_plans plans[1].gap_s")
     sh = rk["decision"]["share"]
     put("ex_share", sh, pct(sh), src, "rank_plans decision.share: draws in which the favoured action is faster: "
         + rk["decision"]["reading"])

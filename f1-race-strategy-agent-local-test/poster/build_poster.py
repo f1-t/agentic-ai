@@ -138,7 +138,7 @@ def fmt_tick(t):
     return (f"{t:.0f}" if float(t).is_integer() else f"{t:g}").replace("-", "−")
 
 
-def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=760, aria="", sub=32, gap=16):
+def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=760, aria="", sub=32, gap=16, inline=False):
     """One block per row: a test-set line (filled marker) and a development line (hollow), each with its 95%
     interval and its value printed at the right."""
     vals = []
@@ -150,7 +150,7 @@ def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=760, aria="", su
     LO, HI = ticks[0], ticks[-1]
     L, R, VX = 225, 525, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top = 34 if zero_line else 8
+    top = 34 if zero_line else (26 if inline else 8)
     blk = 2 * sub + gap
     yb = top + blk * len(rows) - gap / 2
     H = yb + 32
@@ -160,6 +160,9 @@ def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=760, aria="", su
         s.append(f'<line x1="{x:.1f}" y1="{top - 4}" x2="{x:.1f}" y2="{yb:.1f}" stroke="{GRID}" stroke-width="1"/>')
         s.append(f'<text x="{x:.1f}" y="{yb + 26:.1f}" text-anchor="middle" font-size="20" fill="{MUTED}">'
                  f'{fmt_tick(tk)}{" s" if tk == ticks[-1] else ""}</text>')
+    if inline:
+        s.append(f'<text x="{VX - 100}" y="{top + 2}" text-anchor="end" font-size="19" fill="{MUTED}">test</text>')
+        s.append(f'<text x="{VX}" y="{top + 2}" text-anchor="end" font-size="19" fill="{MUTED}">dev</text>')
     if zero_line and LO < 0 < HI:
         x0 = sx(0)
         s.append(f'<line x1="{x0:.1f}" y1="{top - 10}" x2="{x0:.1f}" y2="{yb:.1f}" stroke="{INK}" stroke-width="2"/>')
@@ -177,6 +180,11 @@ def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=760, aria="", su
             s.append(f'<line x1="{sx(lo):.1f}" y1="{y:.1f}" x2="{sx(hi):.1f}" y2="{y:.1f}" stroke="{color}" '
                      f'stroke-width="5"/>')
             s.append(marker(shape, sx(m), y, color, r=10, hollow=(t == "d")))
+            if inline:   # test and development values side by side, on the block's middle line
+                s.append(f'<text x="{VX - 100 if t == "h" else VX}" y="{y0 + sub + 8:.1f}" text-anchor="end" '
+                         f'font-size="22"{BOLD if t == "h" else ""} fill="{INK if t == "h" else MUTED}">'
+                         f'{key_txt(t, g, r)}</text>')
+                continue
             s.append(f'<text x="{VX}" y="{y + 8:.1f}" text-anchor="end" font-size="22"'
                      f"{BOLD if t == 'h' else ''} fill=\"{INK if t == 'h' else MUTED}\">"
                      f'{key_txt(t, g, r)}</text>')
@@ -189,14 +197,14 @@ def forest():
                      lambda t, g, x: f"{g}_{x}_diff", lambda t, g, x: f"{g}_{x}_ci",
                      lambda t, g, x: f'{T(f"{g}_{x}_diff")} {T(f"{g}_{x}_ci")}', True,
                      aria="Agent minus each comparator, mean regret difference, 95% intervals, test and development",
-                     sub=28, gap=11)
+                     sub=26, gap=10)
 
 
 def levels():
     return dot_chart(("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy"),
                      lambda t, g, p: f"{t}_mean_{p}", lambda t, g, p: f"{t}_mci_{p}",
-                     lambda t, g, p: f'{T(f"{t}_mean_{p}")} {T(f"{t}_mci_{p}")}', False,
-                     aria="Mean time lost per policy, 95% intervals, test and development", sub=21, gap=3)
+                     lambda t, g, p: f'{T(f"{t}_mean_{p}")}', False,
+                     aria="Mean time lost per policy, 95% intervals, test and development", sub=17, gap=5, inline=True)
 
 
 def per_race(width=760):
@@ -207,7 +215,7 @@ def per_race(width=760):
     LO, HI = ticks[0], ticks[-1]
     L, R, VX = 190, 545, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top, rowh = 32, 27
+    top, rowh = 32, 25
     yb = top + rowh * len(races)
     H = yb + 32
     s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="Agent minus run to the flag per test '
@@ -273,7 +281,7 @@ def judge_chart(width=470):
 
 def blind_diagram(width=380):
     """The future-blindness test: cut the race at the decision moment, alter the future, compare."""
-    s = [f'<svg class="chart" viewBox="0 0 {width} 262" role="img" aria-label="Future-blindness test: the race is cut '
+    s = [f'<svg class="chart" viewBox="0 0 {width} 288" role="img" aria-label="Future-blindness test: the race is cut '
          f'at the decision moment, everything after it is altered, and everything a policy sees must stay identical">',
          '<defs><pattern id="scr" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">'
          '<rect width="12" height="12" fill="#3a2430"/><line x1="0" y1="0" x2="0" y2="12" stroke="#ff4d3d" '
@@ -294,8 +302,9 @@ def blind_diagram(width=380):
     s.append(f'<line x1="{XC}" y1="26" x2="{XC}" y2="204" stroke="#ff4d3d" stroke-width="4"/>')
     s.append(f'<text x="{XC}" y="20" text-anchor="middle" font-size="19" font-weight="800" fill="#ff8a7d">'
              f'decision moment</text>')
-    s.append(f'<text x="0" y="250" font-size="22" font-weight="800" fill="{INK}">All a policy sees: equal? '
-             f'<tspan fill="#2BB88A">✓ yes</tspan></text>')
+    s.append(f'<text x="0" y="246" font-size="22" font-weight="800" fill="{INK}">Everything the agent sees:</text>')
+    s.append(f'<text x="0" y="276" font-size="22" font-weight="800" fill="{INK}">unchanged '
+             f'<tspan fill="#2BB88A">✓</tspan></text>')
     s.append("</svg>")
     return "".join(s)
 
@@ -307,32 +316,32 @@ def problem_diagram(width=470):
     X0, X1, Y0, Y1 = 40, width - 10, 40, 178
     s.append(f'<line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="{MUTED}" stroke-width="2"/>')
     s.append(f'<line x1="{X0}" y1="{Y0}" x2="{X0}" y2="{Y1}" stroke="{MUTED}" stroke-width="2"/>')
-    s.append(f'<text x="{X1}" y="{Y1 + 28}" text-anchor="end" font-size="20" fill="{MUTED}">laps →</text>')
-    s.append(f'<text x="{X0 - 10}" y="{Y0 - 14}" font-size="20" fill="{MUTED}">lap time ↑</text>')
+    s.append(f'<text x="{X1}" y="{Y1 + 28}" text-anchor="end" font-size="23" fill="{MUTED}">laps →</text>')
+    s.append(f'<text x="{X0 - 10}" y="{Y0 - 14}" font-size="23" fill="{MUTED}">lap time ↑</text>')
     xp = X0 + (X1 - X0) * 0.52
     s.append(f'<path d="M{X0 + 8},{Y1 - 60} Q{(X0 + xp) / 2},{Y1 - 78} {xp - 8},{Y1 - 128}" fill="none" '
              f'stroke="#F0E442" stroke-width="5"/>')
     s.append(f'<path d="M{xp + 26},{Y1 - 52} Q{(xp + X1) / 2},{Y1 - 68} {X1 - 8},{Y1 - 112}" fill="none" '
              f'stroke="#F0E442" stroke-width="5"/>')
     s.append(f'<rect x="{xp - 4}" y="{Y0 - 4}" width="26" height="{Y1 - Y0 + 4}" fill="#ff4d3d" opacity="0.85"/>')
-    s.append(f'<text x="{xp + 9}" y="{Y0 - 14}" text-anchor="middle" font-size="20" font-weight="800" fill="#ff8a7d">'
+    s.append(f'<text x="{xp + 9}" y="{Y0 - 14}" text-anchor="middle" font-size="23" font-weight="800" fill="#ff8a7d">'
              f'pit stop</text>')
-    s.append(f'<text x="{X0 + 14}" y="{Y1 - 22}" font-size="19" fill="{INK}">tyres wear: slower</text>')
-    s.append(f'<text x="{xp + 34}" y="{Y1 - 22}" font-size="19" fill="{INK}">fresh: faster</text>')
+    s.append(f'<text x="{X0 + 14}" y="{Y1 - 22}" font-size="23" fill="{INK}">tyres wear: slower</text>')
+    s.append(f'<text x="{xp + 34}" y="{Y1 - 22}" font-size="23" fill="{INK}">fresh: faster</text>')
     s.append("</svg>")
     return "".join(s)
 
 
 def agent_diagram(model, width=1000):
     """Race so far -> predictive simulator -> look-ahead search -> LLM agent -> decision."""
-    boxes = (("Race so far", ["laps, tyres,", "gaps, flags"], "#9cc8ff", "#16263a", 150),
-             ("Predictive simulator", ["estimates tyre", "wear and pace", "from the laps", "so far"], "#9cc8ff", "#16263a", 205),
+    boxes = (("Race so far", ["laps, tyres,", "gaps,", "flags"], "#9cc8ff", "#16263a", 145),
+             ("Predictive simulator", ["estimates", "tyre wear", "and pace from", "the laps so far"], "#9cc8ff", "#16263a", 215),
              ("Look-ahead search", ["ranks full", "race plans"], "#E69F00", "#2c2614", 190),
-             ("LLM agent", [model, "reads the plans", "and the race,", "asks follow-ups,", "decides"], "#56B4E9",
+             ("LLM agent", [model, "reads plans", "and the race,", "asks, then", "decides"], "#56B4E9",
               "#16263a", 222),
-             ("Decision", ["PIT now", "onto HARD", "or STAY OUT,", "stop on lap 31"], "#ffcf4a", "#2c2614", 175))
+             ("Decision", ["PIT now", "onto HARD", "or STAY OUT,", "stop lap 31"], "#ffcf4a", "#2c2614", 175))
     gap = (width - sum(b[4] for b in boxes)) / (len(boxes) - 1)
-    H = 372
+    H = 322
     s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="How the agent works">',
          f'<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" '
          f'orient="auto"><path d="M0,0L10,5L0,10Z" fill="{INK}"/></marker></defs>']
@@ -343,11 +352,11 @@ def agent_diagram(model, width=1000):
         words = title.split(" ")
         tl = [title] if len(title) <= 9 else ([words[0], " ".join(words[1:])] if len(words) > 1 else [title])
         for k, tt in enumerate(tl):
-            s.append(f'<text x="{x + w / 2:.1f}" y="{42 + 32 * k}" text-anchor="middle" font-size="27" font-weight="800" '
+            s.append(f'<text x="{x + w / 2:.1f}" y="{44 + 34 * k}" text-anchor="middle" font-size="30" font-weight="800" '
                      f'fill="{INK}">{tt}</text>')
-        y0 = 42 + 32 * len(tl) + 26
+        y0 = 44 + 34 * len(tl) + 28
         for k, line in enumerate(lines):
-            s.append(f'<text x="{x + w / 2:.1f}" y="{y0 + 36 * k}" text-anchor="middle" font-size="24.5" '
+            s.append(f'<text x="{x + w / 2:.1f}" y="{y0 + 39 * k}" text-anchor="middle" font-size="27" '
                      f'fill="{MUTED if i != 4 else INK}">{line}</text>')
         if i < len(boxes) - 1:
             s.append(f'<line x1="{x + w + 2:.1f}" y1="{H / 2}" x2="{x + w + gap - 4:.1f}" y2="{H / 2}" stroke="{INK}" '
@@ -436,17 +445,18 @@ def html(args_line):
     <ol class="trace">
       <li><b>Situation.</b> {V("ex_race")}, after lap {V("ex_lap")}, {V("ex_left")} laps left; {V("ex_set")} tyres,
       {V("ex_age")} laps old; {V("ex_status")} flag.</li>
-      <li><b>Tools.</b> Best plan: <span class="plan">{V("ex_p1")}</span> (pit now). Next: <span class="plan">{V("ex_p2")}</span>,
-      {V("ex_p2_gap")} s. Tyre wear {V("ex_wear_obs")} s/lap observed, {V("ex_wear_model")} predicted.</li>
+      <li><b>Tools.</b> Best plan: {V("ex_p1_words")}.<br>Next best: {V("ex_p2_words")}: {V("ex_p2_slower")}.<br>
+      Tyre wear {V("ex_wear_obs")} s/lap observed, {V("ex_wear_model")} predicted.</li>
       <li><b>Decision.</b> {V("ex_dec")}, confidence {V("ex_conf")}.</li>
       <li><b>Reason.</b> <q>{V("ex_reason")}</q></li>
     </ol>
-    <p class="note">Time lost against the judge&rsquo;s best plan: {V("ex_regret")} s. Plans list tyre and laps per stint.</p>
+    <p class="note">Time lost against the judge&rsquo;s best plan: {V("ex_regret")} s.</p>
   </article>
   <article class="panel test">
     <h2><b>4</b>How we test it</h2>
     <p>A second simulator, the <b>judge</b>, replays the whole race and times every plan. <b>Time lost</b> = a plan&rsquo;s
     race time minus the judge&rsquo;s best plan.</p>
+    <p>The agent never sees the future: we scramble the rest of the race and check that nothing it sees changes.</p>
     <div class="split">
       <div class="blind">{blind_diagram()}</div>
       <div><p>The judge orders close finishers correctly {V("fid_close_pct")} of the time.</p>
@@ -529,7 +539,7 @@ h1{font-size:96pt;line-height:1;margin:0;letter-spacing:.02em;font-weight:900}
   border:2px dashed var(--pend);padding:0 .07in}
 .main{flex:1;display:flex;flex-direction:column;gap:.22in;min-height:0}
 .row{display:grid;gap:.3in;flex:none}
-.r1{grid-template-columns:1.15fr 1.6fr}
+.r1{grid-template-columns:1fr 1.85fr}
 .r2{grid-template-columns:1fr 1.25fr}
 .r4{grid-template-columns:2.1fr 1fr}
 .r4 ul{font-size:26pt}
@@ -560,10 +570,11 @@ q{font-style:italic;color:var(--muted)}
 .tbl td.dvc{color:var(--muted)}
 .sw{display:inline-block;width:.2in;height:.2in;border-radius:.03in;margin-right:.1in;vertical-align:.02em}
 .take{background:#16263a;border-color:var(--dev)}
-.take p{font-size:29pt;line-height:1.24}
-.prob{max-width:6.4in}
-.split{display:grid;grid-template-columns:5.3in 1fr;gap:.3in;align-items:start}
-.ex{font-size:27pt}
+.take p{font-size:33pt;line-height:1.26}
+.cap{font-size:24pt;line-height:1.2}
+.prob{max-width:5.3in}
+.split{display:grid;grid-template-columns:4.9in 1fr;gap:.3in;align-items:start}
+.ex{font-size:26pt}
 .ex .note{font-size:25pt}
 footer{flex:none;border-top:2px solid var(--line);padding-top:.08in}
 .foot{font-size:15pt;color:var(--muted);white-space:nowrap}
