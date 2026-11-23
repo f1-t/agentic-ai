@@ -1530,6 +1530,144 @@ Tested and not adopted (no interval excludes 0 in the useful direction):
   falls (MAE 5.81 -> 5.62 laps), but the favourite's judge-regret rises: +0.09 [+0.03, +0.17]*, first
   third +0.20 [+0.03, +0.39]*. Rejected.
 
+### Tyre sets at the snapshot (`SimConfig.tyre_inventory`, adopted)
+
+Before this switch every snapshot of the eval and the scorecard carried `sets_available = None`, and
+both simulators ran each later stint on a NEW set. In the calibration races, a later stint starts on
+a used set:
+
+| compound | later stints on a used set | median age |
+|---|---|---|
+| SOFT | 66% | 4 laps |
+| MEDIUM | 19% | 3 laps |
+| HARD | 11% | 2 laps |
+
+Under the inventory below, the belief's favourite needed a new set the driver no longer held at
+34.8% of the scorecard snapshots and the judge's at 31.3%; a set of a compound with none left at
+0.7% and 0.2%. The tyre sets were adopted in both simulators on 2026-11-22, for the rerun.
+
+**The inventory.** With the switch on, `src/sim/tyre_inventory.py` gives each snapshot the driver's
+sets left at that moment, and the existing machinery applies it (`tyre_sets.weekend_sets`,
+`rules.inventory`, `Snapshot.sets_available`).
+
+- **Allocation.**
+  - From 2020: 2 HARD, 3 MEDIUM and 8 SOFT.
+  - On a sprint weekend: 2 HARD, 4 MEDIUM and 6 SOFT.
+  - 2019: each driver's allocation was his team's choice and the cache does not hold it. A 2019 race
+    therefore takes 13 sets of each compound. It is unconstrained on new sets, but the used sets its
+    sessions show are held at their recorded ages.
+- **Less:**
+  - the sets opened in practice, the sprint and qualifying, each kept at the laps it has run (a set
+    used for a few qualifying laps is held at that age);
+  - the sets fitted in the race up to the snapshot, from the race laps completed by the end of the
+    driver's lap k (`data.visible_rows` on the session times).
+- **Approximations, both toward allowing a set:**
+  - Sets handed back after practice are not modelled: every opened set is kept as a used set.
+  - A used set that matches no held set is not counted against the allocation's unseen new sets,
+    because it may be one set counted twice.
+- **Information.** Every source is from before the race or is a race lap completed by the snapshot,
+  so the inventory is as of the snapshot.
+  - The judge reads the same inventory as the belief at each snapshot (ledger entry
+    `tyre_inventory`, tag "this race, to snapshot").
+  - The judge's whole-race replays run each real stint at its recorded age, as they did before.
+  - `tests/test_future_blindness.py` checks that the sets do not move when the race after the moment
+    is changed or cut.
+
+**Effect on a plan.**
+
+- **The rule.** A later stint takes the best set of its compound left: a new one while one remains,
+  else the least used. A used set starts at its laps run and carries the wear and tyre-life cost of
+  that age.
+  - A stint naming a used age (a recorded strategy) takes that set, else the nearest held one, or
+    refits a set this plan took off earlier at its age then.
+  - A plan that needs a compound with no set left is infeasible.
+- **Where the rule applies.** The rule is the same in every path a plan takes:
+  - the engine (`rules.assign_sets`; `Simulator.compare`'s pit action);
+  - the look-ahead and the continuations (`optimizer_bridge.to_contract`: `belief_optimizer`,
+    `decisions.to_plan`, `kept_plan`, `named_plan`);
+  - `rank_plans` and `evaluate_plan`;
+  - the submission check.
+- **Where the snapshot is filled.** The snapshot gets its sets where the reference, the policies and
+  the scorecard read it (`score.score_scenario`, `reference.compute_reference`,
+  `fidelity.section_b`), so what a policy is shown is what is scored.
+- **The agent.**
+  - `race_picture` gains `sets_left`: per compound, the new sets held and the ages of the used ones.
+  - The v2free prompt gains one sentence: sets are limited, and a used set starts at its age.
+
+**The rule baselines.**
+
+| baseline | what it does under the inventory |
+|---|---|
+| `run_to_flag` | Already keeps only plans that pass every rule on the belief, the inventory included, so it takes its next compound in order. |
+| `one_stop_total` | Before the first stop: `fixed_one_stop`. After it: `run_to_flag`. |
+| `fixed_one_stop`, `fixed_two_stop`, `greedy_crossover` | Plan as before and take the best set of each named compound. When a compound they name has no set left, they are unavailable for that scenario, with the stated reason "No tyre set for the rule's plan: ...". |
+| `actual_strategy` | Replays the recorded strategy with each later stint at its recorded set's age (`data.race_stints`), so the inventory matches the real set, or refits it. A recorded strategy the inventory still cannot fit is unavailable, with the reason. |
+
+**Real strategies against the inventory.** At the race start, the 601 later real stints of the 324
+finishers of the 19 calibration races:
+
+- 574 find their exact set;
+- 27 (4.5%) take the nearest held set of the compound;
+- none is infeasible.
+
+The 27 substitutions:
+
+| where | stints | why |
+|---|---|---|
+| 2022 Austria (sprint weekend) | 7 MEDIUM | the race fitted a new MEDIUM the estimate no longer holds |
+| 2022 Brazil (sprint weekend) | 8 SOFT, 1 MEDIUM | the same: 7 new sets, 2 used ones |
+| 2023 Bahrain | 1 SOFT | a new set the estimate no longer holds |
+| ten other stints at seven races | 10 | a used set whose recorded age is not held; the nearest held age differs by 1 to 25 laps |
+
+At the two sprint weekends the sessions show more sets than the allocation (a set counted twice in
+the timing data), so the new sets left come out short.
+
+One of the ten is 2023 Spain LEC's HARD at 25: a set taken off earlier in the race and refitted. A
+plan that took that set off can refit it, so `actual_strategy` plays it exactly.
+
+**Measured on the 19 calibration races, switch off against on** (`python -m src.sim.fidelity run`,
+paired on 1225 snapshots, race-cluster 95%; on: the adopted default at 3881500; off: the main of
+2026-11-22 with the SC queue):
+
+| measure | off | on | change |
+|---|---|---|---|
+| judge close pairs | 0.747 | 0.747 | 0 (the judge's whole-race replays are untouched) |
+| judge relative gap | 7.60 s | 7.60 s | 0 |
+| plan-rank agreement | 0.872 | 0.880 | +0.008 [-0.004, +0.020]; first third +0.015 [+0.002, +0.028] |
+| favourite's judge-regret | 3.16 s | 3.47 s | +0.31 [-0.25, +1.09]; first third +0.79 [-0.41, +2.26]; no history +0.56; low-wear four +0.37 |
+| pit-now agreement | 0.827 | 0.847 | +0.020 [-0.007, +0.048]; low-wear four +0.033 [+0.013, +0.051] |
+| over-stop share | 0.120 | 0.095 | -0.025 [-0.059, +0.001] |
+| E_real_regret_s | 5.59 s | 5.21 s | |
+
+**dev20 baselines rescore** (`src.eval.rerun baselines`, references rebuilt; off: the legacy pair,
+on: the adopted default at 3881500). Each side's regret is against its own judge's reference.
+Change in judge-regret, race-cluster 95%:
+
+| policy | all | first third | low-wear four |
+|---|---|---|---|
+| `belief_optimizer` | 3.04 -> 3.34 s, +0.30 [-0.32, +1.05] | +0.62 [-0.52, +2.04] | -0.21 [-0.61, +0.06] |
+| `run_to_flag` | 9.06 -> 8.28 s, -0.78 [-1.36, -0.29] | -1.13 [-2.01, -0.32] | -0.21 [-0.47, +0.02] |
+| `one_stop_total` | 9.82 -> 9.09 s, -0.73 [-1.23, -0.30] | -1.01 [-1.70, -0.42] | -0.19 [-0.47, +0.01] |
+| `actual_strategy` | 6.43 -> 6.86 s, +0.43 [-0.26, +1.20] | +0.50 [-0.76, +1.98] | -0.24 [-0.58, +0.12] |
+| `fixed_one_stop` | 13.64 -> 14.57 s, +0.93 [-0.30, +2.24] | +0.67 | +1.88 [-0.05, +5.61] |
+| `fixed_two_stop` | 22.73 -> 26.49 s, +3.76 [+2.19, +5.62] | +5.45 [+2.51, +8.69] | +2.75 [+0.27, +7.39] |
+| `greedy_crossover` (80 rows) | 84.96 -> 111.46 s, +26.5 [+14.1, +42.6] | +29.9 | +19.5 |
+
+Every `actual_strategy` row the off side scores, the on side scores (428 of 469; the 41 others are
+unavailable on both sides for the same reasons as before).
+
+The inventory makes two baselines unavailable, both because a named compound has no set left:
+
+- `fixed_one_stop`: 2 more rows ("No tyre set for the rule's plan: ... no HARD set left");
+- `fixed_two_stop`: 31 more rows.
+
+References that use a proxied compound: 15 of the 469 scenarios off, 22 on.
+
+**Where the regret change comes from.** One race carries it: 2021 Spain, +414 s of the +381 s total.
+Nobody raced HARD there, so both simulators price HARD by proxy. Once the MEDIUMs left are used sets,
+the judge moves to the proxied HARD and the belief does not. This is not special-cased (see the
+limitation under "Limitations").
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
@@ -4023,6 +4161,15 @@ Standing limitations:
   the ordering constraint makes the proxied HARD a copy of SOFT, which 66 of v1's references
   use as a second SOFT-like compound; rows carry `proxied_compounds` and
   `opt_proxied_compounds` so results can be read with and without the rows that rest on one.
+- **A compound nobody raced is priced by proxy in both simulators, and the tyre sets make that
+  matter more** ("Tyre sets at the snapshot"). Once the sets left of a raced compound are used, a
+  plan moves to a new set of the unraced one, whose price has no race laps behind it in either
+  simulator. At 2021 Spain (no car ran HARD) this carries the whole change in the favourite's
+  regret when the sets were switched on. It is not special-cased.
+- **The tyre sets are estimated, not recorded.** Sets handed back after practice are not modelled
+  (every opened set is kept as a used one). 2019 allocations are not in the cache (13 per compound:
+  unconstrained on new sets, used sets at their recorded ages). At the two 2022 sprint weekends the
+  sessions show more sets than the allocation, so new sets come out short there.
 - **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
   actual_strategy unavailable on 65 scenarios.
 - **SC and VSC are modelled, not known.** The belief draws periods from rates and lengths fitted on
@@ -4630,19 +4777,22 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   true, mode: single, held_behind_laps: 1.25, placement: record}`, adopted 2026-11-22, "Placing the
   car by the record"): at each recorded SC period the simulated car joins the train at its recorded
   place, cars more than 1.25 laps behind at the deployment held at their gap (hindsight, the judge
-  only, ledgered as `sc_queue` and `sc_queue_placement`); no traffic; R8 retired. As a file:
-  `configs/sim/world_hybrid.yaml`. config_hash `7c974c32c67c` (before the SC queue `15e3f31d98a7`,
-  before v3 `5069228b35e7`, before the SC alignment `abc455a9bbb6`, before the scorecard
-  `d230d3a56b0b`).
+  only, ledgered as `sc_queue` and `sc_queue_placement`); the tyre sets at the snapshot
+  (`config.WORLD_TYRE_INVENTORY`, `tyre_inventory: true`, adopted 2026-11-22, "Tyre sets at the
+  snapshot"; the same as-of inventory as the belief, ledgered as `tyre_inventory`); no traffic; R8
+  retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash `c821efe0bc98` (before the tyre
+  sets `7c974c32c67c`, before the SC queue `15e3f31d98a7`, before v3 `5069228b35e7`, before the SC
+  alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
   ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
   `sd_scale`, SC/VSC lengths from the as-of history of period lengths, a period in progress
   continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22), the
   wear-cliff edge at its point in every sample (`belief_cliff_edge: point`, adopted 2026-11-22,
-  "Belief priors"); no safety-car queue (`tests/test_eval_default_config.py` checks no belief config
-  carries it). config_hash `9d691bbbcf24` (before v3 `351f4124ff22`, before the SC alignment
-  `f7b872d14c0c`, before the scorecard `d479652b0fe7`). `belief_traffic.yaml` and
+  "Belief priors"); the tyre sets at the snapshot (`tyre_inventory: true`, adopted 2026-11-22, "Tyre
+  sets at the snapshot"); no safety-car queue (`tests/test_eval_default_config.py` checks no belief
+  config carries it). config_hash `aaf95a09bc50` (before the tyre sets `9d691bbbcf24`, before v3
+  `351f4124ff22`, before the SC alignment `f7b872d14c0c`, before the scorecard `d479652b0fe7`). `belief_traffic.yaml` and
   `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
   `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
@@ -4650,10 +4800,38 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   pit-stop durations (`pit_stops`), overtaking difficulty, three-stop search.
   The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
   and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
-  `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged).
+  `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged);
+  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`.
   Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
-  queue's other forms).
+  queue's other forms), `tyre_inventory_off` (both simulators).
+
+Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
+calibration races, none failed). Hashes and versions:
+
+| | before | after |
+|---|---|---|
+| SIM_CODE_VERSION | `32671b6a2ad5` | `30efab2adf7a` |
+| default world config_hash | `7c974c32c67c` | `c821efe0bc98` |
+| belief config_hash | `9d691bbbcf24` | `aaf95a09bc50` |
+
+Measures; the judge's are unchanged because its whole-race replays already run real ages:
+
+| measure | after | before |
+|---|---|---|
+| close pairs out of sample | 0.747 | 0.747 |
+| Spearman | 0.960 | 0.960 |
+| relative gap | 7.60 s | 7.60 s |
+| plan-rank agreement | 0.880 | 0.872 |
+| judge-regret of the belief's favourite | 3.47 s | 3.16 s |
+| pit-now agreement | 0.847 | 0.827 |
+| belief replay close pairs | 0.667 | unchanged |
+| plan 90% coverage | 0.972 | |
+| E_real_regret_s | 5.21 s | 5.59 s |
+
+The noise floor (`ceiling_pooled.csv` there) is unchanged. The paired off/on table and the reading are
+under "Tyre sets at the snapshot". Every reference built on the earlier world is stale: its world
+config_hash and SIM_CODE_VERSION both changed.
 
 Confirmation after the judge's safety-car queue on 83fb72e
 (`reports/calibration/fidelity/sc-queue-83fb72e/`, all 19 calibration races, none failed, future

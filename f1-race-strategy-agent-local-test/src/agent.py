@@ -111,6 +111,11 @@ PRERACE_SENTENCE = (" race_picture's pre_race block is the tyre supplier's view 
                     "the simulator, made before any race lap was run; where it and the ranking disagree (for example on "
                     "the number of stops or how long a compound lasts), weigh it with what the race has shown since.")
 
+# SimConfig.tyre_inventory (the snapshot carries the sets left): this sentence follows the same anchor
+TYRE_SETS_SENTENCE = (" Tyre sets are limited: race_picture's sets_left lists the sets your car still holds. A later "
+                      "stint takes a new set of its compound while one is left, else the least used one, which starts "
+                      "at its age; a compound with no set left cannot be fitted.")
+
 SUBMIT_TOOL = {
     "name": "submit_recommendation",
     "description": "Submit the final immediate mid-race strategy decision.",
@@ -524,6 +529,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
                      else base_prompt.replace(GAP_SENTENCE, ""))
     if proto == "v2free" and tools.agent_tools.prerace_shown():
         system_prompt = system_prompt.replace(PRERACE_ANCHOR, PRERACE_ANCHOR + PRERACE_SENTENCE)
+    if proto == "v2free" and tools._contract().sets_available is not None:
+        system_prompt = system_prompt.replace(PRERACE_ANCHOR, PRERACE_ANCHOR + TYRE_SETS_SENTENCE)
     evidence = None   # v2: the latest rank_plans evidence (_evidence_of)
     readings = {}     # v2free: what each plan read against plan 1 was shown as (_readings_of)
     held = None       # v2: the submission the consistency check held, until the final one

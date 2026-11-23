@@ -70,7 +70,7 @@ import numpy as np
 import pandas as pd
 
 from ..baselines.domain import NoFeasiblePlan, PolicyUnavailable
-from ..sim import calibration, proxy, traffic
+from ..sim import calibration, proxy, traffic, tyre_inventory
 from ..sim.optimizer_bridge import optimize_batch
 from . import decisions
 from .policies import Decision
@@ -204,6 +204,10 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
     plans its own reference too, and the rows gain ref_models_agree: every one of them agrees
     with the world's reference (references_agree). They score nothing."""
     belief = world if belief is None else belief
+    if tyre_inventory.on(getattr(world, "config", None), getattr(belief, "config", None)):
+        # SimConfig.tyre_inventory: the as-of sets in the snapshot the reference, the policies and the
+        # scoring all read
+        scenario = scenario.model_copy(update={"snapshot": tyre_inventory.with_sets(scenario.snapshot, scenario.race_id)})
     snap = scenario.snapshot
     base = {"scenario_id": scenario.scenario_id, "race_id": scenario.race_id, "driver": scenario.driver,
             "lap": scenario.lap, "compound": snap.compound, "tyre_age": snap.tyre_age,

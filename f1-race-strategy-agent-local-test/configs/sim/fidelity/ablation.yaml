@@ -16,7 +16,7 @@
 # (linear_fuel with driver effects, wear bound 0, fuel anchoring, persistent lap noise, as-of pit loss
 # and cliff, the cliff edge at its point). Each adopted choice has a factor that switches it back off
 # (world_events_off, cliff_edge_history, belief_no_driver_effects, the judge's wear fit world_linear /
-# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw, sc_queue_off); the rejected ones stay as
+# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw, sc_queue_off, tyre_inventory_off); the rejected ones stay as
 # factors that switch them on.
 factors:
   # traffic (sim/traffic.py, docs/eval.md "Traffic"): the order measures are why it exists
@@ -120,6 +120,12 @@ factors:
   # the safety-car queue (sim/sc_queue.py, config.WORLD_SC_QUEUE): adopted in the judge 2026-11-22 (single
   # mode, the near-lapped rule, the car placed by its recorded place), so the base has it; these switch
   # it back off or to its earlier forms, or add it to the belief (which has no queue)
+  # the tyre sets at the snapshot (sim/tyre_inventory.py, docs/eval.md "Tyre sets at the snapshot"), adopted in
+  # both simulators: off, every later stint on a new set in both
+  tyre_inventory_off:
+    note: both simulators without the tyre sets (configs/sim/legacy/world_pre_tyre_inventory.yaml, belief_pre_tyre_inventory.yaml)
+    world: {tyre_inventory: false}
+    belief: {tyre_inventory: false}
   sc_queue_off:
     note: the judge without the safety-car queue (configs/sim/legacy/world_pre_sc_queue.yaml)
     world: {sc_queue: {enabled: false, mode: single, spacing_s: 0.5, held_behind_laps: null, placement: clock}}
