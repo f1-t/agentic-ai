@@ -4850,7 +4850,39 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
   queue's other forms), `tyre_inventory_off` (both simulators), `cliff_edge_history_only`.
 
-ASOF_CONFIRMATION
+Confirmation after the judge's as-of edge, on f6148e0 (main 72d2fc5 with the tyre sets, plus the
+adoption). Output: `reports/calibration/fidelity/asof-edge-f6148e0/`, all 19 calibration races,
+none failed, future blindness pass.
+- SIM_CODE_VERSION `b239243dc1ea`, before `30efab2adf7a`.
+- Default world config_hash `9b98afd55974`, before `c821efe0bc98`.
+- The belief is unchanged, `aaf95a09bc50`.
+
+Headline: close pairs out of sample 0.747, Spearman 0.960, relative gap 7.60 s, plan-rank
+agreement 0.884, judge-regret of the belief's favourite 3.14 s, pit-now agreement 0.861, belief
+replay close pairs 0.667, plan 90% coverage 0.972, E_real_regret_s 4.77 s (over 20 s: 0.057). The
+noise floor (`ceiling_pooled.csv` there) is unchanged: judge 0.747 / 7.6 s.
+
+As-of against the prior-only edge (`cliff_edge_history_only`, the same base), race-cluster 95%:
+
+| measure | history_only | as_of change |
+|---|---|---|
+| close pairs / Spearman / relative gap | 0.747 / 0.960 / 7.60 s | 0 / 0 / 0 |
+| plan-rank agreement | 0.880 | +0.004 [+0.000, +0.007] |
+| judge-regret of the belief's favourite | 3.47 s | -0.33 [-0.79, -0.01] |
+| early third / mid / late | 7.15 / 2.14 / 1.24 s | 0.00 / -0.18 [-0.45, -0.00] / -0.88 [-2.07, -0.03] |
+| pit-now agreement, all / late | 0.847 / 0.892 | +0.014 [-0.004, +0.039] / +0.053 [+0.006, +0.125] |
+| E_real_regret_s / over 20 s | 5.21 s / 0.070 | -0.43 [-1.12, -0.05] / -0.013 [-0.029, -0.001] |
+| judge's best panel plan adds a stop the team did not make | 0.089 | -0.019 [-0.052, +0.000] |
+
+The dev20 rescore against each judge's own reference (tyre sets on, as-of against history_only):
+- belief_optimizer: 3.34 to 2.99 s, -0.34 [-0.77, -0.04].
+- run_to_flag: +0.01.
+- one_stop_total: +0.00.
+- actual_strategy: 6.86 to 6.53 s, -0.33 [-0.71, -0.03]. The reference adds a stop the team did
+  not make 0.107 to 0.086; the share over 20 s is level at 0.089.
+
+Every reference built on the earlier world is stale: its world config_hash and SIM_CODE_VERSION
+both changed.
 
 Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
 calibration races, none failed). Hashes and versions:
