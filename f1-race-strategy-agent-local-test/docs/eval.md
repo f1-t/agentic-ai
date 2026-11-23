@@ -3207,7 +3207,9 @@ This is the current result: the second evaluation ("Second evaluation" below).
 - **Test set, all nine races.** The agent is ahead of both simple rules: -2.28 s against
   `run_to_flag` and -2.21 s against `one_stop_total`. The race-cluster interval includes zero for
   both. It is ahead of the teams' actual strategies (-5.03 s), and level with its look-ahead
-  (`belief_optimizer`, -0.02 s).
+  (`belief_optimizer`, -0.02 s). Most of the lead over the rules, and nearly all of the lead over
+  the teams, comes from 2019 Monaco. Without it the agent is level with all three ("Unmodelled
+  team decisions" under "Limitations").
 - **Fresh five** (the pre-registered primary test). The agent is level with both rules (+1.67 s
   and +1.74 s). The shortfall sits at 2022 Australia and 2022 Miami, where the look-ahead has the
   same regret.
@@ -3408,6 +3410,10 @@ rule's plan": 6 `fixed_two_stop` rows and 1 `greedy_crossover` row (`v3/test9/ta
 | 2025_11_austria | earlier | 25 | 2.08 | 2.15 | 8.11 | 7.83 | 5.58 (25) | -6.02 | -5.96 | 20 of 25 |
 
 Over all nine, the agent's regret equals the look-ahead's on 196 of 224 scenarios.
+
+At 2019 Monaco the judge scores the teams' real strategies 41.25 s behind its own best plan, and
+the rules 19.02 s behind. The simulators do not model the managed pace the field ran there
+("Unmodelled team decisions" under "Limitations").
 
 The fresh-five shortfall is the look-ahead's:
 
@@ -4760,6 +4766,35 @@ Standing limitations:
   there, so the belief's draws of an SC or VSC starting in those k laps do not enter the
   continuation. Under SC or VSC at the snapshot the stay is planned from the snapshot ("Decisions",
   "Changes after the freeze"). Found after the freeze and left as it is.
+
+### Unmodelled team decisions
+
+**Track position and managed pace.** The simulators treat lap time as a property of tyres and
+fuel: a car laps at the pace they allow. They do not model:
+
+- track position: the cost of rejoining behind cars that cannot be passed;
+- pace management: drivers lapping below the tyre's limit to save the tyres or to control gaps.
+
+**2019 Monaco is the extreme case.** The field ran a managed pace there, and 8 of the 16 drivers
+sampled kept one set for 62 to 68 laps (the `actual_strategy` plans in
+`reports/eval/rerun/v3/test9/tables/combined.csv`). The judge scores the teams' real strategies
+41.25 s behind its own best plan (`tables/summary.csv`). Monaco carries most of the agent's
+test-set lead (agent minus X, 95% (race, driver) interval, from `combined.csv`):
+
+| X | all nine | without Monaco |
+| --- | --- | --- |
+| run_to_flag | -2.28 (-4.22, -0.22) | -0.29 (-1.95, +1.32) |
+| one_stop_total | -2.21 (-4.22, -0.10) | -0.21 (-1.92, +1.48) |
+| actual_strategy | -5.03 (-8.53, -1.87) | -0.34 (-2.34, +1.56) |
+
+**A team decides more than when to pit.** It also sets the driver's target pace, the fuel mix and
+the car's setup (downforce, camber, brake balance, anti-roll), using information this project
+does not have. Some of it could be proxied, for example lift-and-coast and managed pace from
+telemetry. It was not, because that is hard, and it would require the agent to make more
+decisions, to be given the outcome of other decisions, or to be one of several agents.
+
+With those modelled, the teams' actual strategies would be expected to score better against the
+judge. Read the comparison with the teams with that in mind.
 
 ## Running on Sol
 
