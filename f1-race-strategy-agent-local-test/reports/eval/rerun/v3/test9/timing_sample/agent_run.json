@@ -1,0 +1,54 @@
+{
+ "passes": [
+  {
+   "label": "agent",
+   "jobs": 1,
+   "started": "2026-11-23T04:14:11.654635+00:00",
+   "ended": "2026-11-23T04:17:51.704793+00:00",
+   "wall_s": 220.1,
+   "to_run": 24,
+   "ran": 24,
+   "skipped": 0,
+   "errors": 0,
+   "retries": 0,
+   "retry_event_counts": {},
+   "crashed": 0,
+   "env": {
+    "LLM_BACKEND": "voyager",
+    "ANTHROPIC_MODEL": null,
+    "HF_MODEL": null,
+    "VOYAGER_MODEL": "qwen3-30b-a3b",
+    "VOYAGER_MAX_TOKENS": "1024",
+    "VOYAGER_TEMPERATURE": null,
+    "AGENT_MAX_TOOL_CALLS": null,
+    "AGENT_SUBMIT_GRACE_STEPS": null,
+    "AGENT_REPEAT_MODE": null,
+    "AGENT_TURN_STATUS": null,
+    "AGENT_SHOW_IDENTITY": null,
+    "AGENT_GAP_YARDSTICK": null,
+    "AGENT_TURN_REPEAT": "run",
+    "AGENT_PROTOCOL": "v2free",
+    "AGENT_PRERACE": null
+   }
+  }
+ ],
+ "agent_jobs": 1,
+ "scenarios": 24,
+ "only": true,
+ "headline": "the decision time reported is the isolated timing sample's (timing_sample.csv: K episodes run sequentially, one job, before the pass); the full pass's per-episode latency_s was measured with agent_jobs episodes running concurrently and is reported beside it, not as the decision time",
+ "latency_measured_under": "1 concurrent episode (agent_jobs) in the full pass; other users of the endpoint are not controlled",
+ "agent_wall_s": 220.1,
+ "timing_sample_wall_s": 0,
+ "retry_policy": {
+  "tries": 3,
+  "backoff_s": [
+   5.0,
+   20.0
+  ],
+  "request_timeout_s": 180.0,
+  "retried": "429, 5xx, timeouts, dropped connections; 401/403 stop the pass"
+ },
+ "rows_status": {
+  "ok": 24
+ }
+}

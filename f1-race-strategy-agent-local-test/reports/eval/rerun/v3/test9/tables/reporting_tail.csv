@@ -1,0 +1,25 @@
+policy,scored,share_over_20s (stated),share_over_10s,share_over_30s,median_s,worst_s,group,group_label,group_races
+actual_strategy,116,0.06896551724137931,0.1724137931034483,0.008620689655172414,0.3131019400034347,47.76223214067432,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+agent,124,0.1693548387096774,0.28225806451612906,0.024193548387096774,1.2605409684767892,45.10303820782792,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+belief_optimizer,124,0.1693548387096774,0.27419354838709675,0.024193548387096774,0.9323819482765431,45.10303820782792,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+fixed_one_stop,121,0.21487603305785125,0.5454545454545454,0.01652892561983471,10.823421547997896,35.77617031560658,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+fixed_two_stop,115,0.7043478260869566,0.9217391304347826,0.45217391304347826,28.85090994378379,48.14549459942714,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+greedy_crossover,19,0.8421052631578947,1.0,0.7368421052631579,43.71623605430159,291.9268448467101,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+one_stop_total,124,0.07258064516129033,0.2661290322580645,0.0,0.826404867119436,25.82441682544004,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+run_to_flag,124,0.06451612903225806,0.27419354838709675,0.0,0.9597633769742515,25.82441682544004,fresh five,"the five races never examined before this run, the primary test of the corrected system",5
+actual_strategy,97,0.26804123711340205,0.4329896907216495,0.16494845360824742,8.204490202221677,113.57509855324406,earlier four,"a second look, the four races scored once under the superseded protocol",4
+agent,100,0.03,0.13,0.0,0.8371427467975536,26.237517259075503,earlier four,"a second look, the four races scored once under the superseded protocol",4
+belief_optimizer,100,0.03,0.13,0.0,0.940827704038611,26.516397808722104,earlier four,"a second look, the four races scored once under the superseded protocol",4
+fixed_one_stop,96,0.3020833333333333,0.6979166666666666,0.16666666666666666,14.884445504234805,53.27413905279445,earlier four,"a second look, the four races scored once under the superseded protocol",4
+fixed_two_stop,90,0.7333333333333333,0.9111111111111111,0.5666666666666667,32.13893840422804,62.825045210671306,earlier four,"a second look, the four races scored once under the superseded protocol",4
+greedy_crossover,16,0.9375,1.0,0.9375,67.33541182006775,159.9286524937379,earlier four,"a second look, the four races scored once under the superseded protocol",4
+one_stop_total,100,0.19,0.41,0.13,6.253940225421275,53.27413905279445,earlier four,"a second look, the four races scored once under the superseded protocol",4
+run_to_flag,100,0.19,0.41,0.13,6.253940225421275,53.27413905279445,earlier four,"a second look, the four races scored once under the superseded protocol",4
+actual_strategy,213,0.1596244131455399,0.29107981220657275,0.07981220657276995,2.5129352985545665,113.57509855324406,all nine,every held-out race,9
+agent,224,0.10714285714285714,0.21428571428571427,0.013392857142857142,1.0111889324296044,45.10303820782792,all nine,every held-out race,9
+belief_optimizer,224,0.10714285714285714,0.20982142857142858,0.013392857142857142,0.940827704038611,45.10303820782792,all nine,every held-out race,9
+fixed_one_stop,217,0.2534562211981567,0.6129032258064516,0.08294930875576037,12.793922078881224,53.27413905279445,all nine,every held-out race,9
+fixed_two_stop,205,0.7170731707317073,0.9170731707317074,0.5024390243902439,30.046604727716613,62.825045210671306,all nine,every held-out race,9
+greedy_crossover,35,0.8857142857142857,1.0,0.8285714285714286,59.09380992011393,291.9268448467101,all nine,every held-out race,9
+one_stop_total,224,0.125,0.33035714285714285,0.05803571428571429,1.3039113453360187,53.27413905279445,all nine,every held-out race,9
+run_to_flag,224,0.12053571428571429,0.33482142857142855,0.05803571428571429,1.4684952148445518,53.27413905279445,all nine,every held-out race,9

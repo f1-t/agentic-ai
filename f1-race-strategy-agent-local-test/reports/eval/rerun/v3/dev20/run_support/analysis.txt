@@ -1,0 +1,281 @@
+
+===== counts per policy and status =====
+status             ok  unavailable
+policy                            
+actual_strategy   428           41
+agent             469            0
+belief_optimizer  469            0
+fixed_one_stop    455           14
+fixed_two_stop    401           68
+greedy_crossover   80          389
+one_stop_total    469            0
+run_to_flag       469            0
+
+===== non-ok reasons =====
+policy            status       reason                                                                                  
+actual_strategy   unavailable  New stints must reach the minimum stint length.                                               8
+                               The complete dry race must use at least two compounds.                                        4
+                               The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).         16
+                               The plan uses an unavailable compound.                                                       13
+fixed_one_stop    unavailable  No tyre set for the rule's plan: Stint 2: no HARD set with 0 laps run; no HARD set left.      2
+                               The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).         12
+fixed_two_stop    unavailable  No tyre set for the rule's plan: Stint 2: no HARD set with 0 laps run; no HARD set left.      1
+                               No tyre set for the rule's plan: Stint 3: no HARD set with 0 laps run; no HARD set left.     30
+                               The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).         19
+                               There are too few laps for exactly 2 future stops.                                           18
+greedy_crossover  unavailable  The plan stops immediately; a first stint needs at least one lap (docs/rules.md R1).        389
+
+===== negative regret rows =====
+0
+
+===== pooled regret per policy =====
+                      n    mean  median     p90   worst
+policy                                                 
+belief_optimizer  469.0    3.01    0.31   10.11   30.75
+agent             469.0    3.05    0.25   10.22   30.75
+actual_strategy   428.0    6.54    1.27   18.87  129.87
+run_to_flag       469.0    8.34    3.01   21.88   71.25
+one_stop_total    469.0    9.14    3.01   23.24   81.31
+fixed_one_stop    455.0   14.89   14.70   26.63   81.31
+fixed_two_stop    401.0   26.74   26.35   42.30   94.17
+greedy_crossover   80.0  112.00   82.91  213.98  387.09
+
+===== per race mean regret =====
+policy                        agent  belief_optimizer  run_to_flag  one_stop_total  actual_strategy
+race_id                                                                                            
+2019_10_united_kingdom         4.28              4.23         3.04            3.04             5.04
+2021_01_bahrain                2.14              2.45        11.08           11.08             6.79
+2021_04_spain                  5.86              5.83         9.58           13.62             8.12
+2021_09_austrian               5.59              5.60         2.98            2.57             2.64
+2021_20_qatar                  2.52              2.55         8.59            9.55             6.83
+2021_22_united_arab_emirates   4.34              4.42         4.65            4.99            10.43
+2022_01_bahrain                2.49              1.73        17.53           17.53             6.63
+2022_02_saudi_arabia           0.33              0.33         9.01            8.73             4.11
+2022_06_spain                  0.83              1.07        18.58           18.91            11.72
+2022_08_azerbaijan             3.57              3.57         3.12            3.21             4.85
+2022_09_canada                 1.52              1.35         3.84            3.84             2.98
+2022_11_austria                6.37              6.21        13.89           15.29            25.11
+2022_12_france                 5.41              5.16         6.39            6.39             3.34
+2022_20_mexico                 1.91              1.95        11.20           14.05             7.45
+2022_21_brazil                 1.80              1.80        14.53           14.53             5.83
+2022_22_united_arab_emirates   3.44              3.43         4.13            4.23             1.47
+2023_01_bahrain                1.32              1.34         8.12           11.98             8.54
+2023_07_spain                  1.45              1.44         4.89            6.99             3.29
+2024_07_emilia_romagna         3.53              3.50         4.65            4.65            14.51
+
+===== per race median / p90 / worst (agent) =====
+                                 n  mean  median    p90  worst
+race_id                                                       
+2019_10_united_kingdom        25.0  4.28    3.02  11.82  16.49
+2021_01_bahrain               25.0  2.14    1.15   4.78  13.73
+2021_04_spain                 25.0  5.86    4.40  16.27  25.53
+2021_09_austrian              25.0  5.59    0.40  15.53  22.14
+2021_20_qatar                 25.0  2.52    0.00   8.87  23.38
+2021_22_united_arab_emirates  25.0  4.34    0.00  19.69  23.27
+2022_01_bahrain               25.0  2.49    1.22   7.34  12.23
+2022_02_saudi_arabia          25.0  0.33    0.00   0.23   7.02
+2022_06_spain                 25.0  0.83    0.11   1.56   5.93
+2022_08_azerbaijan            25.0  3.57    1.21  11.95  17.65
+2022_09_canada                25.0  1.52    0.00   4.39  11.19
+2022_11_austria               19.0  6.37    1.65  21.75  30.75
+2022_12_france                25.0  5.41    2.71  14.66  18.87
+2022_20_mexico                25.0  1.91    0.05   4.53  14.09
+2022_21_brazil                25.0  1.80    0.39   3.96  16.47
+2022_22_united_arab_emirates  25.0  3.44    0.19  10.19  27.19
+2023_01_bahrain               25.0  1.32    0.00   5.09  13.55
+2023_07_spain                 25.0  1.45    0.00   5.47   7.08
+2024_07_emilia_romagna        25.0  3.53    2.35   8.79  14.38
+
+===== split: all (469 agent rows) =====
+                      n  mean  median    p90   worst
+policy                                              
+agent             469.0  3.05    0.25  10.22   30.75
+run_to_flag       469.0  8.34    3.01  21.88   71.25
+one_stop_total    469.0  9.14    3.01  23.24   81.31
+actual_strategy   428.0  6.54    1.27  18.87  129.87
+belief_optimizer  469.0  3.01    0.31  10.11   30.75
+  agent - run_to_flag: -5.29 (-6.58, -4.11) race (-7.90, -2.92) n 469 W/T/L (237, 148, 84) ahead
+  agent - one_stop_total: -6.10 (-7.51, -4.75) race (-8.91, -3.55) n 469 W/T/L (237, 148, 84) ahead
+  agent - actual_strategy: -3.72 (-5.08, -2.46) race (-5.49, -2.01) n 428 W/T/L (174, 177, 77) ahead
+  agent - belief_optimizer: +0.04 (-0.04, +0.12) race (-0.05, +0.15) n 469 W/T/L (43, 398, 28) level
+
+===== look-ahead departures =====
+episodes with a rank_plans reading: 469 of 469
+rank_plans plan 1 equals belief_optimizer's plan: 469 of 469
+submissions naming a whole plan: 4
+scored plan differs from plan 1: 71 ; action (PIT/STAY) differs: 7 ; immediate (incl. compound) differs: 7
+departures vs belief_optimizer (0.05 s): helped / hurt / same: 40 26 5  net sum 16.91 mean 0.238
+non-departures: agent - belief_optimizer mean 0.0
+                            n  mean  total  helped  hurt
+reason                                                  
+observed wear vs model     48  0.02   1.12      28    16
+neutralisation (SC/VSC)    14  1.74  24.36       6     8
+traffic / position / gaps   3 -2.10  -6.30       2     1
+fewer stops / risk          2 -0.17  -0.35       1     0
+other / none stated         2 -0.23  -0.47       1     1
+pit loss                    1 -0.29  -0.29       1     0
+tyre life / cliff           1 -1.16  -1.16       1     0
+worst departures:
+                       scenario_id  decision top_immediate agent_immediate                                 plan                             top_plan  delta_vs_bo                   reason
+168         2022_01_bahrain:MSC:45  STAY_OUT      PIT SOFT        STAY_OUT                         [[SOFT, 12]]              [[SOFT, 1], [SOFT, 11]]    10.774723  neutralisation (SC/VSC)
+154         2022_01_bahrain:BOT:45  STAY_OUT      PIT SOFT        STAY_OUT                       [[MEDIUM, 12]]            [[MEDIUM, 1], [SOFT, 11]]    10.731375  neutralisation (SC/VSC)
+312          2022_12_france:RUS:25  STAY_OUT      STAY_OUT        STAY_OUT              [[HARD, 8], [HARD, 20]]                         [[HARD, 28]]     7.450271   observed wear vs model
+270          2022_09_canada:TSU:35  STAY_OUT      STAY_OUT        STAY_OUT             [[HARD, 10], [SOFT, 25]]              [[HARD, 6], [HARD, 29]]     4.183940  neutralisation (SC/VSC)
+290         2022_11_austria:TSU:20  STAY_OUT      STAY_OUT        STAY_OUT  [[HARD, 9], [HARD, 25], [SOFT, 17]]  [[HARD, 6], [HARD, 24], [SOFT, 21]]     2.594036   observed wear vs model
+55            2021_04_spain:LAT:25  STAY_OUT      STAY_OUT        STAY_OUT         [[MEDIUM, 15], [MEDIUM, 26]]         [[MEDIUM, 14], [MEDIUM, 27]]     1.518565   observed wear vs model
+449  2024_07_emilia_romagna:GAS:15  STAY_OUT      STAY_OUT        STAY_OUT           [[HARD, 29], [MEDIUM, 19]]           [[HARD, 28], [MEDIUM, 20]]     1.110652   observed wear vs model
+16   2019_10_united_kingdom:NOR:30  STAY_OUT      STAY_OUT        STAY_OUT           [[MEDIUM, 11], [SOFT, 11]]          [[MEDIUM, 6], [MEDIUM, 16]]     1.052326   observed wear vs model
+best departures:
+                             scenario_id                                     plan                                top_plan  delta_vs_bo                     reason
+40                2021_01_bahrain:RUS:10  [[SOFT, 6], [MEDIUM, 20], [MEDIUM, 20]]   [[SOFT, 5], [MEDIUM, 17], [HARD, 24]]    -5.038833  traffic / position / gaps
+211                 2022_06_spain:MAG:25    [[MEDIUM, 1], [SOFT, 21], [SOFT, 19]]   [[MEDIUM, 1], [SOFT, 20], [SOFT, 20]]    -2.550454     observed wear vs model
+334                2022_20_mexico:PER:10   [[SOFT, 15], [SOFT, 28], [MEDIUM, 18]]  [[SOFT, 15], [SOFT, 29], [MEDIUM, 17]]    -2.131189     observed wear vs model
+155               2022_01_bahrain:GAS:25               [[MEDIUM, 11], [HARD, 21]]               [[MEDIUM, 8], [HARD, 24]]    -1.530597  traffic / position / gaps
+127  2021_22_united_arab_emirates:BOT:05    [[MEDIUM, 7], [SOFT, 23], [SOFT, 23]]   [[MEDIUM, 6], [SOFT, 23], [SOFT, 24]]    -1.374233     observed wear vs model
+
+===== reliability =====
+rows 469 submitted 469 voluntary 468 grace 1
+status {'ok': 469} api_retries 0
+decisions {'STAY_OUT': 443, 'PIT': 26}
+  latency_s: mean 13.4 median 13.1 p90 18.2 total 6269
+  tool_calls: mean 7.3 median 7.0 p90 9.0 total 3411
+  evidence_calls: mean 6.3 median 6.0 p90 8.0 total 2937
+  repeat_calls: mean 0.0 median 0.0 p90 0.0 total 9
+  input_tokens: mean 23050.8 median 22797.0 p90 26442.4 total 10810809
+  output_tokens: mean 306.8 median 298.0 p90 364.0 total 143882
+
+===== split: four low-wear races (100 agent rows) =====
+                      n  mean  median    p90  worst
+policy                                             
+agent             100.0  4.44    0.40  15.75  23.27
+run_to_flag       100.0  3.45    0.63  11.33  20.68
+one_stop_total    100.0  3.45    0.63  11.33  23.02
+actual_strategy    97.0  5.71    1.33  17.91  34.44
+belief_optimizer  100.0  4.46    0.40  15.75  24.64
+  agent - run_to_flag: +1.00 (-1.22, +2.89) race (+0.07, +2.06) n 100 W/T/L (33, 31, 36) level
+  agent - one_stop_total: +0.99 (-1.23, +2.99) race (-0.17, +2.35) n 100 W/T/L (33, 31, 36) level
+  agent - actual_strategy: -1.47 (-4.05, +1.12) race (-5.31, +1.89) n 97 W/T/L (33, 36, 28) level
+  agent - belief_optimizer: -0.01 (-0.05, +0.02) race (-0.06, +0.03) n 100 W/T/L (4, 94, 2) level
+
+===== split: rest (not the low-wear four) (369 agent rows) =====
+                      n   mean  median    p90   worst
+policy                                               
+agent             369.0   2.67    0.18   8.34   30.75
+run_to_flag       369.0   9.67    5.58  22.79   71.25
+one_stop_total    369.0  10.69    5.58  26.03   81.31
+actual_strategy   331.0   6.79    1.21  20.19  129.87
+belief_optimizer  369.0   2.62    0.22   8.21   30.75
+  agent - run_to_flag: -7.00 (-8.41, -5.69) race (-9.54, -4.62) n 369 W/T/L (204, 117, 48) ahead
+  agent - one_stop_total: -8.02 (-9.59, -6.52) race (-10.58, -5.52) n 369 W/T/L (204, 117, 48) ahead
+  agent - actual_strategy: -4.38 (-5.91, -2.91) race (-6.45, -2.42) n 331 W/T/L (141, 141, 49) ahead
+  agent - belief_optimizer: +0.05 (-0.04, +0.16) race (-0.06, +0.18) n 369 W/T/L (39, 304, 26) level
+
+===== split: first 15 laps (lap <= 15) (156 agent rows) =====
+                      n   mean  median    p90  worst
+policy                                              
+agent             156.0   6.59    3.77  17.96  30.75
+run_to_flag       156.0  11.10    5.45  27.37  71.25
+one_stop_total    156.0  12.75    5.45  36.11  81.31
+actual_strategy   139.0  10.30    5.79  24.98  67.76
+belief_optimizer  156.0   6.69    3.95  17.96  30.75
+  agent - run_to_flag: -4.52 (-7.52, -1.84) race (-11.22, +1.17) n 156 W/T/L (90, 1, 65) ahead
+  agent - one_stop_total: -6.17 (-9.54, -3.10) race (-13.62, +0.07) n 156 W/T/L (90, 1, 65) ahead
+  agent - actual_strategy: -4.05 (-6.56, -1.71) race (-7.59, -1.11) n 139 W/T/L (83, 8, 48) ahead
+  agent - belief_optimizer: -0.10 (-0.20, -0.03) race (-0.23, -0.01) n 156 W/T/L (27, 119, 10) ahead
+
+===== split: after lap 15 (313 agent rows) =====
+                      n  mean  median    p90   worst
+policy                                              
+agent             313.0  1.28    0.00   4.17   25.53
+run_to_flag       313.0  6.97    1.18  20.59   47.55
+one_stop_total    313.0  7.34    1.16  20.76   73.01
+actual_strategy   289.0  4.74    0.00  15.07  129.87
+belief_optimizer  313.0  1.18    0.00   3.65   25.53
+  agent - run_to_flag: -5.68 (-6.88, -4.49) race (-7.47, -4.13) n 313 W/T/L (147, 147, 19) ahead
+  agent - one_stop_total: -6.06 (-7.32, -4.76) race (-7.88, -4.45) n 313 W/T/L (147, 147, 19) ahead
+  agent - actual_strategy: -3.55 (-5.02, -2.21) race (-5.44, -2.01) n 289 W/T/L (91, 169, 29) ahead
+  agent - belief_optimizer: +0.11 (+0.01, +0.23) race (+0.00, +0.26) n 313 W/T/L (16, 279, 18) behind
+
+race_picture tyre-life tiers per race: {'2019_10_united_kingdom': [4], '2021_01_bahrain': [3], '2021_04_spain': [3], '2021_09_austrian': [3], '2021_20_qatar': [3], '2021_22_united_arab_emirates': [3], '2022_01_bahrain': [1, 2], '2022_02_saudi_arabia': [3], '2022_06_spain': [1, 2], '2022_08_azerbaijan': [3], '2022_09_canada': [3], '2022_11_austria': [1], '2022_12_france': [3], '2022_20_mexico': [3], '2022_21_brazil': [3], '2022_22_united_arab_emirates': [1], '2023_01_bahrain': [1, 2], '2023_07_spain': [1, 2], '2024_07_emilia_romagna': [3]}
+races without circuit history (all tiers >= 3): ['2019_10_united_kingdom', '2021_01_bahrain', '2021_04_spain', '2021_09_austrian', '2021_20_qatar', '2021_22_united_arab_emirates', '2022_02_saudi_arabia', '2022_08_azerbaijan', '2022_09_canada', '2022_12_france', '2022_20_mexico', '2022_21_brazil', '2024_07_emilia_romagna']
+
+===== split: races without circuit history (325 agent rows) =====
+                      n  mean  median    p90   worst
+policy                                              
+agent             325.0  3.29    0.32  12.34   25.53
+run_to_flag       325.0  7.13    1.63  20.78   41.83
+one_stop_total    325.0  7.71    1.56  21.23   81.31
+actual_strategy   307.0  6.37    1.02  18.44  129.87
+belief_optimizer  325.0  3.29    0.32  12.34   25.53
+  agent - run_to_flag: -3.84 (-5.16, -2.58) race (-6.41, -1.58) n 325 W/T/L (151, 106, 68) ahead
+  agent - one_stop_total: -4.42 (-5.95, -3.01) race (-7.21, -1.90) n 325 W/T/L (151, 106, 68) ahead
+  agent - actual_strategy: -3.14 (-4.70, -1.69) race (-5.07, -1.26) n 307 W/T/L (113, 129, 65) ahead
+  agent - belief_optimizer: +0.00 (-0.06, +0.07) race (-0.07, +0.07) n 325 W/T/L (22, 291, 12) level
+
+===== split: races with circuit history (144 agent rows) =====
+                      n   mean  median    p90  worst
+policy                                              
+agent             144.0   2.50    0.21   6.57  30.75
+run_to_flag       144.0  11.08    6.67  28.54  71.25
+one_stop_total    144.0  12.37    6.67  30.74  74.12
+actual_strategy   121.0   6.99    1.86  22.74  65.40
+belief_optimizer  144.0   2.38    0.30   6.57  30.75
+  agent - run_to_flag: -8.58 (-11.49, -5.98) race (-13.55, -3.68) n 144 W/T/L (86, 42, 16) ahead
+  agent - one_stop_total: -9.87 (-12.96, -7.15) race (-14.37, -5.16) n 144 W/T/L (86, 42, 16) ahead
+  agent - actual_strategy: -5.18 (-8.38, -2.67) race (-8.98, -1.65) n 121 W/T/L (61, 48, 12) ahead
+  agent - belief_optimizer: +0.11 (-0.07, +0.35) race (-0.10, +0.41) n 144 W/T/L (21, 107, 16) level
+
+track status of scenarios: {'green': 429, 'vsc': 23, 'sc': 17}
+
+===== split: track status green (429 agent rows) =====
+                      n  mean  median    p90   worst
+policy                                              
+agent             429.0  3.11    0.31   9.93   30.75
+run_to_flag       429.0  8.50    3.01  21.98   71.25
+one_stop_total    429.0  9.31    3.01  23.39   81.31
+actual_strategy   391.0  6.72    1.45  19.14  129.87
+belief_optimizer  429.0  3.12    0.33  10.12   30.75
+  agent - run_to_flag: -5.39 (-6.77, -4.12) race (-8.27, -2.83) n 429 W/T/L (220, 125, 84) ahead
+  agent - one_stop_total: -6.20 (-7.74, -4.77) race (-9.26, -3.45) n 429 W/T/L (220, 125, 84) ahead
+  agent - actual_strategy: -3.78 (-5.32, -2.41) race (-5.68, -1.96) n 391 W/T/L (161, 155, 75) ahead
+  agent - belief_optimizer: -0.01 (-0.06, +0.05) race (-0.07, +0.05) n 429 W/T/L (42, 361, 26) level
+
+===== split: track status sc (17 agent rows) =====
+                     n  mean  median    p90  worst
+policy                                            
+agent             17.0  5.04    0.02  14.96  18.44
+run_to_flag       17.0  8.54    1.37  24.03  35.76
+one_stop_total    17.0  9.85    1.37  30.87  41.51
+actual_strategy   14.0  4.32    0.01  17.37  22.25
+belief_optimizer  17.0  3.78    0.02  14.96  18.52
+  agent - run_to_flag: -3.50 (-7.19, -0.32) race (-9.56, -1.12) n 17 W/T/L (5, 12, 0) ahead
+  agent - one_stop_total: -4.80 (-9.19, -1.20) race (-13.88, -1.84) n 17 W/T/L (5, 12, 0) ahead
+  agent - actual_strategy: -0.72 (-4.20, +2.48) race (-7.04, +2.28) n 14 W/T/L (2, 11, 1) level
+  agent - belief_optimizer: +1.26 (-0.01, +3.16) race (-0.02, +2.22) n 17 W/T/L (1, 14, 2) level
+
+===== split: track status vsc (23 agent rows) =====
+                     n  mean  median    p90  worst
+policy                                            
+agent             23.0  0.49    0.00   2.05   3.82
+run_to_flag       23.0  5.29    3.37  16.53  20.68
+one_stop_total    23.0  5.54    3.37  16.84  20.68
+actual_strategy   23.0  4.86    0.01  18.41  23.13
+belief_optimizer  23.0  0.49    0.00   2.05   3.82
+  agent - run_to_flag: -4.80 (-7.62, -2.42) race (-8.62, -1.44) n 23 W/T/L (12, 11, 0) ahead
+  agent - one_stop_total: -5.05 (-7.90, -2.60) race (-9.16, -1.44) n 23 W/T/L (12, 11, 0) ahead
+  agent - actual_strategy: -4.37 (-7.46, -1.70) race (-8.91, -0.01) n 23 W/T/L (11, 11, 1) ahead
+  agent - belief_optimizer: +0.00 (+0.00, +0.00) race (+0.00, +0.00) n 23 W/T/L (0, 23, 0) level
+
+===== previous pass (committed dev20): pooled =====
+                      n   mean  median     p90   worst
+policy                                                
+belief_optimizer  469.0   3.82    0.55   13.00   29.13
+agent             469.0   3.96    0.74   13.18   28.95
+actual_strategy   428.0   7.02    2.25   19.51   69.15
+run_to_flag       469.0   9.61    4.20   24.25   79.12
+one_stop_total    469.0  10.44    4.03   25.67   79.83
+fixed_one_stop    457.0  14.81   13.64   25.33   79.83
+fixed_two_stop    432.0  24.99   24.43   39.61   66.63
+greedy_crossover   80.0  91.91   70.30  186.74  237.06
+same decision as previous pass: 435 of 469
+previous decisions {'STAY_OUT': 421, 'PIT': 48}

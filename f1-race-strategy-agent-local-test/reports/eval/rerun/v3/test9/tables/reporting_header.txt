@@ -1,0 +1,4 @@
+reporting.yaml sha256 7bf04ee516bd0b271d69759431719e0b60489540b183d98f23e92efb4b01d88a
+report set test9
+question: does the agent beat the simple rules?
+fidelity: The judge orders close finishers correctly 0.753 of the time (ceiling 0.745) and its gap between two cars is off by 13.2 s on average (floor 3.2 s); absolute regrets of 4-10 s sit inside that, so paired differences carry the claims.

@@ -8,12 +8,13 @@ agent that makes one pit-stop decision at a time, from a snapshot of a real race
 - **The decision.** At a snapshot (race R, driver D, after lap L), the agent decides: pit now
   onto a compound, or stay out for k laps and reassess.
 - **The loop.** It runs a hand-written plan → call tools → observe → refine loop (`src/agent.py`,
-  at most 10 steps). The tools (`src/tools.py`) read the snapshot and estimate:
-  - tyre wear;
-  - pit loss;
-  - how a pit or a stay plays out, with ranges and probabilities.
+  at most 10 steps). The tools (`src/tools.py`) read the snapshot and give:
+  - the race picture (`race_picture`);
+  - a ranking of the best plan in each strategy family (`rank_plans`, the look-ahead);
+  - tyre wear and pit loss, with ranges and probabilities.
 
-  The agent ends the episode by submitting a decision (`submit_recommendation`).
+  The agent may choose any plan (protocol `v2free`). It ends the episode by submitting a decision
+  (`submit_recommendation`).
 
 ## How it is judged
 
@@ -43,19 +44,23 @@ season or driver names.
 
 ## Result
 
-**Held-out** (`reports/eval/rerun/test9/`, tag `eval-v2-test`, one pass of `qwen3-30b-a3b`):
+**Test set** (`reports/eval/rerun/v3/test9/`, tag `eval-v3`, one pass of `qwen3-30b-a3b`):
 
+- Over all nine test-set races, the agent is ahead of both simple rules (-2.28 and -2.21 s mean
+  regret; the race-cluster interval includes zero). It is also ahead of the teams' actual
+  strategies (-5.03 s), and level with its look-ahead, the optimizer its tools run.
 - On the five races examined for the first time (the pre-registered primary test), the agent is
-  level with both simple rules, with mean regret higher by about 1.5 s and intervals that include
-  zero. It is also level with the teams and with its own tools' optimizer.
-- On all nine held-out races it is level with the rules and ahead of the teams' actual strategies
-  (-4.55 s).
-- The roughly 6 s lead over the rules on the calibration races (`reports/eval/rerun/dev20/`) did
-  not hold on unseen races. That shortfall shows up in the tools' optimizer as well.
+  level with the rules (+1.67 s). The shortfall sits at 2022 Australia and 2022 Miami, where the
+  look-ahead has the same regret.
+- On the development races (`reports/eval/rerun/v3/dev20/`) it is ahead of the rules by 5.29 s.
+
+This is the second evaluation. The first, at `eval-v2-test` (`reports/eval/rerun/test9/` and
+`dev20/`), is kept as run.
 
 The full tables, the method and the limitations are in docs/eval.md:
+- "Results at eval-v3";
+- "Second evaluation";
 - "Held-out result (test9) at eval-v2-test";
-- "Development result (dev20) at eval-v2-dev2";
 - "Changes after the freeze";
 - "Limitations".
 
@@ -97,8 +102,8 @@ CI (`.github/workflows/tests.yml`) runs the fast tier and the slow tier split in
 
 **Rerunning the evaluation** takes one command per stage: `python -m src.eval.rerun
 {scenarios,references,baselines,agent,tables} --set dev20 ...`. The details are in docs/eval.md,
-"Rerunning the evaluation". The held-out set `test9` has been built and run once, and is not
-rebuilt.
+"Rerunning the evaluation". The test set `test9` was built once and run twice (`eval-v2-test`,
+`eval-v3`), and is not rebuilt.
 
 ## Where things are
 
@@ -108,7 +113,8 @@ rebuilt.
 | `src/sim/` | the simulators (belief and world), fits, priors, the optimizer bridge |
 | `src/eval/` | scenarios, references, policies, scoring, the rerun pipeline, the lint |
 | `configs/sim/`, `configs/eval/` | simulator configs (current and legacy), sets and the pre-registered reporting choices |
-| `reports/eval/rerun/{dev20,test9}/` | the current development and held-out results |
+| `reports/eval/rerun/v3/{dev20,test9}/` | the current development and test-set results (`eval-v3`) |
+| `reports/eval/rerun/{dev20,test9}/` | the first evaluation (`eval-v2-*`), kept as run |
 | `docs/eval.md`, `docs/rules.md`, `docs/baselines.md`, `docs/traffic.md` | the protocol, the race rules, the baselines, the traffic model |
 | `poster/` | the research poster build |
 
