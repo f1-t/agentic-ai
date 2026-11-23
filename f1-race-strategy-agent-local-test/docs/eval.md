@@ -4655,6 +4655,27 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
   queue's other forms).
 
+Confirmation after the judge's safety-car queue on 83fb72e
+(`reports/calibration/fidelity/sc-queue-83fb72e/`, all 19 calibration races, none failed, future
+blindness pass; SIM_CODE_VERSION `32671b6a2ad5`, before `3c48388e8271`; default world config_hash
+`7c974c32c67c`, before `15e3f31d98a7`; the belief unchanged, `9d691bbbcf24`):
+
+- close pairs out of sample 0.747 (before 0.753);
+- Spearman 0.960 (0.957);
+- relative gap 7.60 s (13.19);
+- absolute 13.4 s (18.9);
+- plan-rank agreement 0.872 (0.882);
+- judge-regret of the belief's favourite 3.16 s (3.36);
+- pit-now agreement 0.827 (0.835);
+- belief replay close pairs 0.667 (unchanged);
+- plan 90 % coverage 0.975.
+
+Noise floor (`ceiling_pooled.csv` there): judge 0.747 [0.683, 0.798] / 7.6 s [5.7, 10.2],
++ per-stint pace 0.658 / 6.4 s, + pit laps 0.652 / 6.9 s, + SC/VSC laps 0.611 / 5.2 s, + lap 1
+(the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]. The judge's relative gap now sits 2.4 s
+above the level with every neutralised lap recorded, down from 8.0 s. Every reference built on the
+earlier world is stale (its world config_hash and SIM_CODE_VERSION both changed).
+
 Confirmation after v3 (the wear guard and the point cliff edge) on 02a3a7f
 (`reports/calibration/fidelity/v3-02a3a7f/`, all 19 calibration races, none failed;
 SIM_CODE_VERSION `df1ab3800c69`, before `afd80306ad68`): close pairs out of sample 0.753, Spearman
