@@ -6,8 +6,9 @@ times in three. With it on, a snapshot gets the sets the driver still holds at t
 
   allocation  the event's sets per compound: ALLOCATION_STANDARD (2 HARD, 3 MEDIUM, 8 SOFT) from
               2020 on, ALLOCATION_SPRINT (2, 4, 6) on a sprint weekend; 2019 allocations were
-              chosen per driver and are not in the cache, so a 2019 race stays unconstrained
-              (sets_available None)
+              chosen per driver and are not in the cache, so a 2019 race takes ALLOCATION_OPEN (13
+              of each compound): unconstrained on new sets, but the used sets its sessions show are
+              held at their ages
   minus       the sets opened in practice, sprint and qualifying, each kept at the laps it has run
               (tyre_sets.weekend_sets, which follows one physical set by its TyreLife)
   minus       the sets fitted in the race up to the snapshot, from the race laps completed by then
@@ -32,6 +33,7 @@ from .race_ids import parse_race_id
 
 ALLOCATION_STANDARD = {"HARD": 2, "MEDIUM": 3, "SOFT": 8}
 ALLOCATION_SPRINT = {"HARD": 2, "MEDIUM": 4, "SOFT": 6}
+ALLOCATION_OPEN = {"HARD": 13, "MEDIUM": 13, "SOFT": 13}   # 2019: the per-driver choice is not cached
 FIRST_FIXED_SEASON = 2020
 WEEKEND_SESSIONS = ("FP1", "FP2", "FP3", "SQ", "S", "Q")
 Q2_START_RULE_LAST_SEASON = 2021
@@ -48,16 +50,22 @@ def _load(season, rnd, kind):
 
 @lru_cache(maxsize=8)
 def weekend(race_id: str):
-    """(sessions, race laps, allocation) for a race id, or None when it cannot be built (2019, no
-    race laps). sessions are the pre-race FastF1 Laps tables keyed as tyre_sets wants them."""
-    season, rnd, _ = parse_race_id(race_id)
-    if int(season) < FIRST_FIXED_SEASON:
+    """(sessions, race laps, allocation) for a race id, or None when it cannot be built (a
+    synthetic race, a race id that names no cached weekend, no race laps): such a race stays
+    unconstrained. sessions are the pre-race FastF1 Laps tables keyed as tyre_sets wants them."""
+    try:
+        season, rnd, _ = parse_race_id(race_id)
+    except (ValueError, TypeError):
+        return None
+    if int(season) > 2050:   # synthetic test races (2099_01_synthetic)
         return None
     race = _load(season, rnd, "R")
     if race is None:
         return None
     sessions = {k: v for k in WEEKEND_SESSIONS if (v := _load(season, rnd, k)) is not None}
     sprint = "S" in sessions or "SQ" in sessions
+    if int(season) < FIRST_FIXED_SEASON:
+        return sessions, race, dict(ALLOCATION_OPEN)
     return sessions, race, dict(ALLOCATION_SPRINT if sprint else ALLOCATION_STANDARD)
 
 
@@ -71,8 +79,9 @@ def visible_race_laps(race: pd.DataFrame, driver: str, k: int) -> pd.DataFrame:
     t = own["Time"].dt.total_seconds().to_numpy(dtype=float)
     if not len(t) or not np.isfinite(t[0]):
         return race[(race["Driver"] == driver) & (race["LapNumber"] <= k)]
-    end = race["Time"].dt.total_seconds().to_numpy(dtype=float)
-    return race[np.isfinite(end) & (end <= t[0])]
+    from .data import visible_rows   # the one cut by session time (end_s <= t), as every as-of input
+    seen = visible_rows(race.assign(end_s=race["Time"].dt.total_seconds()), float(t[0]))
+    return seen.drop(columns="end_s")
 
 
 def sets_at(race_id: str, driver: str, k: int):

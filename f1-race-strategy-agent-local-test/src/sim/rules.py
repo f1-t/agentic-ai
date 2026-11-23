@@ -198,6 +198,9 @@ def assign_sets(snapshot, plan, sources=None, best=False):
         return [None] * len(plan.stints), []
     pool = [t for t in snapshot.sets_available if sources is None or t.source in sources]
     out, errors = [None], []
+    # best: the sets this plan has taken off, at their laps run then; a stint naming a used age
+    # (a recorded strategy) may refit one of them, as teams do
+    off = [] if not best else [_taken_off(snapshot, plan.stints[0], None, snapshot.tyre_age)]
     for i, st in enumerate(plan.stints[1:], start=2):
         if st.set_id is not None:
             found = [t for t in pool if t.set_id == st.set_id]
@@ -213,6 +216,12 @@ def assign_sets(snapshot, plan, sources=None, best=False):
         else:
             found = [t for t in pool if t.compound == st.compound and t.laps_run == st.start_age]
             same = [t for t in pool if t.compound == st.compound]
+            refit = [t for t in off if t.compound == st.compound and t.laps_run == st.start_age]
+            if not found and best and st.start_age > 0 and refit:
+                off.remove(refit[0])
+                out.append(refit[0])
+                off.append(_taken_off(snapshot, st, refit[0], st.start_age))
+                continue
             if not found and best and same:
                 # SimConfig.tyre_inventory: the best set of the compound left, new when one remains,
                 # else the least used; an asked-for used age takes the nearest held one
@@ -227,7 +236,16 @@ def assign_sets(snapshot, plan, sources=None, best=False):
             t = found[0]
         pool.remove(t)
         out.append(t)
+        if best:
+            off.append(_taken_off(snapshot, st, t, t.laps_run))
     return out, errors
+
+
+def _taken_off(snapshot, stint, tset, start_age):
+    """The set of `stint` once the stint is run: its laps run then (a refit candidate)."""
+    from ..contracts import TyreSet
+    return TyreSet(compound=stint.compound, laps_run=int(start_age) + int(stint.laps),
+                   source=getattr(tset, "source", "observed"), set_id=getattr(tset, "set_id", None))
 
 
 def _sources(config):

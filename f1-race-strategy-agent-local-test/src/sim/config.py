@@ -576,15 +576,22 @@ WORLD_WEAR_GUARD = {"enabled": True, "scale_sd_by_drivers": True}
 # The SimConfig default stays off and the belief has no queue; the eval world sets it here. The world
 # before it: configs/sim/legacy/world_pre_sc_queue.yaml.
 WORLD_SC_QUEUE = {"enabled": True, "mode": "single", "held_behind_laps": 1.25, "placement": "record"}
+# The tyre sets at the snapshot (SimConfig.tyre_inventory, sim/tyre_inventory.py, docs/eval.md "Tyre sets
+# at the snapshot"): adopted 2026-11-22 for the rerun, in both simulators (the belief through
+# configs/sim/belief.yaml). The SimConfig default stays off; the eval world sets it here. The world
+# before it: configs/sim/legacy/world_pre_tyre_inventory.yaml.
+WORLD_TYRE_INVENTORY = True
 
 
 def world_default(config: "SimConfig") -> "SimConfig":
     """`config` with the eval world's wear fit (WORLD_DEGRADATION), tyre-life edge (WORLD_EDGE),
-    thin-fit wear guard (WORLD_WEAR_GUARD) and safety-car queue (WORLD_SC_QUEUE)."""
+    thin-fit wear guard (WORLD_WEAR_GUARD), safety-car queue (WORLD_SC_QUEUE) and tyre sets
+    (WORLD_TYRE_INVENTORY)."""
     return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION),
                                      "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE}),
                                      "wear_guard": config.wear_guard.model_copy(update=WORLD_WEAR_GUARD),
-                                     "sc_queue": config.sc_queue.model_copy(update=WORLD_SC_QUEUE)})
+                                     "sc_queue": config.sc_queue.model_copy(update=WORLD_SC_QUEUE),
+                                     "tyre_inventory": WORLD_TYRE_INVENTORY})
 
 
 def compound_class(config, compound) -> str:

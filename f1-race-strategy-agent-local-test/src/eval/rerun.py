@@ -621,7 +621,9 @@ def config_choices(c, role: str) -> dict:
            "events": c.events.name, **({"events_params": dict(c.events.params)} if c.events.params else {}),
            "traffic": c.traffic.name if c.traffic.name == "none" else
            f"{c.traffic.name} ({c.traffic.params.get('source', 'recorded')})",
-           "lap_noise": c.lap_noise, "plan_on": c.plan_on, "fit_window": c.fit_window}
+           "lap_noise": c.lap_noise, "plan_on": c.plan_on, "fit_window": c.fit_window,
+           # the tyre sets at the snapshot (sim/tyre_inventory.py): as of the snapshot in both simulators
+           "tyre_inventory": c.tyre_inventory}
     if c.fit_window == "full":
         out["tyre_life_edge"] = c.wear_cliff.world_edge
         # the thin-fit wear guard acts on whole-race fits only (sim/wear_guard.py)

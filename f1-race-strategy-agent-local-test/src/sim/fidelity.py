@@ -507,12 +507,17 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
                           "toward the historical wear)", _H,
             "data/derived/wear_history.csv, races strictly before this one; which compounds are thin is read from "
             "this race's fit rows, as the fit itself is")
+    if getattr(cfg, "tyre_inventory", False):
+        add("tyre_inventory", "tyre sets at the snapshot (sim/tyre_inventory.py)", _K,
+            "the weekend's allocation, less the sets opened in practice, sprint and qualifying (weekend, pre-race) "
+            "and those fitted in the race up to the snapshot; the judge reads the same as-of inventory as the "
+            "belief, and its whole-race replays run each real stint at its recorded age")
     add("min_stint_two_compounds", "R1-R3: minimum stint, two dry compounds", _R)
     covered = {"wear_guard","fit_window", "rules", "stint_limit_margin_laps", "stint_limit_rank", "compound_proxy", "traffic",
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
                "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit", "sc_queue",
-               "pit_stops"}
+               "pit_stops", "tyre_inventory"}
     default = SimConfig().model_dump(mode="json")
     mine = cfg.model_dump(mode="json")
     for k in sorted(mine):
