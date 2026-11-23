@@ -14,6 +14,12 @@ python poster/build_poster.py --export      # defaults: --dev reports/eval/rerun
 python3 poster/check_layout.py
 ```
 
+`--group NN` (with `--export`) also writes the PDF as `poster/GroupNN_Poster.pdf`. Without the option, no copy is
+written.
+
+The example decision is the development episode `poster_stats.EXAMPLE` (`2022_06_spain:MAG:25`). It is read from
+its trajectory, and the build checks it against the scored agent row.
+
 Defaults:
 
 - `--dev` and `--test` default to the committed v3 outputs.
