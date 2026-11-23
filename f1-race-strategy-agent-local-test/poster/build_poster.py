@@ -189,14 +189,14 @@ def forest():
                      lambda t, g, x: f"{g}_{x}_diff", lambda t, g, x: f"{g}_{x}_ci",
                      lambda t, g, x: f'{T(f"{g}_{x}_diff")} {T(f"{g}_{x}_ci")}', True,
                      aria="Agent minus each comparator, mean regret difference, 95% intervals, test and development",
-                     sub=34, gap=16)
+                     sub=28, gap=11)
 
 
 def levels():
     return dot_chart(("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy"),
                      lambda t, g, p: f"{t}_mean_{p}", lambda t, g, p: f"{t}_mci_{p}",
                      lambda t, g, p: f'{T(f"{t}_mean_{p}")} {T(f"{t}_mci_{p}")}', False,
-                     aria="Mean regret per policy, 95% intervals, test and development", sub=25, gap=8)
+                     aria="Mean time lost per policy, 95% intervals, test and development", sub=21, gap=3)
 
 
 def per_race(width=760):
@@ -207,7 +207,7 @@ def per_race(width=760):
     LO, HI = ticks[0], ticks[-1]
     L, R, VX = 190, 545, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top, rowh = 34, 30
+    top, rowh = 32, 27
     yb = top + rowh * len(races)
     H = yb + 32
     s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="Agent minus run to the flag per test '
@@ -300,26 +300,59 @@ def blind_diagram(width=380):
     return "".join(s)
 
 
-def system_diagram(model, width=470):
-    """Predictive simulator -> look-ahead search -> LLM agent -> decision, scored by the judge."""
-    def box(y, h, title, line, color, fill):
-        return (f'<rect x="0" y="{y}" width="{width}" height="{h}" rx="9" fill="{fill}" stroke="{color}" stroke-width="2"/>'
-                f'<text x="16" y="{y + 31}" font-size="23" font-weight="800" fill="{INK}">{title}</text>'
-                f'<text x="16" y="{y + 60}" font-size="21" fill="{MUTED}">{line}</text>')
+def problem_diagram(width=470):
+    """Illustration (no data): lap time rises as tyres wear; a pit stop costs time and resets the tyres."""
+    s = [f'<svg class="chart" viewBox="0 0 {width} 215" role="img" aria-label="Illustration: lap time rises as tyres '
+         f'wear; a pit stop costs time once and gives fresh, faster tyres">']
+    X0, X1, Y0, Y1 = 40, width - 10, 40, 178
+    s.append(f'<line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="{MUTED}" stroke-width="2"/>')
+    s.append(f'<line x1="{X0}" y1="{Y0}" x2="{X0}" y2="{Y1}" stroke="{MUTED}" stroke-width="2"/>')
+    s.append(f'<text x="{X1}" y="{Y1 + 28}" text-anchor="end" font-size="20" fill="{MUTED}">laps →</text>')
+    s.append(f'<text x="{X0 - 10}" y="{Y0 - 14}" font-size="20" fill="{MUTED}">lap time ↑</text>')
+    xp = X0 + (X1 - X0) * 0.52
+    s.append(f'<path d="M{X0 + 8},{Y1 - 60} Q{(X0 + xp) / 2},{Y1 - 78} {xp - 8},{Y1 - 128}" fill="none" '
+             f'stroke="#F0E442" stroke-width="5"/>')
+    s.append(f'<path d="M{xp + 26},{Y1 - 52} Q{(xp + X1) / 2},{Y1 - 68} {X1 - 8},{Y1 - 112}" fill="none" '
+             f'stroke="#F0E442" stroke-width="5"/>')
+    s.append(f'<rect x="{xp - 4}" y="{Y0 - 4}" width="26" height="{Y1 - Y0 + 4}" fill="#ff4d3d" opacity="0.85"/>')
+    s.append(f'<text x="{xp + 9}" y="{Y0 - 14}" text-anchor="middle" font-size="20" font-weight="800" fill="#ff8a7d">'
+             f'pit stop</text>')
+    s.append(f'<text x="{X0 + 14}" y="{Y1 - 22}" font-size="19" fill="{INK}">tyres wear: slower</text>')
+    s.append(f'<text x="{xp + 34}" y="{Y1 - 22}" font-size="19" fill="{INK}">fresh: faster</text>')
+    s.append("</svg>")
+    return "".join(s)
 
-    def arrow(y):
-        return (f'<line x1="{width / 2}" y1="{y}" x2="{width / 2}" y2="{y + 20}" stroke="{INK}" stroke-width="3" '
-                f'marker-end="url(#ah)"/>')
-    s = [f'<svg class="chart" viewBox="0 0 {width} 396" role="img" aria-label="The system">',
+
+def agent_diagram(model, width=1000):
+    """Race so far -> predictive simulator -> look-ahead search -> LLM agent -> decision."""
+    boxes = (("Race so far", ["laps, tyres,", "gaps, flags"], "#9cc8ff", "#16263a", 150),
+             ("Predictive simulator", ["estimates tyre", "wear and pace", "from the laps", "so far"], "#9cc8ff", "#16263a", 205),
+             ("Look-ahead search", ["ranks full", "race plans"], "#E69F00", "#2c2614", 190),
+             ("LLM agent", [model, "reads the plans", "and the race,", "asks follow-ups,", "decides"], "#56B4E9",
+              "#16263a", 222),
+             ("Decision", ["PIT now", "onto HARD", "or STAY OUT,", "stop on lap 31"], "#ffcf4a", "#2c2614", 175))
+    gap = (width - sum(b[4] for b in boxes)) / (len(boxes) - 1)
+    H = 372
+    s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="How the agent works">',
          f'<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" '
          f'orient="auto"><path d="M0,0L10,5L0,10Z" fill="{INK}"/></marker></defs>']
-    s.append(box(0, 78, "Predictive simulator", "knows only the race so far", "#9cc8ff", "#16263a"))
-    s.append(arrow(80))
-    s.append(box(104, 78, "Look-ahead search", "ranks full race plans", "#E69F00", "#2c2614"))
-    s.append(arrow(184))
-    s.append(box(208, 78, f"LLM agent ({model})", "reads the plans, makes the call", "#56B4E9", "#16263a"))
-    s.append(arrow(288))
-    s.append(box(312, 78, "Judge", "scores plans against the whole race", "#ffcf4a", "#2c2614"))
+    x = 0.0
+    for i, (title, lines, color, fill, w) in enumerate(boxes):
+        s.append(f'<rect x="{x:.1f}" y="0" width="{w}" height="{H - 4}" rx="10" fill="{fill}" stroke="{color}" '
+                 f'stroke-width="2.5"/>')
+        words = title.split(" ")
+        tl = [title] if len(title) <= 9 else ([words[0], " ".join(words[1:])] if len(words) > 1 else [title])
+        for k, tt in enumerate(tl):
+            s.append(f'<text x="{x + w / 2:.1f}" y="{42 + 32 * k}" text-anchor="middle" font-size="27" font-weight="800" '
+                     f'fill="{INK}">{tt}</text>')
+        y0 = 42 + 32 * len(tl) + 26
+        for k, line in enumerate(lines):
+            s.append(f'<text x="{x + w / 2:.1f}" y="{y0 + 36 * k}" text-anchor="middle" font-size="24.5" '
+                     f'fill="{MUTED if i != 4 else INK}">{line}</text>')
+        if i < len(boxes) - 1:
+            s.append(f'<line x1="{x + w + 2:.1f}" y1="{H / 2}" x2="{x + w + gap - 4:.1f}" y2="{H / 2}" stroke="{INK}" '
+                     f'stroke-width="3" marker-end="url(#ah)"/>')
+        x += w + gap
     s.append("</svg>")
     return "".join(s)
 
@@ -327,54 +360,37 @@ def system_diagram(model, width=470):
 # ---------------------------------------------------------------- tables
 def tail_table():
     pols = ("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy")
-    head = '<tr><th></th><th>&gt;20 s off, test</th><th>&gt;20 s off, dev</th><th>median</th><th>worst</th></tr>'
+    head = '<tr><th>Decisions more than 20 s off</th><th>test</th><th>development</th></tr>'
     body = []
     for pol in pols:
         name, color, _ = POL[pol]
         body.append(f'<tr><th class="rl"><i class="sw" style="background:{color}"></i>{name}</th>'
-                    f'<td><b>{V(f"hall_t_over20_{pol}")}</b></td><td class="dvc">{V(f"d_t_over20_{pol}")}</td>'
-                    f'<td>{V(f"hall_t_median_{pol}")} s</td><td>{V(f"hall_t_worst_{pol}")} s</td></tr>')
+                    f'<td><b>{V(f"hall_t_over20_{pol}")}</b></td><td class="dvc">{V(f"d_t_over20_{pol}")}</td></tr>')
     return f'<table class="tbl tail"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table>'
 
 
-def adopt_table():
-    a, n = val("adopted"), val("not_adopted")
-    rows = "".join(f"<tr><td>{x}</td><td>{y}</td></tr>" for x, y in
-                   zip(a + [""] * (len(n) - len(a)), n + [""] * (len(a) - len(n))))
-    return ('<table class="tbl adopt"><thead><tr><th>Adopted</th><th>Not adopted</th></tr></thead>'
-            f"<tbody>{rows}</tbody></table>")
-
-
-def banner_test():
-    """Regret saved against the two simple rules (the range of the two paired means), and the look-ahead."""
+def less_lost():
+    """'averaged 2.2 s less lost time than simple rules' (the smaller of the two paired means)."""
     v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total")]
     if v != ["ahead", "ahead"]:
-        return f"the agent {rules_phrase()} and {versus('hall', 'belief_optimizer', 'its look-ahead')}."
-    m = sorted(abs(val(f"hall_{x}_diff")) for x in ("run_to_flag", "one_stop_total"))
+        return rules_phrase()
+    m = min(abs(val(f"hall_{x}_diff")) for x in ("run_to_flag", "one_stop_total"))
     for x in ("run_to_flag", "one_stop_total"):
         used(f"hall_{x}_diff")
-    amount = f"{_html.escape(ps.s(m[0], 1))} s"   # the smaller of the two: true for both rules
-    return (f"the agent averaged {amount} less regret than the simple rules and "
-            f"{versus('hall', 'belief_optimizer', 'its look-ahead')}.")
+    return f"averaged {_html.escape(ps.s(m, 1))} s less lost time than simple rules"
 
 
-def stakeholder():
-    v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total", "actual_strategy")]
-    first = (f"The agent matched or beat simple rules on {V('races_matched')} of {V('races_total')} test races.")
-    return (f"<p>{first}</p><p>Its edge comes from the simulator and the look-ahead search.</p>"
-            "<p>With track position and pace management modelled, the teams&rsquo; strategies would likely score "
-            "better.</p>"
-            "<p>Better tyre knowledge and a stronger model are the next gains.</p>")
-
-
-# ---------------------------------------------------------------- page
 def html(args_line):
     D, H = N["_sets"].value
     model = T("h_model") if ready("h_model") else T("d_model")
-    lab = {"ahead": "matches", "level": "matches", "behind": "trails"}
+    legal_all = val("h_ag_ok") == val("h_ag_scored") and val("d_ag_ok") == val("d_ag_scored")
+    used("h_ag_ok"), used("d_ag_ok")
     lv = [val(f"{g}_belief_optimizer_verdict") for g in ("hall", "d")]
-    match_line = ("Matches its look-ahead on both sets." if lv == ["level", "level"]
-                  else f"Against its look-ahead: test {lv[0]}, development {lv[1]}.")
+    edge = ("; its edge comes from its simulator, not the language model" if lv == ["level", "level"] else "")
+    answer = (f"it makes a legal, explained call every time and {less_lost()} on {V('races_total')} test races{edge}."
+              if legal_all else f"it {less_lost()} on {V('races_total')} test races{edge}.")
+    match = ("The agent matches its look-ahead on both sets: the simulator and search do the work."
+             if lv == ["level", "level"] else "The agent differs from its look-ahead.")
     ribbon = ""
     if H.fixture:
         ribbon = '<div class="ribbon fix">LAYOUT FIXTURE: development rows in the test column. NOT A RESULT.</div>'
@@ -386,7 +402,6 @@ def html(args_line):
     <div class="kicker">CSE 598 Agentic AI &middot; Arizona State University</div>
     <h1>PITWALL</h1>
     <div class="acro">Predictive Intelligence for Tactical When-to-pit Agentic Lap-wise Logic</div>
-    <div class="q">Can a language model call the pit stop?</div>
     <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sarah Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
       <span>Stakeholder: Manav Ananthakumar &middot; Professor: Hua Wei</span></div>
   </div>
@@ -396,85 +411,90 @@ def html(args_line):
 </header>
 
 <div class="answer">
-  <div><b>Future-blind:</b> scrambling the race after the decision changes nothing a policy sees.</div>
-  <div><b>Judge:</b> orders close finishers correctly {V("fid_close_pct")} of the time; gap error {V("fid_relgap")} s.</div>
-  <div><b>Test set:</b> {banner_test()}</div>
+  <div><b>Question:</b> can a language-model agent decide when a Formula 1 car should pit?</div>
+  <div><b>Answer:</b> {answer}</div>
 </div>
 
 <main class="main">
-  <div class="row">
-  <article class="panel p1">
-    <h2><b>1</b>The system</h2>
-    {system_diagram(model)}
-    <p class="note"><b>Simple rules:</b> run to the flag; one stop in total.</p>
+  <div class="row r1">
+  <article class="panel">
+    <h2><b>1</b>The problem</h2>
+    <p>Tyres get slower every lap. A pit stop costs about {V("pit_loss_median")} but gives fresh tyres. When to stop,
+    and onto which tyre, decides races. The call is made mid-race, without knowing what comes next.</p>
+    <div class="prob">{problem_diagram()}</div>
   </article>
+  <article class="panel">
+    <h2><b>2</b>The agent</h2>
+    {agent_diagram(model)}
 
-  <article class="panel p2">
-    <h2><b>2</b>Evaluation integrity</h2>
-    <p>A policy sees only the race up to the decision moment, this weekend&rsquo;s practice, the rules and earlier
-    races.</p>
-    {blind_diagram()}
-  </article>
-
-  <article class="panel p3">
-    <h2><b>3</b>How good is the judge?</h2>
-    {judge_chart()}
-    {adopt_table()}
   </article>
   </div>
 
-  <article class="panel p4">
-    <h2><b>4</b>Results</h2>
-    <p class="def"><b>Regret:</b> extra race time over the judge&rsquo;s best plan. Lower is better.
-    <span class="key">Filled = test set; hollow = development set.</span></p>
+  <div class="row r2">
+  <article class="panel ex">
+    <h2><b>3</b>An example decision</h2>
+    <ol class="trace">
+      <li><b>Situation.</b> {V("ex_race")}, after lap {V("ex_lap")}, {V("ex_left")} laps left; {V("ex_set")} tyres,
+      {V("ex_age")} laps old; {V("ex_status")} flag.</li>
+      <li><b>Tools.</b> Best plan: <span class="plan">{V("ex_p1")}</span> (pit now). Next: <span class="plan">{V("ex_p2")}</span>,
+      {V("ex_p2_gap")} s. Tyre wear {V("ex_wear_obs")} s/lap observed, {V("ex_wear_model")} predicted.</li>
+      <li><b>Decision.</b> {V("ex_dec")}, confidence {V("ex_conf")}.</li>
+      <li><b>Reason.</b> <q>{V("ex_reason")}</q></li>
+    </ol>
+    <p class="note">Time lost against the judge&rsquo;s best plan: {V("ex_regret")} s. Plans list tyre and laps per stint.</p>
+  </article>
+  <article class="panel test">
+    <h2><b>4</b>How we test it</h2>
+    <p>A second simulator, the <b>judge</b>, replays the whole race and times every plan. <b>Time lost</b> = a plan&rsquo;s
+    race time minus the judge&rsquo;s best plan.</p>
+    <div class="split">
+      <div class="blind">{blind_diagram()}</div>
+      <div><p>The judge orders close finishers correctly {V("fid_close_pct")} of the time.</p>
+      <p class="note"><b>Compared against:</b> two simple rules (run to the flag; one stop in total), the teams&rsquo;
+      actual strategies, the look-ahead alone.</p>
+      <p class="note"><b>Test set:</b> {V("h_races")} races, {V("h_ag_scored")} decisions.<br><b>Development set:</b>
+      {V("d_races")} races, {V("d_ag_scored")} decisions.</p></div>
+    </div>
+  </article>
+  </div>
+
+  <article class="panel res">
+    <h2><b>5</b>Results <span class="key">filled = test set, hollow = development set</span></h2>
     <div class="figs">
-      <div><div class="caption">Agent minus each comparator (s) [95% interval]</div>{forest()}
-        <div class="caption">The tail</div>{tail_table()}</div>
-      <div><div class="caption">Per test race: agent minus run to the flag (s)</div>{per_race()}
-        <div class="caption">Mean regret (s)</div>{levels()}</div>
+      <div><div class="caption">Agent minus each alternative: time lost (s) [95% interval]</div>{forest()}
+        {tail_table()}</div>
+      <div><div class="caption">By test race: agent minus run to the flag (s)</div>{per_race()}
+        <div class="caption">Mean time lost (s)</div>{levels()}</div>
     </div>
   </article>
 
-  <div class="row">
-  <article class="panel p5">
-    <h2><b>5</b>What the LLM adds</h2>
+  <div class="row r4">
+  <article class="panel">
+    <h2><b>6</b>Analysis</h2>
     <ul>
-      <li>{match_line}</li>
-      <li>A legal, explained call every time, in about {V("h_lat")}.</li>
-      <li>Reasoned departures from the top plan: {V("h_sdep_helped")} helped, {V("h_sdep_hurt")} hurt
-      (development: {V("d_sdep_helped")} and {V("d_sdep_hurt")}).</li>
+      <li>{match}</li>
+      <li>The language model adds a legal, explained call every time, in about {V("h_lat")}.</li>
+      <li>It wins where tyre behaviour is well known and loses where it is not: Australia 2022,
+      {V("pr_2022_03_australia_agent")} s.</li>
+      <li>Not modelled: track position and pace management. Teams also choose pace, fuel mix and setup.</li>
+      <li>Reasoned departures from the top plan: {V("h_sdep_helped")} helped, {V("h_sdep_hurt")} hurt.</li>
     </ul>
-    <p>The gains come from the simulator and the search.</p>
   </article>
-
-  <article class="panel p6">
-    <h2><b>6</b>Limitations and next</h2>
-    <ul>
-      <li>Misjudges hard-tyre pace early at new circuits.</li>
-      <li>One model, one pass.</li>
-      <li>Not modelled: track position and pace management.</li>
-      <li>Teams also choose target pace, fuel mix and car setup; the agent only chooses when to pit.</li>
-    </ul>
-    <p><b>Next:</b> telemetry-based tyre knowledge; more of the team&rsquo;s decisions for the agent; a stronger
-    model.</p>
-  </article>
-
-  <article class="panel p7">
-    <h2><b>7</b>For the stakeholder</h2>
-    {stakeholder()}
+  <article class="panel take">
+    <h2><b>7</b>Takeaways and next</h2>
+    <p>The agent matched or beat simple rules on {V("races_matched")} of {V("races_total")} test races.</p>
+    <p><b>Next:</b> tyre knowledge from telemetry; more of the team&rsquo;s decisions; a stronger model.</p>
   </article>
   </div>
 </main>
 
 <footer>
-  <div class="refs">Code: github.com/f1-t/agentic-ai; every number: <code>poster/numbers.md</code> &middot; Data: FastF1
-    &middot; Map: <span lang="ja">ごひょううべこ</span>, CC BY-SA 4.0 &middot; Not affiliated with Formula 1.</div>
   <div class="foot">Model {model} &middot; tag <code>{V("h_tag")}</code> ({V("h_commit")}) &middot; test set
     {V("h_races")} races, n = {V("h_ag_scored")} &middot; development set {V("d_races")} races, n = {V("d_ag_scored")}
-    &middot; one agent pass</div>
+    &middot; one agent pass &middot; github.com/f1-t/agentic-ai &middot; data: FastF1 &middot; map:
+    <span lang="ja">ごひょううべこ</span>, CC BY-SA 4.0</div>
 </footer>
 </div>"""
-    del lab
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
             f"<!-- built by poster/build_poster.py {_html.escape(args_line)} -->"
@@ -491,61 +511,64 @@ html,body{margin:0;padding:0;width:24in;height:36in;background:var(--bg);
 body{font-family:"Noto Sans","Liberation Sans",Arial,sans-serif;color:var(--ink);font-size:27pt;line-height:1.2}
 code{font-family:"DejaVu Sans Mono","Liberation Mono",monospace;font-size:.9em}
 .poster{position:relative;width:24in;height:36in;padding:.6in .7in .6in;display:flex;flex-direction:column;
-  gap:.22in;overflow:hidden;border-top:.12in solid var(--red)}
+  gap:.2in;overflow:hidden;border-top:.12in solid var(--red)}
 .ribbon{flex:none;border:3px dashed #ff4d3d;color:#ff8a7d;font-size:20pt;font-weight:800;padding:.04in .2in;
   text-align:center}
 .top{display:flex;justify-content:space-between;align-items:center;gap:.4in;flex:none}
 .kicker{font-size:21pt;letter-spacing:.12em;text-transform:uppercase;color:var(--red);font-weight:700}
-h1{font-size:100pt;line-height:1;margin:0;letter-spacing:.02em;font-weight:900}
-.acro{font-size:23pt;color:var(--amber);font-weight:700}
-.q{font-size:42pt;font-weight:700;margin:.02in 0 .05in;line-height:1.12}
+h1{font-size:96pt;line-height:1;margin:0;letter-spacing:.02em;font-weight:900}
+.acro{font-size:23pt;color:var(--amber);font-weight:700;margin-bottom:.06in}
 .authors{font-size:24pt;line-height:1.26}
 .authors span{font-size:21pt;color:var(--muted)}
-.map{margin:0;width:5.8in;flex:none}
-.map img{width:5.8in;height:auto;display:block}
-.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.1in .3in .12in;font-size:29pt;
-  line-height:1.25;display:flex;flex-direction:column;gap:.04in}
+.map{margin:0;width:5.4in;flex:none}
+.map img{width:5.4in;height:auto;display:block}
+.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.12in .3in .14in;font-size:31pt;
+  line-height:1.24;display:flex;flex-direction:column;gap:.06in}
 .answer b{color:var(--amber)}
 .pend{display:inline-block;font-size:.88em;font-style:italic;font-weight:700;color:var(--pend);
   border:2px dashed var(--pend);padding:0 .07in}
-.main{flex:1;display:flex;flex-direction:column;gap:.24in;min-height:0}
-.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.32in;flex:none}
-.p4{flex:1;min-height:0}
+.main{flex:1;display:flex;flex-direction:column;gap:.22in;min-height:0}
+.row{display:grid;gap:.3in;flex:none}
+.r1{grid-template-columns:1.15fr 1.6fr}
+.r2{grid-template-columns:1fr 1.25fr}
+.r4{grid-template-columns:2.1fr 1fr}
+.r4 ul{font-size:26pt}
+.res{flex:1;min-height:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.16in .28in .2in;min-height:0;
   overflow:hidden}
 h2{font-size:34pt;line-height:1.1;margin:0 0 .12in;display:flex;align-items:center;gap:.14in;white-space:nowrap}
 h2>b{display:inline-flex;align-items:center;justify-content:center;width:.56in;height:.56in;border-radius:50%;
   background:#c42f26;font-size:24pt;flex:none}
+h2 .key{margin-left:auto;font-size:22pt;font-weight:600;color:var(--muted)}
 p{margin:0 0 .1in}
 p:last-child{margin-bottom:0}
-.note{font-size:24pt;line-height:1.2;color:var(--muted);margin-top:.06in}
+.note{font-size:24pt;line-height:1.2;color:var(--muted)}
 .note b{color:var(--ink)}
-.def{border-left:.08in solid var(--amber);padding-left:.14in;font-size:26pt;line-height:1.22}
-.key{color:var(--muted);font-size:24pt}
-ul{margin:0 0 .12in;padding-left:.4in}
+ul,ol{margin:0;padding-left:.42in}
 li{margin-bottom:.08in}
-.chart{display:block;width:100%;height:auto;margin:.04in 0 .12in;font-family:"Noto Sans","Liberation Sans",Arial,sans-serif}
-.caption{font-size:25pt;font-weight:800;margin:.1in 0 .04in}
-.figs{display:grid;grid-template-columns:1fr 1fr;gap:.5in;margin:.06in 0}
-.tbl{width:100%;border-collapse:collapse;font-size:24pt;line-height:1.18;margin:.06in 0}
-.tbl.tail{font-size:26pt}
-.tbl.tail th,.tbl.tail td{padding:.09in .07in}
-.tbl th,.tbl td{padding:.05in .07in;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
-.tbl thead th{font-size:21pt;color:var(--muted);font-weight:700;vertical-align:bottom}
+.trace li{margin-bottom:.1in}
+.trace li::marker{color:var(--amber);font-weight:800}
+.plan{font-family:"DejaVu Sans Mono","Liberation Mono",monospace;font-size:.82em;color:var(--amber);white-space:nowrap}
+q{font-style:italic;color:var(--muted)}
+.chart{display:block;width:100%;height:auto;margin:.04in 0 .1in;font-family:"Noto Sans","Liberation Sans",Arial,sans-serif}
+.caption{font-size:25pt;font-weight:800;margin:.08in 0 .04in}
+.figs{display:grid;grid-template-columns:1fr 1fr;gap:.5in}
+.tbl{width:100%;border-collapse:collapse;font-size:24pt;line-height:1.18;margin:.12in 0 .06in}
+.tbl th,.tbl td{padding:.06in .07in;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl thead th{font-size:22pt;color:var(--muted);font-weight:700;vertical-align:bottom}
 .tbl th.rl,.tbl thead th:first-child{text-align:left;font-weight:700}
 .tbl td.dvc{color:var(--muted)}
-.tbl.adopt td,.tbl.adopt th{text-align:left;white-space:normal;width:50%}
-.tbl.adopt thead th{color:var(--amber);font-size:23pt}
-.tbl.adopt{font-size:22pt}
 .sw{display:inline-block;width:.2in;height:.2in;border-radius:.03in;margin-right:.1in;vertical-align:.02em}
-.p7{background:#16263a;border-color:var(--dev)}
-.p7 p{font-size:28pt;line-height:1.22}
-footer{flex:none;border-top:2px solid var(--line);padding-top:.08in;display:flex;flex-direction:column;gap:.04in}
-.refs{font-size:14pt;line-height:1.3;color:var(--muted);white-space:nowrap}
-.refs code{font-size:1em}
-.refs [lang=ja]{font-family:"Noto Sans CJK JP","Noto Sans CJK TC",sans-serif}
-.foot{font-size:17pt;font-weight:700}
+.take{background:#16263a;border-color:var(--dev)}
+.take p{font-size:29pt;line-height:1.24}
+.prob{max-width:6.4in}
+.split{display:grid;grid-template-columns:5.3in 1fr;gap:.3in;align-items:start}
+.ex{font-size:27pt}
+.ex .note{font-size:25pt}
+footer{flex:none;border-top:2px solid var(--line);padding-top:.08in}
+.foot{font-size:15pt;color:var(--muted);white-space:nowrap}
 .foot code{font-size:1em}
+.foot [lang=ja]{font-family:"Noto Sans CJK JP","Noto Sans CJK TC",sans-serif}
 """
 
 
@@ -579,6 +602,7 @@ def main():
     ap.add_argument("--fixture", action="store_true",
                     help="layout test only: accept a development set as --test and mark the poster NOT A RESULT")
     ap.add_argument("--export", action="store_true", help="also write the PDF, the 300 ppi PNG and the preview")
+    ap.add_argument("--group", help="with --export: also copy the PDF to poster/GroupNN_Poster.pdf (NN = this number)")
     a = ap.parse_args()
     dev = a.dev if Path(a.dev).is_absolute() else str(ps.PROJECT / a.dev)
     test = a.test if Path(a.test).is_absolute() else str(ps.PROJECT / a.test)
@@ -593,6 +617,10 @@ def main():
     print(f"wrote {OUT_HTML.name} and numbers.md: {len(USED)} numbers, {len(pend)} pending")
     if a.export:
         export()
+        if a.group:
+            dst = HERE / f"Group{int(a.group):02d}_Poster.pdf"
+            shutil.copyfile(OUT_PDF, dst)
+            print("wrote", dst.name)
 
 
 if __name__ == "__main__":
