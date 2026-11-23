@@ -1451,6 +1451,64 @@ improve with race-cluster intervals that exclude 0, pit-now agreement holds). Ad
 `belief_cliff_edge: point` in `configs/sim/belief.yaml` and its mirrors (the belief before:
 `configs/sim/legacy/belief_pre_v3.yaml`).
 
+### Pre-race publications: circuit ratings and strategy guidance (`SimConfig.prerace`, off)
+
+The tyre supplier publishes two things before each race that a strategist reads and the simulator did
+not: the circuit ratings of its race-week preview (traction, braking, lateral, tyre stress, asphalt
+grip and abrasion, track evolution, downforce, 1-5) and its strategy guidance after qualifying (the
+strategies it expects to be fastest: stops, compounds, sometimes pit-window laps). Both are in
+`data/derived/circuit_ratings.csv` and `prerace_guidance.csv` (sources and coverage in
+`data/derived/README.md`), keyed by race id and read by `src/sim/prerace.py`. Like the tyre
+nominations they are public before the race: `src/sim/provenance.py` registers them as kind
+`pre_race` (records no race's data, reads none); every fit that uses them reads earlier races only.
+
+Switches, all off by default (left out of `config_hash` at their defaults); the judge never reads them:
+
+| switch | what it does |
+|---|---|
+| `prerace.stops_prior_s: L` | the belief's ranking of plans (`optimizer_bridge.optimize_batch`: the look-ahead, `belief_optimizer`, the continuations of a decision, `rank_plans`) adds L s per stop by which a plan's stops left differ from the guidance's (the first expected strategy's stop count less the stops made). Reported times never change; a race with no guidance stop count ranks as before |
+| `prerace.tyre_life_guidance: windows\|stated` | the guidance's implied stint lengths (stated pit windows; `stated` also splits the fastest strategy's compound sequence by role life weights 1 : 0.75 : 0.56) combined by precision with the historical tyre-life prior, bias and sd from earlier races |
+| `prerace.tyre_life_ratings: replace\|supplement` | the ratings (abrasion, tyre stress, lateral, traction) as covariates of the tyre-life prior, a ridge fit on earlier races, instead of / on top of the nominated-trio severity shift |
+| `AGENT_PRERACE=on` | `race_picture` carries `pre_race`: the ratings in words and the expected strategies (no race, circuit, season or driver named), and the v2free prompt one sentence on it |
+
+**Measured** (19 calibration races, main 3ed475f defaults as base; race-cluster 95% intervals; `*`
+excludes 0). The stop-count values L = 2 and 5 s were stated before measuring, with the rule "the
+larger gain in the first third whose low-wear and overall intervals do not get worse".
+
+Scorecard, belief favourite's judge-regret (s) and over-stop share (favourite has more stops than the
+judge's), change against the base (the prior re-ranks the scorecard's plan panel with the same rule):
+
+| split | base regret | L = 2 | L = 5 | base over-stop | L = 2 | L = 5 |
+|---|---|---|---|---|---|---|
+| all (1225) | 3.36 | -0.27 [-0.50, -0.06]* | -0.43 [-0.84, -0.06]* | 0.140 | -0.021* | -0.028 [-0.067, +0.003] |
+| first third (392) | 7.02 | -0.29 [-0.71, +0.03] | -0.58 [-1.18, -0.07]* | 0.263 | -0.036* | -0.048 [-0.112, +0.011] |
+| no circuit history (726) | 4.09 | -0.34 [-0.70, -0.01]* | -0.68 [-1.30, -0.10]* | 0.140 | -0.021* | -0.034 |
+| low-wear four (246) | 4.62 | +0.00 [-0.00, +0.02] | -0.14 [-0.51, +0.15] | 0.130 | -0.008 | -0.004 |
+
+Same favourite as the judge +0.024* / +0.038*, pit-now agreement +0.020* / +0.026*; plan-rank
+correlation is unchanged (the prior moves the favourite, not the belief's times). By the stated rule
+L = 5.
+
+dev20 `belief_optimizer` (469 scenarios, the switch in the look-ahead's own search), judge-regret
+change against the base: L = 2 -0.19 [-0.50, +0.08], first third -0.33 [-1.10, +0.31], low-wear four
+-0.30 [-0.60, +0.00]; L = 5 +0.02 [-0.51, +0.65], first third +0.13 [-1.07, +1.43]. The full search
+does not confirm the panel's gain at L = 5: over the whole plan space a strong prior also pulls to
+badly timed plans of the expected stop count. Against the rule baselines the look-ahead stays ahead
+overall (base: -5.56 s against `run_to_flag`) and behind at the low-wear four (+1.95 base, +1.65 at
+L = 2, +1.73 at L = 5).
+
+Tested and not adopted (no interval excludes 0 in the useful direction):
+- tyre-life prior against each race's observed edge (63 observations, as of each race; base MAE 6.96
+  laps): ratings replacing the trio shift +0.43 [-0.99, +1.73]; ratings supplementing it -0.03
+  [-0.92, +0.87]; guidance windows -0.39 [-1.14, +0.09]; guidance stated -0.24 [-1.16, +0.45];
+- the belief's lap-0 and lap-10 wear and HARD/SOFT-vs-MEDIUM gaps against the race's own, corrected by
+  an as-of ridge on the ratings, the trio hardness or the track temperature at the snapshot: no
+  improvement; ratings worsen the SOFT gap at lap 0 (+0.17 s [+0.02, +0.32]) and track temperature at
+  lap 10 (+0.18 [+0.04, +0.35]);
+- `tyre_life_guidance: stated` in the scorecard: the lap-0 edge's error against the observed edge
+  falls (MAE 5.81 -> 5.62 laps), but the favourite's judge-regret rises: +0.09 [+0.03, +0.17]*, first
+  third +0.20 [+0.03, +0.39]*. Rejected.
+
 ## Proxied compounds
 
 A strategy is not banned because nobody ran it. The world's full-window fit models a compound
