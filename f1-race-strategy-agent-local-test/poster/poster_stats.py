@@ -580,6 +580,13 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
         "over snapshots of the calibration races")
     extra(N, put, pend, D, H, groups)
     v3(N, put, pend, D, H)
+    example(N, put, D)
+    approach(N, put, D, H)
+    pl =json.loads((PROJECT / "configs" / "sim" / "pit_loss_prior.json").read_text())["races"]
+    vals = sorted(float(r["pit_loss_s"]) for r in pl.values())
+    med = float(np.median(vals))
+    put("pit_loss_median", med, f"{med:.0f} s", "configs/sim/pit_loss_prior.json",
+        f"median whole-race pit loss over the {len(vals)} calibration races in the pit-loss prior table")
     N["_sets"] = Num((D, H), "", "", "")
     return N
 
@@ -660,6 +667,106 @@ def provenance_md(N: dict[str, Num], used: list[str], args_line: str) -> str:
     lines += ["", "Pending inputs: " + (", ".join(pend) if pend else "none") + "."]
     return "\n".join(lines) + "\n"
 
+
+
+EXAMPLE = "2022_06_spain:MAG:25"   # the example decision: a development-set episode (short, both tools, regret 0)
+
+
+def example(N, put, D, scenario=EXAMPLE):
+    """The example decision, read from the committed development trajectory of `scenario`."""
+    race, drv, lap = scenario.split(":")
+    f = D.base / "trajectories" / f"{race}_{drv}_{lap}.jsonl"
+    ev = [e for e in (json.loads(x) for x in f.read_text().splitlines()) if e.get("tool")]
+    by = {}
+    for e in ev:
+        by.setdefault(e["tool"], e)
+    rp, rk, sub = by["race_picture"]["output"], by["rank_plans"]["output"], by["submit_recommendation"]["input"]
+    src = f"development: trajectories/{f.name}"
+    car = rp["car"]
+    a = ok_rows(D.rows, "agent").set_index("scenario_id").loc[scenario]
+    if abs(float(a["regret_s"])) > 0.05 or str(a["decision"]) != sub["decision"]:
+        raise SystemExit(f"example {scenario}: the scored agent row does not match the trajectory or is not near zero")
+    comp, age = [x.strip() for x in car["current_set"].replace("age", "").split(",")]
+    put("ex_race", race, ps_race(race), src, "the example's race (development set)")
+    put("ex_lap", int(lap), str(int(lap)), src, "laps completed at the decision")
+    put("ex_left", car["laps_left"], str(car["laps_left"]), src, "race_picture car.laps_left")
+    put("ex_pos", car["position"], str(car["position"]), src, "race_picture car.position")
+    put("ex_status", car["track_status"], car["track_status"].lower(), src, "race_picture car.track_status")
+    put("ex_set", comp, comp, src, "race_picture car.current_set (compound)")
+    put("ex_age", int(age), age, src, "race_picture car.current_set (tyre age, laps)")
+    w = car["set_wear"]
+    put("ex_wear_obs", w["observed_s_per_lap"], f"{w['observed_s_per_lap']:.3f}", src,
+        "race_picture car.set_wear.observed_s_per_lap (s per lap of tyre age, clean laps so far)")
+    put("ex_wear_model", w["model"]["value"], f"{w['model']['value']:.3f}", src, "race_picture car.set_wear.model.value")
+    p1, p2 = rk["plans"][0], rk["plans"][1]
+    put("ex_p1", p1["plan"], p1["plan"].replace(">", "›"), src, "rank_plans plans[0].plan (compound and laps per stint)")
+    put("ex_p1_now", p1["immediate"], p1["immediate"].replace("_", " ").lower(), src, "rank_plans plans[0].immediate")
+    put("ex_p2", p2["plan"], p2["plan"].replace(">", "›"), src, "rank_plans plans[1].plan")
+    put("ex_p2_gap", p2["gap_s"], s(p2["gap_s"], 1, sign=True), src, "rank_plans plans[1].gap_s (minus the top plan)")
+    def words(plan, immediate):
+        st = [x.strip().split() for x in plan.split(">")]
+        first = "pit now" if str(immediate).startswith("PIT") else f"stay {st[0][1]} laps"
+        return ", ".join([first] + [f"{c} {n} laps" for c, n in st[1:]])
+    put("ex_p1_words", p1["plan"], words(p1["plan"], p1["immediate"]), src,
+        "rank_plans plans[0] in words: the current set's laps as 'pit now' (immediate PIT) or 'stay N laps', then each "
+        "later stint's compound and laps; plan " + p1["plan"])
+    put("ex_p2_words", p2["plan"], words(p2["plan"], p2["immediate"]), src,
+        "rank_plans plans[1] in words, as above; plan " + p2["plan"])
+    put("ex_p2_slower", p2["gap_s"], f"{p2['gap_s']:.1f} s slower", src, "rank_plans plans[1].gap_s")
+    sh = rk["decision"]["share"]
+    put("ex_share", sh, pct(sh), src, "rank_plans decision.share: draws in which the favoured action is faster: "
+        + rk["decision"]["reading"])
+    put("ex_pitloss", rp["rejoin"]["pit_loss_now_s"], f"{rp['rejoin']['pit_loss_now_s']:.0f} s", src,
+        "race_picture rejoin.pit_loss_now_s")
+    put("ex_dec", sub["decision"], sub["decision"].replace("_", " ") + (f" onto {sub['compound']}" if sub["decision"] == "PIT"
+        else ""), src, "submit_recommendation decision and compound")
+    put("ex_conf", sub["confidence"], pct(sub["confidence"]), src, "submit_recommendation confidence")
+    rat = sub["rationale"]
+    i = rat.lower().find("observed wear")
+    quote = (rat[i:] if i >= 0 else rat)
+    quote = quote[0].upper() + quote[1:]
+    put("ex_reason", rat, quote, src, "submit_recommendation rationale, from 'observed wear' to the end; full text: " + rat)
+    put("ex_regret", float(a["regret_s"]), s(float(a["regret_s"]), 1), D.f("tables/combined.csv"),
+        f"agent regret_s at {scenario}")
+    put("ex_n_calls", len(ev), str(len(ev)), src, "tool calls in the episode, the submission included")
+
+
+SIM_CURVE = Path(__file__).resolve().parent / "sim_curve.csv"
+
+
+def approach(N, put, D, H):
+    """The simulator and agent panels: run settings from both sets' provenance (they must agree) and the simulator
+    figure's per-lap times, written by poster/sim_curve.py at the example's snapshot."""
+    for key, path, how in (("sim_n_samples", ("profile", "sim", "n_samples"),
+                            "profile.sim.n_samples: simulated races per plan (the profile configs/compute/local.yaml)"),
+                           ("agent_max_turns", ("loop", "max_steps"), "loop.max_steps: model turns per decision")):
+        vals = []
+        for S in (D, H):
+            v = S.prov
+            for k in path:
+                v = v[k]
+            vals.append(v)
+        if vals[0] != vals[1]:
+            raise SystemExit(f"{key}: development {vals[0]} and test {vals[1]} differ")
+        put(key, int(vals[0]), f"{int(vals[0])}", "provenance.json (development and test, equal)", how)
+    c = pd.read_csv(SIM_CURVE)
+    src = "poster/sim_curve.csv (poster/sim_curve.py)"
+    for k, nk in (("plan1", "ex_p1"), ("plan2", "ex_p2")):
+        if c[k].iloc[0] != N[nk].value:
+            raise SystemExit(f"sim_curve.csv {k} {c[k].iloc[0]!r} is not the example's {nk} {N[nk].value!r}")
+    if int(c["n_samples_profile"].iloc[0]) != N["sim_n_samples"].value or not bool(c["sc_free"].all()):
+        raise SystemExit("sim_curve.csv: profile n_samples differs from the runs, or its sample drew a safety car")
+    n = int(c["plans_scored"].iloc[0])
+    put("sim_plans", n, f"{n:,}", src, "plans_scored: optimize_batch candidates scored at the example snapshot "
+        "(belief, max_stops 2, zero-lap first stints left out)")
+    stop = float(c["plan1_pit_loss_s"].iloc[0]) / 2
+    put("sim_stop_s", stop, f"{stop:.0f} s", src, "plan1_pit_loss_s / 2: the belief's pit loss per stop at the snapshot")
+    put("sim_curve", c, "figure", src, "plan1_s and plan2_s: the belief's point-estimate lap time per lap (seed 0, "
+        "no parameter draw, no lap noise, no safety car), plans " + c["plan1"].iloc[0] + " and " + c["plan2"].iloc[0])
+
+
+def ps_race(r):
+    return race_name(r)
 
 
 LEVEL_POL = ("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy", "fixed_one_stop",
