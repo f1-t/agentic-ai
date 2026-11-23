@@ -580,6 +580,13 @@ class Simulator:
             return self._fit(practice, model=_cal.held_prior(prior, out))
         ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
         self._fit(race, ref=ref, prior=prior, shrinkage=taus, fuel_prior=fuel)
+        if cfg.belief_guard.enabled and cfg.fit_window == "to_snapshot":
+            # the belief's thin-fit guard (sim/belief_guard.py): visible rows, as-of tables only
+            from . import belief_guard as _bg
+            self.degradation, _ = _bg.guarded(
+                self.degradation, race[race["lap"].notna()] if "lap" in race else race, snapshot.race.race_id,
+                cfg.belief_guard, proxy_cfg=_proxy.as_of_config(cfg.compound_proxy, snapshot.race.race_id),
+                practice=prior, quali=self.quali_gaps(), wear_lower_bound=cfg.degradation.params.get("wear_lower_bound"))
 
     def cliffs_for(self, snapshot: Snapshot) -> dict:
         """compound -> cliff.Cliff on this instance's fit at `snapshot` ({} with the cliff off).

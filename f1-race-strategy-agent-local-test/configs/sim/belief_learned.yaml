@@ -31,3 +31,12 @@ fuel_anchor:
 # The tyre sets at the snapshot (docs/eval.md "Tyre sets at the snapshot", adopted 2026-11-22; before:
 # configs/sim/legacy/belief_pre_tyre_inventory.yaml): the as-of inventory, a later stint on the best set of its compound left
 tyre_inventory: true
+# The thin-fit guard (docs/eval.md "Thin fits in the belief", adopted 2026-11-22; before:
+# configs/sim/legacy/belief_pre_belief_guard.yaml): a compound whose visible clean race rows come from fewer than 3
+# drivers or number fewer than 40 has its level and wear shrunk toward the well-covered compounds and the as-of wear history
+belief_guard:
+  enabled: true
+  mode: pace_wear
+  min_drivers: 3
+  min_rows: 40
+  scale_sd_by_drivers: true
