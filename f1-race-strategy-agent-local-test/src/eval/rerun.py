@@ -634,7 +634,9 @@ def config_choices(c, role: str) -> dict:
         out["tyre_life_edge"] = "as_of_snapshot (history extended by the tyre ages seen so far)"
     if role != "world":
         out.update(calibrator=c.calibrator.name, fuel_anchor=c.fuel_anchor.model_dump(mode="json"),
-                   pit_loss=c.pit_loss.source, belief_cliff_edge=c.belief_cliff_edge)
+                   pit_loss=c.pit_loss.source, belief_cliff_edge=c.belief_cliff_edge,
+                   # the belief's thin-fit guard (sim/belief_guard.py): windowed fits only
+                   belief_guard=c.belief_guard.model_dump(mode="json") if c.belief_guard.enabled else False)
     return out
 
 

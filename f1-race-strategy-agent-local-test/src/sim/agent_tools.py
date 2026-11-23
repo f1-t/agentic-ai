@@ -1136,7 +1136,8 @@ def _stint_ages(snapshot: Snapshot, plan) -> list[tuple[str, float]]:
 def uncertainty_flags(snapshot: Snapshot, sim, plans, *, profile=None) -> tuple[list[str], list[list[str]]]:
     """(general flags, per plan flags) in words, from what the belief knows at the snapshot: a compound
     of the plans priced without race laps (the compound proxy), a compound whose estimate leans on the
-    prior (prior_dominated), a stint run past the compound's longest run seen so far when the tyre
+    prior (prior_dominated) or rests on few cars' race laps (thin_race_fit, the belief's thin-fit guard), a stint
+    run past the compound's longest run seen so far when the tyre
     life beyond it is a generic prior (cliff tiers GENERIC_LIFE_TIER on) or past the life estimate
     itself, and a safety car or VSC in progress. Nothing after the snapshot enters."""
     fit = sim.fitted_for(snapshot)
@@ -1151,6 +1152,12 @@ def uncertainty_flags(snapshot: Snapshot, sim, plans, *, profile=None) -> tuple[
         if tiers is not None and (tiers.get("pace_source") != "race" or tiers.get("wear_source") != "race"):
             general.append(f"{c} has no race laps so far: pace from {tiers.get('pace_source')}, wear from "
                            f"{tiers.get('wear_source')} (a proxy)")
+        elif f"thin_race_fit:{c}" in rep.flags:
+            g = (fit_report.get("belief_guard") or {}).get(c, {})
+            n = int(g.get("n_drivers", 0))
+            general.append(f"{c}: race laps so far from {n} car{'s' if n != 1 else ''} ({int(g.get('n_rows', 0))} "
+                           f"clean laps); its pace and wear are pulled toward the better-covered compounds and "
+                           f"earlier races")
         elif f"prior_dominated:{c}" in rep.flags:
             general.append(f"{c}: few race laps so far, its estimate leans on the prior")
     if snapshot.track_status != "green":

@@ -96,7 +96,8 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     outside its support are flagged no_hazard_support:<compound>. A compound priced by proxy
     (fit_report["proxy"], proxy.py) is flagged pace_from_<source>:<compound> and
     wear_from_<source>:<compound> for each parameter not from race laps, source practice,
-    qualifying or cross_race_step.
+    qualifying or cross_race_step. A compound the belief's thin-fit guard moved (fit_report["belief_guard"],
+    belief_guard.py: its race laps so far come from few cars or few rows) is flagged thin_race_fit:<compound>.
     """
     rep = getattr(model, "fit_report", None)
     if rep is None:
@@ -143,6 +144,10 @@ def build(model, fit_window, snapshot: Snapshot, ages=None, summary=CALIBRATION_
     for c, e in sorted((rep.get("proxy") or {}).items()):
         if c in compounds and compounds[c].modelled:
             flags += [f"{kind}_from_{e[f'{kind}_source']}:{c}" for kind in ("pace", "wear") if e[f"{kind}_tier"] != 1]
+    # SimConfig.belief_guard (belief_guard.py): a compound whose race laps so far come from few cars or rows,
+    # its level and wear pulled toward the better-covered compounds and earlier races
+    flags += [f"thin_race_fit:{c}" for c in sorted(rep.get("belief_guard") or {})
+              if c in compounds and compounds[c].modelled]
     return ModelReport(
         fit_window=fit_window, compounds=compounds, fuel_s_per_lap=fuel,
         hinge=None if hinge is None else {c: dict(e) for c, e in hinge.items()},

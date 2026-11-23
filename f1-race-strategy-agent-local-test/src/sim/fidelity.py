@@ -507,6 +507,12 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
                           "toward the historical wear)", _H,
             "data/derived/wear_history.csv, races strictly before this one; which compounds are thin is read from "
             "this race's fit rows, as the fit itself is")
+    bg = getattr(cfg, "belief_guard", None)
+    if bg is not None and bg.enabled and cfg.fit_window != "full":
+        add("belief_guard", f"belief thin-fit guard (under {bg.min_drivers} drivers or {bg.min_rows} visible rows: "
+                            "level and wear shrunk toward the well-covered compounds and the historical wear)", _K,
+            "the race rows visible at the snapshot, the as-of proxy steps and data/derived/wear_history.csv "
+            "(races strictly before this one)")
     if getattr(cfg, "tyre_inventory", False):
         add("tyre_inventory", "tyre sets at the snapshot (sim/tyre_inventory.py)", _K,
             "the weekend's allocation, less the sets opened in practice, sprint and qualifying (weekend, pre-race) "
@@ -517,7 +523,7 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
                "events", "effects", "calibrator", "degradation", "lap_noise", "hinge_knots", "hinge_knot_default",
                "pre_race_base_delta_s", "pre_race_fuel_slope_s_per_lap", "shrinkage", "n_samples", "policy_view",
                "pit_loss", "exclude_snapshot_driver", "wear_cliff", "min_race_rows_to_fit", "sc_queue",
-               "pit_stops", "tyre_inventory"}
+               "pit_stops", "tyre_inventory", "belief_guard"}
     default = SimConfig().model_dump(mode="json")
     mine = cfg.model_dump(mode="json")
     for k in sorted(mine):

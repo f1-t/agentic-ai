@@ -4790,8 +4790,10 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22), the
   wear-cliff edge at its point in every sample (`belief_cliff_edge: point`, adopted 2026-11-22,
   "Belief priors"); the tyre sets at the snapshot (`tyre_inventory: true`, adopted 2026-11-22, "Tyre
-  sets at the snapshot"); no safety-car queue (`tests/test_eval_default_config.py` checks no belief
-  config carries it). config_hash `aaf95a09bc50` (before the tyre sets `9d691bbbcf24`, before v3
+  sets at the snapshot"); the thin-fit guard (`belief_guard: {enabled: true, mode: pace_wear,
+  min_drivers: 3, min_rows: 40, scale_sd_by_drivers: true}`, adopted 2026-11-22, "Thin fits in the
+  belief"); no safety-car queue (`tests/test_eval_default_config.py` checks no belief
+  config carries it). config_hash `b9891459af63` (before the thin-fit guard `aaf95a09bc50`, before the tyre sets `9d691bbbcf24`, before v3
   `351f4124ff22`, before the SC alignment `f7b872d14c0c`, before the scorecard `d479652b0fe7`). `belief_traffic.yaml` and
   `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
@@ -4801,10 +4803,11 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
   and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
   `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged);
-  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`.
+  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`; `belief_pre_belief_guard.yaml`
+  (the world unchanged).
   Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
-  queue's other forms), `tyre_inventory_off` (both simulators).
+  queue's other forms), `tyre_inventory_off` (both simulators), `belief_guard_off`.
 
 Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
 calibration races, none failed). Hashes and versions:
