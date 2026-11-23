@@ -9,13 +9,15 @@ import pytest
 from src.contracts import Snapshot
 from src.eval import rerun, score
 from src.sim import SimConfig, agent_tools, calibration, fidelity
-from src.sim.config import (WORLD_DEGRADATION, WORLD_EDGE, WORLD_SC_QUEUE, WORLD_WEAR_GUARD, ScQueue, WearGuard,
-                             world_default)
+from src.sim.config import (WORLD_DEGRADATION, WORLD_EDGE, WORLD_SC_QUEUE, WORLD_TYRE_INVENTORY, WORLD_WEAR_GUARD,
+                             ScQueue, WearGuard, world_default)
 from src.sim.engine import Simulator
 
 ROOT = fidelity.ROOT
-DEFAULT_WORLD_HASH = "7c974c32c67c"       # driver effects, edge history_only, hybrid SC/VSC pooled history, wear guard, SC queue
-DEFAULT_BELIEF_HASH = "9d691bbbcf24"      # belief.yaml with driver effects, SC/VSC history lengths, cliff edge point
+DEFAULT_WORLD_HASH = "c821efe0bc98"       # driver effects, edge history_only, hybrid SC/VSC pooled history, wear guard, SC queue, tyre sets
+DEFAULT_BELIEF_HASH = "aaf95a09bc50"      # belief.yaml with driver effects, SC/VSC history lengths, cliff edge point, tyre sets
+PRE_TYRE_INVENTORY_WORLD_HASH = "7c974c32c67c"   # the default world from the SC queue (#142) to the tyre sets
+PRE_TYRE_INVENTORY_BELIEF_HASH = "9d691bbbcf24"  # the default belief from v3 (#138) to the tyre sets
 PRE_SC_QUEUE_WORLD_HASH = "15e3f31d98a7"  # the default world from v3 (#138) to the SC queue's adoption
 PRE_V3_WORLD_HASH = "5069228b35e7"        # the default world from the SC alignment (#125) to v3
 PRE_V3_BELIEF_HASH = "351f4124ff22"
@@ -46,6 +48,8 @@ def test_the_default_world_is_the_scorecard_choice():
     assert w.sc_queue == ScQueue(enabled=True, mode="single", held_behind_laps=1.25, placement="record")
     assert w.sc_queue.spacing_s == 0.5
     assert not SimConfig().sc_queue.enabled     # the SimConfig default stays off; the eval world sets it
+    assert WORLD_TYRE_INVENTORY is True and w.tyre_inventory
+    assert not SimConfig().tyre_inventory       # the SimConfig default stays off; the eval world sets it
     assert w.degradation.model_dump() == {"name": "linear_fuel", "params": {"driver_effects": "race"}} \
         == {"name": WORLD_DEGRADATION["name"], "params": WORLD_DEGRADATION["params"]}
     assert w.traffic.name == "none" and w.stint_limit_margin_laps is None and w.plan_on == "draws"
@@ -65,6 +69,7 @@ def test_the_default_belief_is_the_scorecard_choice_and_the_tools_read_it():
     assert b.calibrator.name == "as_of_history" and b.wear_cliff.enabled
     assert (b.events.name, b.events.params) == ("rate", {"as_of": True, "duration": "history"})
     assert b.belief_cliff_edge == "point" and SimConfig().belief_cliff_edge == "draw"
+    assert b.tyre_inventory and agent_tools.belief_config().tyre_inventory
     assert agent_tools.belief_config().belief_cliff_edge == "point"
     assert calibration.config_hash(b) == DEFAULT_BELIEF_HASH
     assert agent_tools.BELIEF_CONFIG == score.BELIEF_CONFIG == fidelity.BELIEF_FILE
@@ -104,9 +109,15 @@ def test_every_earlier_choice_stays_available_as_a_file():
     # before the SC queue: the default world without it (the belief unchanged)
     sq_w = SimConfig.from_file(ROOT / "configs/sim/legacy/world_pre_sc_queue.yaml")
     assert calibration.config_hash(sq_w) == PRE_SC_QUEUE_WORLD_HASH and not sq_w.sc_queue.enabled
-    assert sq_w.model_copy(update={"sc_queue": default_world().sc_queue}) == default_world()
+    ti_w = SimConfig.from_file(ROOT / "configs/sim/legacy/world_pre_tyre_inventory.yaml")
+    ti_b = SimConfig.from_file(ROOT / "configs/sim/legacy/belief_pre_tyre_inventory.yaml")
+    assert calibration.config_hash(ti_w) == PRE_TYRE_INVENTORY_WORLD_HASH and not ti_w.tyre_inventory
+    assert calibration.config_hash(ti_b) == PRE_TYRE_INVENTORY_BELIEF_HASH and not ti_b.tyre_inventory
+    assert ti_w.model_copy(update={"tyre_inventory": True}) == default_world()
+    assert ti_b.model_copy(update={"tyre_inventory": True}) == b
+    assert sq_w.model_copy(update={"sc_queue": ti_w.sc_queue}) == ti_w
     assert v3_w.model_copy(update={"wear_guard": sq_w.wear_guard}) == sq_w
-    assert v3_b.model_copy(update={"belief_cliff_edge": "point"}) == b
+    assert v3_b.model_copy(update={"belief_cliff_edge": "point"}) == ti_b
     assert pre_w.model_copy(update={"events": v3_w.events}) == v3_w
     assert pre.model_copy(update={"events": v3_b.events}) == v3_b
     # the traffic world is the default world plus traffic only (test_traffic_eval_params too)
@@ -138,13 +149,16 @@ def test_the_ablation_toggles_each_adopted_choice_back_off():
     assert specs["belief_cliff_edge_draw"].belief_config().belief_cliff_edge == "draw"
     assert specs["belief_cliff_edge_draw"].belief_config().model_copy(update={"belief_cliff_edge": "point"}) == base_b
     assert w["sc_queue_off"].sc_queue == ScQueue()
-    assert calibration.config_hash(w["sc_queue_off"]) == PRE_SC_QUEUE_WORLD_HASH
+    assert calibration.config_hash(w["sc_queue_off"].model_copy(update={"tyre_inventory": False})) == PRE_SC_QUEUE_WORLD_HASH
     assert w["sc_queue_off"].model_copy(update={"sc_queue": base_w.sc_queue}) == base_w
     assert w["sc_queue_clock"].sc_queue.placement == "clock" and w["sc_queue_clock"].sc_queue.held_behind_laps == 1.25
     assert w["sc_queue_old"].sc_queue.held_behind_laps is None and w["sc_queue_old"].sc_queue.enabled
     assert w["sc_queue_field"].sc_queue.mode == "field"
     assert not base_b.sc_queue.enabled and specs["sc_queue_both"].belief_config().sc_queue.enabled
     assert specs["sc_queue_both"].belief_config().sc_queue.placement == "clock"
+    ti = specs["tyre_inventory_off"]
+    assert calibration.config_hash(ti.world_config()) == PRE_TYRE_INVENTORY_WORLD_HASH
+    assert calibration.config_hash(ti.belief_config()) == PRE_TYRE_INVENTORY_BELIEF_HASH
     tb = specs["traffic_both"]
     assert tb.world_config().traffic.name == "ghost" and tb.belief_config().traffic.params["source"] == "projected"
     # traffic aside, traffic_both keeps every adopted choice
@@ -164,6 +178,7 @@ def test_provenance_names_each_choice():
         ("race", "persistent", "none", "as_of_history", None, "draws")
     assert b["belief_cliff_edge"] == "point" and "wear_guard" not in b and "sc_queue" not in b
     assert b["fuel_anchor"]["prior"] == "anchored" and b["tyre_life_edge"].startswith("as_of_snapshot")
+    assert w["tyre_inventory"] is True and b["tyre_inventory"] is True
 
 
 def test_belief_config_as_runs_the_tools_on_the_given_belief_and_restores():

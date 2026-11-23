@@ -1,0 +1,35 @@
+# LEGACY, for reproducing results produced before the tyre sets were adopted (docs/eval.md
+# "The current configuration", adopted 2026-11-22): the eval's default world from the safety-car
+# queue (#142) to the tyre sets' adoption, without config.WORLD_TYRE_INVENTORY. Pair it with
+# configs/sim/legacy/belief_pre_tyre_inventory.yaml.
+# The eval's default world as a file (docs/eval.md "Safety cars and VSC in the scoring world"): the
+# full fit window, traffic off, config.WORLD_DEGRADATION's wear fit (linear_fuel with driver
+# effects), the wear cliff's edge config.WORLD_EDGE ("history_only": the historical prior, nothing
+# from this race) and eval.score.WORLD_EVENTS: the SC/VSC in progress at the snapshot as recorded
+# (with the field's recorded lap times), later ones drawn at the rate model's rates, the same draws
+# for every plan and the reference. Opt-in until the fidelity scorecard chose it; now the default,
+# so `score` without --world-config runs this world. The thin-fit wear guard config.WORLD_WEAR_GUARD
+# (adopted 2026-11-22, v3; before: configs/sim/legacy/world_pre_v3.yaml). The safety-car queue
+# config.WORLD_SC_QUEUE (adopted 2026-11-22; before: configs/sim/legacy/world_pre_sc_queue.yaml). tests/test_eval_default_config.py
+# checks it equals score.default_world_config(config.world_default(SimConfig())).
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
+wear_guard:
+  enabled: true
+  scale_sd_by_drivers: true
+sc_queue:
+  enabled: true
+  mode: single
+  held_behind_laps: 1.25
+  placement: record
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
+    duration: history   # later periods: rates and lengths pooled over the history table (adopted 2026-11-22)
+    pooled: true

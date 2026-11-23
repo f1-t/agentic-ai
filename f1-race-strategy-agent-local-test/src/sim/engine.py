@@ -670,6 +670,9 @@ class Simulator:
                 errors.append(_messages(exc))
                 continue
             errs = self.validate(snapshot, plan, rules)
+            if (not errs and self.config.tyre_inventory and snapshot.sets_available is not None
+                    and "inventory" not in (self.config.rules if rules is None else rules)):
+                errs = check(["inventory"], RuleContext(snapshot, plan, self.modelled, self.config))
             parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
             errors.append(errs)
         out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
@@ -1145,6 +1148,12 @@ class Simulator:
                 age = act.start_age or 0
                 chosen = next((t for t in pool if (t.set_id == act.set_id if act.set_id is not None
                                else t.compound == act.compound and t.laps_run == age)), None)
+                if chosen is None and act.set_id is None and self.config.tyre_inventory:
+                    # SimConfig.tyre_inventory: the best set of the compound left (rules.assign_sets)
+                    same = [t for t in pool if t.compound == act.compound]
+                    if same:
+                        chosen = min(same, key=lambda t: (t.laps_run != 0, t.laps_run) if age == 0
+                                     else (abs(t.laps_run - age), t.laps_run))
                 if chosen is not None and act.set_id is not None and age not in (0, chosen.laps_run):
                     return None, [f"start_age {act.start_age} conflicts with set '{chosen.set_id}' "
                                   f"({chosen.laps_run} laps run)"]
