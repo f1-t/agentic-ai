@@ -1,0 +1,18 @@
+# LEGACY, for reproducing results produced before the v3 adoption (docs/eval.md "The current
+# configuration", adopted 2026-11-22): the eval's default world as it was from the SC alignment
+# (#125) to v3, without the judge's thin-fit wear guard. Pair it with
+# configs/sim/legacy/belief_pre_v3.yaml. tests/test_eval_default_config.py checks it is the
+# default world with the wear guard off and nothing else.
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
+    duration: history
+    pooled: true

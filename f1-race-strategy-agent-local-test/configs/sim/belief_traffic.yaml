@@ -27,6 +27,7 @@ degradation:
     wear_lower_bound: 0.0
     driver_effects: race
 lap_noise: persistent
+belief_cliff_edge: point   # as belief.yaml
 calibrator:
   name: as_of_history
 fuel_anchor:

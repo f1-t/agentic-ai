@@ -4,8 +4,9 @@
 # from this race) and eval.score.WORLD_EVENTS: the SC/VSC in progress at the snapshot as recorded
 # (with the field's recorded lap times), later ones drawn at the rate model's rates, the same draws
 # for every plan and the reference. Opt-in until the fidelity scorecard chose it; now the default,
-# so `score` without --world-config runs this world. tests/test_eval_default_config.py checks it
-# equals score.default_world_config(config.world_default(SimConfig())).
+# so `score` without --world-config runs this world. The thin-fit wear guard config.WORLD_WEAR_GUARD
+# (adopted 2026-11-22, v3; before: configs/sim/legacy/world_pre_v3.yaml). tests/test_eval_default_config.py
+# checks it equals score.default_world_config(config.world_default(SimConfig())).
 fit_window: full
 degradation:
   name: linear_fuel
@@ -13,6 +14,9 @@ degradation:
     driver_effects: race
 wear_cliff:
   world_edge: history_only
+wear_guard:
+  enabled: true
+  scale_sd_by_drivers: true
 events:
   name: hybrid
   params:

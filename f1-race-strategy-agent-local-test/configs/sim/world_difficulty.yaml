@@ -12,6 +12,9 @@ degradation:
     driver_effects: race
 wear_cliff:
   world_edge: history_only
+wear_guard:   # as world.yaml
+  enabled: true
+  scale_sd_by_drivers: true
 events:
   name: hybrid
   params:

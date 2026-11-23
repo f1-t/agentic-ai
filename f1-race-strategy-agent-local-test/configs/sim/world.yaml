@@ -19,6 +19,9 @@ degradation:
     driver_effects: race
 wear_cliff:
   world_edge: history_only
+wear_guard:   # the thin-fit wear guard, as world_hybrid.yaml (adopted 2026-11-22)
+  enabled: true
+  scale_sd_by_drivers: true
 events:
   name: hybrid
   params:
