@@ -87,6 +87,9 @@ factors:
   cliff_edge_race:
     note: the judge's edge from this race alone (the oldest age raced, the earlier design)
     world: {wear_cliff: {world_edge: race}}
+  cliff_edge_as_of:
+    note: the judge's edge from the historical prior extended by the ages run up to the scored snapshot (the belief's visible rows; history_only at lap 0)
+    world: {wear_cliff: {world_edge: as_of}}
   # the judge's thin-fit wear guard (sim/wear_guard.py, config.WORLD_WEAR_GUARD): fewer than 3 drivers
   # or 40 clean race rows on a compound shrinks its wear by precision toward the as-of historical
   # wear, the fit's sd scaled by sqrt(3 / drivers). Adopted 2026-11-22 (v3), so the base has it

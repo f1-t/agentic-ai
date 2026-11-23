@@ -364,7 +364,10 @@ class WearCliff(_Cfg):
     # simulators share, nothing from this race), "history" (b: that prior extended by the ages this
     # race has lap data for; the default until the fidelity scorecard chooses between a and b) or
     # "race" (c: the oldest age raced in this race, the earlier design)
-    world_edge: Literal["history_only", "history", "race"] = "history"
+    # "as_of" (d): the prior extended by the ages run up to the scored snapshot's moment (the visible
+    # rows the belief's edge reads, cut by session time; race laps only, no practice): nothing from
+    # after the decision, so a whole-race replay from lap 0 is "history_only"
+    world_edge: Literal["history_only", "history", "race", "as_of"] = "history"
     # the historical prior (sim/cliff.py history_prior): "tyre_history" (src/sim/tyre_history.py,
     # the shared history model) or "stub" (cliff.life_prior, the earlier as-of stub)
     prior_source: Literal["stub", "tyre_history"] = "tyre_history"

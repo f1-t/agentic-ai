@@ -423,10 +423,12 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
         if role == "judge" and cfg.fit_window == "full":
             edge = wc.world_edge
             add("cliff_edge", f"wear-cliff support edge (world_edge {edge})",
-                {"history_only": _H, "history": _W, "race": _W}[edge],
+                {"history_only": _H, "history": _W, "race": _W, "as_of": _K}[edge],
                 {"history_only": "the historical tyre-life prior only (races strictly before this one)",
                  "history": "the historical prior extended by the ages this race has lap data for",
-                 "race": "the oldest age raced in this race"}[edge],
+                 "race": "the oldest age raced in this race",
+                 "as_of": "the historical prior extended by the ages run up to the scored snapshot "
+                          "(the belief's visible-rows cut)"}[edge],
                 None if edge == "history_only" else "cliff_history_only")
         else:
             add("cliff_edge", "wear-cliff support edge (as of the snapshot)", _K,

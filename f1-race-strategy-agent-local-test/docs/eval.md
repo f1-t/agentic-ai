@@ -1196,6 +1196,46 @@ in the judge's config. Adopted 2026-11-22 as the eval world's default (`config.W
 the world before: `configs/sim/legacy/world_pre_v3.yaml`). Every reference and result scored on the
 old judge is stale.
 
+### The judge's edge as of the snapshot (`world_edge: as_of`, off by default)
+
+The belief's tyre-life edge is the historical prior extended by the tyre ages seen so far: the
+visible rows at the snapshot. The judge's default (`history_only`) is the prior alone, so late in a
+race the judge charges stint lengths the belief has already watched cars run. `history` uses the
+whole race's ages, which is the race's future.
+
+`as_of` is the middle option. The edge is the `history_only` edge raised to the oldest age run on
+that compound in the rows visible at the scored snapshot: the same session-time cut as the belief
+(`Simulator.cut_time`), race laps only (`cliff.as_of_world_cliffs`, keyed per snapshot moment in
+`engine.cliffs_for`). The fidelity ledger tags it "this race, to snapshot". At lap 0 it is
+`history_only`, so whole-race replays from the start are unchanged by construction.
+
+Measured 2026-11-22 against `history_only`, main 69a9589's default judge, 19 calibration races,
+race-cluster 95%:
+
+| measure | `history_only` | `as_of` change |
+|---|---|---|
+| per-car close pairs / Spearman / relative gap (whole-race replays) | 0.747 / 0.960 / 7.60 s | 0 / 0 / 0 (identical) |
+| whole-field close pairs, all k (from 10, 20, 30, 40 too) | 0.691 | -0.001 [-0.006, +0.004] (k20 -0.003, k40 +0.014 [+0.003, +0.028]) |
+| whole-field relative gap | 15.00 s | -0.045 [-0.120, +0.002] |
+| B2 rank rho | 0.872 | +0.004 [+0.001, +0.007] |
+| B2 regret of the belief's favourite, overall / early third / mid / late | 3.16 / 6.36 / 2.03 / 1.19 s | -0.33 [-0.75, -0.03] / 0.00 / -0.19 [-0.36, -0.05] / -0.84 [-2.00, -0.04] |
+| pit-now agreement, overall / late | 0.827 / 0.870 | +0.015 [-0.001, +0.042] / +0.050 [+0.008, +0.121] |
+| E_real_regret_s / over 20 s | 5.59 s / 0.056 | -0.44 [-1.12, -0.05] / -0.010 [-0.026, +0.001] |
+| judge's best panel plan adds a stop the team did not make | 0.110 | -0.021 [-0.055, -0.001] |
+| dev20 actual_strategy regret | 6.43 s | -0.32 [-0.71, -0.01] (over 20 s 0.070 level; reference adds a stop 0.126 to 0.103) |
+| dev20 belief_optimizer / run_to_flag / one_stop_total | 3.04 / 9.06 / 9.82 s | -0.30 [-0.72, -0.04] / -0.02 / -0.03 |
+| Monaco 2024 (scratch as-of set) actual_strategy | 83.3 s | 77.9 s (lap 45: 146 to 125; lap 60: 84 to 67; laps 5-35 unchanged) |
+
+Under the selection rule, `as_of` is an adopt-candidate for the judge:
+- Agreement improves: rank, regret and late pit-now all improve, and nothing gets worse in the
+  early third.
+- Expert consistency improves.
+- No order measure gets worse: the whole-race replays are identical, and the mid-race whole-field
+  replay is level overall, improved at k40 and -0.003 at k20 inside its interval.
+- It reads nothing after the decision moment.
+
+Monaco improves only late, because the real stints there outlast every edge until the very end.
+
 ### Fuel identification (measured, not adopted)
 
 The fuel slope's stated interval was far too tight: the config prior (-0.045 s/lap, tau 0.008)
