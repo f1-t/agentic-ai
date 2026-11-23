@@ -731,6 +731,8 @@ class Simulator:
         offset = self._pace_offset(snapshot.driver)
         team_pit = self.team_pit_delta(snapshot)   # 0.0 unless config.pit_stops.team
         fq = self.field_queue(snapshot)   # None unless config.sc_queue is on in mode "single"
+        if fq is not None and fq.placement == "record" and fq.capture is None:
+            fq.anchor = self._queue_anchor(snapshot, fq, seed, n_samples, scenario)
 
         # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
         # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
@@ -818,6 +820,8 @@ class Simulator:
             # parameters and the lap noise draw from their own streams (EVENT_STREAM per
             # sample, DEGRADATION_STREAM and LAP_NOISE_STREAM per batch), never from rng.
             rng = np.random.default_rng([seed, k])
+            if fq is not None:
+                fq.sample = k
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
             if z_pit is not None:
@@ -963,6 +967,27 @@ class Simulator:
             self._pit_loss_cache[key] = _pl.team_delta(stops, team.iloc[0] if len(team) else None,
                                                        ps.team_prior_stops)[0]
         return self._pit_loss_cache[key]
+
+    def _queue_anchor(self, snapshot: Snapshot, fq, seed, n_samples, scenario) -> dict | None:
+        """{(sample, S): the car's real remaining strategy's simulated time at the end of lap S - 1}
+        for the safety-car queue's placement "record": that plan simulated alone on the same seed,
+        draws, scenario and tyre-set inventory as the batch, so every plan of every batch of this
+        scenario is placed against the same anchor. None (every plan placed by its clock) where the
+        real strategy cannot be simulated from this snapshot."""
+        from .calibration import REPLAY_RULES, remaining_plan
+        try:
+            plan = remaining_plan(self.laps, snapshot.driver, snapshot.laps_completed)
+        except (ValueError, KeyError, IndexError):
+            return None
+        fq.capture = {}
+        try:
+            res = self.simulate_batch(snapshot, [plan], seed=seed, n_samples=n_samples, scenario=scenario,
+                                      rules=REPLAY_RULES)
+        except Exception:
+            res = None
+        finally:
+            captured, fq.capture = fq.capture, None
+        return captured if res is not None and res.valid[0] else None
 
     def field_queue(self, snapshot: Snapshot):
         """sc_queue.FieldQueue of this snapshot under config.sc_queue (mode "single"), else None.

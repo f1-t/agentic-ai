@@ -184,11 +184,20 @@ def test_placement_by_the_record_removes_the_drift_of_the_simulated_clock():
     pit[1, 1] = 20.0                                   # the second plan stops at the end of lap 2
     q = {p: sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=90.0, recorded=True, held_laps=1.25,
                                 placement=p) for p in ("clock", "record")}
+    # the anchor: the car's real strategy (no stop, the first plan here) simulated at 267 s at lap 3
+    q["record"].anchor = {(0, 4): 267.0}
     end5 = {p: np.cumsum(lap_c + pit, axis=1)[:, 4] + q[p].shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5) for p in q}
     length = 450.0 - 270.0
     assert end5["clock"][0] == pytest.approx(267.0 + length)              # first by its clock
     assert end5["record"][0] == pytest.approx(270.0 + length + 1.0)       # third by the record
     assert end5["record"][1] == pytest.approx(270.0 + length + 1.0)       # 296 s at lap 3: still third, last
+    # each plan's shift depends on the anchor, not on the batch: the second plan scored alone is the same
+    alone = q["record"].shift(4, 5, lap_c[1:], pit[1:], 1, 0.0, 20.0, 0.5)
+    assert alone[0] == q["record"].shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5)[1]
+    # with no anchor for the scenario every plan is placed by its clock
+    q["record"].anchor = None
+    assert q["record"].shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5) == pytest.approx(
+        q["clock"].shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5))
     # the belief (recorded False) is never placed by the record
     qb = sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=90.0, held_laps=1.25, placement="record")
     qc = sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=90.0, held_laps=1.25)

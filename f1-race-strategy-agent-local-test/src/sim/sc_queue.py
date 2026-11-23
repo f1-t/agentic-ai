@@ -252,6 +252,12 @@ class FieldQueue:
         # train by its recorded place at the deployment, a plan moved by its simulated time
         # difference at S - 1 to the plans that stopped where the car really did before S
         self.placement = placement
+        # the anchor (placement "record"): the car's real remaining strategy, simulated once per batch
+        # call on the same draws (Simulator._queue_anchor). `capture` collects its time at S - 1 per
+        # (sample, S) while the anchor itself runs; `anchor` holds them for the plans' run; `sample`
+        # is the engine's current sample. A plan's placement depends on the scenario and draw only,
+        # never on the other plans of its batch
+        self.sample, self.capture, self.anchor = 0, None, None
         self.own_pace_s = float(own_pace_s) if np.isfinite(own_pace_s) else 0.0
         self.own_lapped = bool(own_lapped)
         self.horizon = int(horizon)
@@ -317,13 +323,16 @@ class FieldQueue:
         t_key = t_before   # the car's time at S - 1 that places it in the train
         if (self.placement == "record" and self.recorded and dep is not None and self.driver in dep[0].index):
             own_eq = float(dep[0][self.driver]) - self.start   # its recorded green time at S - 1
-            if S - 1 > k:
-                real = np.array([(L in self.own_in_laps) for L in range(first_lap, S)])
-                same = ((pit_lap[:, :S - first_lap] > 0) == real[None, :]).all(axis=1)
-                if same.any():   # drift of the plans that stopped as the car did, removed from every plan
-                    t_key = t_before - (float(np.median(t_before[same])) - own_eq)
-            else:
+            if S - 1 <= k:   # a period already running at the snapshot: the recorded place
                 t_key = np.full(n_plans, own_eq)
+            elif self.capture is not None:   # the anchor's own run: it is the car's real strategy
+                self.capture[(self.sample, S)] = float(t_before[0])
+                t_key = np.full(n_plans, own_eq)
+            elif self.anchor is not None and (self.sample, S) in self.anchor:
+                # the anchor's drift at S - 1 (this draw), removed from every plan: each plan placed by
+                # its own simulated time difference to the car's real strategy
+                t_key = t_before - (self.anchor[(self.sample, S)] - own_eq)
+            # else: no anchor for this scenario: the clock, for every plan alike
         key_d = t_key + pit_lap[:, i0:iE + 1].sum(axis=1)
         if S - 1 <= self.horizon:
             t_o = self.at(S - 1)
