@@ -2579,7 +2579,7 @@ def _options(args) -> Options:
     return Options(b_drivers=args.drivers, b_every=args.every, samples=0 if args.coverage else args.samples,
                    n_one=args.n_one, n_two=args.n_two, lodo=not args.no_lodo, loso=not args.no_loso,
                    grid_references=not args.no_grid_references, hindsight_variants=not args.no_hindsight_variants,
-                   components=not args.no_components, seed=args.seed, field_replay=args.field_replay)
+                   components=not args.no_components, seed=args.seed, field_replay=args.field_replay, max_stops=getattr(args, "max_stops", 2))
 
 
 def _common(ap):
@@ -2605,6 +2605,8 @@ def _common(ap):
     ap.add_argument("--field-replay", action="store_true",
                     help="also run src/sim/field_replay.py's whole-field replay and report its summary")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--max-stops", type=int, default=2, choices=(1, 2, 3),
+                    help="future stops the judge's reference search allows (A4, grid references); 3 is the switch")
     ap.add_argument("--jobs", type=int, default=DEFAULT_JOBS,
                     help=f"worker processes, one BLAS thread each (default min(6, cpu_count // 2) = {DEFAULT_JOBS})")
 

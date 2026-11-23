@@ -76,7 +76,7 @@ def quadratic_time(state, plan, seed):
     return result + seed * 0.01
 
 
-@pytest.mark.parametrize("max_stops", [0, 1, 2])
+@pytest.mark.parametrize("max_stops", [0, 1, 2, 3])
 @pytest.mark.parametrize(
     "state",
     [
@@ -177,7 +177,7 @@ def test_invalid_simulator_outputs_fail_instead_of_being_silently_skipped(value)
         optimize(snapshot(), lambda state, plan, seed: value)
 
 
-@pytest.mark.parametrize("max_stops", [-1, 3, True, 1.5])
+@pytest.mark.parametrize("max_stops", [-1, 4, True, 1.5])
 def test_unsupported_stop_limits_fail(max_stops):
     with pytest.raises(ValueError):
         list(candidate_plans(snapshot(), max_stops=max_stops))

@@ -10,9 +10,12 @@ from .domain import NoFeasiblePlan, Plan, Snapshot, Stint, validate_plan
 Simulator = Callable[[Snapshot, Plan, int], float]
 
 
+MAX_FUTURE_STOPS = 3   # the deepest search candidate_plans enumerates (ComputeProfile.sim.max_stops, default 2)
+
+
 def _stop_limit(max_stops):
-    if type(max_stops) is not int or not 0 <= max_stops <= 2:
-        raise ValueError("max_stops must be 0, 1, or 2 future stops.")
+    if type(max_stops) is not int or not 0 <= max_stops <= MAX_FUTURE_STOPS:
+        raise ValueError(f"max_stops must be 0 to {MAX_FUTURE_STOPS} future stops.")
 
 
 def _seeds(seeds):
@@ -37,11 +40,18 @@ def candidate_plans(snapshot: Snapshot, max_stops: int = 2) -> Iterator[Plan]:
                 (n, remaining - n)
                 for n in range(first_minimum, remaining - minimum + 1)
             )
-        else:
+        elif stops == 2:
             lengths = (
                 (n, m, remaining - n - m)
                 for n in range(first_minimum, remaining - 2 * minimum + 1)
                 for m in range(minimum, remaining - n - minimum + 1)
+            )
+        else:   # three stops: only under max_stops 3 (the switch), after every plan of two
+            lengths = (
+                (n, m, p, remaining - n - m - p)
+                for n in range(first_minimum, remaining - 3 * minimum + 1)
+                for m in range(minimum, remaining - n - 2 * minimum + 1)
+                for p in range(minimum, remaining - n - m - minimum + 1)
             )
         for split in lengths:
             for replacements in product(
