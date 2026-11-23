@@ -173,3 +173,46 @@ def test_the_references_and_baselines_stages_do_not_depend_on_jobs_or_order(tmp_
     # the reversed set is another set (its digest names the order); every number is the same
     pd.testing.assert_frame_equal(runs["one"].drop(columns="scenario_digest"),
                                   runs["reversed"].drop(columns="scenario_digest"), check_exact=True)
+
+
+# --- a plan's times do not depend on its batch (the judge's safety-car queue, placement "record") -------
+DEV20 = ROOT / "reports" / "eval" / "rerun" / "dev20" / "scenarios.json"
+BATCH_CASES = [("2022_09_canada:ALO:25", False),   # later safety cars drawn (the recorded race had one at 48-54)
+               ("2022_09_canada:LEC:50", False),   # a safety car in progress at the snapshot
+               ("2022_21_brazil:GAS:35", False),   # later safety cars drawn
+               ("2022_21_brazil:GAS:35", True)]    # no neutralisation at all (an explicit empty scenario)
+
+
+@pytest.fixture(scope="module")
+def default_judge():
+    from src.eval.score import race_simulators
+    from src.sim.compute import load_profile
+    return race_simulators(load_profile("local"))
+
+
+@pytest.mark.skipif(not DEV20.exists(), reason="committed dev20 set not present")
+@pytest.mark.parametrize("sid, empty", BATCH_CASES)
+def test_a_plans_times_do_not_depend_on_its_batch_on_the_default_world(default_judge, sid, empty):
+    """The default world places the car in the safety-car train against an anchor (its real remaining
+    strategy, simulated alone on the same draws), never against the other plans of its batch: any
+    plan's per-draw times are bit-identical scored alone, in a pair and inside the reference search,
+    and the reference plan rescored alone reproduces the reference's own times (regret >= 0)."""
+    from src.sim.events import Scenario
+    from src.sim.optimizer_bridge import optimize_batch
+    item = {i.scenario_id: i for i in ScenarioSet.load(DEV20).items}[sid]
+    snap = item.snapshot
+    world = default_judge(snap.race.race_id, "world")
+    assert world.config.sc_queue.enabled and world.config.sc_queue.placement == "record"
+    scen = Scenario(sc_laps=[], vsc_laps=[]) if empty else None
+    kw = dict(seed=0, n_samples=12, scenario=scen)
+    ref = optimize_batch(snap, world, max_stops=2, return_times=True, **kw)
+    plans, times = ref.diagnostics["searched"]["plans"], ref.diagnostics["searched"]["times"]
+    alone = world.simulate_batch(snap, [ref.plan], **kw).times[0]
+    assert np.array_equal(alone, np.asarray(ref.diagnostics["times"]))
+    picks = sorted({0, 1, len(plans) // 3, 2 * len(plans) // 3, len(plans) - 1})
+    for i in picks:
+        assert np.array_equal(world.simulate_batch(snap, [plans[i]], **kw).times[0], times[i]), (sid, i)
+    pair = world.simulate_batch(snap, [plans[picks[-1]], plans[picks[1]]], **kw).times
+    assert np.array_equal(pair[0], times[picks[-1]]) and np.array_equal(pair[1], times[picks[1]])
+    # every plan is at least as slow as the reference on average (the shared-draw regret contract)
+    assert all(np.mean(t) >= np.mean(times[0]) - 1e-9 for t in times)
