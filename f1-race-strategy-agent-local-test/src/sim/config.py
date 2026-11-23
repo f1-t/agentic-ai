@@ -563,7 +563,13 @@ WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}
 # the ablation says"): close-pair order +0.025 [+0.000, +0.060] against "history" on 18 races, and
 # no hindsight. The SimConfig default stays "history"; the eval world sets it here. The earlier
 # world (edge "history") is configs/sim/legacy/world_pre_scorecard.yaml.
-WORLD_EDGE = "history_only"
+# Since 2026-11-22 it is "as_of": that prior extended by the tyre ages run up to the scored snapshot
+# (the rows the predictive simulator sees there, the same session-time cut), so the judge stops
+# charging stint lengths the belief has already watched cars run and still reads nothing after the
+# decision moment (a whole-race replay from lap 0 is "history_only"). Measured on the 19 calibration
+# races against "history_only" (docs/eval.md "The judge's edge as of the snapshot"). The world
+# before it: configs/sim/legacy/world_pre_asof_edge.yaml.
+WORLD_EDGE = "as_of"
 # The eval world's thin-fit wear guard (WearGuard, sim/wear_guard.py): a compound whose whole-race
 # wear rests on fewer than 3 drivers or 40 clean rows is shrunk toward the as-of historical wear,
 # the fit's sd scaled by sqrt(3 / drivers). Measured on the 19 calibration races (docs/eval.md

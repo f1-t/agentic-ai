@@ -4807,7 +4807,10 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
 `default`, the agent's tools, the scorecard's base):
 
 - **Judge (world):** linear_fuel with driver effects, no hinge (`config.WORLD_DEGRADATION`); the
-  wear cliff with the tyre-life edge from history only (`config.WORLD_EDGE` `history_only`); hybrid
+  wear cliff with the tyre-life edge as of the scored snapshot (`config.WORLD_EDGE` `as_of`, adopted
+  2026-11-22, "The judge's edge as of the snapshot": the historical prior extended by the tyre ages
+  run up to the scored snapshot, the same information as the predictive simulator; ledgered "this
+  race, to snapshot"); hybrid
   SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
   policy's plan and the reference see the same periods for a seed, the later periods at rates and
   lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
@@ -4820,8 +4823,8 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   only, ledgered as `sc_queue` and `sc_queue_placement`); the tyre sets at the snapshot
   (`config.WORLD_TYRE_INVENTORY`, `tyre_inventory: true`, adopted 2026-11-22, "Tyre sets at the
   snapshot"; the same as-of inventory as the belief, ledgered as `tyre_inventory`); no traffic; R8
-  retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash `c821efe0bc98` (before the tyre
-  sets `7c974c32c67c`, before the SC queue `15e3f31d98a7`, before v3 `5069228b35e7`, before the SC
+  retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash `9b98afd55974` (before the as-of
+  edge `c821efe0bc98`, before the tyre sets `7c974c32c67c`, before the SC queue `15e3f31d98a7`, before v3 `5069228b35e7`, before the SC
   alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
@@ -4841,10 +4844,13 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
   and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
   `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged);
-  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`.
+  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`; `world_pre_asof_edge.yaml`
+  (the belief unchanged).
   Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
-  queue's other forms), `tyre_inventory_off` (both simulators).
+  queue's other forms), `tyre_inventory_off` (both simulators), `cliff_edge_history_only`.
+
+ASOF_CONFIRMATION
 
 Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
 calibration races, none failed). Hashes and versions:

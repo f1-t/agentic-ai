@@ -10,13 +10,14 @@
 #
 # The base is the eval's default world, the scorecard-chosen configuration (score.default_world_config
 # of config.world_default: linear_fuel with driver effects, config.WORLD_DEGRADATION; the wear cliff
-# with world_edge "history_only", config.WORLD_EDGE; SC/VSC hybrid, score.WORLD_EVENTS; the thin-fit
+# with world_edge "as_of", config.WORLD_EDGE (the prior extended by the ages run up to the scored
+# snapshot); SC/VSC hybrid, score.WORLD_EVENTS; the thin-fit
 # wear guard, config.WORLD_WEAR_GUARD; the safety-car queue, config.WORLD_SC_QUEUE; R8 retired;
 # traffic off) and configs/sim/belief.yaml
 # (linear_fuel with driver effects, wear bound 0, fuel anchoring, persistent lap noise, as-of pit loss
 # and cliff, the cliff edge at its point). Each adopted choice has a factor that switches it back off
 # (world_events_off, cliff_edge_history, belief_no_driver_effects, the judge's wear fit world_linear /
-# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw, sc_queue_off, tyre_inventory_off); the rejected ones stay as
+# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw, sc_queue_off, tyre_inventory_off, cliff_edge_history_only); the rejected ones stay as
 # factors that switch them on.
 factors:
   # traffic (sim/traffic.py, docs/eval.md "Traffic"): the order measures are why it exists
@@ -79,17 +80,17 @@ factors:
   learned_trained:
     note: the belief with the trained learned calibrator (configs/sim/belief_learned.yaml, committed artifacts)
     belief_file: configs/sim/belief_learned.yaml
-  # the wear cliff's edge in the judge (sim/cliff.py world_cliffs; base "history_only": the
-  # historical prior, nothing from this race)
+  # the wear cliff's edge in the judge (sim/cliff.py world_cliffs; base "as_of": the historical prior
+  # extended by the ages run up to the scored snapshot, adopted 2026-11-22)
   cliff_edge_history:
     note: the judge's edge from the historical prior extended by this race's tyre ages (the world before the adoption)
     world: {wear_cliff: {world_edge: history}}
   cliff_edge_race:
     note: the judge's edge from this race alone (the oldest age raced, the earlier design)
     world: {wear_cliff: {world_edge: race}}
-  cliff_edge_as_of:
-    note: the judge's edge from the historical prior extended by the ages run up to the scored snapshot (the belief's visible rows; history_only at lap 0)
-    world: {wear_cliff: {world_edge: as_of}}
+  cliff_edge_history_only:
+    note: the judge's edge from the historical prior alone, nothing from this race (the world before the as-of edge, configs/sim/legacy/world_pre_asof_edge.yaml)
+    world: {wear_cliff: {world_edge: history_only}}
   # the judge's thin-fit wear guard (sim/wear_guard.py, config.WORLD_WEAR_GUARD): fewer than 3 drivers
   # or 40 clean race rows on a compound shrinks its wear by precision toward the as-of historical
   # wear, the fit's sd scaled by sqrt(3 / drivers). Adopted 2026-11-22 (v3), so the base has it

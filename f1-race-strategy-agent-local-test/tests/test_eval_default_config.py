@@ -14,7 +14,8 @@ from src.sim.config import (WORLD_DEGRADATION, WORLD_EDGE, WORLD_SC_QUEUE, WORLD
 from src.sim.engine import Simulator
 
 ROOT = fidelity.ROOT
-DEFAULT_WORLD_HASH = "c821efe0bc98"       # driver effects, edge history_only, hybrid SC/VSC pooled history, wear guard, SC queue, tyre sets
+DEFAULT_WORLD_HASH = "9b98afd55974"       # driver effects, edge as_of, hybrid SC/VSC pooled history, wear guard, SC queue, tyre sets
+PRE_ASOF_EDGE_WORLD_HASH = "c821efe0bc98"   # the default world from the tyre sets (#143) to the as-of edge
 DEFAULT_BELIEF_HASH = "aaf95a09bc50"      # belief.yaml with driver effects, SC/VSC history lengths, cliff edge point, tyre sets
 PRE_TYRE_INVENTORY_WORLD_HASH = "7c974c32c67c"   # the default world from the SC queue (#142) to the tyre sets
 PRE_TYRE_INVENTORY_BELIEF_HASH = "9d691bbbcf24"  # the default belief from v3 (#138) to the tyre sets
@@ -37,9 +38,9 @@ def belief():
 
 def test_the_default_world_is_the_scorecard_choice():
     w = default_world()
-    assert score.WORLD_EVENTS_DEFAULT is True and WORLD_EDGE == "history_only"
+    assert score.WORLD_EVENTS_DEFAULT is True and WORLD_EDGE == "as_of"
     assert (w.events.name, w.events.params) == ("hybrid", {"lap_times": "recorded", "duration": "history", "pooled": True})
-    assert w.wear_cliff.enabled and w.wear_cliff.world_edge == "history_only"
+    assert w.wear_cliff.enabled and w.wear_cliff.world_edge == "as_of"
     assert WORLD_WEAR_GUARD == {"enabled": True, "scale_sd_by_drivers": True}
     assert w.wear_guard == WearGuard(enabled=True, scale_sd_by_drivers=True)
     assert (w.wear_guard.min_drivers, w.wear_guard.min_rows) == (3, 40)
@@ -113,7 +114,11 @@ def test_every_earlier_choice_stays_available_as_a_file():
     ti_b = SimConfig.from_file(ROOT / "configs/sim/legacy/belief_pre_tyre_inventory.yaml")
     assert calibration.config_hash(ti_w) == PRE_TYRE_INVENTORY_WORLD_HASH and not ti_w.tyre_inventory
     assert calibration.config_hash(ti_b) == PRE_TYRE_INVENTORY_BELIEF_HASH and not ti_b.tyre_inventory
-    assert ti_w.model_copy(update={"tyre_inventory": True}) == default_world()
+    # before the as-of edge: the default world with the prior-only edge (the belief unchanged)
+    ae_w = SimConfig.from_file(ROOT / "configs/sim/legacy/world_pre_asof_edge.yaml")
+    assert calibration.config_hash(ae_w) == PRE_ASOF_EDGE_WORLD_HASH and ae_w.wear_cliff.world_edge == "history_only"
+    assert ae_w.model_copy(update={"wear_cliff": default_world().wear_cliff}) == default_world()
+    assert ti_w.model_copy(update={"tyre_inventory": True}) == ae_w
     assert ti_b.model_copy(update={"tyre_inventory": True}) == b
     assert sq_w.model_copy(update={"sc_queue": ti_w.sc_queue}) == ti_w
     assert v3_w.model_copy(update={"wear_guard": sq_w.wear_guard}) == sq_w
@@ -149,7 +154,9 @@ def test_the_ablation_toggles_each_adopted_choice_back_off():
     assert specs["belief_cliff_edge_draw"].belief_config().belief_cliff_edge == "draw"
     assert specs["belief_cliff_edge_draw"].belief_config().model_copy(update={"belief_cliff_edge": "point"}) == base_b
     assert w["sc_queue_off"].sc_queue == ScQueue()
-    assert calibration.config_hash(w["sc_queue_off"].model_copy(update={"tyre_inventory": False})) == PRE_SC_QUEUE_WORLD_HASH
+    prior_only = w["cliff_edge_history_only"].wear_cliff
+    assert calibration.config_hash(w["sc_queue_off"].model_copy(
+        update={"tyre_inventory": False, "wear_cliff": prior_only})) == PRE_SC_QUEUE_WORLD_HASH
     assert w["sc_queue_off"].model_copy(update={"sc_queue": base_w.sc_queue}) == base_w
     assert w["sc_queue_clock"].sc_queue.placement == "clock" and w["sc_queue_clock"].sc_queue.held_behind_laps == 1.25
     assert w["sc_queue_old"].sc_queue.held_behind_laps is None and w["sc_queue_old"].sc_queue.enabled
@@ -157,7 +164,11 @@ def test_the_ablation_toggles_each_adopted_choice_back_off():
     assert not base_b.sc_queue.enabled and specs["sc_queue_both"].belief_config().sc_queue.enabled
     assert specs["sc_queue_both"].belief_config().sc_queue.placement == "clock"
     ti = specs["tyre_inventory_off"]
-    assert calibration.config_hash(ti.world_config()) == PRE_TYRE_INVENTORY_WORLD_HASH
+    assert calibration.config_hash(ti.world_config().model_copy(update={"wear_cliff": prior_only})) == \
+        PRE_TYRE_INVENTORY_WORLD_HASH
+    # the as-of edge switched back to the prior alone is the world before it
+    assert prior_only.world_edge == "history_only"
+    assert calibration.config_hash(w["cliff_edge_history_only"]) == PRE_ASOF_EDGE_WORLD_HASH
     assert calibration.config_hash(ti.belief_config()) == PRE_TYRE_INVENTORY_BELIEF_HASH
     tb = specs["traffic_both"]
     assert tb.world_config().traffic.name == "ghost" and tb.belief_config().traffic.params["source"] == "projected"
@@ -169,7 +180,8 @@ def test_provenance_names_each_choice():
     w = rerun.config_choices(rerun.default_world(), "world")
     assert calibration.config_hash(rerun.default_world()) == DEFAULT_WORLD_HASH
     assert (w["events"], w["tyre_life_edge"], w["driver_effects"], w["hinge"], w["traffic"]) == \
-        ("hybrid", "history_only", "race", False, "none")
+        ("hybrid", "as_of", "race", False, "none")
+    assert "up to the scored snapshot" in w["tyre_life_edge_basis"]
     assert w["wear_guard"] == {"enabled": True, "min_drivers": 3, "min_rows": 40, "scale_sd_by_drivers": True}
     assert w["sc_queue"] == {"enabled": True, "mode": "single", "spacing_s": 0.5, "held_behind_laps": 1.25,
                              "placement": "record"}
