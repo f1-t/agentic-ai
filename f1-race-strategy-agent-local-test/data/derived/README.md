@@ -57,3 +57,53 @@ index is ordinal: a C3 of 2019 and a C3 of 2024 share an index but are not the s
 Built by `python -m src.sim.tyre_history build` from every cached race not held out
 (data/eval_set.json plus `held_out_extra` in configs/tyre_history.yaml); the manifest lists
 the races and their dates. Rerun it when races are added to the cache.
+
+## circuit_ratings.csv, prerace_guidance.csv
+
+Two tables of what the tyre supplier (Pirelli) publishes BEFORE each race, one row per weekend of
+tyre_nominations.csv (all 38, the nine held-out weekends too: like the nomination, this is public
+pre-race information). Nothing about any race's outcome is recorded, and no race data was read to
+build them. A blank cell means the item was not published or could not be confirmed; readers then
+fall back to what they did without the tables. Fetched 2026-11-22 with a generic web client, no
+personal details.
+
+**circuit_ratings.csv**: the "track characteristics" ratings of the supplier's race-week preview
+(published Monday to Wednesday of race week), read off the preview's infographic: `traction`,
+`braking`, `lateral`, `tyre_stress`, `asphalt_grip`, `asphalt_abrasion`, `track_evolution`,
+`downforce`, each 1 (low) to 5 (high); `other_ratings` for a category outside these; the minimum
+starting pressures for slicks (`min_pressure_front_psi`, `min_pressure_rear_psi`) and camber limits
+(`camber_limit_front_deg`, `camber_limit_rear_deg`) where the preview gives them; `published_date` of
+the preview; `source_url` (the preview page, or a repost of it) and `image_url` (the infographic read).
+- 2019 previews carry five categories (tyre stress, lateral, asphalt grip, asphalt abrasion,
+  downforce): traction, braking and track evolution are blank. 2021 previews have no track evolution.
+- 2019-21 infographics print the number beside each bar; from 2022 they are needle gauges, read by
+  needle position (near-edge reads are named in `notes`).
+- 2020 Sakhir: the joint Bahrain/Sakhir preview's second infographic (outer circuit). 2021 Austrian:
+  the joint Styrian/Austrian preview (same layout). 2022 Emilia Romagna and 2023 Spain: a Pitpass
+  repost of the preview's infographic (Pirelli's own page not found); 2023 Spain's pressures agree
+  with the FIA-published Pirelli preview of 2023-05-31.
+- Coverage: 38/38 rows with ratings; the four life covariates (abrasion, tyre stress, lateral,
+  traction) for 36 (not 2019).
+
+**prerace_guidance.csv**: the supplier's pre-race strategy guidance, from its release after
+qualifying (the "Saturday" / "qualifying" release; after the sprint on a sprint weekend,
+`published_stage` "other pre-race"), always published before the race start (2022 Miami and Canada
+are dated the race day in CEST but went out on Saturday evening local time: see `notes`).
+- Up to three expected strategies in the order given (`s1` the one called fastest where the release
+  ranks them, otherwise the order listed, said in `notes`): `sN_stops`, `sN_sequence` (role names
+  SOFT/MEDIUM/HARD by the weekend's nomination, e.g. `MEDIUM-HARD`), `sN_windows` (the stated pit-stop
+  laps, one `a-b` range per stop, `;`-separated; stated stint lengths converted to stop laps and said
+  in `notes`). A sequence the release does not state in full is recorded as worded (e.g. `MEDIUM/HARD
+  mix`, `?-?-SOFT`); readers use only fully stated sequences and still read the stop count.
+- `pace_gap_soft_medium_s`, `pace_gap_medium_hard_s`: stated per-lap gaps (positive: the harder is
+  slower); `degradation_note`: a short paraphrase of the stated wear expectation.
+- `quote`: the sentence(s) the row was taken from (short; a few are close paraphrases, said in
+  `notes`); `source_url`: the release.
+- Coverage: an expected stop count for 38/38, a fully stated compound sequence for 32, pit-window
+  laps for only 9 (2019 Monaco and UK, 2020 Sakhir, 2021 Bahrain, 2022 Singapore and Abu Dhabi, 2023
+  Spain, 2024 Monaco, 2025 Qatar), stated pace gaps for 4.
+- Only documents published before the race; no race report, result or post-race release was opened
+  to fill a gap. 2024 Brazil's qualifying moved to race morning, so its row is the Saturday release
+  written before qualifying. 2021 Emilia Romagna and Spain give a stop count only.
+
+Read by `src/sim/prerace.py` (registered in `src/sim/provenance.py` as kind "pre_race").
