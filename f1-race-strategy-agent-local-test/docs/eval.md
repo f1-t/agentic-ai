@@ -4445,6 +4445,94 @@ Reading under the selection rule:
   1.15 laps behind were held by race control, and no rule fitted on the other races reproduces
   that.
 
+#### Placing the car by the record
+
+Switch `sc_queue.placement` (`clock`, the default; `record`). It applies with `held_behind_laps`
+set and in the judge only (fit_window full; hindsight, ledgered as `sc_queue_placement`).
+
+The near-lapped rule's remaining order loss came from placing the simulated car in the train by
+its simulated time at S - 1 among the other cars' recorded times. Any drift of its simulated clock
+by then turned into places in the train, and the car kept them. Under `record`:
+
+- the car is placed by its recorded green time at S - 1, from its own crossings before the
+  deployment (`sc_queue.deployment_times`);
+- each plan is moved by its simulated time difference at S - 1 to the plans of the same batch
+  that stopped where the car really did before S (the median of those plans' times). A replay of
+  the real strategy lands at its recorded place; a plan that stopped earlier or later moves by
+  what the simulator says that cost or gained it;
+- with no such plan in the batch, the car keeps its clock;
+- for a period already running at the snapshot, the car's recorded place is used.
+
+Measured on a3e2a46 (main 3ed475f, the v3 defaults: belief cliff edge at its point, the judge's
+scaled wear guard), the same 19 races and options as above. The base is close pairs 0.753,
+Spearman 0.957, relative gap 13.19 s, B2 rho 0.882, regret 3.36 s, pit-now 0.834.
+
+| arm | close-pair order | Spearman | rel gap MAE s | B2 rho | B2 regret s | pit-now |
+| --- | --- | --- | --- | --- | --- | --- |
+| near-lapped rule (clock, single) | 0.709 (-0.043 [-0.081, -0.010]) | 0.953 | 7.49 (-5.70) | -0.010 | -0.20 | -0.009 |
+| near-lapped rule (field) | 0.734 (-0.019 [-0.036, -0.003]) | 0.956 | 7.47 (-5.72) | 0 | 0 | 0 |
+| rule + placement by the record | 0.747 (-0.005 [-0.033, +0.021]) | 0.960 | 7.60 (-5.59 [-10.72, -1.47]) | -0.010 [-0.015, -0.006] | -0.20 [-0.38, -0.03] | -0.008 [-0.022, +0.006] |
+| the same, the rule in the belief too | 0.747 | 0.960 | 7.60 | +0.008 | +0.55 | -0.116 [-0.175, -0.063] |
+
+Per race, queue off / the rule (clock) / the rule with placement:
+
+- 2022 Bahrain: close pairs 0.804 / 0.630 / 0.761; Spearman 0.754 / 0.754 / 0.821; relative
+  gap 39.8 / 8.9 / 9.6 s.
+- 2022 Brazil: close pairs 0.854 / 0.792 / 0.875; Spearman 0.975 / 0.919 / 0.973; relative gap
+  28.2 / 3.2 / 3.6 s.
+- 2022 Canada: close pairs 0.733 / 0.700 / 0.800.
+- 2021 Abu Dhabi: close pairs 0.786 / 0.821 / 0.893.
+
+Pit-now agreement on SC-in-progress snapshots (60): off 0.700, placement in the judge 0.750,
+placement in the judge with the rule in the belief 0.683. On VSC snapshots (48): 0.646, 0.667,
+0.500.
+
+Whole-field replay against queue off. Close pairs:
+
+| pace, k | the rule (clock) | the rule with placement |
+| --- | --- | --- |
+| asof, 0 | +0.003 | +0.049 [+0.000, +0.102] |
+| asof, 10-40 | -0.014 to -0.035 | +0.005 to +0.030 (intervals include 0) |
+| practice, 0-40 | -0.049 to -0.071 at k 10-40 | -0.033 to +0.049 (intervals include 0) |
+
+Relative gap with placement: -2.5 to -6.0 s, intervals clear of 0 at most k.
+
+dev20 rescore, the baselines' regret against each judge's own reference (judge variants
+`configs/sim/world_hybrid.yaml` plus the switch, belief default, references and baselines rebuilt
+at a3e2a46; paired by scenario, race-cluster 95%). The queue-off judge rebuilt here is the
+current default, not the committed dev20 files.
+
+| policy | off s | rule (clock) | rule with placement |
+| --- | --- | --- | --- |
+| belief_optimizer | 3.25 | -0.14 [-0.29, +0.01] | -0.21 [-0.38, -0.05] |
+| run_to_flag | 8.80 | +0.34 [+0.17, +0.56] | +0.26 [+0.05, +0.49] |
+| one_stop_total | 9.64 | +0.26 [+0.07, +0.49] | +0.18 [-0.04, +0.43] |
+| actual_strategy | 6.58 | -0.12 [-0.31, +0.07] | -0.15 [-0.32, +0.03] |
+
+The judge's mean reference stop count rises from 0.789 to 0.838: a stop under a safety car now
+costs places in the train, not open-air seconds, so the reference takes more stops under SC.
+
+Reading under the selection rule:
+
+- Placement by the record is an adopt-candidate for the judge. Close-pair order is level with
+  queue-off within its interval (-0.005 [-0.033, +0.021]), Spearman is level, and the gap gain
+  holds: relative gap 13.2 to 7.6 s.
+- The belief's plan ranking against the judge moves by -0.010 in rho and -0.20 s in regret
+  (better), and pit-now agreement is unchanged within its interval.
+- On dev20 the belief optimizer's regret falls by 0.21 s; the fixed-rule baselines' regret rises
+  by 0.2 to 0.3 s.
+- The queue stays off in the belief: there it costs 0.116 of pit-now agreement (the two
+  simulators' safety-car expectations).
+- To adopt: add to the judge's config (`configs/sim/world_hybrid.yaml`, `score.default_world_config`):
+
+  ```yaml
+  sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25, placement: record}
+  ```
+
+  This changes the judge, so every reference and result scored on it is stale.
+
+Files: `reports/calibration/fidelity/placement-a3e2a46/` (the ablation, per-race measures, the whole-field replay per race, and the dev20 regret per scenario and policy under the three judges).
+
 ### Safety-car duration and rates: the belief against the judge
 
 Switches `events.params.duration` ("geometric", the default, or "history") and, for the judge's

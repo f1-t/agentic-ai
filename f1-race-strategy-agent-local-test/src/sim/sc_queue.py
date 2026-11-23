@@ -235,7 +235,7 @@ class FieldQueue:
 
     def __init__(self, rows: pd.DataFrame, driver: str, horizon: int, spacing_s: float, lap_ref_s: float,
                  recorded: bool = False, own_pace_s: float = 0.0, lapped=(), own_lapped: bool = False,
-                 held_laps: float = None):
+                 held_laps: float = None, placement: str = "clock"):
         self.spacing_s, self.lap_ref_s, self.recorded = float(spacing_s), float(lap_ref_s), recorded
         # the near-lapped rule (ScQueue.held_behind_laps): a car more than held_laps laps behind the
         # leader at the deployment is held (not a car in the queue: it keeps its gap at the
@@ -248,6 +248,10 @@ class FieldQueue:
         # plan's simulated time for the car, the others' as placed or projected) over lap_ref_s
         self.held_laps = None if held_laps is None else float(held_laps)
         self.rows, self.driver, self._behind = rows, driver, {}
+        # placement "record" (ScQueue.placement, the judge only: hindsight): the car is placed in the
+        # train by its recorded place at the deployment, a plan moved by its simulated time
+        # difference at S - 1 to the plans that stopped where the car really did before S
+        self.placement = placement
         self.own_pace_s = float(own_pace_s) if np.isfinite(own_pace_s) else 0.0
         self.own_lapped = bool(own_lapped)
         self.horizon = int(horizon)
@@ -257,6 +261,7 @@ class FieldQueue:
         own1 = own.loc[own["lap"] == 1, "start_s"].dropna()
         self.own_offset = float(own1.iloc[0]) - self.start if len(own1) else 0.0
         self.own_t = (own.set_index("lap")["end_s"].astype(float) - self.start)
+        self.own_in_laps = {int(L) for L in own.loc[own["pit_in"].astype(bool), "lap"]} if len(own) else set()
         self.sc_laps = {L for p in sc_periods(rows) for L in range(p[0], p[1] + 1)} if len(rows) else set()
         self.all_t = rows.pivot_table(index="lap", columns="driver", values="end_s", aggfunc="first") - self.start
         others = rows[(rows["driver"] != driver) & ~rows["driver"].isin(list(lapped))]
@@ -308,8 +313,18 @@ class FieldQueue:
             t_before = np.full(n_plans, float(self.own_t[S - 1]))
         else:
             return zero
-        key_d = t_before + pit_lap[:, i0:iE + 1].sum(axis=1)
         dep = self.deployment(S) if self.held_laps is not None and S - 1 <= self.horizon else None
+        t_key = t_before   # the car's time at S - 1 that places it in the train
+        if (self.placement == "record" and self.recorded and dep is not None and self.driver in dep[0].index):
+            own_eq = float(dep[0][self.driver]) - self.start   # its recorded green time at S - 1
+            if S - 1 > k:
+                real = np.array([(L in self.own_in_laps) for L in range(first_lap, S)])
+                same = ((pit_lap[:, :S - first_lap] > 0) == real[None, :]).all(axis=1)
+                if same.any():   # drift of the plans that stopped as the car did, removed from every plan
+                    t_key = t_before - (float(np.median(t_before[same])) - own_eq)
+            else:
+                t_key = np.full(n_plans, own_eq)
+        key_d = t_key + pit_lap[:, i0:iE + 1].sum(axis=1)
         if S - 1 <= self.horizon:
             t_o = self.at(S - 1)
             if self.held_laps is not None:   # cars that retired before the period are not in the field
@@ -340,13 +355,13 @@ class FieldQueue:
                 if self.driver in dep[0].index:
                     held_d = np.full(n_plans, (float(dep[0][self.driver]) - self.start - lead0) / dep[1] > self.held_laps)
                 else:
-                    held_d = (t_before - lead0) / dep[1] > self.held_laps
+                    held_d = (t_key - lead0) / dep[1] > self.held_laps
             else:   # from the times at the end of lap S - 1 (others placed or projected, the plan's own)
                 t1_o = (np.broadcast_to(t_o.to_numpy(dtype=float)[None, :], key_o.shape) if S - 1 <= self.horizon
                         else key_o)
-                lead = np.minimum(t1_o.min(axis=1), t_before)
+                lead = np.minimum(t1_o.min(axis=1), t_key)
                 b_o = (t1_o - lead[:, None]) / self.lap_ref_s
-                held_d = (t_before - lead) / self.lap_ref_s > self.held_laps
+                held_d = (t_key - lead) / self.lap_ref_s > self.held_laps
             key_o = np.where(b_o > self.held_laps, np.inf, key_o)   # a held car is not a car in the queue
             if not np.isfinite(key_o).any():
                 return zero

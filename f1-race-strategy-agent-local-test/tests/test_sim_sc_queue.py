@@ -172,3 +172,24 @@ def test_a_car_that_retired_is_not_in_the_queue():
     without = sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=70.0, recorded=True,
                                   held_laps=1.25).shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5)
     assert with_r == pytest.approx(without)
+
+
+def test_placement_by_the_record_removes_the_drift_of_the_simulated_clock():
+    """C really ran 92 s laps (third at lap 3: 276 s behind A's 270, B's 273). Its simulated clock
+    drifted to 89 s laps (267 s at lap 3): by the clock it leads the train; by the record (placement
+    "record") it is third, and a plan pitting at lap 2 moves by its time difference to the real one."""
+    f = _field({"A": 90.0, "B": 91.0, "C": 92.0})
+    lap_c = np.full((2, 8), 89.0)
+    pit = np.zeros((2, 8))
+    pit[1, 1] = 20.0                                   # the second plan stops at the end of lap 2
+    q = {p: sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=90.0, recorded=True, held_laps=1.25,
+                                placement=p) for p in ("clock", "record")}
+    end5 = {p: np.cumsum(lap_c + pit, axis=1)[:, 4] + q[p].shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5) for p in q}
+    length = 450.0 - 270.0
+    assert end5["clock"][0] == pytest.approx(267.0 + length)              # first by its clock
+    assert end5["record"][0] == pytest.approx(270.0 + length + 1.0)       # third by the record
+    assert end5["record"][1] == pytest.approx(270.0 + length + 1.0)       # 296 s at lap 3: still third, last
+    # the belief (recorded False) is never placed by the record
+    qb = sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=90.0, held_laps=1.25, placement="record")
+    qc = sc_queue.FieldQueue(f, "C", horizon=8, spacing_s=0.5, lap_ref_s=90.0, held_laps=1.25)
+    assert qb.shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5) == pytest.approx(qc.shift(4, 5, lap_c, pit, 1, 0.0, 20.0, 0.5))

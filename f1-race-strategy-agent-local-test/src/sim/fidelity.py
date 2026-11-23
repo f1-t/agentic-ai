@@ -495,6 +495,9 @@ def ledger(cfg: SimConfig, role: str, declared=()) -> list[dict]:
             add("sc_queue", "safety-car queue: the car placed among the other cars' recorded race", _W,
                 "the others' recorded times at each SC start and their stops under it, the recorded period length, "
                 "the car's whole-race pace (when the engine has none), the cars that finished laps down")
+            if getattr(sq, "placement", "clock") == "record" and sq.held_behind_laps is not None:
+                add("sc_queue_placement", "safety-car queue: the car placed by its recorded place at the deployment", _W,
+                    "the car's own crossings before each deployment and its real stops before it")
         else:
             add("sc_queue", "safety-car queue: the car placed among the field visible at the snapshot", _K,
                 "the others' times as of the snapshot, projected with gaps held; the car's as-of pace")
