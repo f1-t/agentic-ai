@@ -606,11 +606,22 @@ class Simulator:
             # which a set built by snapshot_at varies per driver): a cache keyed without them kept
             # the first snapshot's edges, so a plan's score depended on the scenarios scored before
             key = ("world", *_race_key(snapshot))
+            as_of = wc.world_edge == "as_of"
+            if as_of:   # the edge moves with the scored snapshot's moment: the belief's visible-rows cut
+                k = int(snapshot.laps_completed or 0)
+                t = self.cut_time(snapshot.driver, k)
+                key = (*key, k, t)
             if key not in self._cliffs:
                 if len(self._cliffs) >= FIT_CACHE_SIZE:
                     del self._cliffs[next(iter(self._cliffs))]
                 steps = self.config.compound_proxy.steps if self.config.compound_proxy.enabled else None
-                self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, snapshot.race, wc, steps)
+                if as_of:
+                    seen = (self.laps[self.laps["lap"] <= k] if t is None else visible_rows(self.laps, t)) if k > 0 \
+                        else self.laps.iloc[0:0]
+                    self._cliffs[key] = _cliff.as_of_world_cliffs(self.laps, seen, self.practice, snapshot.race, wc,
+                                                                  steps)
+                else:
+                    self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, snapshot.race, wc, steps)
                 rep = getattr(self.degradation, "fit_report", None)
                 if rep is not None:   # where each edge came from, for the fidelity tool's hindsight ledger
                     self.degradation = copy.copy(self.degradation)

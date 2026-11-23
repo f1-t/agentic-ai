@@ -626,6 +626,9 @@ def config_choices(c, role: str) -> dict:
            "tyre_inventory": c.tyre_inventory}
     if c.fit_window == "full":
         out["tyre_life_edge"] = c.wear_cliff.world_edge
+        if c.wear_cliff.world_edge == "as_of":   # the judge's edge reads only ages run up to the scored snapshot
+            out["tyre_life_edge_basis"] = ("history extended by the tyre ages run up to the scored snapshot: "
+                                           "the same information as the predictive simulator")
         # the thin-fit wear guard acts on whole-race fits only (sim/wear_guard.py)
         out["wear_guard"] = c.wear_guard.model_dump(mode="json") if c.wear_guard.enabled else False
         # the safety-car queue (sim/sc_queue.py): the judge's, placed by the record (hindsight)

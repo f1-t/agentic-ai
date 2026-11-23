@@ -138,6 +138,23 @@ def world_cliffs(laps, practice, race, wc, steps=None) -> dict[str, Cliff]:
     return out
 
 
+def as_of_world_cliffs(laps, rows, practice, race, wc, steps=None) -> dict[str, Cliff]:
+    """WearCliff.world_edge "as_of" (d): the "history_only" edges (world_cliffs on the whole race,
+    the prior alone where it exists), each raised to the oldest age run on that compound in `rows`,
+    the race rows visible at the scored snapshot (engine.cliffs_for: the belief's visible-rows cut).
+    Nothing from after the decision moment; with no row visible (lap 0) it is "history_only"."""
+    base = world_cliffs(laps, practice, race, wc.model_copy(update={"world_edge": "history_only"}), steps)
+    seen = oldest_ages(rows)
+    out = {}
+    for c, cl in base.items():
+        s = seen.get(c)
+        if s is not None and s > cl.age:
+            out[c] = Cliff(s, cl.kappa, cl.cap, f"{cl.source} extended by the ages seen by the snapshot to {s:g}")
+        else:
+            out[c] = cl
+    return out
+
+
 def world_ledger(cliffs: dict) -> dict[str, dict]:
     """compound -> {edge, source, whole_race_input}: the judge's edges and whether each used this
     race's laps (a whole-race input), for the fidelity ledger."""
