@@ -1,0 +1,99 @@
+component,source,target_kind,n,races,mae,bias,cov_68,cov_90
+tyre_life,history prior (tyre_life_prior),oldest age run,52,19,7.517576883957061,-1.1285678030230135,0.6730769230769231,0.8846153846153846
+tyre_life,history prior (tyre_life_prior),median stint-end age,52,19,9.607873155072996,8.95797065851545,0.5576923076923077,0.8461538461538461
+tyre_life,history prior (tyre_life_prior),observed edge (tyre_history.observed_tyre_life),48,19,5.756576573845777,1.5711087181740162,0.8125,0.9375
+tyre_life,judge cliff edge (as_of),oldest age run,53,19,7.344146512769638,-1.1388633687957193,,
+tyre_life,judge cliff edge (as_of),median stint-end age,53,19,9.395003231600363,8.757363046298623,,
+tyre_life,judge cliff edge (as_of),observed edge (tyre_history.observed_tyre_life),48,19,5.721696724075436,1.5362288684036745,,
+tyre_life,belief cliff edge @k0,oldest age run,52,19,7.397870453605238,-0.8794072511806956,0.6382978723404256,0.8723404255319149
+tyre_life,belief cliff edge @k0,median stint-end age,52,19,9.857033706915312,9.207131210357765,0.5531914893617021,0.8723404255319149
+tyre_life,belief cliff edge @k0,observed edge (tyre_history.observed_tyre_life),48,19,5.808579430439724,1.8410326493365279,0.7906976744186046,0.9302325581395349
+tyre_life,"as-of data (race to k0, practice)",oldest age run,52,19,12.692307692307692,-10.576923076923077,,
+tyre_life,"as-of data (race to k0, practice)",median stint-end age,52,19,8.221153846153847,-0.49038461538461536,,
+tyre_life,"as-of data (race to k0, practice)",observed edge (tyre_history.observed_tyre_life),48,19,9.922916666666667,-7.768750000000001,,
+tyre_life,belief cliff edge @k10,oldest age run,52,19,7.397870453605238,-0.8794072511806956,0.6382978723404256,0.8723404255319149
+tyre_life,belief cliff edge @k10,median stint-end age,52,19,9.857033706915312,9.207131210357765,0.5531914893617021,0.8723404255319149
+tyre_life,belief cliff edge @k10,observed edge (tyre_history.observed_tyre_life),48,19,5.808579430439724,1.8410326493365279,0.7906976744186046,0.9302325581395349
+tyre_life,"as-of data (race to k10, practice)",oldest age run,52,19,12.48076923076923,-10.365384615384615,,
+tyre_life,"as-of data (race to k10, practice)",median stint-end age,52,19,8.009615384615385,-0.27884615384615385,,
+tyre_life,"as-of data (race to k10, practice)",observed edge (tyre_history.observed_tyre_life),48,19,9.69375,-7.539583333333334,,
+tyre_life,belief cliff edge @k20,oldest age run,52,19,7.263092603717684,-0.7446294012931406,0.6818181818181818,0.8863636363636364
+tyre_life,belief cliff edge @k20,median stint-end age,52,19,9.953462681630791,9.341909060245321,0.5227272727272727,0.8636363636363636
+tyre_life,belief cliff edge @k20,observed edge (tyre_history.observed_tyre_life),48,19,5.745903426394872,1.9870419867147124,0.825,0.925
+tyre_life,"as-of data (race to k20, practice)",oldest age run,52,19,11.307692307692308,-9.192307692307692,,
+tyre_life,"as-of data (race to k20, practice)",median stint-end age,52,19,7.259615384615385,0.8942307692307693,,
+tyre_life,"as-of data (race to k20, practice)",observed edge (tyre_history.observed_tyre_life),48,19,8.506250000000001,-6.268750000000001,,
+tyre_life,belief cliff edge @k(mid),oldest age run,52,19,6.374588541617512,0.14387466080703126,0.6756756756756757,0.8648648648648649
+tyre_life,belief cliff edge @k(mid),median stint-end age,52,19,10.589976619817683,10.230413122345492,0.43243243243243246,0.8378378378378378
+tyre_life,belief cliff edge @k(mid),observed edge (tyre_history.observed_tyre_life),48,19,5.423723529494775,2.9495880539898987,0.8181818181818182,0.9090909090909091
+tyre_life,"as-of data (race to k(mid), practice)",oldest age run,52,19,7.884615384615385,-5.769230769230769,,
+tyre_life,"as-of data (race to k(mid), practice)",median stint-end age,52,19,7.3173076923076925,4.3173076923076925,,
+tyre_life,"as-of data (race to k(mid), practice)",observed edge (tyre_history.observed_tyre_life),48,19,5.6937500000000005,-2.5604166666666677,,
+wear_rate,belief @k0,within-stint slope less fuel,51,19,0.04841657820107738,0.013451095375579177,0.47058823529411764,0.6862745098039216
+wear_rate,belief @k10,within-stint slope less fuel,51,19,0.03700399684717457,0.0040768418340119085,0.29411764705882354,0.45098039215686275
+wear_rate,belief @k20,within-stint slope less fuel,51,19,0.03274411181882783,0.003155351979954932,0.21568627450980393,0.3333333333333333
+wear_rate,belief @k(mid),within-stint slope less fuel,51,19,0.02590655981179601,-0.003333102458739878,0.27450980392156865,0.39215686274509803
+wear_rate,judge (full fit),within-stint slope less fuel,51,19,0.01743704728800921,-0.01339247642183626,,
+fresh_tyre_gain,belief @k0,real gain at the stop,565,19,0.8148628049478823,0.17918813139475767,,
+fresh_tyre_gain,belief @k10,real gain at the stop,530,19,0.8954538422110407,0.05572293363982553,,
+fresh_tyre_gain,belief @k20,real gain at the stop,359,19,0.7198306363458128,0.12325385082401555,,
+fresh_tyre_gain,belief @k(mid),real gain at the stop,235,19,0.6183554147215309,0.009962855110616642,,
+compound_gap,belief @k0,"race (judge full fit, fresh tyre, mid-race)",47,19,0.7258843564045727,-0.32162333683659333,,
+compound_gap,belief @k0,qualifying,7,7,0.7238165530875662,0.628643370076853,,
+compound_gap,belief @k10,"race (judge full fit, fresh tyre, mid-race)",47,19,0.6428277562803353,-0.1801128116312971,,
+compound_gap,belief @k10,qualifying,7,7,0.9414347692484968,0.6738804231823787,,
+compound_gap,belief @k20,"race (judge full fit, fresh tyre, mid-race)",47,19,0.40139973606609175,0.007889458362682492,,
+compound_gap,belief @k20,qualifying,7,7,0.7681516021844426,0.5030983595858151,,
+compound_gap,belief @k(mid),"race (judge full fit, fresh tyre, mid-race)",47,19,0.33677501863471093,-0.09209641885093604,,
+compound_gap,belief @k(mid),qualifying,7,7,0.8542421265090443,0.469056910014226,,
+fuel,prior (config),race (judge full fit),19,19,0.01933132763995445,0.015758971322192693,,
+fuel,belief @k0,race (judge full fit),19,19,0.007919118943856572,0.0016205017235111831,0.631578947368421,0.9473684210526315
+fuel,belief @k10,race (judge full fit),19,19,0.00826650798416515,-0.0011788953424245298,0.3157894736842105,0.42105263157894735
+fuel,belief @k20,race (judge full fit),19,19,0.007531549847863216,-0.002565698456485568,0.15789473684210525,0.42105263157894735
+fuel,belief @k(mid),race (judge full fit),19,19,0.005547299834952288,-0.0007913466263978021,0.42105263157894735,0.5263157894736842
+pit_loss,prior from earlier races (cross_circuit_asof),"whole race, robust (pit_loss.whole_race: median green stop)",11,11,2.4568687817935855,-0.9587991748068451,0.5454545454545454,0.6363636363636364
+pit_loss,prior from earlier races (cross_circuit_asof),"whole race, replay mean (calibrate._pit_loss)",11,11,2.840635318827904,-2.0212039138692264,0.5454545454545454,0.7272727272727273
+pit_loss,constant (calibrate.DEFAULT_PIT_LOSS_S),"whole race, robust (pit_loss.whole_race: median green stop)",19,19,2.3456698851018984,-1.7518050342729847,,
+pit_loss,constant (calibrate.DEFAULT_PIT_LOSS_S),"whole race, replay mean (calibrate._pit_loss)",19,19,3.3173684210526324,-2.3415789473684216,,
+pit_loss,as-of estimate @k0 (pit_loss.estimate),"whole race, robust (pit_loss.whole_race: median green stop)",19,19,1.8316857511928373,-0.7771599317762206,0.7894736842105263,0.8421052631578947
+pit_loss,as-of estimate @k0 (pit_loss.estimate),"whole race, replay mean (calibrate._pit_loss)",19,19,2.6979730793214176,-1.3669338448716573,0.631578947368421,0.7894736842105263
+pit_loss,as-of estimate @k0 (pit_loss.estimate),"whole race, median SC stop",10,10,13.291085559440557,7.060158379953377,0.2,0.3
+pit_loss,belief charged @k0,"whole race, robust (pit_loss.whole_race: median green stop)",19,19,1.806887276946617,-0.6699712206312542,,
+pit_loss,belief charged @k0,"whole race, replay mean (calibrate._pit_loss)",19,19,2.651202874326161,-1.259745133726691,,
+pit_loss,belief charged @k0,"whole race, median SC stop",10,10,13.302967983082379,7.119600427598321,,
+pit_loss,as-of estimate @k10 (pit_loss.estimate),"whole race, robust (pit_loss.whole_race: median green stop)",19,19,1.7437606183377645,-0.08738354229946628,0.7894736842105263,0.8421052631578947
+pit_loss,as-of estimate @k10 (pit_loss.estimate),"whole race, replay mean (calibrate._pit_loss)",19,19,2.418367718222556,-0.677157455394903,0.7368421052631579,0.7894736842105263
+pit_loss,as-of estimate @k10 (pit_loss.estimate),"whole race, median SC stop",10,10,13.35994712010554,7.312088407536974,0.3,0.4
+pit_loss,belief charged @k10,"whole race, robust (pit_loss.whole_race: median green stop)",19,19,1.728733762261568,0.0132419023434212,,
+pit_loss,belief charged @k10,"whole race, replay mean (calibrate._pit_loss)",19,19,2.372485910015829,-0.5765320107520155,,
+pit_loss,belief charged @k10,"whole race, median SC stop",10,10,13.373512770020932,7.367658696148932,,
+pit_loss,as-of estimate @k20 (pit_loss.estimate),"whole race, robust (pit_loss.whole_race: median green stop)",19,19,0.6831336674834417,-0.23065635372501272,1.0,1.0
+pit_loss,as-of estimate @k20 (pit_loss.estimate),"whole race, replay mean (calibrate._pit_loss)",19,19,1.8884345359735335,-0.8204302668204495,0.631578947368421,0.7894736842105263
+pit_loss,as-of estimate @k20 (pit_loss.estimate),"whole race, median SC stop",10,10,12.61513084372665,7.364543676904077,0.1,0.5
+pit_loss,belief charged @k20,"whole race, robust (pit_loss.whole_race: median green stop)",19,19,0.6639148045791463,-0.15965068891905226,,
+pit_loss,belief charged @k20,"whole race, replay mean (calibrate._pit_loss)",19,19,1.8464996186050233,-0.749424602014489,,
+pit_loss,belief charged @k20,"whole race, median SC stop",10,10,12.61466451700735,7.400834440430645,,
+pit_loss,as-of estimate @k(mid) (pit_loss.estimate),"whole race, robust (pit_loss.whole_race: median green stop)",19,19,0.5305146294653214,-0.3921730576348594,0.9473684210526315,1.0
+pit_loss,as-of estimate @k(mid) (pit_loss.estimate),"whole race, replay mean (calibrate._pit_loss)",19,19,1.9957736083693056,-0.9819469707302961,0.631578947368421,0.7894736842105263
+pit_loss,as-of estimate @k(mid) (pit_loss.estimate),"whole race, median SC stop",10,10,12.403008834551189,7.150934912952498,0.2,0.5
+pit_loss,belief charged @k(mid),"whole race, robust (pit_loss.whole_race: median green stop)",19,19,0.5073059733743481,-0.32659745662302003,,
+pit_loss,belief charged @k(mid),"whole race, replay mean (calibrate._pit_loss)",19,19,1.9442986662108837,-0.9163713697184569,,
+pit_loss,belief charged @k(mid),"whole race, median SC stop",10,10,12.401745776955936,7.184674789280557,,
+lap1_and_warmup,prior (config),observed (median lap-1 residual + prior),19,19,2.021578947368421,1.3394736842105261,,
+lap1_and_warmup,model (no warm-up term: 0),median residual of the first lap after the out-lap,19,19,0.18022296489411735,0.08226976471440095,,
+traffic_rejoin,judge rejoin position (horizon 2),real position after the out-lap,601,19,0.5940099833610649,0.11480865224625623,,
+traffic_rejoin,"judge rejoin position (horizon 5, traffic_accuracy)",real position three laps later,594,19,1.1178451178451179,0.07744107744107744,,
+traffic_rejoin,belief rejoin position (horizon 2),real position after the out-lap,601,19,0.7953410981697171,0.0,,
+traffic_rejoin,"belief rejoin position (horizon 5, traffic_accuracy)",real position three laps later,594,19,1.9427609427609427,-0.6296296296296297,,
+neutralisations,judge expected (recorded),occurred,76,19,0.0,0.0,,
+neutralisations,judge config,observed (mean SC lap / ref lap),10,10,0.08239999999999992,-0.05619999999999992,,
+neutralisations,judge config,observed (median VSC lap / green prediction),12,12,0.12175000000000008,0.11991666666666677,,
+neutralisations,belief expected (rate),occurred,76,19,1.3476315789473685,0.4431578947368422,,
+neutralisations,belief config,observed (mean SC lap / ref lap),10,10,0.08239999999999992,-0.05619999999999992,,
+neutralisations,belief config,observed (median VSC lap / green prediction),12,12,0.12175000000000008,0.11991666666666677,,
+neutralised_laps,judge replay (recorded lap times),mean real lap time on the cars' neutralised laps,22,15,2.08119434331784,0.7382432477299345,,
+neutralised_laps,belief replay (factors),mean real lap time on the cars' neutralised laps,22,15,9.884692274763639,6.846316881579597,,
+pit_loss,prior from earlier races (same_circuit_asof),"whole race, robust (pit_loss.whole_race: median green stop)",6,6,0.8690127449867718,-0.6409912933389924,1.0,1.0
+pit_loss,prior from earlier races (same_circuit_asof),"whole race, replay mean (calibrate._pit_loss)",6,6,2.6540833333333325,0.05858333333333358,0.16666666666666666,0.8333333333333334
+pit_loss,prior from earlier races (constant),"whole race, robust (pit_loss.whole_race: median green stop)",2,2,1.2811981015069165,-0.18665001041946994,1.0,1.0
+pit_loss,prior from earlier races (constant),"whole race, replay mean (calibrate._pit_loss)",2,2,2.045,-2.045,1.0,1.0

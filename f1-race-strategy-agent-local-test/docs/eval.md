@@ -1196,6 +1196,80 @@ in the judge's config. Adopted 2026-11-22 as the eval world's default (`config.W
 the world before: `configs/sim/legacy/world_pre_v3.yaml`). Every reference and result scored on the
 old judge is stale.
 
+### Thin fits in the belief (`belief_guard`, adopted)
+
+The judge's guard protects its whole-race fit. The belief's to_snapshot fit had no counterpart, and early in a race
+it needs one more: a compound with `min_samples` visible clean rows is fitted from them however few cars ran it.
+At 2019 UK lap 10 the HARD rows came from two cars (MAG, GRO), and the belief put the HARD 2.4 s/lap slower than
+the MEDIUM, against 0.09 s in the judge. Replacing every compound's pace and wear with the judge's cut the regret
+of the belief's favourite by 2.9 s, 6.4 s in the first third (sim-gaps attribution, a diagnosis only).
+
+`SimConfig.belief_guard` (`src/sim/belief_guard.py`) works on windowed fits only. It reads the rows visible at the
+snapshot and earlier races. Thresholds were fixed before measuring and are the judge's:
+- A compound qualifies when its visible clean race rows number at least one, but come from fewer than
+  `min_drivers` 3 drivers or number fewer than `min_rows` 40.
+- Its wear w and its level at the mean visible tyre age a, L = base + w a, are each shrunk by precision
+  toward a target:
+  - wear: the compound proxy's wear blend from the well-covered compounds of the same fit (practice step, as-of
+    cross-race step, `proxy.as_of_config`), combined by precision with the as-of historical wear
+    (`wear_guard.wear_prior`, races strictly before this one);
+  - level: the proxy's pace blend from the well-covered compounds (practice step, qualifying, as-of cross-race
+    step) plus the wear target times a.
+- `scale_sd_by_drivers` widens the fit's sds by sqrt(3 / drivers) when fewer than 3 cars ran it.
+- With no well-covered compound only the wear moves, toward the history. A compound with no race rows is the
+  proxy's and is left alone.
+- `mode: wear` moves the wear only and keeps L (the judge's form).
+
+The model report flags a guarded compound `thin_race_fit:<compound>`, and the agent's uncertainty flags say, e.g.,
+"HARD: race laps so far from 2 cars (7 clean laps); its pace and wear are pulled toward the better-covered
+compounds and earlier races". `rank_plans`, `race_picture` and the look-ahead read the same guarded fit.
+
+**Measured** (19 calibration races, the B snapshots, guard on against off, race-cluster 95%).
+
+Forms on main 69a9589 (before the tyre sets; base regret 3.16 s):
+
+| form | regret s | pit-now | early regret | no circuit history | low-wear four |
+|---|---|---|---|---|---|
+| A: 3 drivers or 40 rows, pace and wear | -0.09 [-0.22, +0.05] | +0.007 [+0.002, +0.013] | -0.22 | -0.22 [-0.36, -0.09] | -0.31 [-0.56, -0.05] |
+| B: 3 drivers only, pace and wear | -0.01 [-0.08, +0.05] | +0.001 | -0.06 | -0.04 | -0.10 |
+| wear only (the judge's form), 3 drivers | +0.01 [-0.01, +0.05] | 0.000 | +0.01 | +0.01 | +0.05 |
+
+Form A on 72d2fc5 (tyre sets on; base: rho 0.880, regret 3.47 s, pit-now 0.847, over-stop share 0.095):
+
+| split | regret s | rank rho | pit-now | over-stop share |
+|---|---|---|---|---|
+| all | -0.21 [-0.37, -0.06] | +0.002 [-0.000, +0.005] | +0.004 [+0.001, +0.009] | -0.009 [-0.016, -0.002] |
+| first third | -0.64 [-1.13, -0.22] | +0.007 [+0.002, +0.013] | +0.011 [+0.000, +0.024] | -0.023 [-0.045, -0.003] |
+| mid / late | +0.02 / -0.03 | 0.000 / -0.001 | +0.002 / 0.000 | -0.002 / -0.003 |
+| circuit history yes / no | -0.20 [-0.44, -0.01] / -0.21 [-0.45, -0.02] | +0.003 / +0.002 | +0.006 / +0.003 | -0.010 / -0.008 |
+| low-wear four | -0.19 [-0.48, +0.07] | +0.005 [+0.002, +0.010] | +0.004 | 0.000 |
+
+The judge is unchanged, so its order measures do not move. Future blindness (scorecard B5): pass.
+
+dev20 rescore (72d2fc5, references rebuilt, belief with the guard against without): belief_optimizer 3.34 to
+3.29 s, -0.04 [-0.21, +0.13]; first third -0.04 [-0.51, +0.45]; no circuit history -0.11 [-0.33, +0.04];
+low-wear four -0.25 [-0.81, +0.07]. run_to_flag, one_stop_total and actual_strategy are unchanged (+0.00): the
+rules read the belief's tyre-life edge, not its pace, and actual_strategy is the judge's.
+
+Confirmation on 243bf40 (main bc7b28f, the judge's as-of edge, plus the adoption;
+`reports/calibration/fidelity/belief-guard-243bf40/`, all 19 calibration races, none failed, future blindness
+pass). SIM_CODE_VERSION `a2ede471f2ed` (before `b239243dc1ea`); belief config_hash `b9891459af63` (before
+`aaf95a09bc50`); the default world unchanged, `9b98afd55974`.
+
+| measure | before (guard off) | after | change, race-cluster 95% |
+|---|---|---|---|
+| close pairs / Spearman / relative gap | 0.747 / 0.960 / 7.60 s | the same | 0 |
+| plan-rank agreement | 0.884 | 0.886 | +0.002 [-0.000, +0.005] |
+| judge-regret of the belief's favourite | 3.14 s | 2.93 s | -0.21 [-0.37, -0.06] |
+| first third | 7.15 s | 6.51 s | -0.64 [-1.13, -0.22] |
+| pit-now agreement | 0.861 | 0.865 | +0.004 [+0.001, +0.009] |
+| over-stop share | 0.097 | 0.088 | -0.009 [-0.016, -0.002] |
+| E_real_regret_s | 4.77 s | 4.77 s | 0 |
+| belief replay close pairs | 0.667 | 0.666 | |
+
+Adopted 2026-11-22 (form A) in `configs/sim/belief.yaml` and its mirrors; the belief before:
+`configs/sim/legacy/belief_pre_belief_guard.yaml`; the ablation toggle `belief_guard_off`.
+
 ### The judge's edge as of the snapshot (`world_edge: as_of`, off by default)
 
 The belief's tyre-life edge is the historical prior extended by the tyre ages seen so far: the
@@ -4886,6 +4960,15 @@ The dev20 rescore against each judge's own reference (tyre sets on, as-of agains
 
 Every reference built on the earlier world is stale: its world config_hash and SIM_CODE_VERSION
 both changed.
+
+Confirmation after the belief's thin-fit guard on 243bf40 (`reports/calibration/fidelity/belief-guard-243bf40/`,
+all 19 calibration races, none failed, future blindness pass; "Thin fits in the belief"): SIM_CODE_VERSION
+`a2ede471f2ed`, before `b239243dc1ea`; belief config_hash `b9891459af63`, before `aaf95a09bc50`; the world
+unchanged, `9b98afd55974`. Close pairs out of sample 0.747, Spearman 0.960, relative gap 7.60 s (unchanged),
+plan-rank agreement 0.886 (0.884), judge-regret of the belief's favourite 2.93 s (3.14; -0.21 [-0.37, -0.06]),
+pit-now agreement 0.865 (0.861), E_real_regret_s 4.77 s (unchanged). The world's numbers do not change, but every
+reference's key holds SIM_CODE_VERSION, so references built before are stale by key; every belief-side result is
+stale (the belief's config_hash changed).
 
 Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
 calibration races, none failed). Hashes and versions:
