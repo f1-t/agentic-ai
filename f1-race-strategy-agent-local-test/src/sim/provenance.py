@@ -9,6 +9,10 @@ when pricing that race:
   a_priori   an engineering prior stated in code, fitted on no race (reads no race)
   not_as_of  fitted on a fixed race set; off by default and refused for a race not after all
              of them unless forced (the learned calibrator's artifacts)
+  pre_race   a static table of documents published BEFORE each race (the supplier's circuit
+             ratings and strategy guidance), keyed by race id: what is known about a race before it
+             starts, like its tyre nomination. It records no race's data and reads none; a held-out
+             race has a row (public pre-race information) that no fit ever reads as an observation
 
 races_for(name, race_id) is what pricing `race_id` reads; recorded(name) every race the
 artifact records at all. tests/future_blindness.py checks both for every name. The world (the
@@ -23,7 +27,7 @@ from typing import Callable
 @dataclass(frozen=True)
 class Artifact:
     where: str
-    kind: str                                  # "as_of", "a_priori" or "not_as_of"
+    kind: str                                  # "as_of", "a_priori", "not_as_of" or "pre_race"
     recorded: Callable[[], list]               # every race it records
     races_for: Callable[[str], list]           # the races pricing race_id reads
     files: tuple = ()                          # the committed files it is read from, relative to the project
@@ -116,7 +120,50 @@ def _learned_recorded():
     return sorted(out)
 
 
+def _wear_recorded():
+    from . import wear_guard
+    return wear_guard.recorded()
+
+
+def _wear_for(race_id):
+    from . import wear_guard
+    return wear_guard.races_for(race_id)
+
+
+def _overtaking_recorded():
+    from . import overtaking
+    return overtaking.recorded()
+
+
+def _overtaking_for(race_id):
+    from . import overtaking
+    return overtaking.races_for(race_id)
+
+
 POLICY_SIDE = {
+    "circuit_ratings": Artifact(
+        "data/derived/circuit_ratings.csv: the supplier's circuit ratings from its race-week preview (pre-race, "
+        "published), read by race id (prerace.ratings_of): covariates of the belief's tyre-life prior under "
+        "SimConfig.prerace.tyre_life_ratings, fitted on earlier races' tyre_history rows only, and words in the "
+        "agent's race_picture under AGENT_PRERACE", "pre_race", _none, _none_for,
+        ("data/derived/circuit_ratings.csv",)),
+    "prerace_guidance": Artifact(
+        "data/derived/prerace_guidance.csv: the supplier's pre-race strategy guidance, published after qualifying "
+        "and before the race (pre-race, published), read by race id (prerace.strategies_of): a tyre-life estimate "
+        "under SimConfig.prerace.tyre_life_guidance (bias and sd from earlier races only) and the expected "
+        "strategies in the agent's race_picture under AGENT_PRERACE", "pre_race", _none, _none_for,
+        ("data/derived/prerace_guidance.csv",)),
+    "wear_history": Artifact(
+        "data/derived/wear_history.csv: the historical wear per compound the judge's thin-fit wear guard shrinks "
+        "toward (wear_guard.wear_prior; SimConfig.wear_guard, judge only today), races strictly before the race; "
+        "no earlier history: wear_guard.ROLE_PRIOR", "as_of", _wear_recorded, _wear_for,
+        ("data/derived/wear_history.csv",)),
+    "overtaking_difficulty": Artifact(
+        "data/derived/overtaking.csv and overtaking_pairs.csv: the passing difficulty of the belief's traffic "
+        "(traffic difficulty \"asof\", overtaking.difficulty_prior), races strictly before the race; no earlier "
+        "race: the a priori overtaking.PRIOR_* values",
+        "as_of", _overtaking_recorded, _overtaking_for,
+        ("data/derived/overtaking.csv", "data/derived/overtaking_pairs.csv")),
     "compound_steps": Artifact(
         "configs/sim/compound_steps.json per_race and validation_rows: the proxy's tier-5 step, blend weights and sd "
         "floor, recomputed as of the race (proxy.as_of_config); no earlier race: no step, equal weights, "

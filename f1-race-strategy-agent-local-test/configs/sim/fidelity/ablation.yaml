@@ -10,11 +10,16 @@
 #
 # The base is the eval's default world, the scorecard-chosen configuration (score.default_world_config
 # of config.world_default: linear_fuel with driver effects, config.WORLD_DEGRADATION; the wear cliff
-# with world_edge "history_only", config.WORLD_EDGE; SC/VSC hybrid, score.WORLD_EVENTS; R8 retired;
-# traffic off) and configs/sim/belief.yaml (linear_fuel with driver effects, wear bound 0, fuel
-# anchoring, persistent lap noise, as-of pit loss and cliff). Each adopted choice has a factor that
-# switches it back off (world_events_off, cliff_edge_history, belief_no_driver_effects, and the
-# judge's wear fit world_linear / world_hinge); the rejected ones stay as factors that switch them on.
+# with world_edge "as_of", config.WORLD_EDGE (the prior extended by the ages run up to the scored
+# snapshot); SC/VSC hybrid, score.WORLD_EVENTS; the thin-fit
+# wear guard, config.WORLD_WEAR_GUARD; the safety-car queue, config.WORLD_SC_QUEUE; R8 retired;
+# traffic off) and configs/sim/belief.yaml
+# (linear_fuel with driver effects, wear bound 0, fuel anchoring, persistent lap noise, as-of pit loss
+# and cliff, the cliff edge at its point). Each adopted choice has a factor that switches it back off
+# (world_events_off, cliff_edge_history, belief_no_driver_effects, the judge's wear fit world_linear /
+# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw, sc_queue_off, tyre_inventory_off, cliff_edge_history_only,
+# belief_guard_off); the rejected ones stay as
+# factors that switch them on.
 factors:
   # traffic (sim/traffic.py, docs/eval.md "Traffic"): the order measures are why it exists
   world_traffic:
@@ -27,6 +32,25 @@ factors:
     note: traffic in the judge and the belief
     world_file: configs/sim/world.yaml
     belief_file: configs/sim/belief_traffic.yaml
+  # circuit-specific passing (sim/overtaking.py, docs/eval.md "Overtaking difficulty"): the hazard
+  # pass rule with the circuit's threshold, in place of the one rule for every circuit
+  world_difficulty:
+    note: the judge's traffic with the circuit's passing difficulty (configs/sim/world_difficulty.yaml; the circuit's races, this one included)
+    world_file: configs/sim/world_difficulty.yaml
+    requires: [src.sim.overtaking]
+  world_difficulty_race:
+    note: the judge's traffic with this race's own passing rate (shrunk toward the pooled one)
+    world: {traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true, difficulty: race}}}
+    requires: [src.sim.overtaking]
+  belief_difficulty:
+    note: the belief's projected traffic with the as-of passing difficulty (configs/sim/belief_difficulty.yaml; earlier races only)
+    belief_file: configs/sim/belief_difficulty.yaml
+    requires: [src.sim.overtaking]
+  difficulty_both:
+    note: the judge's circuit difficulty and the belief's as-of difficulty
+    world_file: configs/sim/world_difficulty.yaml
+    belief_file: configs/sim/belief_difficulty.yaml
+    requires: [src.sim.overtaking]
   world_events_off:
     note: the judge without SC/VSC (the world before the adoption drew none; the base's hybrid events, configs/sim/world_hybrid.yaml, replay whole races as `recorded` and run the plan panel as `hybrid`)
     world: {events: {name: none}}
@@ -57,14 +81,30 @@ factors:
   learned_trained:
     note: the belief with the trained learned calibrator (configs/sim/belief_learned.yaml, committed artifacts)
     belief_file: configs/sim/belief_learned.yaml
-  # the wear cliff's edge in the judge (sim/cliff.py world_cliffs; base "history_only": the
-  # historical prior, nothing from this race)
+  # the wear cliff's edge in the judge (sim/cliff.py world_cliffs; base "as_of": the historical prior
+  # extended by the ages run up to the scored snapshot, adopted 2026-11-22)
   cliff_edge_history:
     note: the judge's edge from the historical prior extended by this race's tyre ages (the world before the adoption)
     world: {wear_cliff: {world_edge: history}}
   cliff_edge_race:
     note: the judge's edge from this race alone (the oldest age raced, the earlier design)
     world: {wear_cliff: {world_edge: race}}
+  cliff_edge_history_only:
+    note: the judge's edge from the historical prior alone, nothing from this race (the world before the as-of edge, configs/sim/legacy/world_pre_asof_edge.yaml)
+    world: {wear_cliff: {world_edge: history_only}}
+  # the judge's thin-fit wear guard (sim/wear_guard.py, config.WORLD_WEAR_GUARD): fewer than 3 drivers
+  # or 40 clean race rows on a compound shrinks its wear by precision toward the as-of historical
+  # wear, the fit's sd scaled by sqrt(3 / drivers). Adopted 2026-11-22 (v3), so the base has it
+  wear_guard_off:
+    note: the judge's thin wear fits as fitted, no guard (configs/sim/legacy/world_pre_v3.yaml)
+    world: {wear_guard: {enabled: false, scale_sd_by_drivers: false}}
+  wear_guard_unscaled:
+    note: the guard without scaling the thin fit's standard error by the number of drivers
+    world: {wear_guard: {scale_sd_by_drivers: false}}
+  # the belief's wear-cliff edge (SimConfig.belief_cliff_edge): adopted "point" 2026-11-22 (v3)
+  belief_cliff_edge_draw:
+    note: the belief draws each sample's wear-cliff edge, max(seen so far, prior + sd z) (configs/sim/legacy/belief_pre_v3.yaml)
+    belief: {belief_cliff_edge: draw}
   wear_cliff_off:
     note: no wear cliff in either simulator (and no R8), linear wear past every edge
     both: {wear_cliff: {enabled: false}}
@@ -82,20 +122,38 @@ factors:
     note: actual stops in replays and the team's typical stop for every plan, judge; the belief's as-of team stop
     world: {pit_stops: {replay: actual, team: true}}
     belief: {pit_stops: {team: true}}
-  # the safety-car queue (sim/sc_queue.py, off by default: not adopted). The base judge is hybrid SC/VSC
-  sc_queue:
-    note: the judge places each simulated car in the SC queue among the other cars' recorded race (mode single)
-    world: {sc_queue: {enabled: true, mode: single}}
+  # the safety-car queue (sim/sc_queue.py, config.WORLD_SC_QUEUE): adopted in the judge 2026-11-22 (single
+  # mode, the near-lapped rule, the car placed by its recorded place), so the base has it; these switch
+  # it back off or to its earlier forms, or add it to the belief (which has no queue)
+  # the tyre sets at the snapshot (sim/tyre_inventory.py, docs/eval.md "Tyre sets at the snapshot"), adopted in
+  # both simulators: off, every later stint on a new set in both
+  tyre_inventory_off:
+    note: both simulators without the tyre sets (configs/sim/legacy/world_pre_tyre_inventory.yaml, belief_pre_tyre_inventory.yaml)
+    world: {tyre_inventory: false}
+    belief: {tyre_inventory: false}
+  sc_queue_off:
+    note: the judge without the safety-car queue (configs/sim/legacy/world_pre_sc_queue.yaml)
+    world: {sc_queue: {enabled: false, mode: single, spacing_s: 0.5, held_behind_laps: null, placement: clock}}
+  sc_queue_clock:
+    note: the car placed in the train by its simulated time at S - 1 (placement clock), the near-lapped rule kept
+    world: {sc_queue: {placement: clock}}
+  sc_queue_old:
+    note: the first queue, every lead-lap finisher in the train, placed by its simulated time (no near-lapped rule)
+    world: {sc_queue: {held_behind_laps: null, placement: clock}}
   sc_queue_field:
     note: the judge's whole-race replays queue every replayed car together (mode field; Section A only)
-    world: {sc_queue: {enabled: true, mode: field}}
+    world: {sc_queue: {mode: field, placement: clock}}
   sc_queue_both:
-    note: the single-car queue in the judge and in the belief (the field visible at the snapshot)
-    world: {sc_queue: {enabled: true, mode: single}}
-    belief: {sc_queue: {enabled: true, mode: single}}
+    note: the queue in the belief too (the field visible at the snapshot, the near-lapped rule; the belief reads no record)
+    belief: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25}}
   sc_queue_traffic:
-    note: the single-car queue with the earned-pass ghost traffic in the judge (the order holds in a train unless a car has the pace)
-    world: {sc_queue: {enabled: true, mode: single}, traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true}}}
+    note: the judge's queue with the earned-pass ghost traffic (the order holds in a train unless a car has the pace)
+    world: {traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true}}}
+  # the belief's thin-fit guard (sim/belief_guard.py, docs/eval.md "Thin fits in the belief"), adopted 2026-11-22:
+  # off, the belief fits a few-car compound from its own rows as before
+  belief_guard_off:
+    note: the belief without the thin-fit guard (configs/sim/legacy/belief_pre_belief_guard.yaml)
+    belief: {belief_guard: {enabled: false}}
   # safety-car alignment (events.RateEvents duration "history", race_history.period_lengths): adopted
   # 2026-11-22, so the base has it; this toggle switches it back off in both simulators
   sc_alignment_off:

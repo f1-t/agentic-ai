@@ -448,3 +448,22 @@ def test_cli_batch_scorer():
     assert set(report["baselines"]) == {"actual_strategy", "fixed_one_stop", "fixed_two_stop", "greedy_crossover"}
     bad = subprocess.run([*run, "--seeds", "4"], capture_output=True, text=True)
     assert bad.returncode == 2 and "0 1 ... n-1" in bad.stderr
+
+
+def test_chunked_scoring_equals_one_call(noisy, monkeypatch):
+    """A candidate list longer than SCORE_ONE_CALL is scored in chunks under the same draws."""
+    from src.sim import optimizer_bridge as ob
+    one = optimize_batch(mid_race(), noisy, n_samples=4, max_stops=2, return_times=True)
+    monkeypatch.setattr(ob, "SCORE_ONE_CALL", 10)
+    monkeypatch.setattr(ob, "SCORE_CHUNK", 7)
+    chunked = optimize_batch(mid_race(), noisy, n_samples=4, max_stops=2, return_times=True)
+    assert chunked.plan == one.plan and chunked.candidates_evaluated == one.candidates_evaluated
+    assert np.array_equal(chunked.diagnostics["searched"]["mean_time_s"], one.diagnostics["searched"]["mean_time_s"])
+
+
+def test_three_future_stops_widen_the_search(noisy):
+    """max_stops 3 (the switch): every plan of two stops plus the three-stop ones; never worse."""
+    two = optimize_batch(start(), noisy, n_samples=4, max_stops=2)
+    three = optimize_batch(start(), noisy, n_samples=4, max_stops=3)
+    assert three.candidates_evaluated > two.candidates_evaluated
+    assert three.evaluation.mean_time_s <= two.evaluation.mean_time_s + 1e-9

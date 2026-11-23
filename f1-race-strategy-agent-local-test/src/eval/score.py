@@ -70,7 +70,7 @@ import numpy as np
 import pandas as pd
 
 from ..baselines.domain import NoFeasiblePlan, PolicyUnavailable
-from ..sim import calibration, proxy, traffic
+from ..sim import calibration, proxy, traffic, tyre_inventory
 from ..sim.optimizer_bridge import optimize_batch
 from . import decisions
 from .policies import Decision
@@ -204,6 +204,10 @@ def score_scenario(scenario, world, policies: dict, *, belief=None, seed: int = 
     plans its own reference too, and the rows gain ref_models_agree: every one of them agrees
     with the world's reference (references_agree). They score nothing."""
     belief = world if belief is None else belief
+    if tyre_inventory.on(getattr(world, "config", None), getattr(belief, "config", None)):
+        # SimConfig.tyre_inventory: the as-of sets in the snapshot the reference, the policies and the
+        # scoring all read
+        scenario = scenario.model_copy(update={"snapshot": tyre_inventory.with_sets(scenario.snapshot, scenario.race_id)})
     snap = scenario.snapshot
     base = {"scenario_id": scenario.scenario_id, "race_id": scenario.race_id, "driver": scenario.driver,
             "lap": scenario.lap, "compound": snap.compound, "tyre_age": snap.tyre_age,
@@ -405,7 +409,8 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     AGENT_BELIEF_CONFIG names another (to_snapshot window, traffic off, posterior draws and
     persistent lap noise on, driver effects in the fits); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off; the wear fit
-    config.WORLD_DEGRADATION and the tyre-life edge config.WORLD_EDGE, config.world_default;
+    config.WORLD_DEGRADATION, the tyre-life edge config.WORLD_EDGE and the thin-fit wear guard
+    config.WORLD_WEAR_GUARD, config.world_default;
     default_world_config, WORLD_EVENTS on by default). The world alone
     gets the race's whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race

@@ -216,6 +216,32 @@ def compare_plans(candidates):
     return _belief(agent_tools.compare_plans, list(candidates))
 
 
+def rank_plans():
+    """agent_tools.rank_plans for the active snapshot (protocol v2)."""
+    return _belief(agent_tools.rank_plans)
+
+
+def evaluate_plan(plan=None, first_stop_lap=None, compound=None):
+    """agent_tools.evaluate_plan for the active snapshot (protocol v2): a full plan, or a first stop
+    at the end of a lap onto a compound, against the optimizer's best plan."""
+    if plan is None and first_stop_lap is None:
+        return {"error": "Give plan ([[compound, laps], ...] for the remaining laps) or first_stop_lap "
+                         "(with compound, optional).", "recoverable": True}
+    if plan is not None and first_stop_lap is not None:
+        return {"error": "Give either plan or first_stop_lap (with compound), not both.", "recoverable": True}
+    return _belief(agent_tools.evaluate_plan, plan, first_stop_lap, compound)
+
+
+def rank_plans_families():
+    """agent_tools.rank_plans(families=True) for the active snapshot (protocol v2free's rank_plans)."""
+    return _belief(agent_tools.rank_plans, families=True)
+
+
+def race_picture():
+    """agent_tools.race_picture for the active snapshot (protocol v2free)."""
+    return _belief(agent_tools.race_picture)
+
+
 def _validate_action(action: dict[str, Any]):
     s = _snapshot()
     kind = str(action.get("action", "")).lower()
@@ -346,4 +372,51 @@ TOOL_SPECS = [
         },
         "fn": evaluate_strategy,
     },
+]
+
+
+# Protocol v2 (src/agent.py AGENT_PROTOCOL): the ranked plans and one plan evaluated in place of
+# probing one action at a time; the per-estimate tools stay. TOOL_SPECS above is protocol v1, unchanged.
+_V2_KEPT = ("estimate_tyre_degradation", "estimate_pit_loss")
+TOOL_SPECS_V2 = [
+    {
+        "name": "rank_plans",
+        "description": "Call first. The optimizer's best distinct plans for the rest of the race from this snapshot, in one call (it searches every stop lap and compound). Per plan: plan (stints, the first continuing the current set), first_stop, immediate (the action it implies now), submit (the submission that keeps it), gap_s to plan 1 with gap_90 (its 90% interval over shared draws) and faster_share (share of draws faster than plan 1), best_share (share of draws in which it is the fastest plan shown), first_stop_range (the stop laps over which a plan of that shape stays within 1 s), flags (a stint past the estimated tyre life, or past the longest run seen when the life beyond it is a generic prior) and extrapolates (a stint older than any seen so far: a note, not a flag). decision: the best PIT-now plan against the best STAY_OUT plan, the favoured action and its share of draws. flags: weak estimates (a compound with no race laps, a prior-dominated compound, a safety car or VSC in progress). Plan 1 is what the optimizer alone would play.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": rank_plans,
+    },
+    {
+        "name": "evaluate_plan",
+        "description": "One plan against plan 1 of rank_plans under the same draws. Give plan: [[compound, laps], ...] for the remaining laps, the first stint continuing the current set; or first_stop_lap (a stop at the end of that lap) with compound (omit it to try every legal compound), the rest planned by the optimizer. Returns the plan, vs_best (gap_s, gap_90, faster_share), immediate, submit, scored_plan when the scorer would play another plan for that submission, flags and extrapolates. Rule errors say what is legal.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan": {"type": "array", "items": {"type": "array"},
+                         "description": "[[compound, laps], ...] summing to the laps remaining."},
+                "first_stop_lap": {"type": "integer", "description": "The lap at whose end the first stop is made."},
+                "compound": {"type": "string", "description": "The compound fitted at that stop."},
+            },
+            "additionalProperties": False,
+        },
+        "fn": evaluate_plan,
+    },
+    *[spec for spec in TOOL_SPECS if spec["name"] in _V2_KEPT],
+]
+
+# Protocol v2free (the default): v2's tools plus the race as a strategist sees it.
+TOOL_SPECS_V2FREE = [
+    {
+        "name": "rank_plans",
+        "description": "Call first. The simulator's look-ahead across the strategy space, in one call: the best plan of each strategy family (stops left and the compound sequence after the current set; it searches every stop lap), plan 1 the lowest mean time, at most 8 families and none more than 25 s behind (families_dropped counts the rest), plus the best PIT-now plan. Per plan: family, plan (stints, the first continuing the current set), immediate (the action it implies now), submit (the submission fields that keep it), gap_s to plan 1 with gap_90 (its 90% interval over shared draws) and faster_share (share of draws faster than plan 1), best_share (share of draws in which it is the fastest plan shown), first_stop_range (the stop laps over which a plan of that shape stays within 1 s), flags (a stint past the estimated tyre life, or past the longest run seen when the life beyond it is a generic prior) and extrapolates (a stint older than any seen so far: a note, not a flag). decision: the best PIT-now plan against the best STAY_OUT plan. flags: weak estimates (a compound with no race laps, a prior-dominated compound, a safety car or VSC in progress).",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": rank_plans_families,
+    },
+    TOOL_SPECS_V2[1],
+    {
+        "name": "race_picture",
+        "description": "Everything visible now that the look-ahead does not fully weigh, in one call. car: position, gaps, laps left, track status and how long a safety car or VSC has lasted, the pit window, the stints so far, the current set and its last lap times, and set_wear (the set's observed wear in s/lap of tyre age from its clean laps, fuel-corrected, against the model's value and sd: is this set wearing faster or slower than the simulator thinks?). nearby: the cars around (position, gap, compound, tyre age, stops so far). rejoin: cars within the pit loss behind now and the position a stop now would rejoin at, from the gaps. compounds: per compound the race laps behind the fit, the longest run seen in the race, the field's observed wear against the model's, the base pace sd, how a compound with no race laps is priced, and the tyre-life estimate with its sd and source.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "fn": race_picture,
+    },
+    *TOOL_SPECS_V2[2:],
 ]

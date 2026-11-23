@@ -321,6 +321,45 @@ class ScQueue(_Cfg):
     # replays queue every replayed car together (sc_queue.apply) and the engine does nothing
     mode: Literal["single", "field"] = "single"
     spacing_s: float = Field(default=0.5, ge=0)
+    # the near-lapped rule (sc_queue.deployment_behind): a car more than this many laps behind the
+    # leader when the safety car came out is held: not a car in the queue, it keeps its gap at the
+    # deployment to the train's last car ahead of it (it was lapped on the road, and the wave-by came
+    # too late for it to reach the back of the train).
+    # None (the default): every car that finished on the lead lap joins, as before. 1.25: the cut
+    # that best separates the cars that joined from those that did not on the recorded end-of-period
+    # gaps of the calibration races' SC periods (fitted on the race data, not on a scorecard result)
+    held_behind_laps: float | None = Field(default=None, gt=0)
+    # how the single-car queue places the simulated car in the train (with held_behind_laps set):
+    # "clock" (the default) by its simulated time at S - 1 among the others' recorded times, so a
+    # drift of its simulated clock by then costs or gains it places it keeps; "record" (the judge
+    # only, fit_window full: hindsight, ledgered) by its recorded place at the deployment, each plan
+    # moved by its simulated time difference at S - 1 to the plans that stopped where the car did
+    placement: Literal["clock", "record"] = "clock"
+
+
+class WearGuard(_Cfg):
+    """The judge's thin-fit wear guard (sim/wear_guard.py): whole-race fits only (fit_window full);
+    a compound with at least one but fewer than min_drivers drivers or min_rows clean race rows."""
+
+    enabled: bool = False
+    min_drivers: int = Field(default=3, ge=1)
+    min_rows: int = Field(default=40, ge=1)
+    # the fit's standard error of a thin compound's wear counts only the laps, not the cars: with
+    # this on it is scaled by sqrt(min_drivers / n_drivers) when fewer cars than min_drivers ran it
+    scale_sd_by_drivers: bool = False
+
+
+class BeliefGuard(_Cfg):
+    """The belief's thin-fit guard (sim/belief_guard.py): windowed fits only (fit_window to_snapshot);
+    a compound whose clean race rows visible at the snapshot are at least one but come from fewer than
+    min_drivers drivers or number fewer than min_rows has its wear (mode "wear", level at the mean age
+    kept) or its wear and level ("pace_wear") shrunk by precision toward the well-covered compounds of
+    the same fit (the proxy's as-of blend) and the as-of historical wear. Off: as before."""
+    enabled: bool = False
+    mode: Literal["wear", "pace_wear"] = "pace_wear"
+    min_drivers: int = Field(default=3, ge=1)
+    min_rows: int = Field(default=40, ge=1)
+    scale_sd_by_drivers: bool = True
 
 
 class WearCliff(_Cfg):
@@ -338,7 +377,10 @@ class WearCliff(_Cfg):
     # simulators share, nothing from this race), "history" (b: that prior extended by the ages this
     # race has lap data for; the default until the fidelity scorecard chooses between a and b) or
     # "race" (c: the oldest age raced in this race, the earlier design)
-    world_edge: Literal["history_only", "history", "race"] = "history"
+    # "as_of" (d): the prior extended by the ages run up to the scored snapshot's moment (the visible
+    # rows the belief's edge reads, cut by session time; race laps only, no practice): nothing from
+    # after the decision, so a whole-race replay from lap 0 is "history_only"
+    world_edge: Literal["history_only", "history", "race", "as_of"] = "history"
     # the historical prior (sim/cliff.py history_prior): "tyre_history" (src/sim/tyre_history.py,
     # the shared history model) or "stub" (cliff.life_prior, the earlier as-of stub)
     prior_source: Literal["stub", "tyre_history"] = "tyre_history"
@@ -354,6 +396,32 @@ class WearCliff(_Cfg):
     life_excluded: list[str] = Field(default_factory=lambda: ["2025_23_qatar"])
     history: dict = Field(default_factory=_cliff_history)          # configs/sim/tyre_life_history.json
     life_ratio_rows: list = Field(default_factory=_cliff_life_rows)  # compound_steps.json per_race
+
+
+class PreRace(_Cfg):
+    """The tyre supplier's pre-race publications in the BELIEF's priors (src/sim/prerace.py,
+    data/derived/circuit_ratings.csv and prerace_guidance.csv; docs/eval.md "Information contract":
+    published before the race). Read only by a windowed fit (the belief); the judge's tyre-life
+    edge is never moved. Off (the defaults): bit for bit as before; left out of config_hash then.
+
+    tyre_life_ratings   "off"; "replace": the circuit ratings (abrasion, tyre stress, lateral,
+                        traction) as covariates of tyre life, a ridge fit on earlier races, in place
+                        of the nominated-trio severity shift; "supplement": on top of it
+    tyre_life_guidance  the guidance's implied stint lengths combined by precision with the
+                        historical tyre-life prior (bias and sd as of the race): "windows" from
+                        stated pit-window laps only, "stated" also from the fastest expected
+                        strategy's compound sequence where no laps are stated
+    stops_prior_s       the guidance's expected stop count as a prior on the belief's RANKING of plans
+                        (optimizer_bridge.optimize_batch: the look-ahead, belief_optimizer, the
+                        continuations of a decision, rank_plans): a plan ranks on its mean time plus
+                        this many seconds per stop by which its stops left differ from the expected
+                        stops left (prerace.expected_stops_left). 0 (the default) is off; a race with
+                        no guidance stop count ranks as before; the reported times never change and the
+                        judge (fit_window full) never reads it"""
+
+    tyre_life_ratings: Literal["off", "replace", "supplement"] = "off"
+    tyre_life_guidance: Literal["off", "windows", "stated"] = "off"
+    stops_prior_s: float = Field(default=0.0, ge=0)
 
 
 class SimConfig(_Cfg):
@@ -439,6 +507,12 @@ class SimConfig(_Cfg):
     # lap noise; events and pit-loss draws kept), Simulator.point_estimate. The tools' reported
     # intervals still come from the draws. Left out of config_hash at its default.
     plan_on: Literal["draws", "point"] = "draws"
+    # the belief's wear-cliff edge per sample (sim/cliff.py Cliff.sample_ages): "draw" (the
+    # default, as before) max(seen so far, prior + sd z); "point" max(seen so far, prior), the
+    # edge the judge's history_only prior uses. The cost past the edge is convex, so drawing the
+    # edge raises the expected cost of every long stint (docs/eval.md "Belief priors"). Left out
+    # of config_hash at its default.
+    belief_cliff_edge: Literal["draw", "point"] = "draw"
     # R8 stint limit, RETIRED (docs/rules.md R8): a stint could end at most this many laps past
     # the oldest tyre age any car ran on its compound in the whole race, a hindsight rule handed
     # to every policy. None (the default) is off. The legacy setting that reproduces the results
@@ -458,12 +532,29 @@ class SimConfig(_Cfg):
     # proxy rather than fitted from a handful of laps (Simulator._thin_dropped); None (the default)
     # fits every compound with min_samples rows, as before
     min_race_rows_to_fit: int | None = Field(default=None, ge=1)
+    # the judge's thin-fit wear guard (sim/wear_guard.py): in the whole-race fit, a compound whose
+    # wear rests on fewer than min_drivers drivers or min_rows clean race rows is shrunk by precision
+    # toward the as-of historical wear, keeping its mean lap; off by default, left out of config_hash
+    # at its default
+    wear_guard: WearGuard = Field(default_factory=lambda: WearGuard())
+    # the belief's thin-fit guard (sim/belief_guard.py), the windowed fit's counterpart of wear_guard;
+    # off by default, left out of config_hash at its default
+    belief_guard: BeliefGuard = Field(default_factory=lambda: BeliefGuard())
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
     # pit-stop durations (PitStops); left out of config_hash at its default
     pit_stops: PitStops = Field(default_factory=PitStops)
     # the safety-car queue in whole-field replays (ScQueue); left out of config_hash at its default
     sc_queue: ScQueue = Field(default_factory=ScQueue)
+    # the supplier's pre-race publications in the belief's priors (PreRace); left out of
+    # config_hash at its default
+    prerace: PreRace = Field(default_factory=PreRace)
+    # the driver's tyre sets at the snapshot (sim/tyre_inventory.py): off, every later stint is a new
+    # set; on, snapshots carry the as-of inventory (weekend allocation minus the sets opened before
+    # the race and fitted in it so far) and a later stint takes the best set of its compound left (new
+    # when one remains, else the least used, at its laps run); a compound with no set left makes the
+    # plan infeasible. Left out of config_hash at its default
+    tyre_inventory: bool = False
 
     @classmethod
     def from_file(cls, path):
@@ -488,13 +579,44 @@ WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}
 # the ablation says"): close-pair order +0.025 [+0.000, +0.060] against "history" on 18 races, and
 # no hindsight. The SimConfig default stays "history"; the eval world sets it here. The earlier
 # world (edge "history") is configs/sim/legacy/world_pre_scorecard.yaml.
-WORLD_EDGE = "history_only"
+# Since 2026-11-22 it is "as_of": that prior extended by the tyre ages run up to the scored snapshot
+# (the rows the predictive simulator sees there, the same session-time cut), so the judge stops
+# charging stint lengths the belief has already watched cars run and still reads nothing after the
+# decision moment (a whole-race replay from lap 0 is "history_only"). Measured on the 19 calibration
+# races against "history_only" (docs/eval.md "The judge's edge as of the snapshot"). The world
+# before it: configs/sim/legacy/world_pre_asof_edge.yaml.
+WORLD_EDGE = "as_of"
+# The eval world's thin-fit wear guard (WearGuard, sim/wear_guard.py): a compound whose whole-race
+# wear rests on fewer than 3 drivers or 40 clean rows is shrunk toward the as-of historical wear,
+# the fit's sd scaled by sqrt(3 / drivers). Measured on the 19 calibration races (docs/eval.md
+# "Thin wear fits"): close-pair order unchanged, judge-regret of the belief's favourite -0.56 s,
+# pit-now agreement +0.015. The SimConfig default stays off; the eval world sets it here. The world
+# before it: configs/sim/legacy/world_pre_v3.yaml.
+WORLD_WEAR_GUARD = {"enabled": True, "scale_sd_by_drivers": True}
+# The eval world's safety-car queue (ScQueue, sim/sc_queue.py, docs/eval.md "The safety-car queue"):
+# at each recorded SC period the simulated car is placed in the train among the other cars' recorded
+# race by its recorded place at the deployment (placement "record", hindsight: the judge only), cars
+# more than 1.25 laps behind at the deployment held at their gap (the near-lapped rule). Measured on
+# the 19 calibration races: close-pair order -0.005 [-0.033, +0.021], relative gap 13.19 -> 7.60 s.
+# The SimConfig default stays off and the belief has no queue; the eval world sets it here. The world
+# before it: configs/sim/legacy/world_pre_sc_queue.yaml.
+WORLD_SC_QUEUE = {"enabled": True, "mode": "single", "held_behind_laps": 1.25, "placement": "record"}
+# The tyre sets at the snapshot (SimConfig.tyre_inventory, sim/tyre_inventory.py, docs/eval.md "Tyre sets
+# at the snapshot"): adopted 2026-11-22 for the rerun, in both simulators (the belief through
+# configs/sim/belief.yaml). The SimConfig default stays off; the eval world sets it here. The world
+# before it: configs/sim/legacy/world_pre_tyre_inventory.yaml.
+WORLD_TYRE_INVENTORY = True
 
 
 def world_default(config: "SimConfig") -> "SimConfig":
-    """`config` with the eval world's wear fit (WORLD_DEGRADATION) and tyre-life edge (WORLD_EDGE)."""
+    """`config` with the eval world's wear fit (WORLD_DEGRADATION), tyre-life edge (WORLD_EDGE),
+    thin-fit wear guard (WORLD_WEAR_GUARD), safety-car queue (WORLD_SC_QUEUE) and tyre sets
+    (WORLD_TYRE_INVENTORY)."""
     return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION),
-                                     "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE})})
+                                     "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE}),
+                                     "wear_guard": config.wear_guard.model_copy(update=WORLD_WEAR_GUARD),
+                                     "sc_queue": config.sc_queue.model_copy(update=WORLD_SC_QUEUE),
+                                     "tyre_inventory": WORLD_TYRE_INVENTORY})
 
 
 def compound_class(config, compound) -> str:

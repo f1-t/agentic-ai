@@ -481,6 +481,12 @@ PHYSICS_MODULES = (
     "pit_loss",
     # the wear cliff: where each simulator places a compound's tyre life (world and belief)
     "cliff",
+    # the judge's thin-fit wear guard (SimConfig.wear_guard): moves the whole-race fit's wear slopes
+    "wear_guard",
+    # the belief's thin-fit guard (SimConfig.belief_guard): moves the windowed fit's thin compounds
+    "belief_guard",
+    # the passing-difficulty table the ghost traffic's hazard pass rule reads (traffic difficulty)
+    "overtaking",
     # the historical tyre-life prior both simulators place the support edge with (cliff.history_prior,
     # SimConfig.wear_cliff.prior_source "tyre_history"); its committed tables (data/derived/tyre_*.csv,
     # configs/tyre_history.yaml) are read at run time and are not in config_hash
@@ -491,6 +497,12 @@ PHYSICS_MODULES = (
     "race_history",
     # the safety-car queue of whole-field replays (SimConfig.sc_queue)
     "sc_queue",
+    # the supplier's pre-race ratings and guidance read into the belief's tyre-life prior
+    # (SimConfig.prerace); its tables data/derived/circuit_ratings.csv and prerace_guidance.csv
+    # are read at run time and are not in config_hash
+    "prerace",
+    # the driver's tyre sets at a snapshot (SimConfig.tyre_inventory), from the weekend's laps
+    "tyre_inventory",
 )
 NON_PHYSICS = (
     "__init__",       # re-exports only
@@ -551,7 +563,9 @@ SIM_CODE_VERSION = _code_version()   # report column sim_code_version, computed 
 # SimConfig fields added after hashes were published: left out of config_hash while they hold
 # their default, so a config that does not set one keeps its hash (as scenarios._ADDED_FIELDS
 # does for the set digest). A behaviour change behind a new default shows in SIM_CODE_VERSION.
-HASH_OMIT_AT_DEFAULT = ("policy_view", "cross_race_as_of", "fuel_anchor", "plan_on", "sc_queue", "pit_stops")
+HASH_OMIT_AT_DEFAULT = ("policy_view", "cross_race_as_of", "fuel_anchor", "plan_on", "sc_queue", "pit_stops",
+                        "belief_cliff_edge", "wear_guard", "prerace", "tyre_inventory",
+                        "belief_guard")
 
 
 def config_hash(config: SimConfig) -> str:

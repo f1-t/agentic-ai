@@ -1,21 +1,37 @@
 # The eval's default world as a file (docs/eval.md "Safety cars and VSC in the scoring world"): the
 # full fit window, traffic off, config.WORLD_DEGRADATION's wear fit (linear_fuel with driver
-# effects), the wear cliff's edge config.WORLD_EDGE ("history_only": the historical prior, nothing
-# from this race) and eval.score.WORLD_EVENTS: the SC/VSC in progress at the snapshot as recorded
+# effects), the wear cliff's edge config.WORLD_EDGE ("as_of": the historical prior extended by the
+# tyre ages run up to the scored snapshot, the predictive simulator's information; adopted
+# 2026-11-22, before: configs/sim/legacy/world_pre_asof_edge.yaml) and eval.score.WORLD_EVENTS: the SC/VSC in progress at the snapshot as recorded
 # (with the field's recorded lap times), later ones drawn at the rate model's rates, the same draws
 # for every plan and the reference. Opt-in until the fidelity scorecard chose it; now the default,
-# so `score` without --world-config runs this world. tests/test_eval_default_config.py checks it
-# equals score.default_world_config(config.world_default(SimConfig())).
+# so `score` without --world-config runs this world. The thin-fit wear guard config.WORLD_WEAR_GUARD
+# (adopted 2026-11-22, v3; before: configs/sim/legacy/world_pre_v3.yaml). The safety-car queue
+# config.WORLD_SC_QUEUE (adopted 2026-11-22; before: configs/sim/legacy/world_pre_sc_queue.yaml). The tyre sets
+# config.WORLD_TYRE_INVENTORY (adopted 2026-11-22; before: configs/sim/legacy/world_pre_tyre_inventory.yaml).
+# tests/test_eval_default_config.py
+# checks it equals score.default_world_config(config.world_default(SimConfig())).
 fit_window: full
 degradation:
   name: linear_fuel
   params:
     driver_effects: race
 wear_cliff:
-  world_edge: history_only
+  world_edge: as_of
+wear_guard:
+  enabled: true
+  scale_sd_by_drivers: true
+sc_queue:
+  enabled: true
+  mode: single
+  held_behind_laps: 1.25
+  placement: record
 events:
   name: hybrid
   params:
     lap_times: recorded
     duration: history   # later periods: rates and lengths pooled over the history table (adopted 2026-11-22)
     pooled: true
+# The tyre sets at the snapshot (docs/eval.md "Tyre sets at the snapshot", adopted 2026-11-22; before:
+# configs/sim/legacy/world_pre_tyre_inventory.yaml): the as-of inventory, a later stint on the best set of its compound left
+tyre_inventory: true

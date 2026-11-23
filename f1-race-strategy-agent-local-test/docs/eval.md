@@ -228,6 +228,251 @@ would score 23.81 but only by conjuring time. If the belief's bias is fixed else
 should be measured again. Neither side is on by default: the fidelity scorecard measured it by
 the finishing-order measures and kept traffic off ("The current configuration").
 
+### Overtaking difficulty
+
+The traffic model above uses one passing rule for every circuit. `src/sim/overtaking.py` counts
+passes per circuit from the timing data and gives the ghost traffic a circuit-specific
+threshold. It is a switch, `traffic.params.difficulty`, **off by default** (`none`), with the
+earlier behaviour bit for bit when off.
+
+**The count** (`observe_race`, `python -m src.sim.overtaking build`, written to
+`data/derived/overtaking.csv`, `overtaking_pairs.csv` and the manifest; 28 cached races, never a
+held-out one; 2021 Belgium is left out with 1 racing lap):
+
+- A *close lap* is a car that starts lap L within 1.0 s of the car directly ahead on the same lap
+  count (`data.gap_columns`). Both cars need a lap-L time, neither may be on an in-lap or out-lap,
+  and lap L and the car ahead's lap L-1 must be green.
+- A *pass* is a close lap on which the follower crosses the line first.
+- Pit stops, lap 1, SC/VSC laps and the lap after them, retirements and lapping never count.
+- The *rate* is passes per close lap. Normalising by how often cars are in range keeps a
+  processional race at a wide track from reading as hard to pass. `passes_per_lap` (every order
+  change on the same lap count) is reported beside it.
+- A free-air pace fit per race (driver-stint intercept, compound age slope, a common lap slope,
+  laps at least 2 s behind the car ahead) gives the follower's *pace advantage* on each close
+  lap. A logistic P(pass) = sigmoid(slope (advantage - theta)) over the pooled close laps has
+  slope 1.14 per s. The pass probability is 3% with no advantage, about 25% at 0.5-1.0 s,
+  49% at 1.0-1.5 s and 78% at 2-3 s.
+- `theta` is the advantage at which half the close laps end in a pass.
+- The per-circuit value is the rate, in log-odds, shrunk toward the pooled rate with weight
+  n / (n + 150 close laps). It becomes a threshold through the pooled logistic:
+  theta = theta_pool + (z_pool - z) / slope.
+- *Dirty air* is the pace-fit residual of laps under 1.5 s behind less that of free-air laps.
+- *Sectors*: the boundary (S1, S2, line) at which the follower first runs ahead, from the
+  cumulative sector session times.
+
+| race | circuit | close laps | passes | rate | passes/lap | S1/S2/S3 | dirty air s | theta (own) s | judge rate / theta | as-of rate / theta |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2019_10_united_kingdom | silverstone | 183 | 13 | 0.071 | 0.47 | 1/5/7 | 0.52 | 2.23 | 0.095 / 2.14 | (no earlier race) |
+| 2021_01_bahrain | sakhir | 84 | 32 | 0.381 | 0.83 | 32/0/0 | 0.28 | 0.80 | 0.209 / 1.33 | 0.071 / 1.60 |
+| 2021_02_emilia_romagna | imola | 103 | 19 | 0.184 | 0.56 | 16/1/2 | 0.52 | 2.07 | 0.119 / 1.92 | 0.169 / 1.60 |
+| 2021_04_spain | catalunya | 188 | 34 | 0.181 | 0.67 | 30/2/2 | 0.66 | 1.71 | 0.222 / 1.27 | 0.173 / 1.60 |
+| 2021_09_austrian | red_bull_ring | 254 | 25 | 0.098 | 0.37 | 2/23/0 | 0.43 | 1.85 | 0.131 / 1.82 | 0.176 / 1.40 |
+| 2021_20_qatar | lusail | 158 | 35 | 0.222 | 0.76 | 34/0/1 | 0.50 | 1.80 | 0.101 / 2.08 | 0.151 / 1.33 |
+| 2021_21_saudi_arabia | jeddah | 112 | 20 | 0.179 | 1.14 | 15/0/5 | 0.76 | 1.14 | 0.158 / 1.63 | 0.163 / 1.45 |
+| 2021_22_united_arab_emirates | yas_marina | 98 | 10 | 0.102 | 0.28 | 0/9/1 | 0.54 | 1.95 | 0.170 / 1.55 | 0.165 / 1.45 |
+| 2022_01_bahrain | sakhir | 151 | 40 | 0.265 | 1.15 | 30/8/2 | 0.30 | 1.26 | 0.209 / 1.33 | 0.225 / 1.17 |
+| 2022_02_saudi_arabia | jeddah | 152 | 26 | 0.171 | 0.83 | 19/0/7 | 0.72 | 1.09 | 0.158 / 1.63 | 0.176 / 1.38 |
+| 2022_04_emilia_romagna | imola | 192 | 12 | 0.062 | 0.23 | 10/0/2 | 0.52 | 2.48 | 0.119 / 1.92 | 0.178 / 1.34 |
+| 2022_06_spain | catalunya | 102 | 38 | 0.373 | 0.67 | 33/5/0 | 0.07 | 0.58 | 0.222 / 1.27 | 0.172 / 1.31 |
+| 2022_07_monaco | monaco | 191 | 3 | 0.016 | 0.10 | 0/1/2 | 1.02 | - | 0.019 / 3.60 | 0.171 / 1.31 |
+| 2022_08_azerbaijan | baku | 99 | 19 | 0.192 | 0.73 | 16/0/3 | 0.54 | 1.62 | 0.154 / 1.66 | 0.156 / 1.61 |
+| 2022_09_canada | villeneuve | 303 | 26 | 0.086 | 0.57 | 7/2/17 | 0.52 | 1.58 | 0.100 / 2.09 | 0.158 / 1.60 |
+| 2022_11_austria | red_bull_ring | 290 | 46 | 0.159 | 0.81 | 12/31/3 | 0.15 | 1.20 | 0.131 / 1.82 | 0.116 / 1.79 |
+| 2022_12_france | paul_ricard | 198 | 17 | 0.086 | 0.53 | 5/8/4 | 0.34 | 2.39 | 0.105 / 2.04 | 0.150 / 1.53 |
+| 2022_17_singapore | marina_bay | 97 | 7 | 0.072 | 0.24 | 3/1/3 | 0.61 | 2.00 | 0.107 / 2.03 | 0.145 / 1.54 |
+| 2022_20_mexico | rodriguez | 147 | 19 | 0.129 | 0.31 | 17/2/0 | 0.42 | 1.86 | 0.132 / 1.82 | 0.143 / 1.56 |
+| 2022_21_brazil | interlagos | 149 | 42 | 0.282 | 0.96 | 37/3/2 | 0.15 | 1.07 | 0.148 / 1.70 | 0.142 / 1.54 |
+| 2022_22_united_arab_emirates | yas_marina | 169 | 42 | 0.249 | 0.96 | 0/38/4 | 0.26 | 1.39 | 0.170 / 1.55 | 0.130 / 1.60 |
+| 2023_01_bahrain | sakhir | 122 | 17 | 0.139 | 0.35 | 15/2/0 | 0.05 | 1.11 | 0.209 / 1.33 | 0.238 / 1.10 |
+| 2023_07_spain | catalunya | 175 | 48 | 0.274 | 0.77 | 47/1/0 | 0.15 | 0.76 | 0.222 / 1.27 | 0.212 / 1.18 |
+| 2024_07_emilia_romagna | imola | 204 | 26 | 0.127 | 0.47 | 24/1/1 | 0.39 | 1.97 | 0.119 / 1.92 | 0.122 / 1.65 |
+| 2024_08_monaco | monaco | 378 | 3 | 0.008 | 0.05 | 1/1/1 | 0.51 | 5.12 | 0.019 / 3.60 | 0.049 / 2.38 |
+| 2024_12_united_kingdom | silverstone | 193 | 18 | 0.093 | 0.53 | 6/2/10 | 0.21 | 2.10 | 0.095 / 2.14 | 0.100 / 2.17 |
+| 2024_21_brazil | interlagos | 187 | 10 | 0.053 | 0.38 | 6/3/1 | 0.18 | 1.90 | 0.148 / 1.70 | 0.203 / 1.42 |
+| 2025_23_qatar | lusail | 273 | 4 | 0.015 | 0.12 | 3/1/0 | 0.53 | - | 0.101 / 2.08 | 0.178 / 1.55 |
+
+Where passing happens: mostly in S1, the run from the line to the first braking zone. The
+exceptions repeat at the same circuit: Austria (S2, 23/25 and 31/46), Abu Dhabi (S2, 9/10 and
+38/42), Canada (S3) and Silverstone (S2/S3). The ghost model works at the line, so the sector
+split is descriptive. It cannot improve the line-based rate (the rate is the sum of the
+sectors), and it is not used.
+
+**Validation** (`python -m src.sim.overtaking validate`). The question is whether a circuit's
+value predicts a race's own passing better than a pooled constant. It is tested over the races
+with an earlier (as-of) or another (leave-one-race-out) race at the same circuit:
+
+| target | scope | races | circuit value | pooled constant |
+|---|---|---|---|---|
+| theta (the race's own fit), mean abs error s | as-of | 12 | 0.59 | 0.71 |
+| theta, mean abs error s | leave-one-race-out | 21 | 0.62 | 0.67 |
+| rate, mean abs log-odds error | as-of | 13 | 0.80 | 0.88 |
+| rate, mean abs log-odds error | leave-one-race-out | 23 | 0.79 | 0.86 |
+| rate, binomial log-loss per close lap | as-of | 13 | 0.4215 | 0.4262 |
+
+The circuit factor predicts better, but modestly: the same circuit varies a lot from year to
+year (Spain 0.18 to 0.37; Interlagos 0.28, then 0.05 in the wet 2024 race). The biggest miss is
+Monaco 2024: the as-of value calls it hard (theta 2.4 s), but its own fit is 5.1 s. The as-of
+90% band of the rate covers only 0.62 of the races, so it is too narrow. A public per-race
+overtake count was not found in the time available, so there is no second-source check.
+
+**The switch** (`traffic.GhostParams.difficulty`):
+
+- `none`: the earlier rule, the default.
+- `circuit`: the circuit's table races, this one included. Judge only, because it reads the
+  race (hindsight, ledgered).
+- `race`: this race's own count shrunk toward the pooled one. Judge only.
+- `asof`: races strictly before this one (`difficulty_prior`; provenance
+  `overtaking_difficulty`; the a priori `PRIOR_*` with no earlier race). The belief's.
+
+`circuit` and `race` are refused for the projected source. When the switch is on, a caught car
+(not an out-lap ghost) adds the hazard -ln(1 - p) on each lap behind the car ahead, with
+p = sigmoid(slope (advantage - theta)), where advantage is the ghost's lap less ours. The
+hazard is kept while the car stays within 1.5 s and reset otherwise. Theta is raised by
+pass_delta_s - pass_delta_drs_s when DRS is off. The pass completes when the summed hazard
+reaches ln 2, the median time to pass. Until then the car is held at the follow gap.
+
+A pass is positional, with no swap, so no time is conjured. The passed ghost is no longer
+the car ahead until it is more than 2 s ahead, or until we stop or a neutralisation resets
+every fight. `difficulty_dirty_air` takes `dirty_air_s` from the table.
+
+Configs:
+- `configs/sim/world_difficulty.yaml`: `world.yaml` plus `difficulty: circuit`.
+- `configs/sim/belief_difficulty.yaml`: `belief_traffic.yaml` plus `difficulty: asof`.
+
+The agent's `get_model_report` traffic block adds `passing` when the switch is on: the
+difficulty in generic words ("very hard: a faster car usually stays stuck behind for many laps",
+"hard", "average", "easy"), the per-lap pass chance when close (90% band), the pace advantage
+needed, and where it comes from ("earlier races at this track" etc.). It names no circuit.
+
+**DRS trains** (`difficulty_train`). A follower passes on 4.9% of its close laps when the car
+ahead is itself within 1 s of its own car ahead (2,074 laps). It passes on 19.1% when that car
+is free (2,878 laps). At the pooled slope the train threshold is 1.8 s higher (`_train_fit`; the
+as-of version reads earlier races only). With the switch on, a ghost in a train has theta raised by
+shift x (1 - share), and a free ghost has it lowered by shift x share.
+
+**Measured (2026-11-22, calibration races only, nothing adopted).** Base: the adopted default
+world (`world_hybrid.yaml`, traffic off). Race-cluster 95% bootstrap over the 19 calibration
+races.
+
+Whole-field replay (`src/sim/field_replay.py`, leave-one-driver-out fit, as-of pace, k = 0, 10,
+20, 30, 40 pooled), change against the base:
+
+| judge | close-pair order | Spearman | position mae | relative gap s |
+|---|---|---|---|---|
+| base level | 0.667 | 0.886 | 1.42 | 19.8 |
+| traffic (`world.yaml`, one rule) | +0.007 [-0.004, +0.019] | -0.002 | -0.016 | +0.78 [+0.12, +1.31] |
+| difficulty `circuit` | -0.001 [-0.013, +0.014] | -0.002 | +0.007 | +0.78 [+0.13, +1.40] |
+| difficulty `race` | +0.002 [-0.007, +0.013] | -0.003 | +0.014 | +0.71 [+0.07, +1.31] |
+| difficulty `asof` | -0.001 [-0.014, +0.015] | -0.003 | -0.003 | +0.82 [+0.14, +1.48] |
+| `circuit` + table dirty air | +0.004 [-0.007, +0.017] | +0.001 | -0.023 | +0.80 [+0.11, +1.46] |
+| `circuit` + trains | +0.001 [-0.011, +0.016] | -0.002 | -0.009 | +0.62 [-0.06, +1.24] |
+| `asof` + trains | -0.002 [-0.012, +0.011] | -0.001 | -0.008 | +0.54 [-0.12, +1.16] |
+
+By circuit type (judge rate < 0.12 hard: Silverstone, Qatar, Imola, Canada, France; >= 0.18 easy:
+Bahrain, Spain; street: Jeddah, Baku, Canada), close-pair change:
+- `circuit`: hard -0.006, average +0.000, easy +0.002, street +0.011.
+- `circuit` + trains: hard -0.013, average +0.004, easy +0.009, street -0.011.
+- One rule: hard -0.011, average +0.015 [+0.002, +0.037], easy +0.014, street -0.004.
+
+Every interval includes 0 except where marked. No variant helps where passing is hard.
+
+Expert consistency on the dev20 scenarios (469, actual_strategy scored on 428), against each
+judge's own reference (`python -m src.eval.rerun references|baselines --set dev20`):
+
+| judge | mean regret s | p90 | worst | over 20 s | stint the reference ends 5+ laps earlier | change in mean, hard / street |
+|---|---|---|---|---|---|---|
+| default (committed dev20) | 7.02 | 19.5 | 69.2 | 0.096 | 0.086 | |
+| traffic (`world.yaml`) | 7.35 (+0.33 [+0.10, +0.62]) | 20.5 | 68.9 | 0.112 | 0.070 | +0.06 / +0.31 |
+| difficulty `circuit` | 7.36 (+0.34 [+0.09, +0.65]) | 20.6 | 69.0 | 0.110 | 0.075 | +0.25 / +0.23 |
+| difficulty `circuit` + trains | 7.37 (+0.35 [+0.10, +0.64]) | 20.4 | 68.9 | 0.110 | 0.091 | +0.41 / +0.22 |
+| no traffic, `world_edge: history` | 6.23 (-0.79 [-1.74, +0.02]) | 19.2 | 69.2 | 0.079 | 0.086 | -0.77 / -1.79 [-2.91, -1.19] |
+
+At hard circuits the default judge's mean is 7.66 s; Imola 2024 is worst at 17.8 s, with 36%
+over 20 s. With difficulty on, the share of real stints ended 5+ laps early there falls by
+-0.034 [-0.101, +0.018] (Imola 2024: 0.24 to 0.08), but the mean regret does not fall.
+
+Traffic in the judge prices the real strategy's own time in traffic as well as the
+alternatives', so the real plans' regret rises slightly everywhere. The judge's position
+regret for actual_strategy is 0.61 places under both traffic judges.
+
+**Monaco 2024, a diagnostic case** (not in dev20; 25 as-of scenarios sampled into a scratch set
+with the `rerun scenarios` builder, digest `dfb8af57c90c`; never committed as a set). It is
+the one cached non-held-out race where passing is near impossible and the field ran a managed
+pace on HARD for up to 78 laps. Expert consistency of actual_strategy against each judge's
+reference (25 scored):
+
+| judge | mean regret s | median | p90 | worst | over 20 s | reference stops / real stops |
+|---|---|---|---|---|---|---|
+| default (`history_only` edge, no traffic) | 83.6 | 90.2 | 133.8 | 147.6 | 0.88 | 1.16 / 0.32 |
+| traffic, one rule | 81.8 | 86.1 | 134.8 | 145.6 | 0.88 | 1.04 / 0.32 |
+| difficulty `circuit` | 74.5 | 77.1 | 127.3 | 138.7 | 0.84 | 1.00 / 0.32 |
+| difficulty `race` | 75.0 | 77.2 | 128.1 | 138.6 | 0.84 | 1.00 / 0.32 |
+| difficulty `asof` | 81.4 | 85.6 | 134.4 | 143.5 | 0.88 | 1.04 / 0.32 |
+| `circuit` + trains | 74.3 | 75.3 | 129.5 | 135.4 | 0.80 | 1.00 / 0.32 |
+| wear cliff `world_edge: history` | 30.4 | 24.8 | 56.7 | 59.6 | 0.72 | 1.04 / 0.32 |
+| wear cliff `world_edge: race` | 30.4 | 24.8 | 56.7 | 59.6 | 0.72 | 1.04 / 0.32 |
+| wear cliff off | 30.4 | 24.8 | 56.7 | 59.5 | 0.72 | 1.04 / 0.32 |
+| wear cliff off + difficulty `circuit` | 23.2 | 21.3 | 49.8 | 78.7 | 0.52 | 1.00 / 0.32 |
+
+Track position explains a small part: difficulty takes about 9 s off an 84 s regret. Most of the
+gap comes from the tyre-life edge. The history-only prior puts the HARD edge far below the 60-78
+laps the field really ran, so the judge charges a real 18-lap HARD run to the flag about 90 s
+against a stop. The difficulty rule also cannot hold cars at Monaco, because the recorded field
+ran several seconds a lap below the model's free-air pace. A car on fresh tyres is then more than
+the 3.6 s threshold faster than the ghosts, so it gets by.
+
+**The judge's tyre-life edge** (`wear_cliff.world_edge`, an existing switch; judge only, belief
+unchanged). `history` extends the historical edge by the tyre ages this race has laps for
+(hindsight, ledgered). On dev20, against `history_only`:
+- Expert consistency: mean regret -0.79 [-1.74, +0.02] s (7.02 to 6.23), over 20 s 0.096 to
+  0.079, the reference adding a stop the team did not make 0.121 to 0.061. Street circuits
+  -1.79 [-2.91, -1.19]; hard -0.77 [-3.17, +1.22]; Imola 2024 17.8 to 12.5 s.
+- Whole-field close-pair order: -0.014 [-0.032, -0.002]; relative gap -0.37 [-0.82, +0.02] s.
+  `race` gives the same whole-field numbers.
+- References with a stint ending beyond the oldest age raced on that compound: 0.198 to 0.299
+  (by more than 5 laps: 0.070 to 0.107). A raised edge lets plans run up to it.
+- The 25-30-lap SOFT stints at Imola 2024 (SOFT raced 8 laps) appear under both edges, in 72% of
+  that race's references either way. They come from the prior being long there, not from the
+  extension, so the two findings do not conflict.
+
+Per-car fidelity ablation (`python -m src.sim.fidelity ablate --no-hindsight-variants`, base the
+adopted configuration, 19 races, change against the base). `E_real_regret_s` is the new
+expert-consistency row: the judge's time for the real plan less its best panel plan, base 5.88 s.
+
+| factor | close pairs | Spearman | rel gap s | B2 rank rho | B2 regret s | pit-now | E_real_regret_s |
+|---|---|---|---|---|---|---|---|
+| base level | 0.753 | 0.958 | 13.17 | 0.868 | 4.11 | 0.816 | 5.88 |
+| world_traffic | -0.046 [-0.090, +0.003] | -0.010 | -0.41 | -0.009 [-0.015, -0.003] | +0.15 | -0.004 | -0.25 [-0.50, -0.02] |
+| world_difficulty | -0.052 [-0.105, -0.007] | -0.008 | +0.27 | -0.011 [-0.019, -0.004] | +0.26 [+0.09, +0.43] | -0.003 | -0.24 [-0.47, -0.03] |
+| world_difficulty_race | -0.035 [-0.078, +0.006] | -0.014 | +0.11 | -0.012 | +0.26 [+0.06, +0.45] | +0.000 | -0.25 [-0.48, -0.03] |
+| belief_traffic | 0 | 0 | 0 | -0.001 | -0.05 | +0.007 | 0 |
+| belief_difficulty | 0 | 0 | 0 | -0.005 [-0.008, -0.002] | -0.11 [-0.26, +0.02] | +0.009 | 0 |
+| difficulty_both | -0.052 [-0.105, -0.007] | -0.008 | +0.27 | -0.011 | +0.11 | +0.009 | -0.24 |
+| cliff_edge_history (no traffic) | -0.022 [-0.067, +0.006] | +0.003 | -0.38 | -0.003 | -0.40 [-0.95, +0.07] | -0.029 [-0.052, -0.007] | -0.96 [-2.46, +0.07] |
+| cliff_edge_race (no traffic) | -0.022 [-0.067, +0.006] | +0.003 | -0.38 | -0.004 | -0.09 | -0.017 | -1.49 [-3.04, -0.14] |
+
+E by circuit type, difficulty (circuit): hard -0.14, street -0.02, easy -0.31. Cliff edge
+history: hard +0.47, street -0.79, easy -1.11.
+
+**Verdict (selection rule fixed in advance).** No traffic or difficulty variant is an
+adopt-candidate:
+- The per-car close-pair order falls: -0.046 with one rule, -0.052 [-0.105, -0.007] with the
+  circuit difficulty, outside zero.
+- The whole-field order does not move.
+- Plan-ranking agreement with the belief worsens (B2 rank -0.011, regret +0.26 s).
+- Expert consistency moves only in the per-car panel (-0.24 s) and rises slightly against the
+  real reference (+0.34 s).
+- Every switch stays off.
+
+The DRS-train effect and the table are real findings about passing. They do not make the
+judge's order match reality better on these races, where the order error is dominated by pace
+error rather than by who is stuck behind whom.
+
+Compute: a dev20 reference build (469 scenarios) costs 0.81 worker-seconds per scenario for the
+no-traffic judge, against 4.7-5.4 with any traffic judge on this machine. That is about 180 s
+against 1,050-1,220 s per 225 scenarios. The hybrid events make samples differ, so traffic is
+recomputed per sample.
+
 ## Information contract
 
 A policy decides at a snapshot: race R, driver D, after lap L. Let t be the session time at
@@ -861,6 +1106,210 @@ SOFT (8 laps raced, a slightly negative fitted wear from 11 race laps) is planne
 Spain turns one-stop on the proxied HARD (lap-0 stop mode 4 of 7). That is the trade the fidelity
 scorecard measures; (b) is the default until it does.
 
+### Thin wear fits: the judge's guard (`wear_guard`, adopted)
+
+Some of the judge's whole-race wear slopes rest on a handful of laps:
+- 2022 Brazil HARD: 0.160 s/lap from 10 clean rows of one driver, at ages 2-11.
+- 2023 Bahrain MEDIUM: 0.313 from 8 rows.
+- 2024 Imola SOFT: -0.015 from 11 rows of two drivers.
+
+An over-steep HARD at Brazil charges a 42-lap HARD stint about 80 s. That is the regret of
+run_to_flag / one_stop_total at lap 5 there. A negative SOFT at Imola makes 30-lap SOFT stints
+look free.
+
+`SimConfig.wear_guard` (`src/sim/wear_guard.py`) works on the judge's whole-race fit only.
+Thresholds were fixed before measuring:
+- A compound qualifies when it has at least one, but fewer than `min_drivers` 3 drivers or
+  `min_rows` 40 clean race rows.
+- Its wear w (fit sd s) is shrunk by precision toward the historical wear p (sd s_p):
+  w' = (w/s^2 + p/s_p^2) / (1/s^2 + 1/s_p^2).
+- The base moves by (w - w') x the compound's mean fit age, so its mean lap is kept.
+- `scale_sd_by_drivers` also widens s by sqrt(3 / drivers) when fewer than 3 cars ran the compound.
+- A compound with no race rows is the proxy's and is left alone.
+
+p comes from `data/derived/wear_history.csv` (`python -m src.sim.wear_guard build`): the judge's
+own fits (default world, guard off) of 27 non-held-out cached races. `wear_prior` reads it as of
+the race:
+- strictly earlier races only;
+- well-supported fits only (5+ drivers, 60+ rows; no wet race, no 2025 Qatar);
+- wear regressed on the compound's common hardness index;
+- with fewer than 8 such fits, a priori `ROLE_PRIOR` (sd 0.05).
+
+It is registered in `provenance.py` as `wear_history`. The guard is off in `SimConfig` and left out
+of `config_hash` at its default; the eval world turns it on (`config.WORLD_WEAR_GUARD`, adopted
+2026-11-22); with it off, the whole-field replay rows are byte-identical to
+main.
+
+The fits it changes on the calibration races (wear s/lap, guarded; rows / drivers):
+
+| race | compound | fit (sd) | history (sd) | guard | scaled | rows / drivers |
+|---|---|---|---|---|---|---|
+| 2023 Bahrain | MEDIUM | 0.313 (0.068) | 0.063 (0.048) | 0.146 | 0.098 | 8 / 1 |
+| 2022 Brazil | HARD | 0.160 (0.042) | 0.062 (0.050) | 0.119 | 0.093 | 10 / 1 |
+| 2022 Baku | SOFT | 0.129 (0.048) | 0.023 (0.058) | 0.086 | 0.058 | 10 / 1 |
+| 2024 Imola | SOFT | -0.015 (0.067) | 0.042 (0.048) | 0.023 | 0.028 | 11 / 2 |
+| 2021 Austria | SOFT | 0.042 (0.021) | 0.080 (0.050, a priori) | 0.047 | 0.047 | 36 / 4 |
+| 2022 Spain | HARD | 0.166 (0.009) | 0.071 (0.057) | 0.164 | 0.159 | 29 / 1 |
+| 2022 Abu Dhabi | SOFT | 0.178 (0.014) | 0.034 (0.048) | 0.167 | 0.167 | 37 / 3 |
+
+**Measured** (2026-11-22, the 19 calibration races, guard against off; base the adopted default;
+race-cluster 95%).
+
+Per-car fidelity ablation:
+
+| factor | close pairs | rel gap s | B2 rank rho | B2 regret s | pit-now |
+|---|---|---|---|---|---|
+| base level | 0.753 | 13.17 | 0.868 | 4.11 | 0.816 |
+| `wear_guard` | +0.000 [+0.000, +0.000] | +0.015 [+0.001, +0.043] | +0.009 [+0.001, +0.019] | -0.46 [-1.15, -0.00] | +0.014 [+0.000, +0.039] |
+| `wear_guard` + `scale_sd_by_drivers` | +0.000 [+0.000, +0.000] | +0.015 [+0.001, +0.043] | +0.009 [-0.001, +0.021] | -0.56 [-1.31, -0.00] | +0.015 [+0.000, +0.043] |
+
+Whole-field replay (k 0-40): close pairs +0.001 [+0.000, +0.003], relative gap +0.002 s, the
+same for both variants.
+
+dev20 rescore of regret against the judge's own reference. Affected = the 7 races in the table
+above.
+
+| policy | guard, all | guard, affected | scaled, all | scaled, affected |
+|---|---|---|---|---|
+| belief_optimizer | -0.34 [-0.97, +0.01] | -0.91 [-2.55, +0.01] | -0.38 [-1.08, +0.01] | -1.03 [-2.82, +0.00] |
+| run_to_flag | -0.64 [-1.45, +0.02] | -1.70 [-3.49, -0.26] | -0.81 [-1.83, +0.03] | -2.16 [-4.32, -0.18] |
+| one_stop_total | -0.63 [-1.42, +0.02] | -1.69 [-3.46, -0.28] | -0.80 [-1.78, +0.02] | -2.14 [-4.27, -0.26] |
+| actual_strategy (expert consistency) | -0.39 [-1.15, +0.00] | -1.01 [-2.84, +0.00] | -0.44 [-1.29, +0.00] | |
+
+- **Brazil 2022 at lap 5** (run_to_flag / one_stop_total on [SOFT 24, HARD 42]): 79.1 s off, 54.9 s
+  guarded, 43.2 s scaled.
+- **Imola 2024:** actual_strategy 17.8 to 11.6 (11.0 scaled), belief_optimizer -5.7 s. This is
+  the negative SOFT wear fixed.
+- **Expert consistency at hard circuits:** -1.34 [-3.96, +0.00]. Easy and street circuits are level.
+- **References with a stint beyond anything raced:** 0.198 to 0.190.
+- **With the guard off,** every dev20 baseline row (plans, times, references, regrets) is identical
+  to the committed `reports/eval/rerun/dev20/baselines.csv`.
+
+**Reading under the selection rule.** The order measures hold: per-car close pairs are unchanged
+and the whole-field moves +0.001. The relative gap moves +0.015 s. Belief-judge agreement improves:
+rank +0.009, the regret of the belief's favourite -0.46 / -0.56 s with intervals excluding 0, and
+pit-now +0.014. Expert consistency improves.
+
+Both variants are adopt-candidates for the judge. `scale_sd_by_drivers` is the stronger of the two
+pre-stated forms, so it is the recommended one: `wear_guard: {enabled: true, scale_sd_by_drivers: true}`
+in the judge's config. Adopted 2026-11-22 as the eval world's default (`config.WORLD_WEAR_GUARD`;
+the world before: `configs/sim/legacy/world_pre_v3.yaml`). Every reference and result scored on the
+old judge is stale.
+
+### Thin fits in the belief (`belief_guard`, adopted)
+
+The judge's guard protects its whole-race fit. The belief's to_snapshot fit had no counterpart, and early in a race
+it needs one more: a compound with `min_samples` visible clean rows is fitted from them however few cars ran it.
+At 2019 UK lap 10 the HARD rows came from two cars (MAG, GRO), and the belief put the HARD 2.4 s/lap slower than
+the MEDIUM, against 0.09 s in the judge. Replacing every compound's pace and wear with the judge's cut the regret
+of the belief's favourite by 2.9 s, 6.4 s in the first third (sim-gaps attribution, a diagnosis only).
+
+`SimConfig.belief_guard` (`src/sim/belief_guard.py`) works on windowed fits only. It reads the rows visible at the
+snapshot and earlier races. Thresholds were fixed before measuring and are the judge's:
+- A compound qualifies when its visible clean race rows number at least one, but come from fewer than
+  `min_drivers` 3 drivers or number fewer than `min_rows` 40.
+- Its wear w and its level at the mean visible tyre age a, L = base + w a, are each shrunk by precision
+  toward a target:
+  - wear: the compound proxy's wear blend from the well-covered compounds of the same fit (practice step, as-of
+    cross-race step, `proxy.as_of_config`), combined by precision with the as-of historical wear
+    (`wear_guard.wear_prior`, races strictly before this one);
+  - level: the proxy's pace blend from the well-covered compounds (practice step, qualifying, as-of cross-race
+    step) plus the wear target times a.
+- `scale_sd_by_drivers` widens the fit's sds by sqrt(3 / drivers) when fewer than 3 cars ran it.
+- With no well-covered compound only the wear moves, toward the history. A compound with no race rows is the
+  proxy's and is left alone.
+- `mode: wear` moves the wear only and keeps L (the judge's form).
+
+The model report flags a guarded compound `thin_race_fit:<compound>`, and the agent's uncertainty flags say, e.g.,
+"HARD: race laps so far from 2 cars (7 clean laps); its pace and wear are pulled toward the better-covered
+compounds and earlier races". `rank_plans`, `race_picture` and the look-ahead read the same guarded fit.
+
+**Measured** (19 calibration races, the B snapshots, guard on against off, race-cluster 95%).
+
+Forms on main 69a9589 (before the tyre sets; base regret 3.16 s):
+
+| form | regret s | pit-now | early regret | no circuit history | low-wear four |
+|---|---|---|---|---|---|
+| A: 3 drivers or 40 rows, pace and wear | -0.09 [-0.22, +0.05] | +0.007 [+0.002, +0.013] | -0.22 | -0.22 [-0.36, -0.09] | -0.31 [-0.56, -0.05] |
+| B: 3 drivers only, pace and wear | -0.01 [-0.08, +0.05] | +0.001 | -0.06 | -0.04 | -0.10 |
+| wear only (the judge's form), 3 drivers | +0.01 [-0.01, +0.05] | 0.000 | +0.01 | +0.01 | +0.05 |
+
+Form A on 72d2fc5 (tyre sets on; base: rho 0.880, regret 3.47 s, pit-now 0.847, over-stop share 0.095):
+
+| split | regret s | rank rho | pit-now | over-stop share |
+|---|---|---|---|---|
+| all | -0.21 [-0.37, -0.06] | +0.002 [-0.000, +0.005] | +0.004 [+0.001, +0.009] | -0.009 [-0.016, -0.002] |
+| first third | -0.64 [-1.13, -0.22] | +0.007 [+0.002, +0.013] | +0.011 [+0.000, +0.024] | -0.023 [-0.045, -0.003] |
+| mid / late | +0.02 / -0.03 | 0.000 / -0.001 | +0.002 / 0.000 | -0.002 / -0.003 |
+| circuit history yes / no | -0.20 [-0.44, -0.01] / -0.21 [-0.45, -0.02] | +0.003 / +0.002 | +0.006 / +0.003 | -0.010 / -0.008 |
+| low-wear four | -0.19 [-0.48, +0.07] | +0.005 [+0.002, +0.010] | +0.004 | 0.000 |
+
+The judge is unchanged, so its order measures do not move. Future blindness (scorecard B5): pass.
+
+dev20 rescore (72d2fc5, references rebuilt, belief with the guard against without): belief_optimizer 3.34 to
+3.29 s, -0.04 [-0.21, +0.13]; first third -0.04 [-0.51, +0.45]; no circuit history -0.11 [-0.33, +0.04];
+low-wear four -0.25 [-0.81, +0.07]. run_to_flag, one_stop_total and actual_strategy are unchanged (+0.00): the
+rules read the belief's tyre-life edge, not its pace, and actual_strategy is the judge's.
+
+Confirmation on 243bf40 (main bc7b28f, the judge's as-of edge, plus the adoption;
+`reports/calibration/fidelity/belief-guard-243bf40/`, all 19 calibration races, none failed, future blindness
+pass). SIM_CODE_VERSION `a2ede471f2ed` (before `b239243dc1ea`); belief config_hash `b9891459af63` (before
+`aaf95a09bc50`); the default world unchanged, `9b98afd55974`.
+
+| measure | before (guard off) | after | change, race-cluster 95% |
+|---|---|---|---|
+| close pairs / Spearman / relative gap | 0.747 / 0.960 / 7.60 s | the same | 0 |
+| plan-rank agreement | 0.884 | 0.886 | +0.002 [-0.000, +0.005] |
+| judge-regret of the belief's favourite | 3.14 s | 2.93 s | -0.21 [-0.37, -0.06] |
+| first third | 7.15 s | 6.51 s | -0.64 [-1.13, -0.22] |
+| pit-now agreement | 0.861 | 0.865 | +0.004 [+0.001, +0.009] |
+| over-stop share | 0.097 | 0.088 | -0.009 [-0.016, -0.002] |
+| E_real_regret_s | 4.77 s | 4.77 s | 0 |
+| belief replay close pairs | 0.667 | 0.666 | |
+
+Adopted 2026-11-22 (form A) in `configs/sim/belief.yaml` and its mirrors; the belief before:
+`configs/sim/legacy/belief_pre_belief_guard.yaml`; the ablation toggle `belief_guard_off`.
+
+### The judge's edge as of the snapshot (`world_edge: as_of`, off by default)
+
+The belief's tyre-life edge is the historical prior extended by the tyre ages seen so far: the
+visible rows at the snapshot. The judge's default (`history_only`) is the prior alone, so late in a
+race the judge charges stint lengths the belief has already watched cars run. `history` uses the
+whole race's ages, which is the race's future.
+
+`as_of` is the middle option. The edge is the `history_only` edge raised to the oldest age run on
+that compound in the rows visible at the scored snapshot: the same session-time cut as the belief
+(`Simulator.cut_time`), race laps only (`cliff.as_of_world_cliffs`, keyed per snapshot moment in
+`engine.cliffs_for`). The fidelity ledger tags it "this race, to snapshot". At lap 0 it is
+`history_only`, so whole-race replays from the start are unchanged by construction.
+
+Measured 2026-11-22 against `history_only`, main 69a9589's default judge, 19 calibration races,
+race-cluster 95%:
+
+| measure | `history_only` | `as_of` change |
+|---|---|---|
+| per-car close pairs / Spearman / relative gap (whole-race replays) | 0.747 / 0.960 / 7.60 s | 0 / 0 / 0 (identical) |
+| whole-field close pairs, all k (from 10, 20, 30, 40 too) | 0.691 | -0.001 [-0.006, +0.004] (k20 -0.003, k40 +0.014 [+0.003, +0.028]) |
+| whole-field relative gap | 15.00 s | -0.045 [-0.120, +0.002] |
+| B2 rank rho | 0.872 | +0.004 [+0.001, +0.007] |
+| B2 regret of the belief's favourite, overall / early third / mid / late | 3.16 / 6.36 / 2.03 / 1.19 s | -0.33 [-0.75, -0.03] / 0.00 / -0.19 [-0.36, -0.05] / -0.84 [-2.00, -0.04] |
+| pit-now agreement, overall / late | 0.827 / 0.870 | +0.015 [-0.001, +0.042] / +0.050 [+0.008, +0.121] |
+| E_real_regret_s / over 20 s | 5.59 s / 0.056 | -0.44 [-1.12, -0.05] / -0.010 [-0.026, +0.001] |
+| judge's best panel plan adds a stop the team did not make | 0.110 | -0.021 [-0.055, -0.001] |
+| dev20 actual_strategy regret | 6.43 s | -0.32 [-0.71, -0.01] (over 20 s 0.070 level; reference adds a stop 0.126 to 0.103) |
+| dev20 belief_optimizer / run_to_flag / one_stop_total | 3.04 / 9.06 / 9.82 s | -0.30 [-0.72, -0.04] / -0.02 / -0.03 |
+| Monaco 2024 (scratch as-of set) actual_strategy | 83.3 s | 77.9 s (lap 45: 146 to 125; lap 60: 84 to 67; laps 5-35 unchanged) |
+
+Under the selection rule, `as_of` is an adopt-candidate for the judge:
+- Agreement improves: rank, regret and late pit-now all improve, and nothing gets worse in the
+  early third.
+- Expert consistency improves.
+- No order measure gets worse: the whole-race replays are identical, and the mid-race whole-field
+  replay is level overall, improved at k40 and -0.003 at k20 inside its interval.
+- It reads nothing after the decision moment.
+
+Monaco improves only late, because the real stints there outlast every edge until the very end.
+
 ### Fuel identification (measured, not adopted)
 
 The fuel slope's stated interval was far too tight: the config prior (-0.045 s/lap, tau 0.008)
@@ -1030,6 +1479,308 @@ block uses 60 draws and 1 driver, which reduces the Monte Carlo noise in the rep
 - **Planning on the point estimate stays off.** Its replay order is the best of all (0.653, no draw
   noise and no truncation bias), but the planner's ranking agreement and regret are the worst (0.830,
   6.76 s). The draws help ranking here, unlike in the design study (D3, with oracle tyre-life edges).
+
+### Belief priors: where the belief over-stops, and the tyre-life edge at its point
+
+**Where.** On the dev20 development results the belief's plans beat the two fixed rules by about
+6 s overall, but by less at circuits with no earlier race in the tyre history, and the rules win
+at four low-wear races (2019 Britain, 2021 Austria, 2021 Abu Dhabi, 2022 Azerbaijan). The fidelity
+scorecard on the 19 calibration races (adopted configuration at ebde038; 6 drivers, a snapshot
+every 5 laps, 20 draws) locates it. Over the plan panel, the belief's favourite has more stops than
+the judge's favourite at 14% of snapshots and fewer at 8%. Early in the race (the first third) the
+gap is wider: 27% against 8%, a mean of 1.68 stops against 1.49, and a judge-regret of 8.9 s
+against 2.4 s mid-race and 1.2 s late. The over-stopping snapshots carry 37% of all the
+judge-regret. Their commonest form is two stops where the judge's favourite is one long HARD stint.
+
+**Why.** A diagnosis, not a policy input: at the same snapshots, one belief component at a time
+was replaced by the judge's (hindsight), and the judge-regret of the belief's favourite was
+measured again (race-cluster 95% intervals):
+
+| belief component replaced by the judge's | regret, all (4.11 s) | early (8.92 s) | no circuit history (4.79 s) | low-wear four (5.19 s) |
+|---|---|---|---|---|
+| fresh pace and wear of every compound | -2.87 [-3.73, -2.08] | -6.38 [-8.89, -4.12] | -3.19 [-4.10, -2.32] | -3.75 [-4.77, -2.67] |
+| the same, HARD only | -0.82 [-1.72, +0.10] | -2.48 [-4.95, -0.62] | -1.19 [-2.42, -0.04] | -1.10 [-2.51, -0.25] |
+| fresh pace only (gaps to MEDIUM) | +0.08 [-0.85, +1.09] | -0.55 [-2.37, +1.34] | -0.17 [-1.44, +1.14] | -1.98 [-2.56, -1.32] |
+| wear only | +0.30 [-1.45, +2.37] | -0.12 [-3.78, +3.64] | -0.04 [-2.34, +3.12] | +2.77 [-2.46, +8.98] |
+| the tyre-life edges (the judge's: the prior's point) | -0.59 [-1.10, -0.18] | -0.53 [-1.02, -0.12] | -0.91 [-1.68, -0.24] | -0.64 [-1.24, -0.12] |
+| the edge not drawn (max(seen so far, prior)) | -0.20 [-0.38, -0.06] | -0.44 [-0.92, -0.05] | -0.30 [-0.58, -0.05] | -0.45 [-0.88, -0.11] |
+| no parameter draws or lap noise (point estimate) | +0.41 [-0.36, +1.31] | +0.91 [-1.21, +3.23] | +0.51 [-0.74, +1.87] | -0.22 [-0.90, +0.25] |
+
+Most of the regret is the belief's pace and wear per compound early in the race, and only as a
+pair: the fitted intercept and slope trade off against each other, so replacing either alone does
+nothing. At lap 0 the belief is the practice prior. Practice long runs on a compound come from one
+or two cars, in a fit without driver or session terms, and the HARD comes out 0.6 s/lap slower
+than MEDIUM fresh against the judge's race fit (2019 Britain: 2.1 s against 0.1 s). At lap 10 the
+HARD rows come from the few cars that started on it, often slow ones (Britain 2019: two Haas cars,
+whose pace is then taken for the HARD's, +2.4 s). The tyre-life prior is not short on average
+against the observed edge (the 0.9 quantile of stint ends: +0.9 to +2.6 laps by compound). The
+field's ages seen so far are already a lower bound on the belief's edge, and by lap 20 they rarely
+pass it. The edge's spread does matter, though. The cost past the edge is convex, so averaging it
+over drawn edges raises the expected cost of every long stint (Jensen's inequality): it penalises
+exactly the long one-stop the judge prefers.
+
+**The switch** `belief_cliff_edge` (SimConfig, left out of config_hash at its default): `draw`
+(the default, as before) draws each sample's edge, max(seen so far, prior + sd z); `point` takes
+max(seen so far, prior) in every sample, the edge the judge's `history_only` prior uses, with the
+same lower bound. The tools still report the prior and its sd. Measured on the fidelity scorecard,
+point minus draw, race-cluster 95% intervals (* excludes 0):
+
+| split | snapshots | rank rho | regret s | pit-now agreement | over-stop share |
+|---|---|---|---|---|---|
+| all | 1225 | 0.868, +0.005 [+0.001, +0.010]* | 4.11, -0.20 [-0.38, -0.06]* | 0.816, +0.003 [-0.009, +0.017] | 0.142, -0.008 [-0.019, +0.001] |
+| laps 0 to a third | 392 | 0.814, +0.014 [+0.005, +0.028]* | 8.92, -0.44 [-0.92, -0.05]* | 0.719, +0.008 [-0.027, +0.046] | 0.265, -0.010 [-0.037, +0.010] |
+| middle third | 461 | 0.892, +0.000 [-0.004, +0.005] | 2.40, -0.15 [-0.42, +0.04] | 0.857, +0.000 [-0.012, +0.014] | 0.124, -0.011 [-0.026, +0.000] |
+| last third | 372 | 0.896, +0.000 [+0.000, +0.001]* | 1.16, -0.03 [-0.10, +0.01] | 0.867, +0.003 [-0.005, +0.014] | 0.035, -0.003 [-0.009, +0.000] |
+| earlier race at the circuit (8 races) | 499 | 0.892, +0.003 [+0.002, +0.005]* | 3.12, -0.07 [-0.16, -0.00]* | 0.841, +0.004 [+0.000, +0.012] | 0.134, -0.010 [-0.022, +0.000] |
+| none (11 races) | 726 | 0.852, +0.006 [+0.000, +0.014]* | 4.79, -0.30 [-0.58, -0.05]* | 0.799, +0.003 [-0.017, +0.025] | 0.147, -0.007 [-0.024, +0.006] |
+| the low-wear four | 246 | 0.796, +0.013 [-0.002, +0.034] | 5.19, -0.45 [-0.88, -0.11]* | 0.800, -0.004 [-0.024, +0.013] | 0.130, +0.000 [-0.023, +0.025] |
+
+The judge, the tyre-life component rows and the order measures are unchanged (the judge does not
+read the switch; the belief's point edge is the same number). Predictive close-pair order 0.664 ->
+0.667; the plans' 90% interval coverage of the judge 0.991 -> 0.988.
+
+The decision-level check: the belief optimizer on the committed dev20 scenarios, re-scored with no
+model call (the `baselines` stage into a scratch directory, the references rebuilt at this code;
+with the switch off every baseline row is identical to the committed `baselines.csv`). Mean
+judge-regret, point minus draw, race-cluster 95% intervals; the rule baselines do not move (they
+plan on the point edge already):
+
+| split | scenarios | draw | point | change |
+|---|---|---|---|---|
+| all | 469 | 3.82 | 3.63 | -0.19 [-0.43, +0.01] |
+| laps 0 to a third | 167 | 7.72 | 7.24 | -0.48 [-1.12, +0.06] |
+| middle third | 153 | 2.58 | 2.54 | -0.04 [-0.34, +0.25] |
+| last third | 149 | 0.71 | 0.70 | -0.01 [-0.05, +0.00] |
+| earlier race at the circuit | 194 | 3.35 | 3.25 | -0.10 [-0.36, +0.07] |
+| none | 275 | 4.14 | 3.89 | -0.25 [-0.61, +0.07] |
+| the low-wear four | 100 | 6.07 | 5.54 | -0.52 [-0.57, -0.47] |
+
+At the low-wear four `run_to_flag` scores 3.22 s, so the rules still win there, by 2.3 s instead of
+2.9 s. The switch removes one cause of the over-stopping, not the main one: that is the pace and
+wear of the compounds early in the race (the table above), for which no as-of fix tested so far
+holds up (2026-11-22 notes, "sim gaps").
+
+**Decision.** An adopt-candidate by the scorecard rule (plan-ranking agreement and judge-regret
+improve with race-cluster intervals that exclude 0, pit-now agreement holds). Adopted 2026-11-22:
+`belief_cliff_edge: point` in `configs/sim/belief.yaml` and its mirrors (the belief before:
+`configs/sim/legacy/belief_pre_v3.yaml`).
+
+### Pre-race publications: circuit ratings and strategy guidance (`SimConfig.prerace`, off)
+
+The tyre supplier publishes two things before each race that a strategist reads and the simulator did
+not: the circuit ratings of its race-week preview (traction, braking, lateral, tyre stress, asphalt
+grip and abrasion, track evolution, downforce, 1-5) and its strategy guidance after qualifying (the
+strategies it expects to be fastest: stops, compounds, sometimes pit-window laps). Both are in
+`data/derived/circuit_ratings.csv` and `prerace_guidance.csv` (sources and coverage in
+`data/derived/README.md`), keyed by race id and read by `src/sim/prerace.py`. Like the tyre
+nominations they are public before the race: `src/sim/provenance.py` registers them as kind
+`pre_race` (records no race's data, reads none); every fit that uses them reads earlier races only.
+
+Switches, all off by default (left out of `config_hash` at their defaults); the judge never reads them:
+
+| switch | what it does |
+|---|---|
+| `prerace.stops_prior_s: L` | the belief's ranking of plans (`optimizer_bridge.optimize_batch`: the look-ahead, `belief_optimizer`, the continuations of a decision, `rank_plans`) adds L s per stop by which a plan's stops left differ from the guidance's (the first expected strategy's stop count less the stops made). Reported times never change; a race with no guidance stop count ranks as before |
+| `prerace.tyre_life_guidance: windows\|stated` | the guidance's implied stint lengths (stated pit windows; `stated` also splits the fastest strategy's compound sequence by role life weights 1 : 0.75 : 0.56) combined by precision with the historical tyre-life prior, bias and sd from earlier races |
+| `prerace.tyre_life_ratings: replace\|supplement` | the ratings (abrasion, tyre stress, lateral, traction) as covariates of the tyre-life prior, a ridge fit on earlier races, instead of / on top of the nominated-trio severity shift |
+| `AGENT_PRERACE=on` | `race_picture` carries `pre_race`: the ratings in words and the expected strategies (no race, circuit, season or driver named), and the v2free prompt one sentence on it |
+
+**Measured** (19 calibration races, main 3ed475f defaults as base; race-cluster 95% intervals; `*`
+excludes 0). The stop-count values L = 2 and 5 s were stated before measuring, with the rule "the
+larger gain in the first third whose low-wear and overall intervals do not get worse".
+
+Scorecard, belief favourite's judge-regret (s) and over-stop share (favourite has more stops than the
+judge's), change against the base (the prior re-ranks the scorecard's plan panel with the same rule):
+
+| split | base regret | L = 2 | L = 5 | base over-stop | L = 2 | L = 5 |
+|---|---|---|---|---|---|---|
+| all (1225) | 3.36 | -0.27 [-0.50, -0.06]* | -0.43 [-0.84, -0.06]* | 0.140 | -0.021* | -0.028 [-0.067, +0.003] |
+| first third (392) | 7.02 | -0.29 [-0.71, +0.03] | -0.58 [-1.18, -0.07]* | 0.263 | -0.036* | -0.048 [-0.112, +0.011] |
+| no circuit history (726) | 4.09 | -0.34 [-0.70, -0.01]* | -0.68 [-1.30, -0.10]* | 0.140 | -0.021* | -0.034 |
+| low-wear four (246) | 4.62 | +0.00 [-0.00, +0.02] | -0.14 [-0.51, +0.15] | 0.130 | -0.008 | -0.004 |
+
+Same favourite as the judge +0.024* / +0.038*, pit-now agreement +0.020* / +0.026*; plan-rank
+correlation is unchanged (the prior moves the favourite, not the belief's times). By the stated rule
+L = 5.
+
+dev20 `belief_optimizer` (469 scenarios, the switch in the look-ahead's own search), judge-regret
+change against the base: L = 2 -0.19 [-0.50, +0.08], first third -0.33 [-1.10, +0.31], low-wear four
+-0.30 [-0.60, +0.00]; L = 5 +0.02 [-0.51, +0.65], first third +0.13 [-1.07, +1.43]. The full search
+does not confirm the panel's gain at L = 5: over the whole plan space a strong prior also pulls to
+badly timed plans of the expected stop count. Against the rule baselines the look-ahead stays ahead
+overall (base: -5.56 s against `run_to_flag`) and behind at the low-wear four (+1.95 base, +1.65 at
+L = 2, +1.73 at L = 5).
+
+Live agent (v2free, 100 dev20 scenarios, 70 at laps 0-15; judge regret in s; race:driver cluster
+intervals):
+
+| arm | agent | look-ahead | agent - look-ahead |
+|---|---|---|---|
+| prior off, `AGENT_PRERACE` off | 5.87 | 5.91 | -0.03 [-0.14, +0.05] |
+| prior off, block on | 5.91 | 5.91 | +0.00 [-0.10, +0.07] |
+| L = 5, block off | 5.92 | 5.72 | +0.20 [-0.02, +0.50] |
+| L = 5, block on | 6.03 | 5.72 | +0.32 [-0.11, +0.85] |
+
+Block on minus off: +0.04 [-0.01, +0.08] with the prior off (laps 0-15 +0.075 [+0.025, +0.130],
+worse), +0.11 [-0.25, +0.57] with it on. The model cites the block in 1 to 4 departures of 100. The
+guidance as text adds nothing measurable, with or without the prior in the look-ahead. With the
+prior on, the model gives back the look-ahead's gain: `rank_plans` shows plans faster in time below
+the prior-ranked plan 1, and the model departs toward them.
+
+**Decision (2026-11-22).** Not adopted for the rerun. `prerace.stops_prior_s` stays 0 and
+`AGENT_PRERACE` stays off. Both remain switches, and the tables stay in the repo. The scorecard's
+gain at L = 5 does not carry to the look-ahead's full search on dev20, and the agent gives back
+what remains.
+
+Tested and not adopted (no interval excludes 0 in the useful direction):
+- tyre-life prior against each race's observed edge (63 observations, as of each race; base MAE 6.96
+  laps): ratings replacing the trio shift +0.43 [-0.99, +1.73]; ratings supplementing it -0.03
+  [-0.92, +0.87]; guidance windows -0.39 [-1.14, +0.09]; guidance stated -0.24 [-1.16, +0.45];
+- the belief's lap-0 and lap-10 wear and HARD/SOFT-vs-MEDIUM gaps against the race's own, corrected by
+  an as-of ridge on the ratings, the trio hardness or the track temperature at the snapshot: no
+  improvement; ratings worsen the SOFT gap at lap 0 (+0.17 s [+0.02, +0.32]) and track temperature at
+  lap 10 (+0.18 [+0.04, +0.35]);
+- `tyre_life_guidance: stated` in the scorecard: the lap-0 edge's error against the observed edge
+  falls (MAE 5.81 -> 5.62 laps), but the favourite's judge-regret rises: +0.09 [+0.03, +0.17]*, first
+  third +0.20 [+0.03, +0.39]*. Rejected.
+
+### Tyre sets at the snapshot (`SimConfig.tyre_inventory`, adopted)
+
+Before this switch every snapshot of the eval and the scorecard carried `sets_available = None`, and
+both simulators ran each later stint on a NEW set. In the calibration races, a later stint starts on
+a used set:
+
+| compound | later stints on a used set | median age |
+|---|---|---|
+| SOFT | 66% | 4 laps |
+| MEDIUM | 19% | 3 laps |
+| HARD | 11% | 2 laps |
+
+Under the inventory below, the belief's favourite needed a new set the driver no longer held at
+34.8% of the scorecard snapshots and the judge's at 31.3%; a set of a compound with none left at
+0.7% and 0.2%. The tyre sets were adopted in both simulators on 2026-11-22, for the rerun.
+
+**The inventory.** With the switch on, `src/sim/tyre_inventory.py` gives each snapshot the driver's
+sets left at that moment, and the existing machinery applies it (`tyre_sets.weekend_sets`,
+`rules.inventory`, `Snapshot.sets_available`).
+
+- **Allocation.**
+  - From 2020: 2 HARD, 3 MEDIUM and 8 SOFT.
+  - On a sprint weekend: 2 HARD, 4 MEDIUM and 6 SOFT.
+  - 2019: each driver's allocation was his team's choice and the cache does not hold it. A 2019 race
+    therefore takes 13 sets of each compound. It is unconstrained on new sets, but the used sets its
+    sessions show are held at their recorded ages.
+- **Less:**
+  - the sets opened in practice, the sprint and qualifying, each kept at the laps it has run (a set
+    used for a few qualifying laps is held at that age);
+  - the sets fitted in the race up to the snapshot, from the race laps completed by the end of the
+    driver's lap k (`data.visible_rows` on the session times).
+- **Approximations, both toward allowing a set:**
+  - Sets handed back after practice are not modelled: every opened set is kept as a used set.
+  - A used set that matches no held set is not counted against the allocation's unseen new sets,
+    because it may be one set counted twice.
+- **Information.** Every source is from before the race or is a race lap completed by the snapshot,
+  so the inventory is as of the snapshot.
+  - The judge reads the same inventory as the belief at each snapshot (ledger entry
+    `tyre_inventory`, tag "this race, to snapshot").
+  - The judge's whole-race replays run each real stint at its recorded age, as they did before.
+  - `tests/test_future_blindness.py` checks that the sets do not move when the race after the moment
+    is changed or cut.
+
+**Effect on a plan.**
+
+- **The rule.** A later stint takes the best set of its compound left: a new one while one remains,
+  else the least used. A used set starts at its laps run and carries the wear and tyre-life cost of
+  that age.
+  - A stint naming a used age (a recorded strategy) takes that set, else the nearest held one, or
+    refits a set this plan took off earlier at its age then.
+  - A plan that needs a compound with no set left is infeasible.
+- **Where the rule applies.** The rule is the same in every path a plan takes:
+  - the engine (`rules.assign_sets`; `Simulator.compare`'s pit action);
+  - the look-ahead and the continuations (`optimizer_bridge.to_contract`: `belief_optimizer`,
+    `decisions.to_plan`, `kept_plan`, `named_plan`);
+  - `rank_plans` and `evaluate_plan`;
+  - the submission check.
+- **Where the snapshot is filled.** The snapshot gets its sets where the reference, the policies and
+  the scorecard read it (`score.score_scenario`, `reference.compute_reference`,
+  `fidelity.section_b`), so what a policy is shown is what is scored.
+- **The agent.**
+  - `race_picture` gains `sets_left`: per compound, the new sets held and the ages of the used ones.
+  - The v2free prompt gains one sentence: sets are limited, and a used set starts at its age.
+
+**The rule baselines.**
+
+| baseline | what it does under the inventory |
+|---|---|
+| `run_to_flag` | Already keeps only plans that pass every rule on the belief, the inventory included, so it takes its next compound in order. |
+| `one_stop_total` | Before the first stop: `fixed_one_stop`. After it: `run_to_flag`. |
+| `fixed_one_stop`, `fixed_two_stop`, `greedy_crossover` | Plan as before and take the best set of each named compound. When a compound they name has no set left, they are unavailable for that scenario, with the stated reason "No tyre set for the rule's plan: ...". |
+| `actual_strategy` | Replays the recorded strategy with each later stint at its recorded set's age (`data.race_stints`), so the inventory matches the real set, or refits it. A recorded strategy the inventory still cannot fit is unavailable, with the reason. |
+
+**Real strategies against the inventory.** At the race start, the 601 later real stints of the 324
+finishers of the 19 calibration races:
+
+- 574 find their exact set;
+- 27 (4.5%) take the nearest held set of the compound;
+- none is infeasible.
+
+The 27 substitutions:
+
+| where | stints | why |
+|---|---|---|
+| 2022 Austria (sprint weekend) | 7 MEDIUM | the race fitted a new MEDIUM the estimate no longer holds |
+| 2022 Brazil (sprint weekend) | 8 SOFT, 1 MEDIUM | the same: 7 new sets, 2 used ones |
+| 2023 Bahrain | 1 SOFT | a new set the estimate no longer holds |
+| ten other stints at seven races | 10 | a used set whose recorded age is not held; the nearest held age differs by 1 to 25 laps |
+
+At the two sprint weekends the sessions show more sets than the allocation (a set counted twice in
+the timing data), so the new sets left come out short.
+
+One of the ten is 2023 Spain LEC's HARD at 25: a set taken off earlier in the race and refitted. A
+plan that took that set off can refit it, so `actual_strategy` plays it exactly.
+
+**Measured on the 19 calibration races, switch off against on** (`python -m src.sim.fidelity run`,
+paired on 1225 snapshots, race-cluster 95%; on: the adopted default at 3881500; off: the main of
+2026-11-22 with the SC queue):
+
+| measure | off | on | change |
+|---|---|---|---|
+| judge close pairs | 0.747 | 0.747 | 0 (the judge's whole-race replays are untouched) |
+| judge relative gap | 7.60 s | 7.60 s | 0 |
+| plan-rank agreement | 0.872 | 0.880 | +0.008 [-0.004, +0.020]; first third +0.015 [+0.002, +0.028] |
+| favourite's judge-regret | 3.16 s | 3.47 s | +0.31 [-0.25, +1.09]; first third +0.79 [-0.41, +2.26]; no history +0.56; low-wear four +0.37 |
+| pit-now agreement | 0.827 | 0.847 | +0.020 [-0.007, +0.048]; low-wear four +0.033 [+0.013, +0.051] |
+| over-stop share | 0.120 | 0.095 | -0.025 [-0.059, +0.001] |
+| E_real_regret_s | 5.59 s | 5.21 s | |
+
+**dev20 baselines rescore** (`src.eval.rerun baselines`, references rebuilt; off: the legacy pair,
+on: the adopted default at 3881500). Each side's regret is against its own judge's reference.
+Change in judge-regret, race-cluster 95%:
+
+| policy | all | first third | low-wear four |
+|---|---|---|---|
+| `belief_optimizer` | 3.04 -> 3.34 s, +0.30 [-0.32, +1.05] | +0.62 [-0.52, +2.04] | -0.21 [-0.61, +0.06] |
+| `run_to_flag` | 9.06 -> 8.28 s, -0.78 [-1.36, -0.29] | -1.13 [-2.01, -0.32] | -0.21 [-0.47, +0.02] |
+| `one_stop_total` | 9.82 -> 9.09 s, -0.73 [-1.23, -0.30] | -1.01 [-1.70, -0.42] | -0.19 [-0.47, +0.01] |
+| `actual_strategy` | 6.43 -> 6.86 s, +0.43 [-0.26, +1.20] | +0.50 [-0.76, +1.98] | -0.24 [-0.58, +0.12] |
+| `fixed_one_stop` | 13.64 -> 14.57 s, +0.93 [-0.30, +2.24] | +0.67 | +1.88 [-0.05, +5.61] |
+| `fixed_two_stop` | 22.73 -> 26.49 s, +3.76 [+2.19, +5.62] | +5.45 [+2.51, +8.69] | +2.75 [+0.27, +7.39] |
+| `greedy_crossover` (80 rows) | 84.96 -> 111.46 s, +26.5 [+14.1, +42.6] | +29.9 | +19.5 |
+
+Every `actual_strategy` row the off side scores, the on side scores (428 of 469; the 41 others are
+unavailable on both sides for the same reasons as before).
+
+The inventory makes two baselines unavailable, both because a named compound has no set left:
+
+- `fixed_one_stop`: 2 more rows ("No tyre set for the rule's plan: ... no HARD set left");
+- `fixed_two_stop`: 31 more rows.
+
+References that use a proxied compound: 15 of the 469 scenarios off, 22 on.
+
+**Where the regret change comes from.** One race carries it: 2021 Spain, +414 s of the +381 s total.
+Nobody raced HARD there, so both simulators price HARD by proxy. Once the MEDIUMs left are used sets,
+the judge moves to the proxied HARD and the belief does not. This is not special-cased (see the
+limitation under "Limitations").
 
 ## Proxied compounds
 
@@ -1518,6 +2269,173 @@ with neither the status line nor repeat handling, 31 with the status line and re
 repeats, and 27 with the status line and cached repeats, while input
 tokens per episode went 53k, 63k, 85k. The decisions barely changed. The grace turns are
 what guarantee a submission.
+
+### Agent free choice (v2free, the default)
+
+`AGENT_PROTOCOL` = `v2free` (the default since 2026-11-22) | `v2` (copy plan 1, below) | `v1`.
+The agent gets the simulator's look-ahead and the full picture and makes the call; the ranking is
+presented as the simulator's best estimate, not the answer.
+
+- **Tools.** v2's (`rank_plans`, `evaluate_plan`, `estimate_tyre_degradation`, `estimate_pit_loss`)
+  plus `race_picture` (`agent_tools.race_picture`): position, gaps, laps left, track status and how
+  long a neutralisation has lasted, the pit window, the stints so far, the current set and its last
+  lap times; the set's observed wear (fuel-corrected lap time on tyre age over its clean laps)
+  against the model's value and sd; the cars around (position, gap, compound, tyre age, stops so
+  far); the cars within the pit loss behind and the rejoin position a stop now implies, from the
+  gaps; per compound the race laps behind the fit, the longest run seen, the field's observed wear
+  against the model's, the base pace sd, how a compound with no race laps is priced, and the
+  tyre-life estimate with its sd and source. Everything comes from the snapshot and the laps
+  visible at its moment (`Simulator.window_rows`, cut by session time), the belief fit and its
+  report; the cars are the snapshot's labels. It is a compared surface of the future-blindness
+  harness.
+- **Any plan.** A submission may name its whole plan (`plan`, [[compound, laps], ...]), which the
+  scorer plays exactly (`eval.decisions.named_plan`, its later sets drawn from the inventory as any
+  baseline plan's); it must agree with the decision (a PIT's first stint is 1 lap, a STAY_OUT k's at
+  least k + 1) and with `compound` and `first_stop_lap` when given, use at most the stop limit and
+  modelled compounds, and pass the rules; anything else is refused with the cause. `first_stop_lap`
+  and the bare decision work as under v2. v1 and v2 drop a `plan` they were never offered.
+- **Prompt.** What the judge scores (the car's race time over the remaining laps); the look-ahead
+  can be wrong where it flags a weak estimate or where the race so far contradicts it; the choice is
+  any plan; one line of evidence, and when the plan is not plan 1, what in the picture made the
+  departure.
+- **Checks.** The scorer's own (a submission is accepted only if it can be scored), the named-stop
+  and named-plan refusals with the fix and the last-turn fallback, and one contradiction check: a
+  submission whose immediate action's best plan the latest `rank_plans` reading puts behind the
+  other action's in more than 80% of draws is shown that reading once, and the next submission is
+  final. A named plan or first stop that a `rank_plans` or `evaluate_plan` reading put behind plan 1
+  in more than 80% of draws gets the same once, with the sign said in words (a positive gap is
+  slower). Leaving plan 1 is not by itself held.
+- **Candidates.** Under v2free `rank_plans` shows the best plan of each strategy family (stops left
+  and compound sequence), at most 8 and none more than 25 s behind plan 1, plus the best PIT-now
+  plan, instead of v2's top four shapes. With no model calls over the 469 dev20 scenarios, the
+  judge's best plan is among the candidates in 46% (top 4 by time: 46%; laps 0-15: 8% against 5%),
+  a plan within 0.5 s of it in 61% (58%; laps 0-15: 19% against 15%), and always picking the
+  judge's best candidate would gain 2.19 s against plan 1 (top 4: 1.46 s).
+
+**Headroom over the look-ahead, no model calls (469 dev20 scenarios, SIM_CODE_VERSION 61ec117c6e7b).**
+Picking the judge's best of the look-ahead's top 4 with hindsight would cut the judge regret from
+3.82 s to 2.35 s (laps 0-15: 7.71 to 5.34; mid: 2.32 to 1.19; late: 0.93 to 0.17), but early in the
+race the judge's best plan is among them in 5% of scenarios. No rule a harness could apply found
+that room: preferring an unflagged plan within 1 s, 2 s or the 90% gap interval when plan 1 is
+flagged changed the regret by +0.003, −0.018 and −0.016 s; preferring the fewest stops within 1 s,
+2 s or the interval by −0.021, +0.023 and −0.142 s (cluster CI −0.465, +0.209); and the plan with
+the least worst-case gap over the belief's own stress set (pace, wear and tyre-life edge ±1 sd per
+compound) cost +0.777 s (+0.446, +1.156). Where a top-4 plan beats plan 1 by the judge by more than
+0.5 s (120 scenarios), the robust plan was that plan in 2.
+
+**Development check (103 green dev20 scenarios, the v2 check sample; v2free at 7c31d5b against v2,
+--jobs 8 each).**
+
+| | v2 (copy plan 1) | v2free |
+| --- | --- | --- |
+| valid / voluntary | 103 / 102 | 103 / 102 |
+| judge regret mean / median / p90 (s) | 3.66 / 0.52 / 12.58 | 3.78 / 0.52 / 12.93 |
+| agent minus belief_optimizer (s, cluster CI) | 0.000 | +0.116 (−0.093, +0.476) |
+| plan / action agreement with the optimizer | 103 / 103 | 90 / 102 |
+| departures: helped / hurt / same (0.05 s) | 0 | 7 / 3 / 3, net +11.9 s |
+| worst departure (s) | 0 | +16.45 |
+| calls per episode; tokens in / out | 8.3; 24.8k / 371 | 7.4; 22.7k / 318 |
+| latency mean / median (s) | 18.3 / 17.7 | 12.6 / 12.0 |
+
+By stated reason, the check's departures were observed wear against the model 11 (−0.40 s each,
+6 helped, 2 hurt), field evidence on a compound 1 (−0.16), and a neutralisation 1 (+16.45: the model
+read gap_s +11.1 as faster and confirmed the plan when the check showed it the reading). On the
+design sample (100) the same code had 20 departures, 7 helped and 11 hurt (+0.108 s,
+−0.009 to +0.285). After the sign wording (d1dee25) the design sample gave +0.058 s (+0.009, +0.127),
+19 departures, 4 helped and 12 hurt, and the one +16.45 s check episode, rerun alone afterwards,
+kept plan 1. An earlier v2free with v2's top-four candidates (8540ba5) gave +0.040 s (−0.003,
++0.089) on the check, 21 departures, 6 helped and 12 hurt.
+
+### Agent protocol v2
+
+`AGENT_PROTOCOL` = `v2` (the default from #130 until v2free) | `v1` (the prompt, tool surface, loop and
+submission handling before it, unchanged; rerun provenance records the protocol in effect). v2 is a
+development-side change made after the freeze: the held-out result above was run under v1 and
+stands as it is.
+
+- **Tools.** `rank_plans` (no arguments) runs the `belief_optimizer` policy's own search
+  (`optimize_batch` on the belief fit, `SEED`, the profile's samples and stop limit) and shows at
+  most four distinct plans: the best of each shape (immediate action and compounds), with the best
+  PIT-now and the best STAY_OUT plan always shown when both are legal. Plan 1 is the policy's plan.
+  Per plan: the stints, the first stop, the immediate action, `submit` (the submission fields that
+  keep it), `gap_s` to plan 1 with its 90% interval and `faster_share` over the paired draws,
+  `best_share` (fastest of those shown), `first_stop_range` (the stop laps within 1 s for that
+  shape) and flags. `decision` is plan 1's immediate action with the best PIT-now plan read against
+  the best STAY_OUT plan; `flags` names weak estimates (a compound with no race laps, a
+  prior-dominated compound, a safety car or VSC in progress; per plan, a stint past the estimated
+  tyre life or past the longest run seen when the life beyond it is a generic prior).
+  `evaluate_plan` takes a full plan, or `first_stop_lap` with an optional `compound`, and reads it
+  against plan 1. `estimate_tyre_degradation` and `estimate_pit_loss` stay. `evaluate_strategy`,
+  `compare_plans`, `get_model_report` and `get_race_snapshot` are v1 only.
+- **Submission.** v2 adds an optional `first_stop_lap` to `submit_recommendation`: with `compound`,
+  it names the first stop of the plan the submission keeps, and the scorer plays the belief's best
+  full plan with that first stop (`eval.decisions.kept_plan`: `optimize_batch` from the snapshot with
+  the first stint fixed, the same seed, samples and stop limit as `belief_optimum`). Without it a
+  decision is expanded as before. A PIT names the end of the next lap; a STAY_OUT of k laps a stop no
+  earlier than the end of lap `laps_completed + k + 1`; anything else is refused with the fix. Under
+  v1 the loop drops a `first_stop_lap` the model was never offered.
+- **Loop.** Under v2 an argument a tool's schema does not name is refused with the valid ones (v1
+  drops it silently), and an unknown tool name gets the tool list. A submission that does not keep
+  plan 1 of the model's latest `rank_plans` is held once when a turn is left: the model is shown plan
+  1's submit fields and the PIT/STAY_OUT reading, and its next accepted submission is final, changed
+  or not (`consistency_check` events in the trajectory; `check_fired`, `check_changed` in the stats).
+- **Prompt.** A decision protocol: rank_plans first, plan 1 is the default (copy its submit object),
+  a departure only for a plan close to it and only for a named uncertainty flag; one line of
+  evidence in the rationale; the 1,024-token reply cap and at most 3 calls per turn. If a named stop
+  is refused on the very last turn, the submission is scored without it (`kept_stop_dropped`).
+
+**Why.** The 469 dev20 trajectories at `eval-v2-dev2` (v1): agent minus `belief_optimizer` +0.143 s
+(cluster CI +0.025, +0.275), +67 s in all. 33 s came from 45 immediate actions other than the
+optimizer's; 35 s from 55 STAY_OUTs that agreed with it but whose `reassess_after_laps` was at
+least the laps to its first stop (STAY_OUT k forbids a stop before the end of lap
+`laps_completed + k + 1`, which nothing told the model); 8.5 s from 9 PITs onto another compound.
+348 episodes swept STAY_OUT k one value at a time, 116 hit the 24-call budget, 132 calls had
+invented arguments, 79 turns had no tool call (52 cut off at the reply cap), and in 386 the
+confidence was a probability some tool had returned. Mean result sizes: `get_model_report` 6.4k
+characters, `compare_plans` 2.9k, `evaluate_strategy` 2.5k (`rank_plans` 2.3k, `evaluate_plan`
+0.5k).
+
+**The format's ceiling.** Over all 469 dev20 scenarios (belief side, then the judge's times): the
+natural old-format submission for the optimizer's plan (PIT c, or STAY_OUT with k one less than
+the laps to its first stop, or to the flag) is scored on that plan in 228 (49%; green 44%, SC 94%,
+VSC 100%), and some old-format submission is in 341 (73%). Its judge time differs from the
+optimizer's by more than 0.1 s in 45% of scenarios (mean +0.087 s, mean absolute 0.46 s, p95 1.7 s,
+max 20.9 s). Naming the first stop scores the optimizer's plan in 469 of 469, judge gap 0.
+
+**Development samples** (seeded, disjoint; scratch lists, not committed). Design: 100 dev20
+scenarios, every one where the dev20 agent's immediate action differed from the optimizer's (45),
+every SC/VSC one (40), a lap-0 one per race, the rest spread over races. Check: 103 of the
+remaining green scenarios, stratified by race and lap. The design sample took four versions (v2a
+tools and prompt; v2b the named stop and plan-1 default; v2c the copy instruction and extrapolation
+as a note; v2d the last-turn fallback); the check sample ran once, v2c against `origin/main` (v1) as
+control, concurrently, `--jobs 8` each, on a loaded machine (load 28-36 on 16 threads), so latency
+is comparable between the two only.
+
+| check sample (103) | main (v1) | v2 |
+| --- | --- | --- |
+| valid / voluntary submissions | 103 / 100 | 102 / 103 (1 named stop never fixed; the fallback above came after) |
+| judge regret mean / median / p90 (s) | 3.92 / 0.87 / 13.53 | 3.65 / 0.50 / 12.61 |
+| agent minus belief_optimizer (s, cluster CI) | +0.258 (-0.004, +0.558) | 0.000 (0.000, 0.000) on 102 |
+| belief_optimizer's own regret (s) | 3.66 | 3.66 |
+| scored plan = optimizer's plan | 44 | 102 |
+| immediate action = optimizer's | 98 | 102 (+1 invalid) |
+| worst departure (s) | +9.98 | 0.00 |
+| tool calls / evidence calls per episode | 17.4 / 15.5 | 8.0 / 6.8 |
+| repeated calls per episode; budget hits | 3.69; 28 | 0.41; 2 |
+| turns with no tool call (cut off) | 17 (4) | 0 |
+| input / output tokens per episode | 81.8k / 877 | 23.6k / 364 |
+| latency mean / median (s) | 54.0 / 45.3 | 21.6 / 19.6 |
+
+v2 minus main, paired on 102: -0.249 s (cluster CI -0.547, +0.005), 33 better, 48 the same, 21
+worse. The invalid episode repeated a `first_stop_lap` without its compound until its turns ran
+out; the clearer refusal and the last-turn fallback came after the check run, and that one
+scenario rerun once with them (post hoc, not in the table) corrected the compound and scored the
+optimizer's plan. On the design sample v2b's model departed from plan 1 eleven times: 8 citing a
+flag (+0.016 s each against the optimizer), 3 not (+0.27 s); v2c, with the copy instruction,
+departed none of 100 times; v2d (the shipped code) 3 times, all citing a flag (-0.37, -0.37,
++0.45 s), with agent minus optimizer -0.003 s (-0.016, +0.010) and 8.4 calls and 25k input tokens
+per episode. So the language model now adds nothing to the look-ahead and takes nothing
+away: v2's regret is the optimizer's, and what remains is the predictive simulator's error.
 
 `src.grade.grade_decision(snapshot, submission)` grades one submission the same way (valid,
 regret against the optimizer from that snapshot) for `tests/test_case.py`, which reports
@@ -2206,6 +3124,41 @@ standard error mean 0.19 s (median 0.19, max 0.29); the runner-up's gap has medi
 (mean 1.45), and on 82% of them it is within 2 standard errors. At 200 draws the reference
 is not told apart from the next plan on most scenarios, while regrets of a few seconds are
 well outside the noise (a regret_se_s of about 0.3 s).
+
+### Three future stops (a switch, off)
+
+The reference search (`baselines.candidate_plans`, scored by `optimizer_bridge.optimize_batch`)
+allows at most `max_stops` future stops; the default is 2 everywhere (the profile's
+`sim.max_stops`, `python -m src.eval reference --max-stops`, the fidelity tool's `--max-stops`).
+`max_stops: 3` adds every three-stop plan after the plans of up to two stops, so the search
+with 2 is unchanged. A candidate list longer than `optimizer_bridge.SCORE_ONE_CALL` (60,000
+plans; only a three-stop search reaches it) is scored in chunks of `SCORE_CHUNK` (20,000) under
+the same draws, so memory stays bounded.
+
+Measured on the 19 calibration races (main ac85596, the adopted judge, 20 draws, the judge's
+lap-0 reference per start set as in A4; no LLM calls, no held-out race):
+
+- The field (A4's field stop counts): 60 of 325 field cars made three or more stops: 17 in 2022
+  Bahrain, 14 in 2022 Spain, 8 each in 2023 Bahrain and 2022 Brazil, at most 3 elsewhere. Of
+  the full-distance cars, 40 of 209 made three stops and none four; from a snapshot every 5 laps,
+  5.0% of (car, lap) pairs had three or more stops still to make, all at laps 0 to 25.
+- The judge's best plan with three stops allowed is faster than the reference on 8 of 80 start
+  sets: every start set of 2022 Bahrain (3.0 to 4.8 s) and 2022 Spain (0.9 to 5.9 s). On the
+  other 17 races the best three-stop plan is 4 to 41 s slower and the reference is unchanged.
+  A coarse-to-fine search (stint lengths on a 3-lap grid, then +/-2 laps around the best 30)
+  found these plans (per start set: `reports/calibration/three_stops/lap0_references.csv`); the full three-stop search gives the same plan and time on the four start
+  sets checked (2022 Bahrain, 2022 Mexico, 2022 Brazil, 2021 Spain).
+- Stop count against the field (A4): the lap-0 reference matches the car's own stop count for
+  0.471 of the 325 field cars with two stops allowed, 0.548 with three; the race's modal stop
+  count 11 of 19 races, 13 of 19 (2022 Bahrain and 2022 Spain, where the field's mode was 3).
+- Compute: a full three-stop search scores 0.3 to 1.0 million plans at lap 0 (Bahrain 449,696;
+  Brazil 983,320) against at most about 20,000 with two, and took 50 to 121 s per lap-0 reference against
+  1 to 1.5 s on the loaded machine (one BLAS thread). Mid-race snapshots have fewer laps left
+  and fewer plans.
+
+Decision: left off as a named switch. It changes the reference only where the field really
+three-stopped, and it matches the field's stop count better there; it costs about 50 to 90 times
+the reference compute. The evaluation's references and results stay on `max_stops` 2.
 
 ## The frozen simulator and the evaluation tags
 
@@ -3322,6 +4275,15 @@ Standing limitations:
   the ordering constraint makes the proxied HARD a copy of SOFT, which 66 of v1's references
   use as a second SOFT-like compound; rows carry `proxied_compounds` and
   `opt_proxied_compounds` so results can be read with and without the rows that rest on one.
+- **A compound nobody raced is priced by proxy in both simulators, and the tyre sets make that
+  matter more** ("Tyre sets at the snapshot"). Once the sets left of a raced compound are used, a
+  plan moves to a new set of the unraced one, whose price has no race laps behind it in either
+  simulator. At 2021 Spain (no car ran HARD) this carries the whole change in the favourite's
+  regret when the sets were switched on. It is not special-cased.
+- **The tyre sets are estimated, not recorded.** Sets handed back after practice are not modelled
+  (every opened set is kept as a used one). 2019 allocations are not in the cache (13 per compound:
+  unconstrained on new sets, used sets at their recorded ages). At the two 2022 sprint weekends the
+  sessions show more sets than the allocation, so new sets come out short there.
 - **v1 scores under a 10-lap minimum stint** (its snapshots predate R2's 3), which makes
   actual_strategy unavailable on 65 scenarios.
 - **SC and VSC are modelled, not known.** The belief draws periods from rates and lengths fitted on
@@ -3619,15 +4581,218 @@ judge's 0.4 to 9 s behind). Before it can be adopted the queue needs the near-la
 rule (who joins the train, from the gap at deployment against the SC lap) and the two
 simulators' SC duration and rate models aligned (the next section).
 
-Future work, the near-lapped rule: today every car that finished on the lead lap joins the train
-at the period's end. A car within a lap of the leader but physically ahead of the safety car on
-the road (behind by more than the SC lap less its distance to the line) is not picked up by the
-train: it circulates to the back of the queue, or is held a lap down until the "lapped cars may
-overtake" message, so at the end of the period it sits about one SC lap behind the leader, not
-0.5 s per place (2022 Bahrain: the real field at the end of its SC spans 38 s). The rule to
-fit: from each car's gap at deployment and the period's first SC lap time, whether it joins the
-queue at E or one lap later, measured against the recorded end-of-period gaps of the
-history table's races.
+#### The near-lapped rule
+
+Switch `sc_queue.held_behind_laps` (None, the default: as above; 1.25: the rule). What decides
+whether a car joins the train, read from the 8 SC periods with S >= 2 of the calibration races
+(`sc_queue.deployment_behind`: each car's distance behind the leader when the safety car came
+out, from the line crossings made before the deployment, against its recorded gap at the end of
+the period):
+
+- Every car less than one lap behind at the deployment closed up (about 0.5 s per place),
+  whatever the period length (the 3-lap periods of 2021 Spain and 2022 France included). The
+  only cars that did not pitted on the last SC lap.
+- Most cars just over a lap behind closed up too: they are waved past and reach the back of the
+  train in time (2022 Bahrain 1.08 to 1.13 laps, 2022 Brazil up to 1.23, 2022 Canada up to 1.22).
+- Cars 1.3 to 1.6 laps behind did not: 2022 Bahrain's STR, ALB, RIC, NOR, LAT and HUL (1.31 to
+  1.56 laps) ran green laps under the SC on its last two laps and finished the period 24 to 38 s
+  behind the leader; 2022 Brazil's LAT (1.55) 15 s. Only the longest period (2022 Canada, 7 laps)
+  brought cars that far back (1.32, 1.77) into the train.
+- 2021 Abu Dhabi is the exception: the cars 1.06 to 1.25 laps behind were let past only on the
+  last lap and finished it 59 to 95 s back.
+- Pitting under the safety car does not decide it: the stop is already priced in the queue
+  order.
+
+The old rule's `lapped` set holds only cars that finished laps down. The six Bahrain cars unlapped
+later, so each was pulled to 0.5 s per place in a queue where the other cars kept their
+recorded 24 to 38 s, and was placed ahead of the rest of its group.
+
+The rule. A car more than `held_behind_laps` laps behind at the deployment does not join the train.
+It keeps its gap, in the queue order, to the train's last car ahead of it. 1.25 is the cut that
+separates the cars that closed up from those that did not on the recorded end-of-period gaps
+(between Brazil's 1.23, which joined, and Bahrain's 1.31, which did not; 7 of 78 cars that did
+not pit are misclassified, 5 of them 2021 Abu Dhabi's). It was fitted on the race data, not on a
+scorecard result. Under the rule the single-car queue also:
+
+- keys the other cars by their green time at S - 1, projected from their crossings before the
+  deployment (`sc_queue.deployment_times`). A car's recorded crossing of S - 1 made under the
+  safety car would have put it behind cars it was ahead of: 2022 Brazil's ALB and LAT were placed
+  near the front of the train;
+- leaves out of the field the cars that had retired. `FieldQueue.at` had projected them forward
+  at `lap_ref_s` a lap, ahead of every car;
+- ends the train where the recorded leader ended lap E, whatever lap the car's own count saw the
+  safety car from. A car a lap down counts its laps beside the leader's next ones and had been
+  given its own simulated SC laps as the period length.
+
+The old rule is unchanged (`held_behind_laps` None, bit for bit). The judge reads the recorded
+race. The belief reads only the rows visible at the snapshot: the deployment when they show it,
+else the distances from the times at the end of lap S - 1, with the field projected with its gaps
+held (`tests/test_sc_queue_future_blindness.py` covers the rule too).
+
+Measured on 81a549f (19 calibration races, none failed; the adopted judge with hybrid SC/VSC as
+the base; A/B sections without the hindsight variants, leave-one-stint-out or components;
+race-cluster 95% intervals; `python -m src.sim.fidelity ablate --only sc_queue sc_queue_held
+sc_queue_field sc_queue_held_field sc_queue_both sc_queue_held_both`; files in
+`reports/calibration/fidelity/near-lapped-81a549f/`: the ablation, per-race measures, the
+whole-field replay per race and the deployment distances):
+
+| arm | close-pair order | Spearman | rel gap MAE s | B2 rho | B2 regret s | pit-now agree |
+| --- | --- | --- | --- | --- | --- | --- |
+| queue off (the adopted judge) | 0.753 | 0.958 | 13.17 | 0.868 | 4.11 | 0.816 |
+| old queue (single) | 0.690 (-0.062 [-0.115, -0.008]) | 0.882 | 9.35 (-3.82 [-7.83, -0.87]) | 0.859 | 3.77 | 0.803 |
+| near-lapped rule (single) | 0.709 (-0.043 [-0.081, -0.010]) | 0.953 | 7.47 (-5.70 [-10.91, -1.50]) | 0.860 | 3.95 | 0.807 |
+| old queue (field) | 0.726 (-0.027 [-0.044, -0.010]) | 0.954 | 7.70 (-5.47) | | | |
+| near-lapped rule (field) | 0.734 (-0.019 [-0.036, -0.003]) | 0.956 | 7.45 (-5.72 [-10.92, -1.47]) | | | |
+| old queue, belief too | 0.690 | 0.882 | 9.35 | 0.880 | 4.64 | 0.715 |
+| near-lapped rule, belief too | 0.709 | 0.953 | 7.47 | 0.877 | 4.80 | 0.723 |
+
+Per race (single / field), close-pair order, Spearman, relative gap:
+
+| race | queue off | old queue | near-lapped rule | rule, field |
+| --- | --- | --- | --- | --- |
+| 2022 Bahrain (46 pairs) | 0.804, 0.754, 39.8 s | 0.609, -0.054, 35.0 s | 0.630, 0.754, 8.9 s | 0.761, 0.768, 7.6 s |
+| 2022 Brazil (48 pairs) | 0.854, 0.975, 28.2 s | 0.646, 0.368, 13.9 s | 0.792, 0.919, 3.2 s | 0.833, 0.963, 3.8 s |
+
+Snapshots with a neutralisation in progress (lap k or k + 1 neutralised in the recorded race;
+belief against judge):
+
+| arm | SC: pit-now agree (60) | SC: B2 rho | SC: regret s | VSC: pit-now agree (48) |
+| --- | --- | --- | --- | --- |
+| queue off | 0.683 | 0.819 | 10.75 | 0.646 |
+| near-lapped rule in the judge | 0.733 | 0.776 | 10.60 | 0.667 |
+| near-lapped rule in both | 0.683 | 0.819 | 11.77 | 0.500 |
+| old queue in both | 0.567 | 0.821 | 12.68 | 0.521 |
+
+Whole-field replay (`src/sim/field_replay.py`, every classified car's real strategy from k, the
+world as a file with the switch, leave-one-driver-out fit, traffic off; the single-car queue
+against the other cars' recorded race; change against queue off, race-cluster intervals):
+
+| pace, k | close pairs off | old queue | near-lapped rule | rel gap off s | old queue | near-lapped rule |
+| --- | --- | --- | --- | --- | --- | --- |
+| asof, 0 | 0.538 | -0.008 [-0.046, +0.028] | +0.003 [-0.028, +0.038] | 27.1 | -1.84 [-4.53, -0.23] | -2.21 [-4.91, -0.32] |
+| asof, 10 | 0.655 | -0.014 [-0.077, +0.044] | -0.014 [-0.048, +0.020] | 22.3 | -5.34 [-10.76, -1.19] | -5.44 [-10.41, -1.50] |
+| asof, 20 | 0.668 | -0.014 [-0.032, +0.000] | -0.014 [-0.053, +0.016] | 19.9 | -5.21 [-10.84, -1.05] | -5.59 [-10.71, -1.34] |
+| asof, 30 | 0.720 | -0.035 [-0.093, +0.014] | -0.033 [-0.075, +0.011] | 16.2 | -3.73 [-8.98, +0.06] | -4.13 [-9.29, +0.00] |
+| asof, 40 | 0.753 | -0.038 [-0.095, +0.004] | -0.035 [-0.071, +0.000] | 13.6 | -3.90 [-8.91, -0.07] | -4.25 [-9.16, -0.06] |
+| practice, 10 | 0.582 | -0.046 [-0.089, -0.003] | -0.049 [-0.084, -0.009] | 23.1 | -1.35 [-4.34, +0.88] | -1.88 [-5.24, +0.72] |
+| practice, 20 | 0.609 | -0.060 [-0.114, +0.000] | -0.054 [-0.107, +0.004] | 21.1 | -2.00 [-4.32, +0.00] | -2.72 [-5.97, -0.02] |
+| practice, 40 | 0.701 | -0.073 [-0.133, +0.000] | -0.071 [-0.140, -0.006] | 15.4 | -2.59 [-5.99, +0.18] | -3.11 [-6.90, +0.00] |
+
+Spearman on the whole-field replay, 2022 Brazil at practice pace: off 0.86 to 0.92, old queue
+0.30 to 0.42, the rule 0.85 to 0.90 (relative gap 25 s to 4 to 13 s). 2022 Bahrain: off 0.62 to
+0.75, old queue 0.36 to 0.57, the rule 0.42 to 0.61 (relative gap 18 to 37 s to 12 to 15 s).
+
+Reading under the selection rule:
+
+- The rule removes the near-lapped failure. Spearman returns to the queue-off level (0.953
+  against 0.958; the old queue 0.882), Brazil's order is back (0.919 single, 0.963 field) and the
+  gap gain grows: relative gap 13.2 to 7.5 s, against 9.4 s for the old queue. The noise floor
+  with neutralised laps recorded is 5.2 s.
+- Close-pair order is still below queue-off: -0.043 [-0.081, -0.010] single, -0.019 [-0.036,
+  -0.003] field. It is NOT an adopt-candidate: the rule requires order at least level with
+  queue-off within the interval.
+- What is left of the single-car loss is how a simulated car is placed among the other cars'
+  recorded race, not who joins the train. A car whose simulated time at S - 1 has drifted from
+  its real one loses or gains places in the train for it, and keeps them. 2022 Bahrain's leader
+  LEC had drifted 46 s by lap 45 on the whole-field replay (k = 20, practice pace) and pitted
+  under the SC, so it rejoined 13th. Off, the same drift stays a time error that the relative
+  measure partly removes. 16 of the 368 close pairs are lost: 8 in Bahrain, 3 in Brazil, 2 in
+  2019 Britain, 1 each elsewhere. The field mode queues simulated cars among simulated cars and
+  loses 7.
+- The belief with the rule: pit-now agreement on SC-in-progress snapshots is level with queue-off
+  (0.683; the old queue in both 0.567). Overall it is -0.093 [-0.143, -0.043], the same cause as
+  above (the two simulators' safety-car expectations), and on VSC snapshots 0.500 against 0.646.
+- 2021 Abu Dhabi's relative gap gets worse under every queue (22.8 to 27.2 s): its cars 1.06 to
+  1.15 laps behind were held by race control, and no rule fitted on the other races reproduces
+  that.
+
+#### Placing the car by the record
+
+Switch `sc_queue.placement` (`clock`, the default; `record`). It applies with `held_behind_laps`
+set and in the judge only (fit_window full; hindsight, ledgered as `sc_queue_placement`).
+
+The near-lapped rule's remaining order loss came from placing the simulated car in the train by
+its simulated time at S - 1 among the other cars' recorded times. Any drift of its simulated clock
+by then turned into places in the train, and the car kept them. Under `record`:
+
+- the car is placed by its recorded green time at S - 1, from its own crossings before the
+  deployment (`sc_queue.deployment_times`);
+- each plan is moved by its simulated time difference at S - 1 to the plans of the same batch
+  that stopped where the car really did before S (the median of those plans' times). A replay of
+  the real strategy lands at its recorded place; a plan that stopped earlier or later moves by
+  what the simulator says that cost or gained it;
+- with no such plan in the batch, the car keeps its clock;
+- for a period already running at the snapshot, the car's recorded place is used.
+
+Measured on a3e2a46 (main 3ed475f, the v3 defaults: belief cliff edge at its point, the judge's
+scaled wear guard), the same 19 races and options as above. The base is close pairs 0.753,
+Spearman 0.957, relative gap 13.19 s, B2 rho 0.882, regret 3.36 s, pit-now 0.834.
+
+| arm | close-pair order | Spearman | rel gap MAE s | B2 rho | B2 regret s | pit-now |
+| --- | --- | --- | --- | --- | --- | --- |
+| near-lapped rule (clock, single) | 0.709 (-0.043 [-0.081, -0.010]) | 0.953 | 7.49 (-5.70) | -0.010 | -0.20 | -0.009 |
+| near-lapped rule (field) | 0.734 (-0.019 [-0.036, -0.003]) | 0.956 | 7.47 (-5.72) | 0 | 0 | 0 |
+| rule + placement by the record | 0.747 (-0.005 [-0.033, +0.021]) | 0.960 | 7.60 (-5.59 [-10.72, -1.47]) | -0.010 [-0.015, -0.006] | -0.20 [-0.38, -0.03] | -0.008 [-0.022, +0.006] |
+| the same, the rule in the belief too | 0.747 | 0.960 | 7.60 | +0.008 | +0.55 | -0.116 [-0.175, -0.063] |
+
+Per race, queue off / the rule (clock) / the rule with placement:
+
+- 2022 Bahrain: close pairs 0.804 / 0.630 / 0.761; Spearman 0.754 / 0.754 / 0.821; relative
+  gap 39.8 / 8.9 / 9.6 s.
+- 2022 Brazil: close pairs 0.854 / 0.792 / 0.875; Spearman 0.975 / 0.919 / 0.973; relative gap
+  28.2 / 3.2 / 3.6 s.
+- 2022 Canada: close pairs 0.733 / 0.700 / 0.800.
+- 2021 Abu Dhabi: close pairs 0.786 / 0.821 / 0.893.
+
+Pit-now agreement on SC-in-progress snapshots (60): off 0.700, placement in the judge 0.750,
+placement in the judge with the rule in the belief 0.683. On VSC snapshots (48): 0.646, 0.667,
+0.500.
+
+Whole-field replay against queue off. Close pairs:
+
+| pace, k | the rule (clock) | the rule with placement |
+| --- | --- | --- |
+| asof, 0 | +0.003 | +0.049 [+0.000, +0.102] |
+| asof, 10-40 | -0.014 to -0.035 | +0.005 to +0.030 (intervals include 0) |
+| practice, 0-40 | -0.049 to -0.071 at k 10-40 | -0.033 to +0.049 (intervals include 0) |
+
+Relative gap with placement: -2.5 to -6.0 s, intervals clear of 0 at most k.
+
+dev20 rescore, the baselines' regret against each judge's own reference (judge variants
+`configs/sim/world_hybrid.yaml` plus the switch, belief default, references and baselines rebuilt
+at a3e2a46; paired by scenario, race-cluster 95%). The queue-off judge rebuilt here is the
+current default, not the committed dev20 files.
+
+| policy | off s | rule (clock) | rule with placement |
+| --- | --- | --- | --- |
+| belief_optimizer | 3.25 | -0.14 [-0.29, +0.01] | -0.21 [-0.38, -0.05] |
+| run_to_flag | 8.80 | +0.34 [+0.17, +0.56] | +0.26 [+0.05, +0.49] |
+| one_stop_total | 9.64 | +0.26 [+0.07, +0.49] | +0.18 [-0.04, +0.43] |
+| actual_strategy | 6.58 | -0.12 [-0.31, +0.07] | -0.15 [-0.32, +0.03] |
+
+The judge's mean reference stop count rises from 0.789 to 0.838: a stop under a safety car now
+costs places in the train, not open-air seconds, so the reference takes more stops under SC.
+
+Reading under the selection rule:
+
+- Placement by the record is an adopt-candidate for the judge. Close-pair order is level with
+  queue-off within its interval (-0.005 [-0.033, +0.021]), Spearman is level, and the gap gain
+  holds: relative gap 13.2 to 7.6 s.
+- The belief's plan ranking against the judge moves by -0.010 in rho and -0.20 s in regret
+  (better), and pit-now agreement is unchanged within its interval.
+- On dev20 the belief optimizer's regret falls by 0.21 s; the fixed-rule baselines' regret rises
+  by 0.2 to 0.3 s.
+- The queue stays off in the belief: there it costs 0.116 of pit-now agreement (the two
+  simulators' safety-car expectations).
+- To adopt: add to the judge's config (`configs/sim/world_hybrid.yaml`, `score.default_world_config`):
+
+  ```yaml
+  sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25, placement: record}
+  ```
+
+  This changes the judge, so every reference and result scored on it is stale.
+
+Files: `reports/calibration/fidelity/placement-a3e2a46/` (the ablation, per-race measures, the whole-field replay per race, and the dev20 regret per scenario and policy under the three judges).
 
 ### Safety-car duration and rates: the belief against the judge
 
@@ -3716,24 +4881,152 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
 `default`, the agent's tools, the scorecard's base):
 
 - **Judge (world):** linear_fuel with driver effects, no hinge (`config.WORLD_DEGRADATION`); the
-  wear cliff with the tyre-life edge from history only (`config.WORLD_EDGE` `history_only`); hybrid
+  wear cliff with the tyre-life edge as of the scored snapshot (`config.WORLD_EDGE` `as_of`, adopted
+  2026-11-22, "The judge's edge as of the snapshot": the historical prior extended by the tyre ages
+  run up to the scored snapshot, the same information as the predictive simulator; ledgered "this
+  race, to snapshot"); hybrid
   SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
   policy's plan and the reference see the same periods for a seed, the later periods at rates and
   lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
-  2026-11-22); no traffic; R8 retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash
-  `5069228b35e7` (before the SC alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
+  2026-11-22); the thin-fit wear guard with the fit's sd scaled by the number of drivers
+  (`config.WORLD_WEAR_GUARD`, `wear_guard: {enabled: true, scale_sd_by_drivers: true}`, adopted
+  2026-11-22, "Thin wear fits"); the safety-car queue (`config.WORLD_SC_QUEUE`, `sc_queue: {enabled:
+  true, mode: single, held_behind_laps: 1.25, placement: record}`, adopted 2026-11-22, "Placing the
+  car by the record"): at each recorded SC period the simulated car joins the train at its recorded
+  place, cars more than 1.25 laps behind at the deployment held at their gap (hindsight, the judge
+  only, ledgered as `sc_queue` and `sc_queue_placement`); the tyre sets at the snapshot
+  (`config.WORLD_TYRE_INVENTORY`, `tyre_inventory: true`, adopted 2026-11-22, "Tyre sets at the
+  snapshot"; the same as-of inventory as the belief, ledgered as `tyre_inventory`); no traffic; R8
+  retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash `9b98afd55974` (before the as-of
+  edge `c821efe0bc98`, before the tyre sets `7c974c32c67c`, before the SC queue `15e3f31d98a7`, before v3 `5069228b35e7`, before the SC
+  alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
   ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
   `sd_scale`, SC/VSC lengths from the as-of history of period lengths, a period in progress
-  continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22).
-  config_hash `351f4124ff22` (before the SC alignment `f7b872d14c0c`, before the scorecard
-  `d479652b0fe7`). `belief_traffic.yaml` and `belief_learned.yaml` are it plus one block.
+  continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22), the
+  wear-cliff edge at its point in every sample (`belief_cliff_edge: point`, adopted 2026-11-22,
+  "Belief priors"); the tyre sets at the snapshot (`tyre_inventory: true`, adopted 2026-11-22, "Tyre
+  sets at the snapshot"); the thin-fit guard (`belief_guard: {enabled: true, mode: pace_wear,
+  min_drivers: 3, min_rows: 40, scale_sd_by_drivers: true}`, adopted 2026-11-22, "Thin fits in the
+  belief"); no safety-car queue (`tests/test_eval_default_config.py` checks no belief
+  config carries it). config_hash `b9891459af63` (before the thin-fit guard `aaf95a09bc50`, before the tyre sets `9d691bbbcf24`, before v3
+  `351f4124ff22`, before the SC alignment `f7b872d14c0c`, before the scorecard `d479652b0fe7`). `belief_traffic.yaml` and
+  `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
   `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
-  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue (`sc_queue`), the
-  pit-stop durations (`pit_stops`). The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
-  and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`.
+  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue in the belief, the
+  pit-stop durations (`pit_stops`), overtaking difficulty, three-stop search.
+  The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
+  and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
+  `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged);
+  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`; `world_pre_asof_edge.yaml`
+  (the belief unchanged); `belief_pre_belief_guard.yaml` (the world unchanged).
+  Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
+  `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
+  queue's other forms), `tyre_inventory_off` (both simulators), `cliff_edge_history_only`,
+  `belief_guard_off`.
+
+Confirmation after the judge's as-of edge, on f6148e0 (main 72d2fc5 with the tyre sets, plus the
+adoption). Output: `reports/calibration/fidelity/asof-edge-f6148e0/`, all 19 calibration races,
+none failed, future blindness pass.
+- SIM_CODE_VERSION `b239243dc1ea`, before `30efab2adf7a`.
+- Default world config_hash `9b98afd55974`, before `c821efe0bc98`.
+- The belief is unchanged, `aaf95a09bc50`.
+
+Headline: close pairs out of sample 0.747, Spearman 0.960, relative gap 7.60 s, plan-rank
+agreement 0.884, judge-regret of the belief's favourite 3.14 s, pit-now agreement 0.861, belief
+replay close pairs 0.667, plan 90% coverage 0.972, E_real_regret_s 4.77 s (over 20 s: 0.057). The
+noise floor (`ceiling_pooled.csv` there) is unchanged: judge 0.747 / 7.6 s.
+
+As-of against the prior-only edge (`cliff_edge_history_only`, the same base), race-cluster 95%:
+
+| measure | history_only | as_of change |
+|---|---|---|
+| close pairs / Spearman / relative gap | 0.747 / 0.960 / 7.60 s | 0 / 0 / 0 |
+| plan-rank agreement | 0.880 | +0.004 [+0.000, +0.007] |
+| judge-regret of the belief's favourite | 3.47 s | -0.33 [-0.79, -0.01] |
+| early third / mid / late | 7.15 / 2.14 / 1.24 s | 0.00 / -0.18 [-0.45, -0.00] / -0.88 [-2.07, -0.03] |
+| pit-now agreement, all / late | 0.847 / 0.892 | +0.014 [-0.004, +0.039] / +0.053 [+0.006, +0.125] |
+| E_real_regret_s / over 20 s | 5.21 s / 0.070 | -0.43 [-1.12, -0.05] / -0.013 [-0.029, -0.001] |
+| judge's best panel plan adds a stop the team did not make | 0.089 | -0.019 [-0.052, +0.000] |
+
+The dev20 rescore against each judge's own reference (tyre sets on, as-of against history_only):
+- belief_optimizer: 3.34 to 2.99 s, -0.34 [-0.77, -0.04].
+- run_to_flag: +0.01.
+- one_stop_total: +0.00.
+- actual_strategy: 6.86 to 6.53 s, -0.33 [-0.71, -0.03]. The reference adds a stop the team did
+  not make 0.107 to 0.086; the share over 20 s is level at 0.089.
+
+Every reference built on the earlier world is stale: its world config_hash and SIM_CODE_VERSION
+both changed.
+
+Confirmation after the belief's thin-fit guard on 243bf40 (`reports/calibration/fidelity/belief-guard-243bf40/`,
+all 19 calibration races, none failed, future blindness pass; "Thin fits in the belief"): SIM_CODE_VERSION
+`a2ede471f2ed`, before `b239243dc1ea`; belief config_hash `b9891459af63`, before `aaf95a09bc50`; the world
+unchanged, `9b98afd55974`. Close pairs out of sample 0.747, Spearman 0.960, relative gap 7.60 s (unchanged),
+plan-rank agreement 0.886 (0.884), judge-regret of the belief's favourite 2.93 s (3.14; -0.21 [-0.37, -0.06]),
+pit-now agreement 0.865 (0.861), E_real_regret_s 4.77 s (unchanged). The world's numbers do not change, but every
+reference's key holds SIM_CODE_VERSION, so references built before are stale by key; every belief-side result is
+stale (the belief's config_hash changed).
+
+Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
+calibration races, none failed). Hashes and versions:
+
+| | before | after |
+|---|---|---|
+| SIM_CODE_VERSION | `32671b6a2ad5` | `30efab2adf7a` |
+| default world config_hash | `7c974c32c67c` | `c821efe0bc98` |
+| belief config_hash | `9d691bbbcf24` | `aaf95a09bc50` |
+
+Measures; the judge's are unchanged because its whole-race replays already run real ages:
+
+| measure | after | before |
+|---|---|---|
+| close pairs out of sample | 0.747 | 0.747 |
+| Spearman | 0.960 | 0.960 |
+| relative gap | 7.60 s | 7.60 s |
+| plan-rank agreement | 0.880 | 0.872 |
+| judge-regret of the belief's favourite | 3.47 s | 3.16 s |
+| pit-now agreement | 0.847 | 0.827 |
+| belief replay close pairs | 0.667 | unchanged |
+| plan 90% coverage | 0.972 | |
+| E_real_regret_s | 5.21 s | 5.59 s |
+
+The noise floor (`ceiling_pooled.csv` there) is unchanged. The paired off/on table and the reading are
+under "Tyre sets at the snapshot". Every reference built on the earlier world is stale: its world
+config_hash and SIM_CODE_VERSION both changed.
+
+Confirmation after the judge's safety-car queue on 83fb72e
+(`reports/calibration/fidelity/sc-queue-83fb72e/`, all 19 calibration races, none failed, future
+blindness pass; SIM_CODE_VERSION `32671b6a2ad5`, before `3c48388e8271`; default world config_hash
+`7c974c32c67c`, before `15e3f31d98a7`; the belief unchanged, `9d691bbbcf24`):
+
+- close pairs out of sample 0.747 (before 0.753);
+- Spearman 0.960 (0.957);
+- relative gap 7.60 s (13.19);
+- absolute 13.4 s (18.9);
+- plan-rank agreement 0.872 (0.882);
+- judge-regret of the belief's favourite 3.16 s (3.36);
+- pit-now agreement 0.827 (0.835);
+- belief replay close pairs 0.667 (unchanged);
+- plan 90 % coverage 0.975.
+
+Noise floor (`ceiling_pooled.csv` there): judge 0.747 [0.683, 0.798] / 7.6 s [5.7, 10.2],
++ per-stint pace 0.658 / 6.4 s, + pit laps 0.652 / 6.9 s, + SC/VSC laps 0.611 / 5.2 s, + lap 1
+(the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]. The judge's relative gap now sits 2.4 s
+above the level with every neutralised lap recorded, down from 8.0 s. Every reference built on the
+earlier world is stale (its world config_hash and SIM_CODE_VERSION both changed).
+
+Confirmation after v3 (the wear guard and the point cliff edge) on 02a3a7f
+(`reports/calibration/fidelity/v3-02a3a7f/`, all 19 calibration races, none failed;
+SIM_CODE_VERSION `df1ab3800c69`, before `afd80306ad68`): close pairs out of sample 0.753, Spearman
+0.957, relative gap 13.19 s, absolute 18.9 s, plan-rank agreement 0.882, judge-regret of the
+belief's favourite 3.36 s, pit-now agreement 0.835, belief replay close pairs 0.667, B1 MAE 43.7 s,
+plan 90 % coverage 0.988. Noise floor (`ceiling_pooled.csv` there): judge 0.753 / 13.2 s,
++ per-stint pace 0.696 / 11.9 s, + pit laps 0.739 / 11.4 s, + SC/VSC laps 0.614 / 5.2 s, + lap 1
+(the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]. Every reference built on the earlier world
+is stale (its world config_hash and SIM_CODE_VERSION both changed).
 
 Confirmation after the SC alignment on 997d69d (`reports/calibration/fidelity/sc-align-997d69d/`,
 all 19 calibration races, none failed; SIM_CODE_VERSION `938d268003fa`): close pairs out of sample

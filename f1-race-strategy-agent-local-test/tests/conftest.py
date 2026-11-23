@@ -103,6 +103,15 @@ def pytest_runtest_teardown(item, nextitem):
     _set_cliff_default(True)
 
 
+@pytest.fixture(autouse=True)
+def _agent_protocol(request, monkeypatch):
+    """AGENT_PROTOCOL for the test: v1, the loop and tool surface the existing agent tests script
+    (get_race_snapshot, evaluate_strategy, ...), unless the test is marked agent_protocol_v2
+    (src/agent.py, tests/test_agent_protocol_v2.py) or agent_protocol_v2free; whatever a local .env says."""
+    marked = [m for m in ("agent_protocol_v2free", "agent_protocol_v2") if request.node.get_closest_marker(m)]
+    monkeypatch.setenv("AGENT_PROTOCOL", marked[0].removeprefix("agent_protocol_") if marked else "v1")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _wandb_disabled():
     with pytest.MonkeyPatch.context() as mp:

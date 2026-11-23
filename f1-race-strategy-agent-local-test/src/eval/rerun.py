@@ -27,8 +27,8 @@ The sets are defined in configs/eval/rerun_sets.yaml. A report set (development 
 the held-out races) is built only with --final, on the owner's word: building it loads the
 held-out races. --world-config / --belief-config take a SimConfig file or "default" (the world:
 score.default_world_config of config.world_default, the scorecard-chosen judge with driver effects,
-the history-only tyre-life edge and hybrid SC/VSC; the belief: configs/sim/belief.yaml, which the
-agent's tools read too). provenance.json names each of those choices. The parallel stages run --jobs
+the history-only tyre-life edge, hybrid SC/VSC and the thin-fit wear guard; the belief:
+configs/sim/belief.yaml, the wear-cliff edge at its point, which the agent's tools read too). provenance.json names each of those choices. The parallel stages run --jobs
 worker processes, one race at a time each, with BLAS capped at one thread per worker.
 """
 from __future__ import annotations
@@ -59,16 +59,18 @@ TAIL_S = (10.0, 20.0, 30.0)
 # (and the voyager reply cap), never a key, token or endpoint
 MODEL_ENV = ("LLM_BACKEND", "ANTHROPIC_MODEL", "HF_MODEL", "VOYAGER_MODEL", "VOYAGER_MAX_TOKENS", "VOYAGER_TEMPERATURE")
 LOOP_ENV = ("AGENT_MAX_TOOL_CALLS", "AGENT_SUBMIT_GRACE_STEPS", "AGENT_REPEAT_MODE", "AGENT_TURN_STATUS",
-            "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK", "AGENT_TURN_REPEAT")
+            "AGENT_SHOW_IDENTITY", "AGENT_GAP_YARDSTICK", "AGENT_TURN_REPEAT", "AGENT_PROTOCOL",
+            "AGENT_PRERACE")
 
 
 def _loop_env() -> dict:
-    """LOOP_ENV as set, except AGENT_TURN_REPEAT, recorded as the mode in effect (the agent's
-    default when unset): the default moved from "end" to "run" on 2026-11-22, so an unset value
-    would not say which mode a pass ran with."""
-    from ..agent import DEFAULT_TURN_REPEAT
+    """LOOP_ENV as set, except AGENT_TURN_REPEAT and AGENT_PROTOCOL, recorded as the mode in effect
+    (the agent's default when unset): the turn-repeat default moved from "end" to "run" and the
+    protocol default from v1 to v2 on 2026-11-22, so an unset value would not say which a pass ran with."""
+    from ..agent import DEFAULT_TURN_REPEAT, protocol
     env = {k: os.environ.get(k) for k in LOOP_ENV}
     env["AGENT_TURN_REPEAT"] = env["AGENT_TURN_REPEAT"] or DEFAULT_TURN_REPEAT
+    env["AGENT_PROTOCOL"] = protocol(env["AGENT_PROTOCOL"])
     return env
 
 
@@ -619,14 +621,25 @@ def config_choices(c, role: str) -> dict:
            "events": c.events.name, **({"events_params": dict(c.events.params)} if c.events.params else {}),
            "traffic": c.traffic.name if c.traffic.name == "none" else
            f"{c.traffic.name} ({c.traffic.params.get('source', 'recorded')})",
-           "lap_noise": c.lap_noise, "plan_on": c.plan_on, "fit_window": c.fit_window}
+           "lap_noise": c.lap_noise, "plan_on": c.plan_on, "fit_window": c.fit_window,
+           # the tyre sets at the snapshot (sim/tyre_inventory.py): as of the snapshot in both simulators
+           "tyre_inventory": c.tyre_inventory}
     if c.fit_window == "full":
         out["tyre_life_edge"] = c.wear_cliff.world_edge
+        if c.wear_cliff.world_edge == "as_of":   # the judge's edge reads only ages run up to the scored snapshot
+            out["tyre_life_edge_basis"] = ("history extended by the tyre ages run up to the scored snapshot: "
+                                           "the same information as the predictive simulator")
+        # the thin-fit wear guard acts on whole-race fits only (sim/wear_guard.py)
+        out["wear_guard"] = c.wear_guard.model_dump(mode="json") if c.wear_guard.enabled else False
+        # the safety-car queue (sim/sc_queue.py): the judge's, placed by the record (hindsight)
+        out["sc_queue"] = c.sc_queue.model_dump(mode="json") if c.sc_queue.enabled else False
     else:   # a windowed fit places the edge as of the snapshot (sim/cliff.py), whatever world_edge says
         out["tyre_life_edge"] = "as_of_snapshot (history extended by the tyre ages seen so far)"
     if role != "world":
         out.update(calibrator=c.calibrator.name, fuel_anchor=c.fuel_anchor.model_dump(mode="json"),
-                   pit_loss=c.pit_loss.source)
+                   pit_loss=c.pit_loss.source, belief_cliff_edge=c.belief_cliff_edge,
+                   # the belief's thin-fit guard (sim/belief_guard.py): windowed fits only
+                   belief_guard=c.belief_guard.model_dump(mode="json") if c.belief_guard.enabled else False)
     return out
 
 

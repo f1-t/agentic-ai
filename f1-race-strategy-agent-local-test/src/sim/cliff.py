@@ -138,6 +138,23 @@ def world_cliffs(laps, practice, race, wc, steps=None) -> dict[str, Cliff]:
     return out
 
 
+def as_of_world_cliffs(laps, rows, practice, race, wc, steps=None) -> dict[str, Cliff]:
+    """WearCliff.world_edge "as_of" (d): the "history_only" edges (world_cliffs on the whole race,
+    the prior alone where it exists), each raised to the oldest age run on that compound in `rows`,
+    the race rows visible at the scored snapshot (engine.cliffs_for: the belief's visible-rows cut).
+    Nothing from after the decision moment; with no row visible (lap 0) it is "history_only"."""
+    base = world_cliffs(laps, practice, race, wc.model_copy(update={"world_edge": "history_only"}), steps)
+    seen = oldest_ages(rows)
+    out = {}
+    for c, cl in base.items():
+        s = seen.get(c)
+        if s is not None and s > cl.age:
+            out[c] = Cliff(s, cl.kappa, cl.cap, f"{cl.source} extended by the ages seen by the snapshot to {s:g}")
+        else:
+            out[c] = cl
+    return out
+
+
 def world_ledger(cliffs: dict) -> dict[str, dict]:
     """compound -> {edge, source, whole_race_input}: the judge's edges and whether each used this
     race's laps (a whole-race input), for the fidelity ledger."""
@@ -147,21 +164,25 @@ def world_ledger(cliffs: dict) -> dict[str, dict]:
             for c, cl in cliffs.items()}
 
 
-def history_prior(race_id, total_laps, wc, role="belief") -> dict[str, tuple[float, float, str]]:
+def history_prior(race_id, total_laps, wc, role="belief", prerace=None) -> dict[str, tuple[float, float, str]]:
     """compound -> (edge laps, sd laps, tier): the historical tyre-life prior both simulators
     share (`role` is "world" or "belief"; the prior is the same for both). WearCliff.prior_source
     picks it: "tyre_history" (the default) is src/sim/tyre_history.py, tyre_life_prior(race_id,
     compound, total_laps) (C-number and circuit weighted, its own fallback chain, tiers 1-4);
     "stub" is this module's as-of life_prior. Both are strictly as-of by date and never read a
     held-out race. A race id with no date (a synthetic race) takes the stub, whose chain ends in
-    a documented constant."""
+    a documented constant. `prerace` (SimConfig.prerace) moves the belief's prior only, never the
+    world's."""
     rid, _ = _race_key(race_id)
     if wc.prior_source == "stub" or rid is None:
         return life_prior(race_id, total_laps, wc)
     from .tyre_history import tyre_life_prior
+    kw = {}
+    if prerace is not None and role == "belief":
+        kw = {"ratings": prerace.tyre_life_ratings, "guidance": prerace.tyre_life_guidance}
     out = {}
     for c in SOFTNESS:
-        p = tyre_life_prior(rid, c, total_laps=total_laps)
+        p = tyre_life_prior(rid, c, total_laps=total_laps, **kw)
         out[c] = (float(p.edge_laps), float(p.sd_laps), f"tyre_history_tier{p.tier}")
     return out
 
@@ -296,7 +317,7 @@ def life_prior(race_id, total_laps, wc) -> dict[str, tuple[float, float, str]]:
     return out
 
 
-def as_of_cliffs(rows, practice, race, wc) -> dict[str, Cliff]:
+def as_of_cliffs(rows, practice, race, wc, prerace=None) -> dict[str, Cliff]:
     """The belief's cliffs for `race` (RaceParams) from `rows`, the race rows visible at the fit's
     calibration point (Simulator.window_rows: cut by session time, the same cut as the fit;
     never an advanced snapshot's laps, which are a plan's hypothetical future), and this weekend's
@@ -313,7 +334,7 @@ def as_of_cliffs(rows, practice, race, wc) -> dict[str, Cliff]:
         offer(c, a, "race_so_far")
     for c, a in oldest_ages(practice).items():
         offer(c, a, "practice")
-    prior = history_prior(race.race_id, race.total_laps, wc, role="belief")
+    prior = history_prior(race.race_id, race.total_laps, wc, role="belief", prerace=prerace)
     out = {}
     for c in sorted(set(seen) | set(prior)):
         lower, lsrc = seen.get(c, (0.0, None))

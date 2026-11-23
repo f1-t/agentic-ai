@@ -287,6 +287,47 @@ def test_new_set_requested_but_only_used_available(sim):
     assert sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30, 7]]).valid
 
 
+@pytest.fixture(scope="module")
+def inv_sim():
+    return Simulator(synthetic_frame(), SimConfig(degradation={"name": "linear"}, tyre_inventory=True))
+
+
+def test_tyre_inventory_takes_the_best_set_left(inv_sim, sim):
+    # SimConfig.tyre_inventory: a stint asking for a new set takes the least used one when none is new
+    snap = inv_snapshot([{"compound": "MEDIUM", "laps_run": 7}, {"compound": "MEDIUM", "laps_run": 3}])
+    res = inv_sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]])
+    assert res.valid
+    assert res.race_time_s == pytest.approx(inv_sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30, 3]]).race_time_s)
+    assert res.race_time_s > inv_sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).race_time_s
+    # a new set when one is left
+    snap2 = inv_snapshot([{"compound": "MEDIUM", "laps_run": 7}, {"compound": "MEDIUM"}])
+    assert inv_sim.simulate(snap2, [["SOFT", 20], ["MEDIUM", 30]]).race_time_s == pytest.approx(
+        inv_sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]]).race_time_s)
+    # off: the exact rule as before
+    assert not sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]]).valid
+
+
+def test_tyre_inventory_rejects_a_compound_with_no_set_left_under_any_rules(inv_sim):
+    snap = inv_snapshot([{"compound": "SOFT", "laps_run": 7}])
+    res = inv_sim.simulate(snap, [["SOFT", 20], ["MEDIUM", 30]], rules=["lap_sum", "min_stint"])
+    assert not res.valid and "no MEDIUM set left" in res.errors[0]
+    assert inv_sim.simulate(start(), [["SOFT", 20], ["MEDIUM", 30]], rules=["lap_sum", "min_stint"]).valid
+
+
+def test_tyre_inventory_pit_action_takes_the_best_set(inv_sim):
+    snap = mid_race(sets_available=[{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"},
+                                    {"compound": "MEDIUM", "laps_run": 2, "set_id": "m3"}])
+    seen = []
+
+    def cont(adv):
+        seen.append(adv)
+        return [["MEDIUM", adv.remaining_laps, 2]]
+
+    res = inv_sim.compare(snap, [{"action": "pit", "compound": "MEDIUM"}], continuation=cont)
+    assert res.valid == [True]
+    assert seen[0].tyre_age == 2 and [t.set_id for t in seen[0].sets_available] == ["m2"]
+
+
 def test_named_set_supplies_start_age(sim):
     snap = inv_snapshot([{"compound": "MEDIUM", "laps_run": 6, "set_id": "m2"}])
     named = sim.simulate(snap, [["SOFT", 20], {"compound": "MEDIUM", "laps": 30, "set_id": "m2"}])

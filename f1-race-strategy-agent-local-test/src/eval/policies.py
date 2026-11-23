@@ -30,7 +30,7 @@ from pathlib import Path
 from ..baselines import domain, policies
 from ..baselines.domain import PolicyUnavailable
 from ..sim.optimizer_bridge import from_contract, pace_for_crossover, to_contract
-from ..sim.rules import stint_limit_violations
+from ..sim.rules import assign_sets, stint_limit_violations
 
 BASELINES = ("actual_strategy", "fixed_one_stop", "fixed_two_stop", "greedy_crossover")
 TRAJECTORY_DIR = Path(__file__).resolve().parents[2] / "reports" / "eval" / "trajectories"
@@ -92,7 +92,16 @@ def _legal(belief, snapshot, contract, limit) -> bool:
         limit is None or not stint_limit_violations(snapshot, contract, *limit))
 
 
-def _bridged(choose, within_limit=None):
+def _no_set(belief, snapshot, contract):
+    """SimConfig.tyre_inventory: the first inventory error of `contract` (a stint on a compound
+    with no set left), else None."""
+    if not getattr(belief.config, "tyre_inventory", False) or snapshot.sets_available is None:
+        return None
+    errors = assign_sets(snapshot, contract, belief.config.inventory_sources, best=True)[1]
+    return errors[0] if errors else None
+
+
+def _bridged(choose, within_limit=None, inventory_check=True):
     """A baseline that plans on the bridge's small snapshot of the belief's fit and returns a
     contracts.Plan.
 
@@ -112,6 +121,10 @@ def _bridged(choose, within_limit=None):
                                     "(docs/rules.md R1).")
         sources = belief.config.inventory_sources
         contract = to_contract(plan, snap, sources=sources)
+        # SimConfig.tyre_inventory: a rule that names a compound with no set left has no plan here
+        missing = _no_set(belief, snap, contract) if inventory_check else None
+        if missing is not None:
+            raise PolicyUnavailable(f"No tyre set for the rule's plan: {missing}")
         limit = _stint_limit(belief, snap)
         if limit is None or not stint_limit_violations(snap, contract, *limit):
             return Decision(contract)
@@ -123,8 +136,37 @@ def _bridged(choose, within_limit=None):
                 adjusted = None
         if adjusted is None or adjusted.stints[0].laps == 0 or adjusted == plan:
             return Decision(contract, meta={"stint_limit_adjusted": False})
-        return Decision(to_contract(adjusted, snap, sources=sources), meta={"stint_limit_adjusted": True})
+        moved = to_contract(adjusted, snap, sources=sources)
+        if inventory_check and _no_set(belief, snap, moved) is not None:
+            return Decision(contract, meta={"stint_limit_adjusted": False})
+        return Decision(moved, meta={"stint_limit_adjusted": True})
     return policy
+
+
+def _real_ages(policy):
+    """actual_strategy under SimConfig.tyre_inventory: each later stint on its recorded set's age
+    (data.race_stints: the set's laps run when fitted), so the scorer's inventory matches the real
+    set (exactly, else the nearest held one; a set the plan took off earlier may be refitted). A
+    recorded strategy the inventory still cannot fit is unavailable, with the cause."""
+    def wrapped(scenario, belief, max_stops):
+        d = policy(scenario, belief, max_stops)
+        snap = scenario.snapshot
+        if not getattr(belief.config, "tyre_inventory", False) or d.plan is None:
+            return d
+        from ..contracts import Plan, PlanStint
+        from ..sim.data import race_stints
+        later = [r for r in race_stints(belief.laps, scenario.driver) if r[3] > snap.laps_completed]
+        plan = Plan.of(d.plan)
+        stints = [PlanStint(compound=st.compound, laps=st.laps,
+                            start_age=(later[j - 1][2] if j > 0 and j - 1 < len(later)
+                                       and later[j - 1][0] == st.compound else 0))
+                  for j, st in enumerate(plan.stints)]
+        aged = Plan(stints=stints)
+        missing = _no_set(belief, snap, aged)
+        if missing is not None:
+            raise PolicyUnavailable(f"The recorded strategy needs a set the inventory does not hold: {missing}")
+        return Decision(aged, meta=d.meta)
+    return wrapped
 
 
 def _one_stop_within_limit(scenario, state, belief, max_stops, plan, limit):
@@ -165,8 +207,8 @@ def _actual_to_distance(actual_stints, total_laps):
 
 
 BASELINE_POLICIES = {
-    "actual_strategy": _bridged(lambda sc, st, sim, m: policies.actual_strategy(
-        st, _actual_to_distance(sc.actual_stints, st.total_laps))),
+    "actual_strategy": _real_ages(_bridged(lambda sc, st, sim, m: policies.actual_strategy(
+        st, _actual_to_distance(sc.actual_stints, st.total_laps)), inventory_check=False)),
     "fixed_one_stop": _bridged(lambda sc, st, sim, m: policies.fixed_one_stop(st), _one_stop_within_limit),
     "fixed_two_stop": _bridged(lambda sc, st, sim, m: policies.fixed_two_stop(st)),
     "greedy_crossover": _bridged(lambda sc, st, belief, m: policies.greedy_crossover(

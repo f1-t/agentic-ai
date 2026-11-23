@@ -1,0 +1,27 @@
+# LEGACY, for reproducing results produced before the v3 adoption (docs/eval.md "The current
+# configuration", adopted 2026-11-22): configs/sim/belief.yaml as it was from the SC alignment (#125)
+# to v3, each sample drawing its own wear-cliff edge (belief_cliff_edge "draw"). Pair it with
+# configs/sim/legacy/world_pre_v3.yaml. tests/test_eval_default_config.py checks it is belief.yaml
+# with the edge drawn and nothing else.
+calibrator:
+  name: as_of_history
+fuel_anchor:
+  prior: anchored
+  practice: anchored
+pit_loss:
+  source: asof
+fit_window: to_snapshot
+traffic:
+  name: none
+events:
+  name: rate
+  params:
+    as_of: true
+    duration: history
+degradation:
+  name: linear_fuel
+  params:
+    draw: posterior
+    wear_lower_bound: 0.0
+    driver_effects: race
+lap_noise: persistent

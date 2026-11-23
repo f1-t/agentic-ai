@@ -685,9 +685,32 @@ def traffic_report(snapshot: Snapshot, sim) -> dict:
     pit = float(snapshot.race.pit_loss_s or 0.0)
     start = state.table.G_prev[:, 0] if len(state.table.laps) else np.empty(0)
     behind = int(((start > state.anchor) & (start <= state.anchor + pit)).sum())
-    return {"modelled": True, "available": True, "basis": TRAFFIC_BASIS,
-            "cars_within_pit_loss_behind_now": behind, "dirty_air_s": round(float(state.dirty_air_s), 2),
-            "own_pace_s": round(float(state.own_offset_s), 2)}
+    out = {"modelled": True, "available": True, "basis": TRAFFIC_BASIS,
+           "cars_within_pit_loss_behind_now": behind, "dirty_air_s": round(float(state.dirty_air_s), 2),
+           "own_pace_s": round(float(state.own_offset_s), 2)}
+    if getattr(state, "difficulty", None) is not None:   # traffic difficulty "asof" (overtaking.py)
+        out["passing"] = passing_words(state.difficulty)
+    return out
+
+
+# the passing difficulty in generic words (no circuit, season or event): the per-lap chance that a
+# car within a second of the one ahead passes it, from overtaking.difficulty_prior
+PASSING_BANDS = ((0.05, "very hard: a faster car usually stays stuck behind for many laps"),
+                 (0.12, "hard: a car needs a large pace advantage to pass"),
+                 (0.20, "average"),
+                 (1.01, "easy: a faster car usually gets by within a lap or two"))
+PASSING_SOURCES = {1: "earlier races at this track", 2: "earlier races at other tracks only",
+                   3: "a general prior (no earlier race)"}
+
+
+def passing_words(d) -> dict:
+    """{difficulty, pass_chance_per_lap_close, pace_advantage_to_pass_s, from}: overtaking.Difficulty
+    in words a tool may show."""
+    words = next(w for cut, w in PASSING_BANDS if d.rate < cut)
+    return {"difficulty": words,
+            "pass_chance_per_lap_close": [round(float(d.rate_lo), 3), round(float(d.rate), 3), round(float(d.rate_hi), 3)],
+            "pace_advantage_to_pass_s": round(float(d.theta_s), 2),
+            "from": PASSING_SOURCES.get(int(d.tier), PASSING_SOURCES[3])}
 
 
 NEUTRAL_HORIZONS = (5, 10)   # laps ahead for the chance of a new SC / VSC (pit_loss)
@@ -1026,11 +1049,485 @@ def submission_error(snapshot: Snapshot, decision: dict, *, sim=None, profile=No
         plan = decisions.to_plan(snapshot, decision, sim, profile.sim.max_stops, seed=0,
                                  n_samples=profile.sim.n_samples)
     except decisions.InvalidDecision as exc:
+        if decision.get("plan") is not None:   # protocol v2free's named plan (decisions.named_plan)
+            return (f"The named plan cannot be scored: {exc}. Fix the plan ([[compound, laps], ...] for the "
+                    f"{remaining} laps left, the first stint on the current set) or leave plan out.")
+        if decision.get("first_stop_lap") is not None:   # protocol v2's kept stop (decisions.kept_plan)
+            return (f"The named first stop cannot be kept: {exc}. Copy first_stop_lap and compound together from "
+                    f"rank_plans' submit field, or leave first_stop_lap out (the rest is then planned again).")
         return f"This decision has no legal plan ({exc}). {legal}."
     errors = sim.validate(snapshot, plan)
     if errors:
         return f"This decision has no legal plan: {'; '.join(explain_rule_errors(snapshot, plan, errors, sim.config))}"
     return None
+
+
+# --- protocol v2 (src/agent.py AGENT_PROTOCOL): ranked plans, one plan evaluated -----------------------
+RANK_TOP = 4        # distinct plans rank_plans shows
+FLEX_S = 1.0        # a shown plan's first stop may move over the laps whose plan of the same shape is within this
+GENERIC_LIFE_TIER = 3   # tyre_history tiers from here on are generic priors (cliff.life_prior: no circuit history)
+_RANKED: dict = {}  # (snapshot, n, stops, config) -> optimize_batch result with times, per snapshot
+
+
+def _ranked(snapshot: Snapshot, fit, n: int, max_stops: int):
+    """optimize_batch from the snapshot exactly as the belief_optimizer policy calls it
+    (eval.decisions.belief_optimum: the belief fit, SEED, n samples, max_stops), with every legal plan
+    in tie-break order (return_times). The first plan is that policy's plan. Cached per snapshot."""
+    from .optimizer_bridge import optimize_batch
+    key = (snapshot.model_dump_json(), n, max_stops)
+    hit = _RANKED.get(key)
+    if hit is None or hit[0] is not fit:   # the fit itself is held, so a cached result is never another fit's
+        if len(_RANKED) > 32:
+            _RANKED.clear()
+        hit = _RANKED[key] = (fit, optimize_batch(snapshot, fit, seed=SEED, n_samples=n, max_stops=max_stops,
+                                                  return_times=True))
+    return hit[1]
+
+
+def plan_text(pairs) -> str:
+    """A plan compactly: "MEDIUM 11 > SOFT 26"."""
+    return " > ".join(f"{c} {int(n)}" for c, n in [list(p)[:2] for p in pairs])
+
+
+def immediate_action(snapshot: Snapshot, pairs) -> dict:
+    """What a plan from the snapshot does now and the submission that keeps it: a first stint of one
+    lap is PIT onto the next compound now; a longer one is STAY_OUT with reassess_after_laps one
+    less than the laps to its first stop (a STAY_OUT of k laps allows no stop before the end of lap
+    laps_completed + k + 1, eval.decisions); no stop is STAY_OUT to the flag. A submission with a
+    stop names it (first_stop_lap and compound), so the scorer keeps this plan (decisions.kept_plan)
+    rather than planning again after the stay."""
+    pairs = [list(p) for p in pairs]
+    done = snapshot.laps_completed
+    if len(pairs) < 2:
+        k = snapshot.remaining_laps
+        return {"action": "STAY_OUT", "first_stop_lap": None,
+                "submit": {"decision": "STAY_OUT", "reassess_after_laps": k}}
+    w, nxt = int(pairs[0][1]), pairs[1][0]
+    # first_stop_lap and compound name the stop the submission keeps (eval.decisions.kept_plan)
+    if w == 1:
+        return {"action": f"PIT {nxt}", "first_stop_lap": done + 1,
+                "submit": {"decision": "PIT", "compound": nxt, "first_stop_lap": done + 1}}
+    return {"action": "STAY_OUT", "first_stop_lap": done + w,
+            "submit": {"decision": "STAY_OUT", "reassess_after_laps": w - 1, "compound": nxt, "first_stop_lap": done + w}}
+
+
+def _shape(snapshot, pairs) -> tuple:
+    """Plans of one shape differ only in their stop laps: the immediate action kind and the compounds."""
+    return ("PIT" if len(pairs) > 1 and int(pairs[0][1]) == 1 else "STAY", tuple(p[0] for p in pairs[1:]))
+
+
+def _gap(d) -> dict:
+    """A paired difference over the draws (plan minus reference): mean, 90% interval, share faster."""
+    d = np.asarray(d, dtype=float)
+    lo, hi = np.percentile(d, [5, 95])
+    return {"gap_s": round(float(d.mean()), 1), "gap_90": [round(float(lo), 1), round(float(hi), 1)],
+            "faster_share": round(float((d < 0).mean() + 0.5 * (d == 0).mean()), 2)}
+
+
+def _stint_ages(snapshot: Snapshot, plan) -> list[tuple[str, float]]:
+    """(compound, age at the end of the stint) per stint of a contract plan from the snapshot."""
+    out = []
+    for i, s in enumerate(plan.stints):
+        start = snapshot.tyre_age if i == 0 else (s.start_age or 0)
+        out.append((s.compound, float(start + s.laps)))
+    return out
+
+
+def uncertainty_flags(snapshot: Snapshot, sim, plans, *, profile=None) -> tuple[list[str], list[list[str]]]:
+    """(general flags, per plan flags) in words, from what the belief knows at the snapshot: a compound
+    of the plans priced without race laps (the compound proxy), a compound whose estimate leans on the
+    prior (prior_dominated) or rests on few cars' race laps (thin_race_fit, the belief's thin-fit guard), a stint
+    run past the compound's longest run seen so far when the tyre
+    life beyond it is a generic prior (cliff tiers GENERIC_LIFE_TIER on) or past the life estimate
+    itself, and a safety car or VSC in progress. Nothing after the snapshot enters."""
+    fit = sim.fitted_for(snapshot)
+    rep = sim.model_report(snapshot)
+    fit_report = getattr(fit.degradation, "fit_report", None) or {}
+    proxy = fit_report.get("proxy") or {}
+    cliffs = sim.cliffs_for(snapshot)
+    used = sorted({s.compound for p in plans for s in p.stints})
+    general = []
+    for c in used:
+        tiers = proxy.get(c)
+        if tiers is not None and (tiers.get("pace_source") != "race" or tiers.get("wear_source") != "race"):
+            general.append(f"{c} has no race laps so far: pace from {tiers.get('pace_source')}, wear from "
+                           f"{tiers.get('wear_source')} (a proxy)")
+        elif f"thin_race_fit:{c}" in rep.flags:
+            g = (fit_report.get("belief_guard") or {}).get(c, {})
+            n = int(g.get("n_drivers", 0))
+            general.append(f"{c}: race laps so far from {n} car{'s' if n != 1 else ''} ({int(g.get('n_rows', 0))} "
+                           f"clean laps); its pace and wear are pulled toward the better-covered compounds and "
+                           f"earlier races")
+        elif f"prior_dominated:{c}" in rep.flags:
+            general.append(f"{c}: few race laps so far, its estimate leans on the prior")
+    if snapshot.track_status != "green":
+        n = _neutralised_for(snapshot)
+        general.append(f"{snapshot.track_status.upper()} in progress ({_laps(n)} so far): a stop now is cheaper; "
+                       f"how long it lasts is drawn by the model")
+    per_plan = []
+    for p in plans:
+        flags = []
+        for c, age in _stint_ages(snapshot, p):
+            life = cliffs.get(c)
+            if life is None:
+                continue
+            seen = life.lower if life.prior is not None else life.age
+            est = life.prior if life.prior is not None else life.age
+            tier = str(life.source or "")
+            generic = life.prior is not None and any(f"tier{t}" in tier for t in range(GENERIC_LIFE_TIER, 10))
+            if est is not None and age > est:
+                flags.append(f"runs {c} to age {age:.0f}, past its estimated life of {est:.0f} laps")
+            elif seen and age > seen and generic:
+                flags.append(f"runs {c} to age {age:.0f}, past the longest run seen ({seen:.0f}); the life "
+                             f"beyond that is a generic prior")
+        per_plan.append(flags)
+    return general, per_plan
+
+
+FAMILY_TOP = 8      # rank_plans(families=True): at most this many strategy families shown
+FAMILY_GAP_S = 25.0  # ... and none more than this far behind plan 1 (the rest are counted as dropped)
+
+
+def family(pairs) -> str:
+    """A plan's strategy family: its stops left and the compounds after the current set, in words."""
+    later = [p[0] for p in pairs[1:]]
+    return "no more stops" if not later else f"{len(later)} stop{'s' if len(later) > 1 else ''}: {' > '.join(later)}"
+
+
+def rank_plans(snapshot: Snapshot, *, families=False, n_samples=None, sim=None, profile=None) -> dict:
+    """The optimizer's best distinct plans from the snapshot (protocol v2's first call), compact.
+
+    The search is the belief_optimizer policy's (_ranked), so plans[0] is that policy's plan. At most
+    RANK_TOP plans, the best of each shape (_shape: the immediate action kind and the compounds),
+    with the best PIT-now and the best STAY_OUT plan always among them when both are legal. Per plan:
+    its stints, first stop, the immediate action and the submission that keeps it (immediate_action),
+    gap_to_best (mean, 90% interval over the paired draws, share of draws faster than the best),
+    best_share (the share of draws in which it is the fastest of those shown), first_stop_range
+    (the first-stop laps over which a plan of the same shape stays within FLEX_S of it), flags (the
+    plan's uncertainty_flags) and extrapolates (the fit's support warnings: a note, not a flag).
+    `decision` is plan 1's immediate action with the best PIT-now plan read against the best STAY_OUT
+    plan (gap_reading, the choice the submission makes); `flags` are uncertainty_flags. Nothing after the snapshot enters.
+
+    With `families` (protocol v2free) the plans shown span the strategy space instead: the best plan of
+    each family (family(): stops left and compound sequence), in the order of their best plans, at most
+    FAMILY_TOP and none more than FAMILY_GAP_S behind plan 1, plus the best PIT-now plan when it is in
+    none of them; each entry names its family, and families_dropped counts the families left out."""
+    from ..baselines.domain import NoFeasiblePlan
+    sim, profile = _setup(snapshot, sim, profile)
+    n = n_samples or profile.sim.n_samples
+    fit = sim.fitted_for(snapshot)
+    window = pit_window(snapshot, sim.config)
+    try:
+        res = _ranked(snapshot, fit, n, profile.sim.max_stops)
+    except NoFeasiblePlan as exc:
+        return {"error": f"No legal plan within the stop limit: {exc}", "recoverable": False,
+                "pit_window": window["summary"]}
+    s = res.diagnostics["searched"]
+    plans, means, times = s["plans"], np.asarray(s["mean_time_s"]), np.asarray(s["times"])
+    pairs = [p.as_pairs() for p in plans]
+    shapes = [_shape(snapshot, p) for p in pairs]
+    shown, seen = [], set()
+    for i, sh in enumerate(shapes):
+        if sh not in seen:
+            seen.add(sh)
+            shown.append(i)
+    best_of = {k: next((i for i, sh in enumerate(shapes) if sh[0] == k), None) for k in ("PIT", "STAY")}
+    dropped = None
+    if families:
+        fams, seen = [], set()
+        for i, pp in enumerate(pairs):
+            if (f := family(pp)) not in seen:
+                seen.add(f)
+                fams.append(i)
+        top = [i for i in fams if means[i] - means[0] <= FAMILY_GAP_S][:FAMILY_TOP]
+        dropped = len(fams) - len(top)
+        if best_of["PIT"] is not None and best_of["PIT"] not in top:   # pitting now is always on show
+            top = sorted({*top, best_of["PIT"]})
+    else:
+        top = shown[:RANK_TOP]
+        for k in ("PIT", "STAY"):   # both immediate actions on show when both are legal
+            if best_of[k] is not None and best_of[k] not in top:
+                top[-1] = best_of[k]
+                top = sorted(set(top))
+    sub = times[top]
+    win = sub == sub.min(axis=0)
+    share = (win / win.sum(axis=0)).mean(axis=1)
+    general, per_plan = uncertainty_flags(snapshot, sim, [plans[i] for i in top], profile=profile)
+    out = []
+    for r, (i, sh_share, flags) in enumerate(zip(top, share, per_plan), start=1):
+        same = [j for j, sh in enumerate(shapes) if sh == shapes[i] and means[j] <= means[i] + FLEX_S]
+        stops = sorted({snapshot.laps_completed + int(pairs[j][0][1]) for j in same if len(pairs[j]) > 1})
+        act = immediate_action(snapshot, pairs[i])
+        entry = {"rank": r, **({"family": family(pairs[i])} if families else {}),
+                 "plan": plan_text(pairs[i]), "stops": len(pairs[i]) - 1,
+                 "first_stop": describe_plan(snapshot, pairs[i]), "immediate": act["action"],
+                 "submit": act["submit"]}
+        if families:   # the family and the submit fields say it; kept compact
+            del entry["stops"], entry["first_stop"]
+        entry.update(_gap(times[i] - times[0]) if i else {"gap_s": 0.0})
+        entry["best_share"] = round(float(sh_share), 2)
+        if len(stops) > 1:
+            entry["first_stop_range"] = [stops[0], stops[-1]]
+        if flags:
+            entry["flags"] = flags
+        warn = _report.support_warnings(fit.degradation, snapshot, plans[i])
+        if warn:   # a stint older than any seen: a note on the plan, not an uncertainty flag
+            entry["extrapolates"] = warn
+        out.append(entry)
+    # the immediate action is plan 1's (the lowest mean time, as the optimizer ranks); share is the
+    # share of draws in which the best plan of that action beats the best plan of the other one, which
+    # can be under one half when a few slow draws decide the mean
+    a, b = best_of["PIT"], best_of["STAY"]
+    favoured = immediate_action(snapshot, pairs[0])["action"]
+    if a is not None and b is not None:
+        d = times[a] - times[b]
+        lo, hi = np.percentile(d, [5, 95])
+        p = float((d < 0).mean() + 0.5 * (d == 0).mean())
+        pit = immediate_action(snapshot, pairs[a])["action"]
+        decision = {"favoured": favoured, "share": round(p if favoured.startswith("PIT") else 1 - p, 2),
+                    "reading": gap_reading(f"{pit} (best plan)", "STAY_OUT (best plan)", p, float(d.mean()),
+                                           float(lo), float(hi))}
+    elif b is not None:
+        decision = {"favoured": favoured, "share": 1.0, "reading": f"no PIT now is legal or modelled: {window['summary']}"}
+    else:
+        decision = {"favoured": favoured, "share": 1.0, "reading": "every legal plan pits now"}
+    more = {"families_dropped": dropped} if families else {}
+    from .optimizer_bridge import _stops_prior
+    if _stops_prior(snapshot, fit) is not None:   # SimConfig.prerace.stops_prior_s: the order is not time alone
+        more["ranking"] = ("plan 1 ranks on mean time plus a pre-race prior on the number of stops; gap_s is "
+                           "time alone, so a plan below plan 1 can show a negative gap")
+    return _jsonable({"plans": out, "decision": decision, "flags": general, "pit_window": window["summary"],
+                      **more, "n_draws": int(times.shape[1]),
+                      "note": "gaps: plan minus the best plan over shared draws (negative: faster); shares cover "
+                              "parameter and lap noise under this model, not model error"})
+
+
+def evaluate_plan(snapshot: Snapshot, plan=None, first_stop_lap=None, compound=None, *, n_samples=None,
+                  sim=None, profile=None) -> dict:
+    """One plan against the optimizer's best (rank_plans' plan 1) under the same draws: a full plan
+    [[compound, laps], ...] whose first stint continues the current set, or a first stop at the end of
+    lap first_stop_lap onto compound (every legal modelled compound when None, the fastest shown): the
+    best full plan with that first stop, the plan a submission naming it is scored on
+    (eval.decisions.kept_plan). Returns the plan, its gap to the best (_gap), the immediate action and
+    submission that keep it (immediate_action), scored_plan when the scorer would play another plan for
+    that submission (eval.decisions.to_plan on this belief: a full plan's later stints are the
+    optimizer's again) and flags; rule replies say what is legal instead."""
+    from ..baselines.domain import NoFeasiblePlan
+    from ..eval import decisions
+    sim, profile = _setup(snapshot, sim, profile)
+    n = n_samples or profile.sim.n_samples
+    fit = sim.fitted_for(snapshot)
+    window = pit_window(snapshot, sim.config)
+    if (plan is None) == (first_stop_lap is None):
+        raise ValueError("give either plan or first_stop_lap (with compound), not both")
+    try:
+        best = _ranked(snapshot, fit, n, profile.sim.max_stops)
+    except NoFeasiblePlan as exc:
+        return {"error": f"No legal plan within the stop limit: {exc}", "recoverable": False}
+    best_plan = best.plan
+    if plan is not None:
+        cands = [plan]
+    else:
+        lap = int(first_stop_lap)
+        if not (window["earliest_stop_lap"] or 0) <= lap <= (window["latest_stop_lap"] or -1):
+            return {"error": f"No legal stop at the end of lap {lap}: {window['summary']}.", "recoverable": True}
+        pits = [c for c in legal_compounds(snapshot, sim.config) if c in fit.modelled]
+        comps = [str(compound).upper()] if compound else pits
+        bad = [c for c in comps if c not in pits]
+        if bad:
+            return {"error": f"Compound {bad[0]} cannot be fitted; choose from {pits}.", "recoverable": True}
+        # the plan the scorer plays for a submission naming this stop (decisions.kept_plan)
+        done = snapshot.laps_completed
+        act = {"action": "pit"} if lap == done + 1 else {"action": "stay", "laps": lap - done - 1}
+        cands = []
+        for c in comps:
+            try:
+                cands.append(decisions.kept_plan(snapshot, {"first_stop_lap": lap, "compound": c}, act, sim,
+                                                 profile.sim.max_stops, seed=0, n_samples=n))
+            except decisions.InvalidDecision as exc:
+                if len(comps) == 1:
+                    return {"error": f"A stop at the end of lap {lap} onto {c}: {exc}", "recoverable": True}
+        if not cands:
+            return {"error": f"No legal plan stops at the end of lap {lap}: {window['summary']}.", "recoverable": True}
+    res = fit.compare(snapshot, [*cands, best_plan], seed=SEED, n_samples=n)
+    k = len(cands)
+    ok = [i for i in range(k) if res.valid[i]]
+    if not ok:
+        errors = explain_rule_errors(snapshot, res.candidates[0], res.errors[0], sim.config)
+        return _jsonable({"valid": False, "error": "; ".join(errors) or "not a legal plan", "recoverable": True,
+                          "pit_window": window["summary"]})
+    i = min(ok, key=lambda j: res.summaries[j].mean_s)
+    pairs = res.candidates[i].as_pairs()
+    times = fit.simulate_batch(snapshot, [res.candidates[i], best_plan], seed=SEED, n_samples=n).times
+    act = immediate_action(snapshot, pairs)
+    out = {"plan": plan_text(pairs), "stops": len(pairs) - 1, "first_stop": describe_plan(snapshot, pairs),
+           "vs_best": {"best_plan": plan_text(best_plan.as_pairs()), **_gap(times[0] - times[1])},
+           "immediate": act["action"], "submit": act["submit"]}
+    if k > 1:
+        out["other_compounds"] = {res.candidates[j].stints[1].compound: round(float(res.gap_mean_s[j][i]), 1)
+                                  for j in ok if j != i}
+    try:
+        scored = decisions.to_plan(snapshot, {**act["submit"], "confidence": 0.5}, sim, profile.sim.max_stops,
+                                   seed=0, n_samples=profile.sim.n_samples)
+        if scored.as_pairs() != pairs:
+            out["scored_plan"] = (f"the scorer plays {plan_text(scored.as_pairs())} for this submission (after a "
+                                  f"STAY_OUT the rest is planned again)")
+    except decisions.InvalidDecision as exc:
+        out["scored_plan"] = f"this submission has no legal plan: {exc}"
+    general, per_plan = uncertainty_flags(snapshot, sim, [res.candidates[i]], profile=profile)
+    if (flags := [*general, *per_plan[0]]):
+        out["flags"] = flags
+    if res.support_warnings[i]:
+        out["extrapolates"] = res.support_warnings[i]
+    return _jsonable(out)
+
+
+# --- protocol v2free: the race as a strategist sees it at the snapshot -----------------------------------
+def _wear_slope(rows, fuel: float):
+    """(observed wear s/lap, clean laps): the slope of fuel-corrected lap time on tyre age within each
+    (driver, stint) of `rows`' clean laps, pooled; None with fewer than 4 laps or no age spread."""
+    if rows is None or not len(rows) or "clean" not in rows:
+        return None, 0
+    r = rows[rows["clean"].fillna(False).astype(bool) & rows["tyre_age"].notna() & rows["lap_time_s"].notna()]
+    if len(r) < 4:
+        return None, int(len(r))
+    keys = [r["driver"], r["stint"].fillna(-1)]
+    y = r["lap_time_s"].astype(float) - fuel * r["lap"].astype(float)
+    a = r["tyre_age"].astype(float)
+    yd, ad = y - y.groupby(keys).transform("mean"), a - a.groupby(keys).transform("mean")
+    den = float((ad * ad).sum())
+    return (None if den <= 0 else round(float((yd * ad).sum()) / den, 3)), int(len(r))
+
+
+def race_picture(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
+    """What a strategist weighs at the snapshot beyond the look-ahead's ranking, compactly, from the
+    snapshot and the race laps visible at it (Simulator.window_rows: cut at the snapshot's moment,
+    data.visible_rows) and the belief fit at it; nothing after the snapshot enters. Driver codes are
+    the snapshot's (tools.present labels them):
+
+      car         position, gaps, laps left, track status and how long a neutralisation has lasted,
+                  the pit window, the stint history, the current set and its last lap times, and the
+                  set's observed wear (fuel-corrected lap time on tyre age) against the model's
+      nearby      the cars around: position, gap, compound, tyre age and stops so far
+      rejoin      cars within the pit loss behind at the end of the last lap (a stop now drops behind
+                  them) and the position that implies, from the gaps alone
+      compounds   per compound: race laps behind the fit, the longest run seen in the race and the
+                  field's observed wear against the model's (value and sd), the base pace sd, where pace
+                  and wear come from when proxied, and the tyre-life estimate with its sd and source"""
+    sim, profile = _setup(snapshot, sim, profile)
+    fit = sim.fitted_for(snapshot)
+    done = snapshot.laps_completed
+    rows = sim.window_rows(snapshot, done) if done > 0 else None
+    if rows is not None and len(rows):
+        rows = rows[rows["lap"] <= done]
+    deg = fit.degradation
+    fuel = float(getattr(deg, "fuel_slope", 0.0) or 0.0)
+    rep = sim.model_report(snapshot)
+    fit_report = getattr(deg, "fit_report", None) or {}
+    proxy = fit_report.get("proxy") or {}
+    cliffs = sim.cliffs_for(snapshot)
+    loss = pit_loss(snapshot, sim=sim, profile=profile)
+    window = pit_window(snapshot, sim.config)
+
+    def model_wear(c):
+        r = rep.compounds.get(c)
+        if r is None or not r.modelled:
+            return None
+        sd = r.wear_s_per_lap.sd
+        return {"value": round(float(r.wear_s_per_lap.value), 3), "sd": None if _nan(sd) else round(float(sd), 3)}
+
+    def r1(x):
+        return None if x is None or _nan(x) else round(float(x), 1)
+    car = {"position": snapshot.position, "gap_ahead_s": r1(snapshot.gap_ahead_s), "gap_behind_s": r1(snapshot.gap_behind_s),
+           "laps_left": snapshot.remaining_laps, "track_status": snapshot.track_status.upper(),
+           "neutralised_for_laps": _neutralised_for(snapshot), "pit_window": window["summary"],
+           "stints_so_far": [f"{s.compound} {s.laps}" for s in snapshot.stints],
+           "current_set": f"{snapshot.compound}, age {snapshot.tyre_age}",
+           "last_laps_s": [round(float(t), 2) for t in snapshot.recent_lap_times_s[-5:]]}
+    own = None
+    if rows is not None and len(rows):
+        mine = rows[rows["driver"] == snapshot.driver]
+        if len(mine):
+            own = mine[mine["stint"] == mine["stint"].max()]
+    slope, n = _wear_slope(own, fuel)
+    car["set_wear"] = {"observed_s_per_lap": slope, "clean_laps": n, "model": model_wear(snapshot.compound)}
+
+    nearby = []
+    for c in snapshot.field.nearby:
+        entry = {"car": c.driver, "position": c.position, "gap_s": None if c.gap_s is None else round(float(c.gap_s), 1)}
+        if rows is not None and len(rows):
+            theirs = rows[rows["driver"] == c.driver]
+            if len(theirs):
+                last = theirs.iloc[-1]
+                entry.update(compound=last["compound"], tyre_age=None if _nan(last["tyre_age"]) else int(last["tyre_age"]),
+                             stops=int(theirs["stint"].nunique()) - 1)
+        nearby.append(entry)
+
+    rejoin = None
+    now = float(loss["pit_loss_now_s"]["median"]) if loss.get("pit_loss_now_s") else None
+    if rows is not None and len(rows) and now is not None and "end_s" in rows:
+        at = rows[rows["lap"] == done]
+        ours = at.loc[at["driver"] == snapshot.driver, "end_s"]
+        if len(ours) and snapshot.position is not None:
+            behind = (pd_numeric(at["end_s"]) - float(ours.iloc[0]))
+            passing = int(((behind > 0) & (behind < now)).sum())
+            rejoin = {"pit_loss_now_s": round(now, 1), "cars_within_it_behind": passing,
+                      "rejoin_position_about": int(snapshot.position) + passing}
+
+    compounds = {}
+    for c, r in rep.compounds.items():
+        if not r.modelled:
+            continue
+        on = rows[rows["compound"] == c] if rows is not None and len(rows) else None
+        slope, n = _wear_slope(on, fuel)
+        entry = {"race_laps": int(r.n_race_rows or 0),
+                 "longest_run_seen": None if on is None or not len(on) else int(on["tyre_age"].max()),
+                 "field_wear_observed": slope, "field_clean_laps": n, "model_wear": model_wear(c),
+                 "base_pace_sd_s": None if _nan(r.base_s.sd) else round(float(r.base_s.sd), 3)}
+        tiers = proxy.get(c)
+        if tiers is not None and (tiers.get("pace_source") != "race" or tiers.get("wear_source") != "race"):
+            entry["priced_by"] = f"pace {tiers.get('pace_source')}, wear {tiers.get('wear_source')}"
+        life = cliffs.get(c)
+        if life is not None:
+            t = _tyre_life(life)
+            entry["tyre_life"] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in
+                                  {"seen": t["longest_run_seen_laps"], "prior": t["prior_life_laps"],
+                                   "prior_sd": t["prior_sd_laps"], "source": t["prior_source"]}.items()
+                                  if v is not None}
+        compounds[c] = entry
+    out = {"car": car, "nearby": nearby, "rejoin": rejoin, "compounds": compounds,
+           "note": "observed wear: s/lap of tyre age from clean laps so far, fuel-corrected; compare with "
+                   "model_wear (the simulator's value and sd); race_laps are the laps behind the fit"}
+    if snapshot.sets_available is not None:   # SimConfig.tyre_inventory: the sets left, by compound
+        left = {}
+        for t in snapshot.sets_available:
+            left.setdefault(t.compound, []).append(int(t.laps_run))
+        out["sets_left"] = {c: {"new": sum(a == 0 for a in ages), "used_ages": sorted(a for a in ages if a > 0)}
+                            for c, ages in sorted(left.items())}
+        out["sets_note"] = ("sets_left: the sets still held, besides the one fitted (new, and the laps already run "
+                            "on each used one); a later stint takes a new set of its compound when one is left, "
+                            "else the least used; a compound with no set left cannot be fitted")
+    if prerace_shown():
+        block = prerace_block(snapshot.race.race_id)
+        if block is not None:
+            out["pre_race"] = block
+    return _jsonable(out)
+
+
+def prerace_shown() -> bool:
+    """AGENT_PRERACE "on": race_picture carries the supplier's pre-race block (prerace.prerace_block:
+    the circuit's tyre ratings in words and the expected strategies, published before the race,
+    nothing naming the race). Off (the default): race_picture as before."""
+    import os
+    mode = os.environ.get("AGENT_PRERACE", "").strip().lower() or "off"
+    if mode not in ("on", "off"):
+        raise ValueError(f"AGENT_PRERACE must be on or off; got {mode!r}")
+    return mode == "on"
+
+
+def pd_numeric(s):
+    import pandas as pd
+    return pd.to_numeric(s, errors="coerce")
 
 
 def recommendation_fields(snapshot: Snapshot, decision: dict) -> dict:
@@ -1043,3 +1540,87 @@ def recommendation_fields(snapshot: Snapshot, decision: dict) -> dict:
         kind = None
     return _jsonable({"decision": kind, "p_pit": decisions.p_pit(decision),
                       "laps_completed": snapshot.laps_completed})
+
+
+# --- the supplier's pre-race block (src/sim/prerace.py tables; AGENT_PRERACE) ----------------------------------------------------------------------------
+_LEVEL = {1: "very low", 2: "low", 3: "medium", 4: "high", 5: "very high"}
+_WORDS = {"asphalt_abrasion": "abrasion", "tyre_stress": "tyre stress", "lateral": "lateral load",
+          "traction": "traction demand", "braking": "braking", "asphalt_grip": "asphalt grip",
+          "track_evolution": "track evolution", "downforce": "downforce"}
+
+
+def prerace_ratings_words(race_id) -> str | None:
+    """'abrasion low, tyre stress high, ...' from the ratings, None without them."""
+    from .prerace import load_ratings
+    t = load_ratings()
+    from .prerace import _rid
+    rid = _rid(race_id)
+    if rid is None or rid not in t.index:
+        return None
+    r = t.loc[rid]
+    parts = [f"{_WORDS[c]} {_LEVEL[int(r[c])]}" for c in
+             ("asphalt_abrasion", "tyre_stress", "lateral", "traction", "braking", "asphalt_grip",
+              "track_evolution", "downforce")
+             if c in r and r[c] == r[c] and int(r[c]) in _LEVEL]
+    return ", ".join(parts) if parts else None
+
+
+def prerace_guidance_words(race_id) -> list[str]:
+    """One plain line per expected strategy, e.g. 'expected fastest: one stop, MEDIUM about laps
+    1-24 then HARD'; [] without guidance."""
+    out = []
+    names = {0: "no stop", 1: "one stop", 2: "two stops", 3: "three stops"}
+    from .prerace import strategies_of
+    for s in strategies_of(race_id):
+        label = "expected fastest" if s["rank"] == 1 else f"expected option {s['rank']}"
+        seq = s["sequence"]
+        stops = names.get(s["stops"], f"{s['stops']} stops")
+        if not seq:
+            out.append(f"{label}: {stops} (compounds not stated)")
+            continue
+        if s["windows"]:
+            stints = []
+            for j, role in enumerate(seq):
+                if j < len(s["windows"]):
+                    lo, hi = s["windows"][j]
+                    stints.append(f"{role} to a stop around lap {lo:g}" + (f"-{hi:g}" if hi != lo else ""))
+                else:
+                    stints.append(f"{role} to the flag")
+            body = ", then ".join(stints)
+        else:
+            body = " then ".join(seq)
+        out.append(f"{label}: {stops}, {body}")
+    return out
+
+
+def prerace_block(race_id) -> dict | None:
+    """The agent's compact pre-race block: the circuit's tyre ratings in words and the supplier's
+    expected strategies, with its stated pace gaps and degradation note. Nothing that names the
+    race, circuit, season or a driver. None when neither table has the race."""
+    from .prerace import _rid
+    rid = _rid(race_id)
+    words = prerace_ratings_words(rid)
+    lines = prerace_guidance_words(rid)
+    from .prerace import load_guidance
+    t = load_guidance()
+    extra = {}
+    if rid is not None and rid in t.index:
+        r = t.loc[rid]
+        for col, name in (("pace_gap_soft_medium_s", "soft_vs_medium_s_per_lap"),
+                          ("pace_gap_medium_hard_s", "medium_vs_hard_s_per_lap")):
+            try:
+                v = float(r.get(col, ""))
+                if v == v:
+                    extra[name] = v
+            except (TypeError, ValueError):
+                pass
+    if not words and not lines and not extra:
+        return None
+    out = {"source": "the tyre supplier's pre-race publications (before the start; may be wrong)"}
+    if words:
+        out["circuit_tyre_ratings"] = words
+    if lines:
+        out["expected_strategies"] = lines
+    if extra:
+        out["stated_pace_gaps"] = extra
+    return out

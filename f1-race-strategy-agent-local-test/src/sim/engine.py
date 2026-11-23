@@ -407,6 +407,8 @@ class Simulator:
         """
         cfg = self.config
         if self.window is not None or (cfg.fit_window == "full" and not cfg.exclude_snapshot_driver):
+            if cfg.fit_window == "full" and cfg.wear_guard.enabled:
+                self._wear_guarded(snapshot)
             return self
         k0 = (_cal.calibration_point(snapshot, cfg.calibration_every, self.weather, cfg.recalibrate_temp_delta_c)
               if cfg.fit_window == "to_snapshot" else None)
@@ -423,9 +425,23 @@ class Simulator:
                 del self._fits[next(iter(self._fits))]
             fit = copy.copy(self)
             fit.window, fit._fits, fit._cliffs = key, {}, {}
+            fit._guard_race = None
             fit._fit_window(snapshot, k0 or 0)
+            if cfg.fit_window == "full" and cfg.wear_guard.enabled:
+                fit._wear_guarded(snapshot)
             self._fits[cache_key] = fit
         return self._fits[cache_key]
+
+    def _wear_guarded(self, snapshot):
+        """The thin-fit wear guard on this whole-race fit, once per race (wear_guard.guarded):
+        SimConfig.wear_guard, the judge only. The race id comes from the snapshot, which is why
+        it is applied here rather than in _fit."""
+        rid = snapshot.race.race_id
+        if getattr(self, "_guard_race", None) == rid:
+            return
+        from . import wear_guard as _wg
+        self.degradation, _ = _wg.guarded(self.degradation, self.laps, rid, self.config.wear_guard)
+        self._guard_race = rid
 
     def point_estimate(self) -> "Simulator":
         """A shallow copy that simulates the point estimate: no posterior parameter draw and no
@@ -564,6 +580,13 @@ class Simulator:
             return self._fit(practice, model=_cal.held_prior(prior, out))
         ref = race if practice is None else pd.concat([race, practice], ignore_index=True)
         self._fit(race, ref=ref, prior=prior, shrinkage=taus, fuel_prior=fuel)
+        if cfg.belief_guard.enabled and cfg.fit_window == "to_snapshot":
+            # the belief's thin-fit guard (sim/belief_guard.py): visible rows, as-of tables only
+            from . import belief_guard as _bg
+            self.degradation, _ = _bg.guarded(
+                self.degradation, race[race["lap"].notna()] if "lap" in race else race, snapshot.race.race_id,
+                cfg.belief_guard, proxy_cfg=_proxy.as_of_config(cfg.compound_proxy, snapshot.race.race_id),
+                practice=prior, quali=self.quali_gaps(), wear_lower_bound=cfg.degradation.params.get("wear_lower_bound"))
 
     def cliffs_for(self, snapshot: Snapshot) -> dict:
         """compound -> cliff.Cliff on this instance's fit at `snapshot` ({} with the cliff off).
@@ -583,11 +606,22 @@ class Simulator:
             # which a set built by snapshot_at varies per driver): a cache keyed without them kept
             # the first snapshot's edges, so a plan's score depended on the scenarios scored before
             key = ("world", *_race_key(snapshot))
+            as_of = wc.world_edge == "as_of"
+            if as_of:   # the edge moves with the scored snapshot's moment: the belief's visible-rows cut
+                k = int(snapshot.laps_completed or 0)
+                t = self.cut_time(snapshot.driver, k)
+                key = (*key, k, t)
             if key not in self._cliffs:
                 if len(self._cliffs) >= FIT_CACHE_SIZE:
                     del self._cliffs[next(iter(self._cliffs))]
                 steps = self.config.compound_proxy.steps if self.config.compound_proxy.enabled else None
-                self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, snapshot.race, wc, steps)
+                if as_of:
+                    seen = (self.laps[self.laps["lap"] <= k] if t is None else visible_rows(self.laps, t)) if k > 0 \
+                        else self.laps.iloc[0:0]
+                    self._cliffs[key] = _cliff.as_of_world_cliffs(self.laps, seen, self.practice, snapshot.race, wc,
+                                                                  steps)
+                else:
+                    self._cliffs[key] = _cliff.world_cliffs(self.laps, self.practice, snapshot.race, wc, steps)
                 rep = getattr(self.degradation, "fit_report", None)
                 if rep is not None:   # where each edge came from, for the fidelity tool's hindsight ledger
                     self.degradation = copy.copy(self.degradation)
@@ -604,7 +638,7 @@ class Simulator:
             if len(self._cliffs) >= FIT_CACHE_SIZE:
                 del self._cliffs[next(iter(self._cliffs))]
             rows = self.window_rows(snapshot, horizon) if horizon > 0 else self.laps.iloc[0:0]
-            self._cliffs[key] = _cliff.as_of_cliffs(rows, self.practice, snapshot.race, wc)
+            self._cliffs[key] = _cliff.as_of_cliffs(rows, self.practice, snapshot.race, wc, self.config.prerace)
         return self._cliffs[key]
 
     def cliff_ledger(self, snapshot: Snapshot) -> dict:
@@ -654,6 +688,9 @@ class Simulator:
                 errors.append(_messages(exc))
                 continue
             errs = self.validate(snapshot, plan, rules)
+            if (not errs and self.config.tyre_inventory and snapshot.sets_available is not None
+                    and "inventory" not in (self.config.rules if rules is None else rules)):
+                errs = check(["inventory"], RuleContext(snapshot, plan, self.modelled, self.config))
             parsed.append(plan if errs else apply_inventory(snapshot, plan, self.config))
             errors.append(errs)
         out = BatchResult(plans=parsed, errors=errors, elapsed_s=snapshot.elapsed_s, seed=seed)
@@ -694,6 +731,8 @@ class Simulator:
         offset = self._pace_offset(snapshot.driver)
         team_pit = self.team_pit_delta(snapshot)   # 0.0 unless config.pit_stops.team
         fq = self.field_queue(snapshot)   # None unless config.sc_queue is on in mode "single"
+        if fq is not None and fq.placement == "record" and fq.capture is None:
+            fq.anchor = self._queue_anchor(snapshot, fq, seed, n_samples, scenario)
 
         # layout: plan-dependent, sample-independent, built once. `ages` are the green-flag
         # ages; under SC/VSC the effective age is sample-dependent (see the sample loop)
@@ -767,7 +806,8 @@ class Simulator:
         if cliffs:
             cols = sorted(set(self.config.compound_classes) | set(cliffs))
             z_cl = (batch_normals(seed, CLIFF_STREAM, n, len(cols))
-                    if any(cl.prior_sd > 0 for cl in cliffs.values()) else np.zeros((n, len(cols))))
+                    if any(cl.prior_sd > 0 for cl in cliffs.values()) and self.config.belief_cliff_edge == "draw"
+                    else np.zeros((n, len(cols))))
             cliff_age = {name: cl.sample_ages(z_cl[:, cols.index(name)]) for name, cl in cliffs.items()}
         seg = np.empty((len(valid), bounds.shape[1] - 1, n))
         green_p = None   # hazard probabilities at the green-flag ages, sample-independent
@@ -780,6 +820,8 @@ class Simulator:
             # parameters and the lap noise draw from their own streams (EVENT_STREAM per
             # sample, DEGRADATION_STREAM and LAP_NOISE_STREAM per batch), never from rng.
             rng = np.random.default_rng([seed, k])
+            if fq is not None:
+                fq.sample = k
             scen = scenario or self.events.draw(snapshot, np.random.default_rng([seed, k, EVENT_STREAM]))
             v = factors.sample(rng)
             if z_pit is not None:
@@ -926,6 +968,27 @@ class Simulator:
                                                        ps.team_prior_stops)[0]
         return self._pit_loss_cache[key]
 
+    def _queue_anchor(self, snapshot: Snapshot, fq, seed, n_samples, scenario) -> dict | None:
+        """{(sample, S): the car's real remaining strategy's simulated time at the end of lap S - 1}
+        for the safety-car queue's placement "record": that plan simulated alone on the same seed,
+        draws, scenario and tyre-set inventory as the batch, so every plan of every batch of this
+        scenario is placed against the same anchor. None (every plan placed by its clock) where the
+        real strategy cannot be simulated from this snapshot."""
+        from .calibration import REPLAY_RULES, remaining_plan
+        try:
+            plan = remaining_plan(self.laps, snapshot.driver, snapshot.laps_completed)
+        except (ValueError, KeyError, IndexError):
+            return None
+        fq.capture = {}
+        try:
+            res = self.simulate_batch(snapshot, [plan], seed=seed, n_samples=n_samples, scenario=scenario,
+                                      rules=REPLAY_RULES)
+        except Exception:
+            res = None
+        finally:
+            captured, fq.capture = fq.capture, None
+        return captured if res is not None and res.valid[0] else None
+
     def field_queue(self, snapshot: Snapshot):
         """sc_queue.FieldQueue of this snapshot under config.sc_queue (mode "single"), else None.
         The full window (the judge) reads the whole race and the recorded periods' lengths; a
@@ -953,7 +1016,9 @@ class Simulator:
             pace = (_queue.own_pace(self.degradation, rows[rows["driver"] == snapshot.driver])
                     if self.pace is None and len(rows) else 0.0)
             self._pit_loss_cache[key] = (_queue.FieldQueue(rows, snapshot.driver, horizon, q.spacing_s, self.ref_lap_s,
-                                                           recorded, pace, lapped, own_lapped) if len(rows) else None)
+                                                           recorded, pace, lapped, own_lapped, q.held_behind_laps,
+                                                           q.placement)
+                                           if len(rows) else None)
         return self._pit_loss_cache[key]
 
     def pit_loss_inputs(self, snapshot: Snapshot) -> dict:
@@ -1126,6 +1191,12 @@ class Simulator:
                 age = act.start_age or 0
                 chosen = next((t for t in pool if (t.set_id == act.set_id if act.set_id is not None
                                else t.compound == act.compound and t.laps_run == age)), None)
+                if chosen is None and act.set_id is None and self.config.tyre_inventory:
+                    # SimConfig.tyre_inventory: the best set of the compound left (rules.assign_sets)
+                    same = [t for t in pool if t.compound == act.compound]
+                    if same:
+                        chosen = min(same, key=lambda t: (t.laps_run != 0, t.laps_run) if age == 0
+                                     else (abs(t.laps_run - age), t.laps_run))
                 if chosen is not None and act.set_id is not None and age not in (0, chosen.laps_run):
                     return None, [f"start_age {act.start_age} conflicts with set '{chosen.set_id}' "
                                   f"({chosen.laps_run} laps run)"]

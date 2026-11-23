@@ -64,7 +64,10 @@ Policy-visible surfaces (observe), per snapshot:
   traffic     the belief with traffic on (configs/sim/belief_traffic.yaml, the projected
               field, src/sim/traffic.py): the projected ghost table of every variant, own pace
               and dirty air, a plan set's times and positions, get_model_report, compare_plans
-              and evaluate_strategy as shown, the belief optimum and run_to_flag planned with it
+              and evaluate_strategy as shown, the belief optimum and run_to_flag planned with it;
+              and the same belief with the as-of passing difficulty (configs/sim/
+              belief_difficulty.yaml): its threshold and source races, a plan set's times and
+              positions, get_model_report and evaluate_strategy as shown
 
 The scoring world and the hindsight reference are allowed to see the whole race and are
 not observed.
@@ -764,6 +767,16 @@ def _tools_surface(snap):
         out[f"evaluate_strategy/pit_{c}"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": c})
     for n in (1, 3):
         out[f"evaluate_strategy/stay_out_{n}"] = _shown(tools.evaluate_strategy, {"action": "stay_out", "laps": n})
+    # protocol v2 (src/agent.py AGENT_PROTOCOL): the ranked plans and one plan evaluated
+    out["rank_plans"] = _shown(tools.rank_plans)
+    out["race_picture"] = _shown(tools.race_picture)   # protocol v2free
+    out["rank_plans/families"] = _shown(tools.rank_plans_families)
+    first = snap.laps_completed + 1
+    for lap in (first, first + 3):
+        out[f"evaluate_plan/stop_{lap - snap.laps_completed}"] = _shown(tools.evaluate_plan, None, lap, None)
+    for k in script:
+        if k.startswith(("one_stop", "too_")):
+            out[f"evaluate_plan/{k}"] = _shown(tools.evaluate_plan, script[k])
     out["race_state"] = _call(agent_tools.race_state, snap)
     for k, p in script.items():
         if k.startswith(("too_", "single")):
@@ -776,6 +789,14 @@ def _decisions_surface(belief, snap):
                                                                      n_samples=N_SAMPLES).as_pairs())}
     subs = {f"PIT_{c}": {"decision": "PIT", "compound": c, "confidence": 0.6} for c in DRY}
     subs["STAY_OUT_3"] = {"decision": "STAY_OUT", "reassess_after_laps": 3, "confidence": 0.6}
+    # protocol v2's kept stop (decisions.kept_plan): a named first stop now and five laps on
+    subs.update({f"KEEP_{c}_{w}": {"decision": "PIT" if w == 1 else "STAY_OUT", "reassess_after_laps": max(1, w - 1),
+                                   "compound": c, "first_stop_lap": snap.laps_completed + w, "confidence": 0.6}
+                 for c in DRY for w in (1, 5)})
+    # protocol v2free's named plan (decisions.named_plan): one stop five laps on, the set drawn from the inventory
+    rest = snap.remaining_laps
+    subs.update({f"PLAN_{c}": {"decision": "STAY_OUT", "reassess_after_laps": 4, "compound": c,
+                               "plan": [[snap.compound, 5], [c, rest - 5]], "confidence": 0.6} for c in DRY})
     for k, sub in subs.items():
         out[k] = _call(lambda s=sub: decisions.to_plan(snap, s, belief, MAX_STOPS, seed=0, n_samples=N_SAMPLES).as_pairs())
     return out
@@ -815,6 +836,35 @@ def _traffic_surface(data, snap, scenario):
                                                                     n_samples=N_SAMPLES).as_pairs())
     out["run_to_flag"] = _call(lambda: plain(policies.RULE_POLICIES["run_to_flag"](scenario, belief, MAX_STOPS).plan))
     assert traffic.GhostTraffic(**cfg.traffic.params).reads_future is False
+    out.update(_difficulty_surface(data, snap, plans))
+    return out
+
+
+BELIEF_DIFFICULTY_CONFIG = score.BELIEF_TRAFFIC_CONFIG.parent / "belief_difficulty.yaml"
+
+
+def _difficulty_surface(data, snap, plans):
+    """The belief with traffic and the as-of passing difficulty (configs/sim/belief_difficulty.yaml,
+    src/sim/overtaking.py): the threshold it plays with and the races it read, a plan set's times and
+    positions, and the passing words the tools show."""
+    from src.sim import traffic
+    cfg = SimConfig.from_file(BELIEF_DIFFICULTY_CONFIG)
+    belief = score.race_simulators(PROFILE, belief_config=cfg)(data.race_id, "belief")
+    fit = belief.fitted_for(snap)
+    laps = np.arange(snap.laps_completed + 1, snap.race.total_laps + 1)
+    state = fit.traffic.prepare(snap, laps, fit.laps, snap.driver, ref_lap_s=fit.ref_lap_s, model=fit.degradation)
+    out = {"difficulty_state": None if state is None else {
+        "theta_s": plain(state.pass_theta_s), "slope": plain(state.pass_slope),
+        "sources": list(state.difficulty.sources) if state.difficulty is not None else None}}
+    b = belief.simulate_batch(snap, plans, seed=agent_tools.SEED, n_samples=N_SAMPLES)
+    out["difficulty_batch"] = {"times": plain(b.times), "traffic_s": plain(b.traffic_s),
+                               "final_pos": plain(b.final_pos), "rejoin_pos": plain(b.rejoin_pos)}
+    with mock.patch.dict(agent_tools._BELIEF, {"config": cfg}), \
+            mock.patch.object(agent_tools, "_SIMS", {}):
+        tools.set_snapshot(snap)
+        out["difficulty_model_report"] = _shown(tools.get_model_report, None)
+        out["difficulty_evaluate_strategy"] = _shown(tools.evaluate_strategy, {"action": "pit", "compound": _other(snap.compound)})
+    assert traffic.GhostTraffic(**cfg.traffic.params).reads_future is False
     return out
 
 
@@ -846,12 +896,38 @@ def serving(data: jobs.RaceData, extra=()):
         yield
 
 
+def inventory_laps(frame: pd.DataFrame) -> pd.DataFrame:
+    """The race frame as the raw laps tyre_inventory reads (Driver, LapNumber, Stint, Compound,
+    TyreLife, FreshTyre, Time, Team): the recorded or the altered race, as the harness built it.
+    FreshTyre is TyreLife 1, as the frame does not carry it."""
+    life = pd.to_numeric(frame["tyre_age"], errors="coerce")
+    return pd.DataFrame({"Driver": frame["driver"].to_numpy(), "LapNumber": frame["lap"].to_numpy(dtype=float),
+                         "Stint": frame["stint"].to_numpy(dtype=float), "Compound": frame["compound"].to_numpy(),
+                         "TyreLife": life.to_numpy(dtype=float), "FreshTyre": (life == 1).to_numpy(),
+                         "Time": pd.to_timedelta(pd.to_numeric(frame["end_s"], errors="coerce"), unit="s").to_numpy(),
+                         "Team": frame["team"].to_numpy()})
+
+
+def with_inventory(data: jobs.RaceData, snap):
+    """The snapshot with the tyre sets (SimConfig.tyre_inventory in the belief), read from the
+    race as the harness built it (recorded or altered) and the weekend's sessions (before the race,
+    never altered; a synthetic race has none and takes the standard allocation): the inventory, and
+    everything that reads it (race_picture's sets_left, the look-ahead, the baselines), is observed."""
+    from src.sim import tyre_inventory
+    if not agent_tools.belief_config().tyre_inventory:
+        return snap
+    w = tyre_inventory.weekend(data.race_id)
+    sessions, allocation = (w[0], w[2]) if w is not None else ({}, dict(tyre_inventory.ALLOCATION_STANDARD))
+    return tyre_inventory.with_sets(snap, data.race_id, weekend_data=(sessions, inventory_laps(data.frame), allocation))
+
+
 def observe(data: jobs.RaceData, driver: str, lap: int, *, snapshot_fix=None, patches=()) -> dict:
     """Every policy-visible surface (SURFACES) at (driver, lap) of `data`. `snapshot_fix`
     rewrites the built snapshot first (a known leak's neutraliser)."""
     snap = BUILDER(data.frame, data.race, driver, lap)
     if snapshot_fix is not None:
         snap = snapshot_fix(snap)
+    snap = with_inventory(data, snap)
     view = RaceSnapshot.from_contract(snap)
     shown = tools.set_snapshot(snap)   # what the model is shown (anonymised unless AGENT_SHOW_IDENTITY)
     scenario = Scenario(scenario_id=f"{data.race_id}:{driver}:{lap:02d}", race_id=data.race_id, driver=driver,
