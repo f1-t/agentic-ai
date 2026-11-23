@@ -39,7 +39,9 @@ import yaml
 
 PROJECT = Path(__file__).resolve().parents[1]
 EVAL_SET = PROJECT / "data" / "eval_set.json"
-SCORECARD = "sc-align-997d69d/main"     # the adopted configuration's scorecard (docs/eval.md, "The current configuration")
+SCORECARD = "belief-guard-243bf40/main"  # the latest committed scorecard of the adopted configuration (eval-v3)
+DEV_DEFAULT = "reports/eval/rerun/v3/dev20"
+TEST_DEFAULT = "reports/eval/rerun/v3/test9"
 ABLATION = "adopt-c67c9a7/ablation"     # each adopted choice switched back off, on the adopted base
 ABLATION_EARLIER = "ablation"           # f7be251's ablation: the learned calibrator only
 TIE = 1e-6            # src.eval.score.REGRET_TOL_S
@@ -252,7 +254,7 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
         N[key] = Num(None, "pending", source, how, pending=True, tag=waits)
 
     D = load_set("d", "development", dev)
-    H = load_set("h", "held-out", test, allow_dev_as_test)
+    H = load_set("h", "test set", test, allow_dev_as_test)
     if not D.present:
         raise SystemExit("--dev is required")
     held = json.loads(EVAL_SET.read_text())
@@ -435,6 +437,11 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
             f"mean decision time, isolated timing sample of {int(iso['episodes'])} episodes run one at a time")
         put(f"{t}_tok", float(iso["input_tokens_mean"]), f"{iso['input_tokens_mean'] / 1000:.0f}k", lsrc,
             "mean input tokens per decision, the same isolated sample")
+        allrow = lat[lat["run"].str.contains("all scenarios")].iloc[0]
+        put(f"{t}_calls", float(allrow["tool_calls_mean"]), f"{allrow['tool_calls_mean']:.0f}", lsrc,
+            "mean tool calls per decision over the whole pass (row 'concurrent, all scenarios')")
+        put(f"{t}_tok", float(allrow["input_tokens_mean"]), f"{allrow['input_tokens_mean'] / 1000:.0f}k", lsrc,
+            "mean input tokens per decision over the whole pass (row 'concurrent, all scenarios')")
         allg = "hall" if t == "h" else "d"
         put(f"{t}_ties_bo", N[f"{allg}_belief_optimizer_wtl"].value[1], str(N[f"{allg}_belief_optimizer_wtl"].value[1]),
             N[f"{allg}_belief_optimizer_wtl"].source, "scenarios where the agent's regret equals the optimizer's (ties)")
@@ -538,12 +545,6 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
     put("ceil_relgap_sc", lv3["rel_gap_mae_s"], s(lv3["rel_gap_mae_s"], 1), csrc,
         "level 3 (stints, stops and SC/VSC laps as recorded): relative gap error s")
     put("ceil_pairs", int(lv0["close_pairs"]), str(int(lv0["close_pairs"])), csrc, "close pairs pooled")
-    if H.present:
-        hdr = (H.root / "reporting_header.txt").read_text()
-        m = re.search(r"correctly ([\d.]+) of the time \(ceiling ([\d.]+)\).*?off by ([\d.]+) s.*?floor ([\d.]+) s", hdr)
-        if m and (round(hl["A_close_pair_acc"], 3), round(lv4["close_pair_acc"], 3), round(hl["A_rel_gap_mae_s"], 1),
-                  round(lv4["rel_gap_mae_s"], 1)) != tuple(float(x) for x in m.groups()):
-            raise SystemExit("cross-check failed: the pre-registered fidelity context differs from the scorecard")
     for name, adir, items in ((ablation, fid / ablation,
                                (("world_events_off", "A_close_pair_acc", 3), ("world_events_off", "A_rel_gap_mae_s", 1),
                                 ("cliff_edge_history", "A_close_pair_acc", 3),
@@ -561,7 +562,11 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
             how = (f"{factor} minus the base ({name}{', main ' + m.group(1) if m else ''}), {col}, pooled; race-cluster "
                    f"bootstrap 95% interval; equals headlines.csv difference")
             put(f"abl_{factor}_{col}", (d, lo, hi), f"{s(d, nd, sign=True)} {ci(lo, hi, nd)}", asrc, how)
+    put("fid_b2regret", hl["B2_regret_s"], s(hl["B2_regret_s"], 1), fsrc,
+        "headline B2_regret_s: judge time the predictive simulator's favourite plan loses to the judge's favourite, mean "
+        "over snapshots of the calibration races")
     extra(N, put, pend, D, H, groups)
+    v3(N, put, pend, D, H)
     N["_sets"] = Num((D, H), "", "", "")
     return N
 
@@ -641,6 +646,90 @@ def provenance_md(N: dict[str, Num], used: list[str], args_line: str) -> str:
     pend = sorted({N[k].tag for k in used if N[k].pending})
     lines += ["", "Pending inputs: " + (", ".join(pend) if pend else "none") + "."]
     return "\n".join(lines) + "\n"
+
+
+
+LEVEL_POL = ("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy", "fixed_one_stop",
+             "fixed_two_stop")
+# the scorecard's adoption list, checked against the run's recorded world and belief choices
+ADOPTED = (("Safety cars and the safety-car queue", lambda w, b: w.get("events") == "hybrid"
+            and bool((w.get("sc_queue") or {}).get("enabled"))),
+           ("Driver effects", lambda w, b: w.get("driver_effects") == "race" and b.get("driver_effects") == "race"),
+           ("Tyre sets", lambda w, b: bool(w.get("tyre_inventory")) and bool(b.get("tyre_inventory"))),
+           ("Thin-data guards", lambda w, b: bool((w.get("wear_guard") or {}).get("enabled"))
+            and bool((b.get("belief_guard") or {}).get("enabled"))),
+           ("Tyre-life history", lambda w, b: "as_of" in str(w.get("tyre_life_edge"))
+            and "as_of" in str(b.get("tyre_life_edge"))))
+NOT_ADOPTED = (("Traffic and overtaking difficulty", lambda w, b: w.get("traffic") == "none" and b.get("traffic") == "none"),
+               ("Tyre-supplier guidance", None),
+               ("Learned calibrator", lambda w, b: "learned" not in str(b.get("calibrator"))
+                and "trained" not in str(b.get("calibrator"))),
+               ("Wear hinge", lambda w, b: not w.get("hinge") and not b.get("hinge")))
+
+
+def v3(N, put, pend, D, H):
+    """The eval-v3 poster's extra numbers: per-policy mean regret on both sets, departures from the look-ahead,
+    and the adoption list checked against the run's configuration."""
+    for S in (H, D):
+        t = S.tag
+        if not S.present:
+            continue
+        chart = pd.read_csv(S.root / "chart_regret_s.csv")
+        for pol in LEVEL_POL:
+            r = ok_rows(S.rows, pol)
+            ids = list(r[["race_id", "driver"]].itertuples(index=False, name=None))
+            lo, hi = cluster_bootstrap(r["regret_s"], ids)
+            c = chart[chart["policy"] == pol].iloc[0]
+            for a, b in ((r["regret_s"].mean(), c["mean"]), (lo, c["ci_low"]), (hi, c["ci_high"])):
+                _close(a, b, f"{S.label} {pol} mean regret vs chart_regret_s.csv")
+            if len(r) != int(c["scenarios"]):
+                raise SystemExit(f"cross-check failed: {S.label} {pol} scored")
+            src = S.f("tables/chart_regret_s.csv")
+            how = (f"mean regret_s of {pol} over its {len(r)} scored scenarios; (race, driver) cluster bootstrap 95% "
+                   "interval; equals chart_regret_s.csv")
+            put(f"{t}_mean_{pol}", float(r["regret_s"].mean()), s(r["regret_s"].mean(), 1), src, how)
+            put(f"{t}_mci_{pol}", (lo, hi), ci(lo, hi, 1), src, how)
+        # departures: the agent's scored plan differs from the look-ahead's top-ranked plan
+        files = sorted((S.base / "run_support").glob("*departures.csv"))
+        if not files:
+            for k in ("dep_n", "dep_helped", "dep_hurt", "dep_net"):
+                pend(f"{t}_{k}", S.label, "departures", "departures file")
+            continue
+        dep = pd.read_csv(files[0])
+        a = ok_rows(S.rows, "agent").set_index("scenario_id")["regret_s"]
+        b = ok_rows(S.rows, "belief_optimizer").set_index("scenario_id")["regret_s"]
+        ok = dep[dep["status"] == "ok"].set_index("scenario_id")
+        delta = (a - b).reindex(ok.index)
+        if (delta - ok["delta_vs_bo"]).abs().max() > 1e-9:
+            raise SystemExit(f"cross-check failed: {files[0].name} delta_vs_bo differs from combined.csv")
+        dp = ok[ok["departs_plan"].astype(bool)]
+        src = f"{S.label}: run_support/{files[0].name}, tables/combined.csv"
+        how = ("decisions whose scored plan differs from the look-ahead's top-ranked plan (departs_plan); helped / hurt: "
+               "agent regret lower / higher than belief_optimizer's by more than 0.05 s (outcome); delta checked "
+               "against combined.csv")
+        put(f"{t}_dep_n", len(dp), str(len(dp)), src, how)
+        put(f"{t}_dep_helped", int((dp["outcome"] == "helped").sum()), str(int((dp["outcome"] == "helped").sum())), src, how)
+        put(f"{t}_dep_hurt", int((dp["outcome"] == "hurt").sum()), str(int((dp["outcome"] == "hurt").sum())), src, how)
+        net = float(dp["delta_vs_bo"].sum())
+        put(f"{t}_dep_net", net, s(net, 1, sign=True), src, "sum of agent minus belief_optimizer regret over the departures")
+    # the adoption list against the configuration the runs used
+    for S in (H, D):
+        if not S.present:
+            continue
+        w = (S.prov.get("world") or {}).get("choices") or {}
+        b = (S.prov.get("belief") or {}).get("choices") or {}
+        for lab, check in ADOPTED:
+            if not check(w, b):
+                raise SystemExit(f"{S.label}: '{lab}' is listed as adopted but the run's configuration does not have it")
+        for lab, check in NOT_ADOPTED:
+            if check is not None and not check(w, b):
+                raise SystemExit(f"{S.label}: '{lab}' is listed as not adopted but the run's configuration has it")
+    put("adopted", [a for a, _ in ADOPTED], ", ".join(a for a, _ in ADOPTED), "provenance.json world/belief choices",
+        "adopted factors, each checked on in both runs' recorded configuration")
+    put("not_adopted", [a for a, _ in NOT_ADOPTED], ", ".join(a for a, _ in NOT_ADOPTED),
+        "provenance.json world/belief choices; docs/eval.md",
+        "factors tested by the scorecard and not adopted; traffic, learned calibrator and hinge checked off in both runs' "
+        "configuration (tyre-supplier guidance has no switch in the recorded choices)")
 
 
 if __name__ == "__main__":

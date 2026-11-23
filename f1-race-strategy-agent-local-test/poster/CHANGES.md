@@ -56,3 +56,16 @@ length and others) into the policies. They are discarded, and none of them appea
   - the development lead split by circuit history.
 
   The tyre-life explanation is labelled a leading explanation, not an established cause.
+
+## Final results (eval-v3)
+
+- **Inputs.**
+  - The runs are the v3 development and test sets, f53d545, tag `eval-v3`. Their documented defaults are
+    `reports/eval/rerun/v3/{dev20,test9}`.
+  - The scorecard is `belief-guard-243bf40`.
+- **Content.**
+  - Results for the whole test set, with the development set beside it.
+  - The LLM's departures from its look-ahead.
+  - An adopted / not adopted list, checked against the run's configuration.
+  - A one-diagram integrity panel.
+- **Type and figures.** Fewer words; the type and the figures are larger.
