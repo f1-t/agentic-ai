@@ -19,6 +19,7 @@ degradation:
     wear_lower_bound: 0.0
     driver_effects: race
 lap_noise: persistent
+belief_cliff_edge: point   # the wear-cliff edge at its point, as belief.yaml
 calibrator:
   name: trained
   params:

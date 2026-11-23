@@ -9,12 +9,14 @@ import pytest
 from src.contracts import Snapshot
 from src.eval import rerun, score
 from src.sim import SimConfig, agent_tools, calibration, fidelity
-from src.sim.config import WORLD_DEGRADATION, WORLD_EDGE, world_default
+from src.sim.config import WORLD_DEGRADATION, WORLD_EDGE, WORLD_WEAR_GUARD, WearGuard, world_default
 from src.sim.engine import Simulator
 
 ROOT = fidelity.ROOT
-DEFAULT_WORLD_HASH = "5069228b35e7"       # driver effects, edge history_only, hybrid SC/VSC, later periods pooled history
-DEFAULT_BELIEF_HASH = "351f4124ff22"      # belief.yaml with driver effects, SC/VSC lengths from as-of history
+DEFAULT_WORLD_HASH = "15e3f31d98a7"       # driver effects, edge history_only, hybrid SC/VSC pooled history, wear guard
+DEFAULT_BELIEF_HASH = "9d691bbbcf24"      # belief.yaml with driver effects, SC/VSC history lengths, cliff edge point
+PRE_V3_WORLD_HASH = "5069228b35e7"        # the default world from the SC alignment (#125) to v3
+PRE_V3_BELIEF_HASH = "351f4124ff22"
 PRE_SC_ALIGNMENT_WORLD_HASH = "abc455a9bbb6"   # the default world from the adoption (#114) to the SC alignment
 PRE_SC_ALIGNMENT_BELIEF_HASH = "f7b872d14c0c"
 PRE_SCORECARD_WORLD_HASH = "d230d3a56b0b"   # the default world from PR #108 until the adoption
@@ -34,6 +36,10 @@ def test_the_default_world_is_the_scorecard_choice():
     assert score.WORLD_EVENTS_DEFAULT is True and WORLD_EDGE == "history_only"
     assert (w.events.name, w.events.params) == ("hybrid", {"lap_times": "recorded", "duration": "history", "pooled": True})
     assert w.wear_cliff.enabled and w.wear_cliff.world_edge == "history_only"
+    assert WORLD_WEAR_GUARD == {"enabled": True, "scale_sd_by_drivers": True}
+    assert w.wear_guard == WearGuard(enabled=True, scale_sd_by_drivers=True)
+    assert (w.wear_guard.min_drivers, w.wear_guard.min_rows) == (3, 40)
+    assert not SimConfig().wear_guard.enabled   # the SimConfig default stays off; the eval world sets it
     assert w.degradation.model_dump() == {"name": "linear_fuel", "params": {"driver_effects": "race"}} \
         == {"name": WORLD_DEGRADATION["name"], "params": WORLD_DEGRADATION["params"]}
     assert w.traffic.name == "none" and w.stint_limit_margin_laps is None and w.plan_on == "draws"
@@ -52,6 +58,8 @@ def test_the_default_belief_is_the_scorecard_choice_and_the_tools_read_it():
     assert (b.fuel_anchor.prior, b.fuel_anchor.practice) == ("anchored", "anchored")
     assert b.calibrator.name == "as_of_history" and b.wear_cliff.enabled
     assert (b.events.name, b.events.params) == ("rate", {"as_of": True, "duration": "history"})
+    assert b.belief_cliff_edge == "point" and SimConfig().belief_cliff_edge == "draw"
+    assert agent_tools.belief_config().belief_cliff_edge == "point"
     assert calibration.config_hash(b) == DEFAULT_BELIEF_HASH
     assert agent_tools.BELIEF_CONFIG == score.BELIEF_CONFIG == fidelity.BELIEF_FILE
     assert rerun.belief_path("default") == str(score.BELIEF_CONFIG)
@@ -81,8 +89,16 @@ def test_every_earlier_choice_stays_available_as_a_file():
     assert calibration.config_hash(pre_w) == PRE_SC_ALIGNMENT_WORLD_HASH
     assert calibration.config_hash(pre) == PRE_SC_ALIGNMENT_BELIEF_HASH
     assert pre_w.events.params == {"lap_times": "recorded"} and pre.events.params == {"as_of": True}
-    assert pre_w.model_copy(update={"events": default_world().events}) == default_world()
-    assert pre.model_copy(update={"events": b.events}) == b
+    # before v3: the same configs with the guard off (world) and the cliff edge drawn (belief)
+    v3_w = SimConfig.from_file(ROOT / "configs/sim/legacy/world_pre_v3.yaml")
+    v3_b = SimConfig.from_file(ROOT / "configs/sim/legacy/belief_pre_v3.yaml")
+    assert calibration.config_hash(v3_w) == PRE_V3_WORLD_HASH
+    assert calibration.config_hash(v3_b) == PRE_V3_BELIEF_HASH
+    assert not v3_w.wear_guard.enabled and v3_b.belief_cliff_edge == "draw"
+    assert v3_w.model_copy(update={"wear_guard": default_world().wear_guard}) == default_world()
+    assert v3_b.model_copy(update={"belief_cliff_edge": "point"}) == b
+    assert pre_w.model_copy(update={"events": v3_w.events}) == v3_w
+    assert pre.model_copy(update={"events": v3_b.events}) == v3_b
     # the traffic world is the default world plus traffic only (test_traffic_eval_params too)
     assert SimConfig.from_file(score.WORLD_TRAFFIC_CONFIG).model_copy(
         update={"traffic": default_world().traffic}) == default_world()
@@ -106,6 +122,11 @@ def test_the_ablation_toggles_each_adopted_choice_back_off():
     off = specs["sc_alignment_off"]
     assert off.world_config().events.params["duration"] == "geometric" and not off.world_config().events.params["pooled"]
     assert off.belief_config().events.params["duration"] == "geometric"
+    assert not w["wear_guard_off"].wear_guard.enabled
+    assert w["wear_guard_off"].model_copy(update={"wear_guard": base_w.wear_guard}) == base_w
+    assert w["wear_guard_unscaled"].wear_guard == WearGuard(enabled=True)
+    assert specs["belief_cliff_edge_draw"].belief_config().belief_cliff_edge == "draw"
+    assert specs["belief_cliff_edge_draw"].belief_config().model_copy(update={"belief_cliff_edge": "point"}) == base_b
     tb = specs["traffic_both"]
     assert tb.world_config().traffic.name == "ghost" and tb.belief_config().traffic.params["source"] == "projected"
     # traffic aside, traffic_both keeps every adopted choice
@@ -117,9 +138,11 @@ def test_provenance_names_each_choice():
     assert calibration.config_hash(rerun.default_world()) == DEFAULT_WORLD_HASH
     assert (w["events"], w["tyre_life_edge"], w["driver_effects"], w["hinge"], w["traffic"]) == \
         ("hybrid", "history_only", "race", False, "none")
+    assert w["wear_guard"] == {"enabled": True, "min_drivers": 3, "min_rows": 40, "scale_sd_by_drivers": True}
     b = rerun.config_choices(belief(), "belief")
     assert (b["driver_effects"], b["lap_noise"], b["traffic"], b["calibrator"], b["sd_scale"], b["plan_on"]) == \
         ("race", "persistent", "none", "as_of_history", None, "draws")
+    assert b["belief_cliff_edge"] == "point" and "wear_guard" not in b
     assert b["fuel_anchor"]["prior"] == "anchored" and b["tyre_life_edge"].startswith("as_of_snapshot")
 
 

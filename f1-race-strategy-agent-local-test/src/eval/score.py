@@ -405,7 +405,8 @@ def race_simulators(profile=None, belief_config=None, world_config=None):
     AGENT_BELIEF_CONFIG names another (to_snapshot window, traffic off, posterior draws and
     persistent lap noise on, driver effects in the fits); the world runs
     `world_config`, by default the profile's SimConfig (full window, traffic off; the wear fit
-    config.WORLD_DEGRADATION and the tyre-life edge config.WORLD_EDGE, config.world_default;
+    config.WORLD_DEGRADATION, the tyre-life edge config.WORLD_EDGE and the thin-fit wear guard
+    config.WORLD_WEAR_GUARD, config.world_default;
     default_world_config, WORLD_EVENTS on by default). The world alone
     gets the race's whole-race pit loss (world_pit_loss); the belief prices stops with the as-of
     estimate its config asks for (docs/eval.md "Pit loss and track status"). Cached per race

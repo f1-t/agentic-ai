@@ -62,3 +62,8 @@ degradation:
 # parameter widening (degradation.params.sd_scale, 1.75 per kind) is a switch, off: it worsened
 # the replay order measures.
 lap_noise: persistent
+# The wear-cliff edge at its point in every sample, max(seen so far, prior), the edge the judge's
+# history_only prior uses, not drawn per sample (docs/eval.md "Belief priors"): judge-regret of the
+# belief's favourite -0.20 s [-0.38, -0.06], more early in the race. Adopted 2026-11-22 (v3); before:
+# configs/sim/legacy/belief_pre_v3.yaml ("draw").
+belief_cliff_edge: point

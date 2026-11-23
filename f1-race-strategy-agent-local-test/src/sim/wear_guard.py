@@ -70,11 +70,12 @@ def _one(rid):
     from src.contracts import Snapshot
     from . import jobs
     from .compute import load_profile
-    from .config import SimConfig, world_default
+    from .config import SimConfig, WearGuard, world_default
     from .engine import Simulator
     from .tyre_history import race_info
     data = jobs.load_race(rid, load_profile())
-    sim = Simulator(data.frame, world_default(SimConfig()), data.practice)
+    # the default world with the guard off: the history is the judge's own unguarded fits
+    sim = Simulator(data.frame, world_default(SimConfig()).model_copy(update={"wear_guard": WearGuard()}), data.practice)
     snap = Snapshot(race=data.race, driver=str(data.frame["driver"].iloc[0]), laps_completed=0, compound="MEDIUM",
                     tyre_age=0, elapsed_s=0.0)
     fit = sim.fitted_for(snap)

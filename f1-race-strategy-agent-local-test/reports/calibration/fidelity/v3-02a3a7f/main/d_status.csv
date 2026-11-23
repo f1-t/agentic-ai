@@ -1,0 +1,191 @@
+component,status,detail,race_id
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2019_10_united_kingdom
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2019_10_united_kingdom
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2019_10_united_kingdom
+compound_gap,ok,fresh-tyre pace gap between compounds,2019_10_united_kingdom
+fuel,ok,fuel/track-evolution slope s per lap,2019_10_united_kingdom
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2019_10_united_kingdom
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2019_10_united_kingdom
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2019_10_united_kingdom
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2019_10_united_kingdom
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2019_10_united_kingdom
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2021_01_bahrain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2021_01_bahrain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2021_01_bahrain
+compound_gap,ok,fresh-tyre pace gap between compounds,2021_01_bahrain
+fuel,ok,fuel/track-evolution slope s per lap,2021_01_bahrain
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2021_01_bahrain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2021_01_bahrain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2021_01_bahrain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2021_01_bahrain
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2021_01_bahrain
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2021_04_spain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2021_04_spain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2021_04_spain
+compound_gap,ok,fresh-tyre pace gap between compounds,2021_04_spain
+fuel,ok,fuel/track-evolution slope s per lap,2021_04_spain
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2021_04_spain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2021_04_spain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2021_04_spain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2021_04_spain
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2021_04_spain
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2021_09_austrian
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2021_09_austrian
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2021_09_austrian
+compound_gap,ok,fresh-tyre pace gap between compounds,2021_09_austrian
+fuel,ok,fuel/track-evolution slope s per lap,2021_09_austrian
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2021_09_austrian
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2021_09_austrian
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2021_09_austrian
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2021_09_austrian
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2021_09_austrian
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2021_20_qatar
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2021_20_qatar
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2021_20_qatar
+compound_gap,ok,fresh-tyre pace gap between compounds,2021_20_qatar
+fuel,ok,fuel/track-evolution slope s per lap,2021_20_qatar
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2021_20_qatar
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2021_20_qatar
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2021_20_qatar
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2021_20_qatar
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2021_20_qatar
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2021_22_united_arab_emirates
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2021_22_united_arab_emirates
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2021_22_united_arab_emirates
+compound_gap,ok,fresh-tyre pace gap between compounds,2021_22_united_arab_emirates
+fuel,ok,fuel/track-evolution slope s per lap,2021_22_united_arab_emirates
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2021_22_united_arab_emirates
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2021_22_united_arab_emirates
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2021_22_united_arab_emirates
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2021_22_united_arab_emirates
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2021_22_united_arab_emirates
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_01_bahrain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_01_bahrain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_01_bahrain
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_01_bahrain
+fuel,ok,fuel/track-evolution slope s per lap,2022_01_bahrain
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_01_bahrain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_01_bahrain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_01_bahrain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_01_bahrain
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_01_bahrain
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_02_saudi_arabia
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_02_saudi_arabia
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_02_saudi_arabia
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_02_saudi_arabia
+fuel,ok,fuel/track-evolution slope s per lap,2022_02_saudi_arabia
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_02_saudi_arabia
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_02_saudi_arabia
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_02_saudi_arabia
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_02_saudi_arabia
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_02_saudi_arabia
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_06_spain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_06_spain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_06_spain
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_06_spain
+fuel,ok,fuel/track-evolution slope s per lap,2022_06_spain
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_06_spain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_06_spain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_06_spain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_06_spain
+neutralised_laps,no rows,,2022_06_spain
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_08_azerbaijan
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_08_azerbaijan
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_08_azerbaijan
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_08_azerbaijan
+fuel,ok,fuel/track-evolution slope s per lap,2022_08_azerbaijan
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_08_azerbaijan
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_08_azerbaijan
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_08_azerbaijan
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_08_azerbaijan
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_08_azerbaijan
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_09_canada
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_09_canada
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_09_canada
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_09_canada
+fuel,ok,fuel/track-evolution slope s per lap,2022_09_canada
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_09_canada
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_09_canada
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_09_canada
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_09_canada
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_09_canada
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_11_austria
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_11_austria
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_11_austria
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_11_austria
+fuel,ok,fuel/track-evolution slope s per lap,2022_11_austria
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_11_austria
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_11_austria
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_11_austria
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_11_austria
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_11_austria
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_12_france
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_12_france
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_12_france
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_12_france
+fuel,ok,fuel/track-evolution slope s per lap,2022_12_france
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_12_france
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_12_france
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_12_france
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_12_france
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_12_france
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_20_mexico
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_20_mexico
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_20_mexico
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_20_mexico
+fuel,ok,fuel/track-evolution slope s per lap,2022_20_mexico
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_20_mexico
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_20_mexico
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_20_mexico
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_20_mexico
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_20_mexico
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_21_brazil
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_21_brazil
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_21_brazil
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_21_brazil
+fuel,ok,fuel/track-evolution slope s per lap,2022_21_brazil
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_21_brazil
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_21_brazil
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_21_brazil
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_21_brazil
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2022_21_brazil
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2022_22_united_arab_emirates
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2022_22_united_arab_emirates
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2022_22_united_arab_emirates
+compound_gap,ok,fresh-tyre pace gap between compounds,2022_22_united_arab_emirates
+fuel,ok,fuel/track-evolution slope s per lap,2022_22_united_arab_emirates
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2022_22_united_arab_emirates
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2022_22_united_arab_emirates
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2022_22_united_arab_emirates
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2022_22_united_arab_emirates
+neutralised_laps,no rows,,2022_22_united_arab_emirates
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2023_01_bahrain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2023_01_bahrain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2023_01_bahrain
+compound_gap,ok,fresh-tyre pace gap between compounds,2023_01_bahrain
+fuel,ok,fuel/track-evolution slope s per lap,2023_01_bahrain
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2023_01_bahrain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2023_01_bahrain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2023_01_bahrain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2023_01_bahrain
+neutralised_laps,ok,lap time under SC and VSC in whole-race replays (recorded lap times in a recorded/hybrid judge),2023_01_bahrain
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2023_07_spain
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2023_07_spain
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2023_07_spain
+compound_gap,ok,fresh-tyre pace gap between compounds,2023_07_spain
+fuel,ok,fuel/track-evolution slope s per lap,2023_07_spain
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2023_07_spain
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2023_07_spain
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2023_07_spain
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2023_07_spain
+neutralised_laps,no rows,,2023_07_spain
+tyre_life,ok,"support edge / fall-off age per compound: the history prior (tyre_history.tyre_life_prior), the belief's R8 edge and the as-of data edge, against the whole race",2024_07_emilia_romagna
+wear_rate,ok,wear per compound against the race's within-stint slopes (late-stint shape: Section A lap residuals),2024_07_emilia_romagna
+fresh_tyre_gain,ok,lap-time gain at real stops: last two clean laps before less first two after,2024_07_emilia_romagna
+compound_gap,ok,fresh-tyre pace gap between compounds,2024_07_emilia_romagna
+fuel,ok,fuel/track-evolution slope s per lap,2024_07_emilia_romagna
+pit_loss,ok,"time lost to a stop: the prior from earlier races and the as-of estimate (pit_loss.py) against the world's whole-race value, green and under SC",2024_07_emilia_romagna
+lap1_and_warmup,ok,standing-start extra and first-lap-of-stint penalty,2024_07_emilia_romagna
+traffic_rejoin,ok,rejoin position after a real stop (traffic_accuracy's horizon 5 when branch feat/traffic-in-eval is present),2024_07_emilia_romagna
+neutralisations,ok,event rate (expected periods and laps over the race) and lap time under SC/VSC,2024_07_emilia_romagna
+neutralised_laps,no rows,,2024_07_emilia_romagna
