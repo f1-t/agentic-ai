@@ -189,14 +189,14 @@ def forest():
                      lambda t, g, x: f"{g}_{x}_diff", lambda t, g, x: f"{g}_{x}_ci",
                      lambda t, g, x: f'{T(f"{g}_{x}_diff")} {T(f"{g}_{x}_ci")}', True,
                      aria="Agent minus each comparator, mean regret difference, 95% intervals, test and development",
-                     sub=40, gap=24)
+                     sub=34, gap=16)
 
 
 def levels():
     return dot_chart(("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy"),
                      lambda t, g, p: f"{t}_mean_{p}", lambda t, g, p: f"{t}_mci_{p}",
                      lambda t, g, p: f'{T(f"{t}_mean_{p}")} {T(f"{t}_mci_{p}")}', False,
-                     aria="Mean regret per policy, 95% intervals, test and development", sub=28, gap=10)
+                     aria="Mean regret per policy, 95% intervals, test and development", sub=25, gap=8)
 
 
 def per_race(width=760):
@@ -207,7 +207,7 @@ def per_race(width=760):
     LO, HI = ticks[0], ticks[-1]
     L, R, VX = 190, 545, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top, rowh = 34, 34
+    top, rowh = 34, 30
     yb = top + rowh * len(races)
     H = yb + 32
     s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="Agent minus run to the flag per test '
@@ -353,8 +353,7 @@ def banner_test():
     m = sorted(abs(val(f"hall_{x}_diff")) for x in ("run_to_flag", "one_stop_total"))
     for x in ("run_to_flag", "one_stop_total"):
         used(f"hall_{x}_diff")
-    lo, hi = (_html.escape(ps.s(x, 1)) for x in m)
-    amount = f"{lo} s" if lo == hi else f"{lo} to {hi} s"
+    amount = f"{_html.escape(ps.s(m[0], 1))} s"   # the smaller of the two: true for both rules
     return (f"the agent averaged {amount} less regret than the simple rules and "
             f"{versus('hall', 'belief_optimizer', 'its look-ahead')}.")
 
@@ -362,7 +361,8 @@ def banner_test():
 def stakeholder():
     v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total", "actual_strategy")]
     first = (f"The agent matched or beat simple rules on {V('races_matched')} of {V('races_total')} test races.")
-    return (f"<p>{first}</p><p>Its edge comes from the simulator and the look-ahead search.</p>"
+    return (f"<p>{first}</p><p>With those modelled, the teams&rsquo; strategies would likely score better.</p>"
+            "<p>Its edge comes from the simulator and the look-ahead search.</p>"
             "<p>Better tyre knowledge and a stronger model are the next gains.</p>")
 
 
@@ -451,9 +451,11 @@ def html(args_line):
     <ul>
       <li>Misjudges hard-tyre pace early at new circuits.</li>
       <li>One model, one pass.</li>
-      <li>The judge scores race time, not position.</li>
+      <li>Not modelled: track position and pace management.</li>
+      <li>Teams also choose target pace, fuel mix and car setup; the agent only chooses when to pit.</li>
     </ul>
-    <p><b>Next:</b> telemetry-based tyre knowledge; a stronger model.</p>
+    <p><b>Next:</b> telemetry-based tyre knowledge; more of the team&rsquo;s decisions for the agent; a stronger
+    model.</p>
   </article>
 
   <article class="panel p7">
