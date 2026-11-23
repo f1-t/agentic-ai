@@ -4480,6 +4480,16 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   `world_pre_v3.yaml` and `belief_pre_v3.yaml`. Ablation toggles back off: `wear_guard_off`,
   `wear_guard_unscaled`, `belief_cliff_edge_draw`.
 
+Confirmation after v3 (the wear guard and the point cliff edge) on 02a3a7f
+(`reports/calibration/fidelity/v3-02a3a7f/`, all 19 calibration races, none failed;
+SIM_CODE_VERSION `df1ab3800c69`, before `afd80306ad68`): close pairs out of sample 0.753, Spearman
+0.957, relative gap 13.19 s, absolute 18.9 s, plan-rank agreement 0.882, judge-regret of the
+belief's favourite 3.36 s, pit-now agreement 0.835, belief replay close pairs 0.667, B1 MAE 43.7 s,
+plan 90 % coverage 0.988. Noise floor (`ceiling_pooled.csv` there): judge 0.753 / 13.2 s,
++ per-stint pace 0.696 / 11.9 s, + pit laps 0.739 / 11.4 s, + SC/VSC laps 0.614 / 5.2 s, + lap 1
+(the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]. Every reference built on the earlier world
+is stale (its world config_hash and SIM_CODE_VERSION both changed).
+
 Confirmation after the SC alignment on 997d69d (`reports/calibration/fidelity/sc-align-997d69d/`,
 all 19 calibration races, none failed; SIM_CODE_VERSION `938d268003fa`): close pairs out of sample
 0.753, Spearman 0.958, relative gap 13.17 s, absolute 18.9 s, plan-rank agreement 0.868,
