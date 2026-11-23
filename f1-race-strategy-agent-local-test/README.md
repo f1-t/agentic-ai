@@ -48,7 +48,9 @@ season or driver names.
 
 - Over all nine test-set races, the agent is ahead of both simple rules (-2.28 and -2.21 s mean
   regret; the race-cluster interval includes zero). It is also ahead of the teams' actual
-  strategies (-5.03 s), and level with its look-ahead, the optimizer its tools run.
+  strategies (-5.03 s), and level with its look-ahead, the optimizer its tools run. Most of
+  those leads come from 2019 Monaco. The field ran a managed pace there, and the simulators model
+  neither managed pace nor track position ("Unmodelled team decisions" in docs/eval.md).
 - On the five races examined for the first time (the pre-registered primary test), the agent is
   level with the rules (+1.67 s). The shortfall sits at 2022 Australia and 2022 Miami, where the
   look-ahead has the same regret.
