@@ -393,6 +393,15 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
             f"tyre-life prior tiers in the tools' model reports (tyre_history_tierN counts {tiers}); 1 = same circuit, "
             "3 = the pool only, 4 = no usable earlier race")
     if H.present and H.has_agent:
+        ok_races = [r for r in groups["hall"][2] if N[f"pr_{r}_agent"].value < 0
+                    or N[f"pr_{r}_agent_ci"].value[0] <= 0 <= N[f"pr_{r}_agent_ci"].value[1]]
+        words = {7: "seven", 8: "eight", 9: "nine", 6: "six", 5: "five"}
+        put("races_matched", len(ok_races), words.get(len(ok_races), str(len(ok_races))), H.f("tables/combined.csv"),
+            "test races where the agent matched or beat run_to_flag: the per-race mean of agent minus run_to_flag is "
+            "below zero, or its 95% (race, driver) interval includes zero. Counted: " + ", ".join(ok_races)
+            + "; not counted: " + ", ".join(r for r in groups["hall"][2] if r not in ok_races))
+        put("races_total", len(groups["hall"][2]), words.get(len(groups["hall"][2]), str(len(groups["hall"][2]))),
+            H.f("tables/combined.csv"), "test races")
         hist = [r for r in groups["hearlier"][2] if "1" in N[f"pr_{r}_tier"].value]
         put("earlier_hist_n", len(hist), {1: "one", 2: "two", 3: "three", 4: "four"}.get(len(hist), str(len(hist))),
             H.f("trajectories"), "earlier-four races whose tools reported a same-circuit tyre-life prior (tier 1): "

@@ -188,7 +188,8 @@ def forest():
     return dot_chart(("run_to_flag", "one_stop_total", "actual_strategy", "belief_optimizer"),
                      lambda t, g, x: f"{g}_{x}_diff", lambda t, g, x: f"{g}_{x}_ci",
                      lambda t, g, x: f'{T(f"{g}_{x}_diff")} {T(f"{g}_{x}_ci")}', True,
-                     aria="Agent minus each comparator, mean regret difference, 95% intervals, test and development")
+                     aria="Agent minus each comparator, mean regret difference, 95% intervals, test and development",
+                     sub=40, gap=24)
 
 
 def levels():
@@ -345,14 +346,22 @@ def adopt_table():
 
 
 def banner_test():
-    return (f"the agent {rules_phrase()}, {versus('hall', 'actual_strategy', 'the teams')} and "
+    """Regret saved against the two simple rules (the range of the two paired means), and the look-ahead."""
+    v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total")]
+    if v != ["ahead", "ahead"]:
+        return f"the agent {rules_phrase()} and {versus('hall', 'belief_optimizer', 'its look-ahead')}."
+    m = sorted(abs(val(f"hall_{x}_diff")) for x in ("run_to_flag", "one_stop_total"))
+    for x in ("run_to_flag", "one_stop_total"):
+        used(f"hall_{x}_diff")
+    lo, hi = (_html.escape(ps.s(x, 1)) for x in m)
+    amount = f"{lo} s" if lo == hi else f"{lo} to {hi} s"
+    return (f"the agent averaged {amount} less regret than the simple rules and "
             f"{versus('hall', 'belief_optimizer', 'its look-ahead')}.")
 
 
 def stakeholder():
     v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total", "actual_strategy")]
-    first = ("The agent beat simple rules and the teams&rsquo; strategies on nine test races." if v == ["ahead"] * 3
-             else "On nine test races the agent did not beat both simple rules and the teams&rsquo; strategies.")
+    first = (f"The agent matched or beat simple rules on {V('races_matched')} of {V('races_total')} test races.")
     return (f"<p>{first}</p><p>Its edge comes from the simulator and the look-ahead search.</p>"
             "<p>Better tyre knowledge and a stronger model are the next gains.</p>")
 
@@ -516,6 +525,8 @@ li{margin-bottom:.08in}
 .caption{font-size:25pt;font-weight:800;margin:.1in 0 .04in}
 .figs{display:grid;grid-template-columns:1fr 1fr;gap:.5in;margin:.06in 0}
 .tbl{width:100%;border-collapse:collapse;font-size:24pt;line-height:1.18;margin:.06in 0}
+.tbl.tail{font-size:26pt}
+.tbl.tail th,.tbl.tail td{padding:.09in .07in}
 .tbl th,.tbl td{padding:.05in .07in;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 .tbl thead th{font-size:21pt;color:var(--muted);font-weight:700;vertical-align:bottom}
 .tbl th.rl,.tbl thead th:first-child{text-align:left;font-weight:700}
