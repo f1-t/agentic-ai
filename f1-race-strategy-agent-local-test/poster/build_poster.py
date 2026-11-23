@@ -361,8 +361,9 @@ def banner_test():
 def stakeholder():
     v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total", "actual_strategy")]
     first = (f"The agent matched or beat simple rules on {V('races_matched')} of {V('races_total')} test races.")
-    return (f"<p>{first}</p><p>With those modelled, the teams&rsquo; strategies would likely score better.</p>"
-            "<p>Its edge comes from the simulator and the look-ahead search.</p>"
+    return (f"<p>{first}</p><p>Its edge comes from the simulator and the look-ahead search.</p>"
+            "<p>With track position and pace management modelled, the teams&rsquo; strategies would likely score "
+            "better.</p>"
             "<p>Better tyre knowledge and a stronger model are the next gains.</p>")
 
 
