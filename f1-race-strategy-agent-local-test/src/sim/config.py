@@ -376,6 +376,32 @@ class WearCliff(_Cfg):
     life_ratio_rows: list = Field(default_factory=_cliff_life_rows)  # compound_steps.json per_race
 
 
+class PreRace(_Cfg):
+    """The tyre supplier's pre-race publications in the BELIEF's priors (src/sim/prerace.py,
+    data/derived/circuit_ratings.csv and prerace_guidance.csv; docs/eval.md "Information contract":
+    published before the race). Read only by a windowed fit (the belief); the judge's tyre-life
+    edge is never moved. Off (the defaults): bit for bit as before; left out of config_hash then.
+
+    tyre_life_ratings   "off"; "replace": the circuit ratings (abrasion, tyre stress, lateral,
+                        traction) as covariates of tyre life, a ridge fit on earlier races, in place
+                        of the nominated-trio severity shift; "supplement": on top of it
+    tyre_life_guidance  the guidance's implied stint lengths combined by precision with the
+                        historical tyre-life prior (bias and sd as of the race): "windows" from
+                        stated pit-window laps only, "stated" also from the fastest expected
+                        strategy's compound sequence where no laps are stated
+    stops_prior_s       the guidance's expected stop count as a prior on the belief's RANKING of plans
+                        (optimizer_bridge.optimize_batch: the look-ahead, belief_optimizer, the
+                        continuations of a decision, rank_plans): a plan ranks on its mean time plus
+                        this many seconds per stop by which its stops left differ from the expected
+                        stops left (prerace.expected_stops_left). 0 (the default) is off; a race with
+                        no guidance stop count ranks as before; the reported times never change and the
+                        judge (fit_window full) never reads it"""
+
+    tyre_life_ratings: Literal["off", "replace", "supplement"] = "off"
+    tyre_life_guidance: Literal["off", "windows", "stated"] = "off"
+    stops_prior_s: float = Field(default=0.0, ge=0)
+
+
 class SimConfig(_Cfg):
     degradation: ComponentSpec = ComponentSpec(name="linear_fuel")
     events: ComponentSpec = ComponentSpec(name="none")
@@ -495,6 +521,9 @@ class SimConfig(_Cfg):
     pit_stops: PitStops = Field(default_factory=PitStops)
     # the safety-car queue in whole-field replays (ScQueue); left out of config_hash at its default
     sc_queue: ScQueue = Field(default_factory=ScQueue)
+    # the supplier's pre-race publications in the belief's priors (PreRace); left out of
+    # config_hash at its default
+    prerace: PreRace = Field(default_factory=PreRace)
 
     @classmethod
     def from_file(cls, path):

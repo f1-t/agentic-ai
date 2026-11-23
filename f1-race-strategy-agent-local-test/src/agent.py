@@ -103,6 +103,14 @@ Replies are capped at 1,024 tokens: reply with JSON only, at most 3 tool calls p
 
 Finish by calling submit_recommendation. Never finish with prose alone."""
 
+# AGENT_PRERACE "on" (v2free only): race_picture carries pre_race, and this sentence follows step 2's
+# list of where the look-ahead can be wrong
+PRERACE_ANCHOR = "runs longer than its tyre life)."
+PRERACE_SENTENCE = (" race_picture's pre_race block is the tyre supplier's view published before the start: how hard "
+                    "the circuit is on tyres and the strategies it expected to be fastest. It is evidence from outside "
+                    "the simulator, made before any race lap was run; where it and the ranking disagree (for example on "
+                    "the number of stops or how long a compound lasts), weigh it with what the race has shown since.")
+
 SUBMIT_TOOL = {
     "name": "submit_recommendation",
     "description": "Submit the final immediate mid-race strategy decision.",
@@ -514,6 +522,8 @@ def run_agent(snapshot, question=None, verbose=True, *, backend=None, max_steps=
     base_prompt = {"v1": SYSTEM_PROMPT, "v2": SYSTEM_PROMPT_V2, "v2free": SYSTEM_PROMPT_V2FREE}[proto]
     system_prompt = (base_prompt if tools.agent_tools.gap_yardstick() == "paired"
                      else base_prompt.replace(GAP_SENTENCE, ""))
+    if proto == "v2free" and tools.agent_tools.prerace_shown():
+        system_prompt = system_prompt.replace(PRERACE_ANCHOR, PRERACE_ANCHOR + PRERACE_SENTENCE)
     evidence = None   # v2: the latest rank_plans evidence (_evidence_of)
     readings = {}     # v2free: what each plan read against plan 1 was shown as (_readings_of)
     held = None       # v2: the submission the consistency check held, until the final one

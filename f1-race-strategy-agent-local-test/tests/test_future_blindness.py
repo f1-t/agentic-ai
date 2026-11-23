@@ -327,7 +327,7 @@ def test_policy_side_artifact_records_its_races(name):
     races = fb.provenance(name)
     assert races is not None
     kind = fb.POLICY_SIDE_ARTIFACTS[name].kind
-    assert kind in ("as_of", "a_priori", "not_as_of") and (kind != "a_priori" or races == [])
+    assert kind in ("as_of", "a_priori", "not_as_of", "pre_race") and (kind not in ("a_priori", "pre_race") or races == [])
     assert not set(races) & fb.tyre_history_held_out(), "a held-out race feeds a policy-side table"
 
 

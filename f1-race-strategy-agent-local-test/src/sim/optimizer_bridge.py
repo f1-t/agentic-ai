@@ -192,18 +192,28 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
     scored = [i for i, e in enumerate(evals) if e is not None]
     if not scored:
         raise domain.NoFeasiblePlan("No legal remaining plan exists within the future-stop limit.")
-    best = min(scored, key=lambda i: _key(evals[i], state))
+    prior = _stops_prior(snapshot, sim)
+    if prior is None:
+        def rank(i):
+            return _key(evals[i], state)
+    else:   # the guidance's stop count as a prior on the ranking only (SimConfig.prerace.stops_prior_s)
+        lam, left = prior
+
+        def rank(i):
+            k = _key(evals[i], state)
+            return (k[0] + lam * abs(evals[i].plan.num_stops - left), *k[1:])
+    best = min(scored, key=rank)
     diagnostics = {"set_assignment": assignments[best], "seed": seed,
                    "n_samples": batch.times.shape[1],
                    "zero_lap_first_stints": len(candidates) - len(nonzero), **limit}
     if return_times:
         diagnostics["times"] = np.asarray(evals[best].seed_times_s, dtype=float)
         rest = [i for i in scored if i != best]
-        second = min(rest, key=lambda i: _key(evals[i], state)) if rest else None
+        second = min(rest, key=rank) if rest else None
         diagnostics["runner_up"] = None if second is None else {
             "plan": contract_plans[second], "mean_time_s": evals[second].mean_time_s,
             "times": np.asarray(evals[second].seed_times_s, dtype=float)}
-        order = [best, *sorted(rest, key=lambda i: _key(evals[i], state))]
+        order = [best, *sorted(rest, key=rank)]
         diagnostics["searched"] = {
             "plans": [contract_plans[i] for i in order],
             "mean_time_s": np.array([evals[i].mean_time_s for i in order], dtype=float),
@@ -212,6 +222,19 @@ def optimize_batch(snapshot: Snapshot, sim, *, seed=0, n_samples=None, max_stops
         evals[best], len(scored), plan=contract_plans[best], invalid=len(plans) - len(scored),
         diagnostics=diagnostics,
     )
+
+
+def _stops_prior(snapshot: Snapshot, sim):
+    """(seconds per stop, expected stops left) of SimConfig.prerace.stops_prior_s for a windowed
+    simulator (never the judge, fit_window full), None when off or the race has no guidance stop
+    count (prerace.expected_stops_left)."""
+    cfg = getattr(sim, "config", None)
+    lam = float(getattr(getattr(cfg, "prerace", None), "stops_prior_s", 0.0) or 0.0)
+    if lam <= 0 or cfg.fit_window == "full":
+        return None
+    from .prerace import expected_stops_left
+    left = expected_stops_left(snapshot.race.race_id, len(snapshot.stints))
+    return None if left is None else (lam, left)
 
 
 def _stint_limit_filter(snapshot: Snapshot, sim, plans):
