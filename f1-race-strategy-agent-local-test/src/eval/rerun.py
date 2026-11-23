@@ -27,8 +27,8 @@ The sets are defined in configs/eval/rerun_sets.yaml. A report set (development 
 the held-out races) is built only with --final, on the owner's word: building it loads the
 held-out races. --world-config / --belief-config take a SimConfig file or "default" (the world:
 score.default_world_config of config.world_default, the scorecard-chosen judge with driver effects,
-the history-only tyre-life edge and hybrid SC/VSC; the belief: configs/sim/belief.yaml, which the
-agent's tools read too). provenance.json names each of those choices. The parallel stages run --jobs
+the history-only tyre-life edge, hybrid SC/VSC and the thin-fit wear guard; the belief:
+configs/sim/belief.yaml, the wear-cliff edge at its point, which the agent's tools read too). provenance.json names each of those choices. The parallel stages run --jobs
 worker processes, one race at a time each, with BLAS capped at one thread per worker.
 """
 from __future__ import annotations
@@ -623,11 +623,13 @@ def config_choices(c, role: str) -> dict:
            "lap_noise": c.lap_noise, "plan_on": c.plan_on, "fit_window": c.fit_window}
     if c.fit_window == "full":
         out["tyre_life_edge"] = c.wear_cliff.world_edge
+        # the thin-fit wear guard acts on whole-race fits only (sim/wear_guard.py)
+        out["wear_guard"] = c.wear_guard.model_dump(mode="json") if c.wear_guard.enabled else False
     else:   # a windowed fit places the edge as of the snapshot (sim/cliff.py), whatever world_edge says
         out["tyre_life_edge"] = "as_of_snapshot (history extended by the tyre ages seen so far)"
     if role != "world":
         out.update(calibrator=c.calibrator.name, fuel_anchor=c.fuel_anchor.model_dump(mode="json"),
-                   pit_loss=c.pit_loss.source)
+                   pit_loss=c.pit_loss.source, belief_cliff_edge=c.belief_cliff_edge)
     return out
 
 

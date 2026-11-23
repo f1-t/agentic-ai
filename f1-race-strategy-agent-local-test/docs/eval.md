@@ -1106,7 +1106,7 @@ SOFT (8 laps raced, a slightly negative fitted wear from 11 race laps) is planne
 Spain turns one-stop on the proxied HARD (lap-0 stop mode 4 of 7). That is the trade the fidelity
 scorecard measures; (b) is the default until it does.
 
-### Thin wear fits: the judge's guard (`wear_guard`, off by default)
+### Thin wear fits: the judge's guard (`wear_guard`, adopted)
 
 Some of the judge's whole-race wear slopes rest on a handful of laps:
 - 2022 Brazil HARD: 0.160 s/lap from 10 clean rows of one driver, at ages 2-11.
@@ -1135,8 +1135,9 @@ the race:
 - wear regressed on the compound's common hardness index;
 - with fewer than 8 such fits, a priori `ROLE_PRIOR` (sd 0.05).
 
-It is registered in `provenance.py` as `wear_history`. The guard is off by default and left out
-of `config_hash` at its default; with it off, the whole-field replay rows are byte-identical to
+It is registered in `provenance.py` as `wear_history`. The guard is off in `SimConfig` and left out
+of `config_hash` at its default; the eval world turns it on (`config.WORLD_WEAR_GUARD`, adopted
+2026-11-22); with it off, the whole-field replay rows are byte-identical to
 main.
 
 The fits it changes on the calibration races (wear s/lap, guarded; rows / drivers):
@@ -1191,8 +1192,9 @@ pit-now +0.014. Expert consistency improves.
 
 Both variants are adopt-candidates for the judge. `scale_sd_by_drivers` is the stronger of the two
 pre-stated forms, so it is the recommended one: `wear_guard: {enabled: true, scale_sd_by_drivers: true}`
-in the judge's config. Adopting it changes the judge, so every reference and result scored on the
-old judge would need rebuilding.
+in the judge's config. Adopted 2026-11-22 as the eval world's default (`config.WORLD_WEAR_GUARD`;
+the world before: `configs/sim/legacy/world_pre_v3.yaml`). Every reference and result scored on the
+old judge is stale.
 
 ### Fuel identification (measured, not adopted)
 
@@ -1445,8 +1447,9 @@ wear of the compounds early in the race (the table above), for which no as-of fi
 holds up (2026-11-22 notes, "sim gaps").
 
 **Decision.** An adopt-candidate by the scorecard rule (plan-ranking agreement and judge-regret
-improve with race-cluster intervals that exclude 0, pit-now agreement holds). It is a switch, off
-here; adopting it is `belief_cliff_edge: point` in `configs/sim/belief.yaml`.
+improve with race-cluster intervals that exclude 0, pit-now agreement holds). Adopted 2026-11-22:
+`belief_cliff_edge: point` in `configs/sim/belief.yaml` and its mirrors (the belief before:
+`configs/sim/legacy/belief_pre_v3.yaml`).
 
 ## Proxied compounds
 
@@ -4454,20 +4457,28 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
   policy's plan and the reference see the same periods for a seed, the later periods at rates and
   lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
-  2026-11-22); no traffic; R8 retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash
-  `5069228b35e7` (before the SC alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
+  2026-11-22); the thin-fit wear guard with the fit's sd scaled by the number of drivers
+  (`config.WORLD_WEAR_GUARD`, `wear_guard: {enabled: true, scale_sd_by_drivers: true}`, adopted
+  2026-11-22, "Thin wear fits"); no traffic; R8 retired. As a file: `configs/sim/world_hybrid.yaml`.
+  config_hash `15e3f31d98a7` (before v3 `5069228b35e7`, before the SC alignment `abc455a9bbb6`,
+  before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
   ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
   `sd_scale`, SC/VSC lengths from the as-of history of period lengths, a period in progress
-  continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22).
-  config_hash `351f4124ff22` (before the SC alignment `f7b872d14c0c`, before the scorecard
-  `d479652b0fe7`). `belief_traffic.yaml` and `belief_learned.yaml` are it plus one block.
+  continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22), the
+  wear-cliff edge at its point in every sample (`belief_cliff_edge: point`, adopted 2026-11-22,
+  "Belief priors"). config_hash `9d691bbbcf24` (before v3 `351f4124ff22`, before the SC alignment
+  `f7b872d14c0c`, before the scorecard `d479652b0fe7`). `belief_traffic.yaml` and
+  `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
   `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
   (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue (`sc_queue`), the
-  pit-stop durations (`pit_stops`). The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
-  and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`.
+  pit-stop durations (`pit_stops`), overtaking difficulty, the near-lapped rule, three-stop search.
+  The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
+  and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
+  `world_pre_v3.yaml` and `belief_pre_v3.yaml`. Ablation toggles back off: `wear_guard_off`,
+  `wear_guard_unscaled`, `belief_cliff_edge_draw`.
 
 Confirmation after the SC alignment on 997d69d (`reports/calibration/fidelity/sc-align-997d69d/`,
 all 19 calibration races, none failed; SIM_CODE_VERSION `938d268003fa`): close pairs out of sample

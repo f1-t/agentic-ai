@@ -520,12 +520,21 @@ WORLD_DEGRADATION = {"name": "linear_fuel", "params": {"driver_effects": "race"}
 # no hindsight. The SimConfig default stays "history"; the eval world sets it here. The earlier
 # world (edge "history") is configs/sim/legacy/world_pre_scorecard.yaml.
 WORLD_EDGE = "history_only"
+# The eval world's thin-fit wear guard (WearGuard, sim/wear_guard.py): a compound whose whole-race
+# wear rests on fewer than 3 drivers or 40 clean rows is shrunk toward the as-of historical wear,
+# the fit's sd scaled by sqrt(3 / drivers). Measured on the 19 calibration races (docs/eval.md
+# "Thin wear fits"): close-pair order unchanged, judge-regret of the belief's favourite -0.56 s,
+# pit-now agreement +0.015. The SimConfig default stays off; the eval world sets it here. The world
+# before it: configs/sim/legacy/world_pre_v3.yaml.
+WORLD_WEAR_GUARD = {"enabled": True, "scale_sd_by_drivers": True}
 
 
 def world_default(config: "SimConfig") -> "SimConfig":
-    """`config` with the eval world's wear fit (WORLD_DEGRADATION) and tyre-life edge (WORLD_EDGE)."""
+    """`config` with the eval world's wear fit (WORLD_DEGRADATION), tyre-life edge (WORLD_EDGE) and
+    thin-fit wear guard (WORLD_WEAR_GUARD)."""
     return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION),
-                                     "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE})})
+                                     "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE}),
+                                     "wear_guard": config.wear_guard.model_copy(update=WORLD_WEAR_GUARD)})
 
 
 def compound_class(config, compound) -> str:

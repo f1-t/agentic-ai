@@ -10,11 +10,13 @@
 #
 # The base is the eval's default world, the scorecard-chosen configuration (score.default_world_config
 # of config.world_default: linear_fuel with driver effects, config.WORLD_DEGRADATION; the wear cliff
-# with world_edge "history_only", config.WORLD_EDGE; SC/VSC hybrid, score.WORLD_EVENTS; R8 retired;
-# traffic off) and configs/sim/belief.yaml (linear_fuel with driver effects, wear bound 0, fuel
-# anchoring, persistent lap noise, as-of pit loss and cliff). Each adopted choice has a factor that
-# switches it back off (world_events_off, cliff_edge_history, belief_no_driver_effects, and the
-# judge's wear fit world_linear / world_hinge); the rejected ones stay as factors that switch them on.
+# with world_edge "history_only", config.WORLD_EDGE; SC/VSC hybrid, score.WORLD_EVENTS; the thin-fit
+# wear guard, config.WORLD_WEAR_GUARD; R8 retired; traffic off) and configs/sim/belief.yaml
+# (linear_fuel with driver effects, wear bound 0, fuel anchoring, persistent lap noise, as-of pit loss
+# and cliff, the cliff edge at its point). Each adopted choice has a factor that switches it back off
+# (world_events_off, cliff_edge_history, belief_no_driver_effects, the judge's wear fit world_linear /
+# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw); the rejected ones stay as
+# factors that switch them on.
 factors:
   # traffic (sim/traffic.py, docs/eval.md "Traffic"): the order measures are why it exists
   world_traffic:
@@ -84,16 +86,19 @@ factors:
   cliff_edge_race:
     note: the judge's edge from this race alone (the oldest age raced, the earlier design)
     world: {wear_cliff: {world_edge: race}}
-  # the judge's thin-fit wear guard (sim/wear_guard.py; off by default): fewer than 3 drivers or 40
-  # clean race rows on a compound shrinks its wear by precision toward the as-of historical wear
-  judge_wear_guard:
-    note: the judge's thin wear fits shrunk toward the as-of history by precision (SimConfig.wear_guard)
-    world: {wear_guard: {enabled: true}}
-    requires: [src.sim.wear_guard]
-  judge_wear_guard_scaled:
-    note: the same with the thin fit's standard error scaled by sqrt(3 / drivers) below 3 drivers
-    world: {wear_guard: {enabled: true, scale_sd_by_drivers: true}}
-    requires: [src.sim.wear_guard]
+  # the judge's thin-fit wear guard (sim/wear_guard.py, config.WORLD_WEAR_GUARD): fewer than 3 drivers
+  # or 40 clean race rows on a compound shrinks its wear by precision toward the as-of historical
+  # wear, the fit's sd scaled by sqrt(3 / drivers). Adopted 2026-11-22 (v3), so the base has it
+  wear_guard_off:
+    note: the judge's thin wear fits as fitted, no guard (configs/sim/legacy/world_pre_v3.yaml)
+    world: {wear_guard: {enabled: false, scale_sd_by_drivers: false}}
+  wear_guard_unscaled:
+    note: the guard without scaling the thin fit's standard error by the number of drivers
+    world: {wear_guard: {scale_sd_by_drivers: false}}
+  # the belief's wear-cliff edge (SimConfig.belief_cliff_edge): adopted "point" 2026-11-22 (v3)
+  belief_cliff_edge_draw:
+    note: the belief draws each sample's wear-cliff edge, max(seen so far, prior + sd z) (configs/sim/legacy/belief_pre_v3.yaml)
+    belief: {belief_cliff_edge: draw}
   wear_cliff_off:
     note: no wear cliff in either simulator (and no R8), linear wear past every edge
     both: {wear_cliff: {enabled: false}}

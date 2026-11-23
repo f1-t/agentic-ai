@@ -3,8 +3,9 @@
 # scenarios sampled per race, the seed, and development (true: a development set; false: a report
 # set, which the scenarios stage builds only with --final). eras: split the tables by era.
 # A set names no simulator: the stages take --world-config / --belief-config, "default" being the
-# scorecard-chosen world (driver effects, history-only tyre-life edge, hybrid SC/VSC) and
-# configs/sim/belief.yaml (driver effects, fuel anchoring, persistent lap noise). A set's scenarios
+# scorecard-chosen world (driver effects, history-only tyre-life edge, hybrid SC/VSC, thin-fit wear
+# guard) and configs/sim/belief.yaml (driver effects, fuel anchoring, persistent lap noise, the
+# wear-cliff edge at its point). A set's scenarios
 # under the as_of rule do not depend on the world (the stratified rule samples on it); its references
 # do (keyed by the world's config_hash and SIM_CODE_VERSION).
 dev20:
