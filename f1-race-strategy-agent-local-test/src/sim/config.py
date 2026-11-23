@@ -329,6 +329,12 @@ class ScQueue(_Cfg):
     # that best separates the cars that joined from those that did not on the recorded end-of-period
     # gaps of the calibration races' SC periods (fitted on the race data, not on a scorecard result)
     held_behind_laps: float | None = Field(default=None, gt=0)
+    # how the single-car queue places the simulated car in the train (with held_behind_laps set):
+    # "clock" (the default) by its simulated time at S - 1 among the others' recorded times, so a
+    # drift of its simulated clock by then costs or gains it places it keeps; "record" (the judge
+    # only, fit_window full: hindsight, ledgered) by its recorded place at the deployment, each plan
+    # moved by its simulated time difference at S - 1 to the plans that stopped where the car did
+    placement: Literal["clock", "record"] = "clock"
 
 
 class WearGuard(_Cfg):
