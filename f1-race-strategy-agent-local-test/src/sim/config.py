@@ -349,6 +349,19 @@ class WearGuard(_Cfg):
     scale_sd_by_drivers: bool = False
 
 
+class BeliefGuard(_Cfg):
+    """The belief's thin-fit guard (sim/belief_guard.py): windowed fits only (fit_window to_snapshot);
+    a compound whose clean race rows visible at the snapshot are at least one but come from fewer than
+    min_drivers drivers or number fewer than min_rows has its wear (mode "wear", level at the mean age
+    kept) or its wear and level ("pace_wear") shrunk by precision toward the well-covered compounds of
+    the same fit (the proxy's as-of blend) and the as-of historical wear. Off: as before."""
+    enabled: bool = False
+    mode: Literal["wear", "pace_wear"] = "pace_wear"
+    min_drivers: int = Field(default=3, ge=1)
+    min_rows: int = Field(default=40, ge=1)
+    scale_sd_by_drivers: bool = True
+
+
 class WearCliff(_Cfg):
     """Tyre life as physics (sim/cliff.py): past a compound's support edge E a lap costs
     min(kappa (age - E)^2, cap_s_per_lap) more. Both simulators start from the same historical
@@ -521,6 +534,9 @@ class SimConfig(_Cfg):
     # toward the as-of historical wear, keeping its mean lap; off by default, left out of config_hash
     # at its default
     wear_guard: WearGuard = Field(default_factory=lambda: WearGuard())
+    # the belief's thin-fit guard (sim/belief_guard.py), the windowed fit's counterpart of wear_guard;
+    # off by default, left out of config_hash at its default
+    belief_guard: BeliefGuard = Field(default_factory=lambda: BeliefGuard())
     # over-long stints priced by a wear cliff (sim/cliff.py), the physics that replaced R8
     wear_cliff: WearCliff = Field(default_factory=WearCliff)
     # pit-stop durations (PitStops); left out of config_hash at its default
