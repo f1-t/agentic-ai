@@ -498,7 +498,8 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
                     history: pd.DataFrame | None = None, nominations: pd.DataFrame | None = None,
                     allow_held_out: bool = False, config: dict | None = None,
                     use_compound: bool = True, use_circuit: bool = True,
-                    use_severity: bool | None = None) -> TyreLifePrior:
+                    use_severity: bool | None = None, ratings: str = "off",
+                    guidance: bool = False) -> TyreLifePrior:
     """The tyre-life prior of `role` (HARD / MEDIUM / SOFT) at `race_id` (module docstring).
 
     races:          restrict the history to these race ids (still as-of and held-out filtered)
@@ -510,6 +511,14 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
                     circuit (every race counts as another circuit); for the validation's ablation
     use_severity:   move another circuit's observation by the difference in severity, read off
                     the nominated trios (default: the config's scaling.severity_from_nomination)
+    ratings:        the supplier's circuit ratings as covariates of tyre life (src/sim/prerace.py,
+                    SimConfig.prerace.tyre_life_ratings): "off" (as before); "replace": a ridge fit on
+                    the earlier races moves each pooled observation instead of the trio shift;
+                    "supplement": the trio shift, then the fit on what it leaves. No fit (too few
+                    earlier rated races) or no ratings for a race: the trio shift alone.
+    guidance:       combine, by precision, with the supplier's pre-race guidance (the longest stint
+                    its expected strategies imply on the role, prerace.guidance_life), its bias and
+                    sd from the earlier races' guidance against their observed edges
     Always returns; never reads a race that started on or after `race_id`."""
     role = str(role).upper()
     if role not in ROLES:
@@ -549,6 +558,9 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
         use_severity = bool((cfg.get("scaling") or {}).get("severity_from_nomination", False))
     shrink = cfg["shrinkage"]
     trio_t = target.trio
+    rfit = None
+    if ratings != "off" and use_compound:
+        rfit = _ratings_fit(h, ratio, ratings == "supplement" and use_severity)
     pooled, local = [], []     # (race_id, role, category, weight, moved edge_frac)
     for r in h.itertuples():
         idx_h = float(r.common_index) if pd.notna(r.common_index) else np.nan
@@ -571,10 +583,16 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
             # a circuit given a softer trio is gentler: its tyres last longer than they would at
             # the target, by the same per-step ratio
             moved = steps + trio_h - trio_t
+        shift = 1.0
+        if rfit is not None and np.isfinite(idx_t) and np.isfinite(idx_h):
+            from .prerace import ratings_shift
+            if ratings == "replace" and _rated(rid, r.race_id):
+                moved = steps
+            shift = math.exp(ratings_shift(rfit, rid, r.race_id))
         cat = OTHER_C_SAME_K if same_k else OTHER_C_OTHER_K
         wet = float(r.wet_share or 0.0) > cfg["observation"]["wet_lap_share"]
         pooled.append((r.race_id, r.role, cat, w[cat] * decay * base * (w["wet_race"] if wet else 1.0),
-                       edge * ratio ** moved))
+                       edge * ratio ** moved * shift))
         # the same-circuit estimate: this circuit's own earlier races, not moved by severity;
         # a race flagged abnormal (red flag, wet or damp) weighs abnormal_same_circuit (0: left out)
         if use_circuit and r.circuit == target.circuit:
@@ -620,8 +638,48 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
         notes.append(f"same circuit: {n_local:.2f} effective races, weight {w_s:.2f} against the pooled estimate")
     if n_pairs < cfg["life_ratio"]["min_pairs"]:
         notes.append(f"life ratio {ratio:g} per step: config default ({n_pairs} earlier pairs)")
+    if rfit is not None:
+        notes.append(f"circuit ratings ({ratings}) fitted on {rfit['races']} earlier races")
+    if guidance:
+        mean, sd = _with_guidance(rid, role, laps, h, mean, sd, notes)
     return TyreLifePrior(mean * laps, sd * laps, n_eff, sources, tier, mean, sd, int(round(laps)), compound, ratio,
                          tuple(notes))
+
+
+def _rated(*race_ids) -> bool:
+    from .prerace import LIFE_COVARIATES, ratings_of
+    return all(ratings_of(r, LIFE_COVARIATES) is not None for r in race_ids)
+
+
+def _ratings_fit(h: pd.DataFrame, ratio: float, after_trio: bool):
+    """prerace.life_severity_fit on the earlier usable rows `h` (already as-of): y = log edge share
+    moved to common index 0 by the life ratio (and, after_trio, to a trio of 0 by the trio shift)."""
+    from .prerace import life_severity_fit
+    lr = math.log(ratio)
+    rows = []
+    for r in h.itertuples():
+        idx, trio = float(r.common_index), float(getattr(r, "trio_index", np.nan))
+        if not np.isfinite(idx) or (after_trio and not np.isfinite(trio)):
+            continue
+        y = math.log(float(r.edge_frac)) - idx * lr + (trio * lr if after_trio else 0.0)
+        rows.append((r.race_id, y))
+    return life_severity_fit(rows)
+
+
+def _with_guidance(rid, role, laps, h, mean, sd, notes) -> tuple[float, float]:
+    """(mean, sd) as shares of distance, combined by precision with the guidance's stint on `role`."""
+    from .prerace import guidance_error_as_of, guidance_life
+    g = guidance_life(rid, laps).get(role)
+    if not g:
+        return mean, sd
+    bias, lsd, n = guidance_error_as_of(h)
+    g_frac = g * math.exp(bias) / laps
+    g_sd = g_frac * lsd
+    w_h, w_g = 1.0 / sd ** 2, 1.0 / g_sd ** 2
+    m = (w_h * mean + w_g * g_frac) / (w_h + w_g)
+    notes.append(f"pre-race guidance {g:g} laps (bias {bias:+.2f} log, sd {lsd:.2f} log, {n} earlier races) "
+                 f"weight {w_g / (w_h + w_g):.2f}")
+    return m, math.sqrt(1.0 / (w_h + w_g))
 
 
 def _weighted(rows) -> tuple[float, float]:

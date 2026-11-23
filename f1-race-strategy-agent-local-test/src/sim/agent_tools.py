@@ -1484,9 +1484,26 @@ def race_picture(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
                                    "prior_sd": t["prior_sd_laps"], "source": t["prior_source"]}.items()
                                   if v is not None}
         compounds[c] = entry
-    return _jsonable({"car": car, "nearby": nearby, "rejoin": rejoin, "compounds": compounds,
-                      "note": "observed wear: s/lap of tyre age from clean laps so far, fuel-corrected; compare with "
-                              "model_wear (the simulator's value and sd); race_laps are the laps behind the fit"})
+    out = {"car": car, "nearby": nearby, "rejoin": rejoin, "compounds": compounds,
+           "note": "observed wear: s/lap of tyre age from clean laps so far, fuel-corrected; compare with "
+                   "model_wear (the simulator's value and sd); race_laps are the laps behind the fit"}
+    if prerace_shown():
+        from . import prerace
+        block = prerace.prerace_block(snapshot.race.race_id)
+        if block is not None:
+            out["pre_race"] = block
+    return _jsonable(out)
+
+
+def prerace_shown() -> bool:
+    """AGENT_PRERACE "on": race_picture carries the supplier's pre-race block (prerace.prerace_block:
+    the circuit's tyre ratings in words and the expected strategies, published before the race,
+    nothing naming the race). Off (the default): race_picture as before."""
+    import os
+    mode = os.environ.get("AGENT_PRERACE", "").strip().lower() or "off"
+    if mode not in ("on", "off"):
+        raise ValueError(f"AGENT_PRERACE must be on or off; got {mode!r}")
+    return mode == "on"
 
 
 def pd_numeric(s):

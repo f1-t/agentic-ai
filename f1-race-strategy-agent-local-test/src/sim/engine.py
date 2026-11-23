@@ -604,7 +604,7 @@ class Simulator:
             if len(self._cliffs) >= FIT_CACHE_SIZE:
                 del self._cliffs[next(iter(self._cliffs))]
             rows = self.window_rows(snapshot, horizon) if horizon > 0 else self.laps.iloc[0:0]
-            self._cliffs[key] = _cliff.as_of_cliffs(rows, self.practice, snapshot.race, wc)
+            self._cliffs[key] = _cliff.as_of_cliffs(rows, self.practice, snapshot.race, wc, self.config.prerace)
         return self._cliffs[key]
 
     def cliff_ledger(self, snapshot: Snapshot) -> dict:
