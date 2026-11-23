@@ -1,0 +1,26 @@
+# LEGACY, for reproducing results produced before the judge's tyre-life edge as of the snapshot was
+# adopted (docs/eval.md "The current configuration", adopted 2026-11-22): the eval's default world
+# from the tyre sets (#143) to that adoption, with wear_cliff.world_edge "history_only" (the
+# historical prior alone, nothing from this race). The belief is unchanged (configs/sim/belief.yaml).
+fit_window: full
+degradation:
+  name: linear_fuel
+  params:
+    driver_effects: race
+wear_cliff:
+  world_edge: history_only
+wear_guard:
+  enabled: true
+  scale_sd_by_drivers: true
+sc_queue:
+  enabled: true
+  mode: single
+  held_behind_laps: 1.25
+  placement: record
+events:
+  name: hybrid
+  params:
+    lap_times: recorded
+    duration: history
+    pooled: true
+tyre_inventory: true

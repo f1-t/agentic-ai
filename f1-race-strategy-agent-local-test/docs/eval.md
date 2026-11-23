@@ -1196,6 +1196,46 @@ in the judge's config. Adopted 2026-11-22 as the eval world's default (`config.W
 the world before: `configs/sim/legacy/world_pre_v3.yaml`). Every reference and result scored on the
 old judge is stale.
 
+### The judge's edge as of the snapshot (`world_edge: as_of`, off by default)
+
+The belief's tyre-life edge is the historical prior extended by the tyre ages seen so far: the
+visible rows at the snapshot. The judge's default (`history_only`) is the prior alone, so late in a
+race the judge charges stint lengths the belief has already watched cars run. `history` uses the
+whole race's ages, which is the race's future.
+
+`as_of` is the middle option. The edge is the `history_only` edge raised to the oldest age run on
+that compound in the rows visible at the scored snapshot: the same session-time cut as the belief
+(`Simulator.cut_time`), race laps only (`cliff.as_of_world_cliffs`, keyed per snapshot moment in
+`engine.cliffs_for`). The fidelity ledger tags it "this race, to snapshot". At lap 0 it is
+`history_only`, so whole-race replays from the start are unchanged by construction.
+
+Measured 2026-11-22 against `history_only`, main 69a9589's default judge, 19 calibration races,
+race-cluster 95%:
+
+| measure | `history_only` | `as_of` change |
+|---|---|---|
+| per-car close pairs / Spearman / relative gap (whole-race replays) | 0.747 / 0.960 / 7.60 s | 0 / 0 / 0 (identical) |
+| whole-field close pairs, all k (from 10, 20, 30, 40 too) | 0.691 | -0.001 [-0.006, +0.004] (k20 -0.003, k40 +0.014 [+0.003, +0.028]) |
+| whole-field relative gap | 15.00 s | -0.045 [-0.120, +0.002] |
+| B2 rank rho | 0.872 | +0.004 [+0.001, +0.007] |
+| B2 regret of the belief's favourite, overall / early third / mid / late | 3.16 / 6.36 / 2.03 / 1.19 s | -0.33 [-0.75, -0.03] / 0.00 / -0.19 [-0.36, -0.05] / -0.84 [-2.00, -0.04] |
+| pit-now agreement, overall / late | 0.827 / 0.870 | +0.015 [-0.001, +0.042] / +0.050 [+0.008, +0.121] |
+| E_real_regret_s / over 20 s | 5.59 s / 0.056 | -0.44 [-1.12, -0.05] / -0.010 [-0.026, +0.001] |
+| judge's best panel plan adds a stop the team did not make | 0.110 | -0.021 [-0.055, -0.001] |
+| dev20 actual_strategy regret | 6.43 s | -0.32 [-0.71, -0.01] (over 20 s 0.070 level; reference adds a stop 0.126 to 0.103) |
+| dev20 belief_optimizer / run_to_flag / one_stop_total | 3.04 / 9.06 / 9.82 s | -0.30 [-0.72, -0.04] / -0.02 / -0.03 |
+| Monaco 2024 (scratch as-of set) actual_strategy | 83.3 s | 77.9 s (lap 45: 146 to 125; lap 60: 84 to 67; laps 5-35 unchanged) |
+
+Under the selection rule, `as_of` is an adopt-candidate for the judge:
+- Agreement improves: rank, regret and late pit-now all improve, and nothing gets worse in the
+  early third.
+- Expert consistency improves.
+- No order measure gets worse: the whole-race replays are identical, and the mid-race whole-field
+  replay is level overall, improved at k40 and -0.003 at k20 inside its interval.
+- It reads nothing after the decision moment.
+
+Monaco improves only late, because the real stints there outlast every edge until the very end.
+
 ### Fuel identification (measured, not adopted)
 
 The fuel slope's stated interval was far too tight: the config prior (-0.045 s/lap, tau 0.008)
@@ -4767,7 +4807,10 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
 `default`, the agent's tools, the scorecard's base):
 
 - **Judge (world):** linear_fuel with driver effects, no hinge (`config.WORLD_DEGRADATION`); the
-  wear cliff with the tyre-life edge from history only (`config.WORLD_EDGE` `history_only`); hybrid
+  wear cliff with the tyre-life edge as of the scored snapshot (`config.WORLD_EDGE` `as_of`, adopted
+  2026-11-22, "The judge's edge as of the snapshot": the historical prior extended by the tyre ages
+  run up to the scored snapshot, the same information as the predictive simulator; ledgered "this
+  race, to snapshot"); hybrid
   SC/VSC (`score.WORLD_EVENTS`, `WORLD_EVENTS_DEFAULT` True), drawn on the events substream so a
   policy's plan and the reference see the same periods for a seed, the later periods at rates and
   lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
@@ -4780,8 +4823,8 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   only, ledgered as `sc_queue` and `sc_queue_placement`); the tyre sets at the snapshot
   (`config.WORLD_TYRE_INVENTORY`, `tyre_inventory: true`, adopted 2026-11-22, "Tyre sets at the
   snapshot"; the same as-of inventory as the belief, ledgered as `tyre_inventory`); no traffic; R8
-  retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash `c821efe0bc98` (before the tyre
-  sets `7c974c32c67c`, before the SC queue `15e3f31d98a7`, before v3 `5069228b35e7`, before the SC
+  retired. As a file: `configs/sim/world_hybrid.yaml`. config_hash `9b98afd55974` (before the as-of
+  edge `c821efe0bc98`, before the tyre sets `7c974c32c67c`, before the SC queue `15e3f31d98a7`, before v3 `5069228b35e7`, before the SC
   alignment `abc455a9bbb6`, before the scorecard `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
@@ -4801,10 +4844,45 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
   and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
   `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged);
-  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`.
+  `world_pre_tyre_inventory.yaml` and `belief_pre_tyre_inventory.yaml`; `world_pre_asof_edge.yaml`
+  (the belief unchanged).
   Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
-  queue's other forms), `tyre_inventory_off` (both simulators).
+  queue's other forms), `tyre_inventory_off` (both simulators), `cliff_edge_history_only`.
+
+Confirmation after the judge's as-of edge, on f6148e0 (main 72d2fc5 with the tyre sets, plus the
+adoption). Output: `reports/calibration/fidelity/asof-edge-f6148e0/`, all 19 calibration races,
+none failed, future blindness pass.
+- SIM_CODE_VERSION `b239243dc1ea`, before `30efab2adf7a`.
+- Default world config_hash `9b98afd55974`, before `c821efe0bc98`.
+- The belief is unchanged, `aaf95a09bc50`.
+
+Headline: close pairs out of sample 0.747, Spearman 0.960, relative gap 7.60 s, plan-rank
+agreement 0.884, judge-regret of the belief's favourite 3.14 s, pit-now agreement 0.861, belief
+replay close pairs 0.667, plan 90% coverage 0.972, E_real_regret_s 4.77 s (over 20 s: 0.057). The
+noise floor (`ceiling_pooled.csv` there) is unchanged: judge 0.747 / 7.6 s.
+
+As-of against the prior-only edge (`cliff_edge_history_only`, the same base), race-cluster 95%:
+
+| measure | history_only | as_of change |
+|---|---|---|
+| close pairs / Spearman / relative gap | 0.747 / 0.960 / 7.60 s | 0 / 0 / 0 |
+| plan-rank agreement | 0.880 | +0.004 [+0.000, +0.007] |
+| judge-regret of the belief's favourite | 3.47 s | -0.33 [-0.79, -0.01] |
+| early third / mid / late | 7.15 / 2.14 / 1.24 s | 0.00 / -0.18 [-0.45, -0.00] / -0.88 [-2.07, -0.03] |
+| pit-now agreement, all / late | 0.847 / 0.892 | +0.014 [-0.004, +0.039] / +0.053 [+0.006, +0.125] |
+| E_real_regret_s / over 20 s | 5.21 s / 0.070 | -0.43 [-1.12, -0.05] / -0.013 [-0.029, -0.001] |
+| judge's best panel plan adds a stop the team did not make | 0.089 | -0.019 [-0.052, +0.000] |
+
+The dev20 rescore against each judge's own reference (tyre sets on, as-of against history_only):
+- belief_optimizer: 3.34 to 2.99 s, -0.34 [-0.77, -0.04].
+- run_to_flag: +0.01.
+- one_stop_total: +0.00.
+- actual_strategy: 6.86 to 6.53 s, -0.33 [-0.71, -0.03]. The reference adds a stop the team did
+  not make 0.107 to 0.086; the share over 20 s is level at 0.089.
+
+Every reference built on the earlier world is stale: its world config_hash and SIM_CODE_VERSION
+both changed.
 
 Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
 calibration races, none failed). Hashes and versions:
