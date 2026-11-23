@@ -2791,6 +2791,41 @@ standard error mean 0.19 s (median 0.19, max 0.29); the runner-up's gap has medi
 is not told apart from the next plan on most scenarios, while regrets of a few seconds are
 well outside the noise (a regret_se_s of about 0.3 s).
 
+### Three future stops (a switch, off)
+
+The reference search (`baselines.candidate_plans`, scored by `optimizer_bridge.optimize_batch`)
+allows at most `max_stops` future stops; the default is 2 everywhere (the profile's
+`sim.max_stops`, `python -m src.eval reference --max-stops`, the fidelity tool's `--max-stops`).
+`max_stops: 3` adds every three-stop plan after the plans of up to two stops, so the search
+with 2 is unchanged. A candidate list longer than `optimizer_bridge.SCORE_ONE_CALL` (60,000
+plans; only a three-stop search reaches it) is scored in chunks of `SCORE_CHUNK` (20,000) under
+the same draws, so memory stays bounded.
+
+Measured on the 19 calibration races (main ac85596, the adopted judge, 20 draws, the judge's
+lap-0 reference per start set as in A4; no LLM calls, no held-out race):
+
+- The field (A4's field stop counts): 60 of 325 field cars made three or more stops: 17 in 2022
+  Bahrain, 14 in 2022 Spain, 8 each in 2023 Bahrain and 2022 Brazil, at most 3 elsewhere. Of
+  the full-distance cars, 40 of 209 made three stops and none four; from a snapshot every 5 laps,
+  5.0% of (car, lap) pairs had three or more stops still to make, all at laps 0 to 25.
+- The judge's best plan with three stops allowed is faster than the reference on 8 of 80 start
+  sets: every start set of 2022 Bahrain (3.0 to 4.8 s) and 2022 Spain (0.9 to 5.9 s). On the
+  other 17 races the best three-stop plan is 4 to 41 s slower and the reference is unchanged.
+  A coarse-to-fine search (stint lengths on a 3-lap grid, then +/-2 laps around the best 30)
+  found these plans (per start set: `reports/calibration/three_stops/lap0_references.csv`); the full three-stop search gives the same plan and time on the four start
+  sets checked (2022 Bahrain, 2022 Mexico, 2022 Brazil, 2021 Spain).
+- Stop count against the field (A4): the lap-0 reference matches the car's own stop count for
+  0.471 of the 325 field cars with two stops allowed, 0.548 with three; the race's modal stop
+  count 11 of 19 races, 13 of 19 (2022 Bahrain and 2022 Spain, where the field's mode was 3).
+- Compute: a full three-stop search scores 0.3 to 1.0 million plans at lap 0 (Bahrain 449,696;
+  Brazil 983,320) against at most about 20,000 with two, and took 50 to 121 s per lap-0 reference against
+  1 to 1.5 s on the loaded machine (one BLAS thread). Mid-race snapshots have fewer laps left
+  and fewer plans.
+
+Decision: left off as a named switch. It changes the reference only where the field really
+three-stopped, and it matches the field's stop count better there; it costs about 50 to 90 times
+the reference compute. The evaluation's references and results stay on `max_stops` 2.
+
 ## The frozen simulator and the evaluation tags
 
 `physics-v1` was the planned name of a simulator release at the end of sprint 2. That tag was
