@@ -3794,15 +3794,130 @@ judge's 0.4 to 9 s behind). Before it can be adopted the queue needs the near-la
 rule (who joins the train, from the gap at deployment against the SC lap) and the two
 simulators' SC duration and rate models aligned (the next section).
 
-Future work, the near-lapped rule: today every car that finished on the lead lap joins the train
-at the period's end. A car within a lap of the leader but physically ahead of the safety car on
-the road (behind by more than the SC lap less its distance to the line) is not picked up by the
-train: it circulates to the back of the queue, or is held a lap down until the "lapped cars may
-overtake" message, so at the end of the period it sits about one SC lap behind the leader, not
-0.5 s per place (2022 Bahrain: the real field at the end of its SC spans 38 s). The rule to
-fit: from each car's gap at deployment and the period's first SC lap time, whether it joins the
-queue at E or one lap later, measured against the recorded end-of-period gaps of the
-history table's races.
+#### The near-lapped rule
+
+Switch `sc_queue.held_behind_laps` (None, the default: as above; 1.25: the rule). What decides
+whether a car joins the train, read from the 8 SC periods with S >= 2 of the calibration races
+(`sc_queue.deployment_behind`: each car's distance behind the leader when the safety car came
+out, from the line crossings made before the deployment, against its recorded gap at the end of
+the period):
+
+- Every car less than one lap behind at the deployment closed up (about 0.5 s per place),
+  whatever the period length (the 3-lap periods of 2021 Spain and 2022 France included). The
+  only cars that did not pitted on the last SC lap.
+- Most cars just over a lap behind closed up too: they are waved past and reach the back of the
+  train in time (2022 Bahrain 1.08 to 1.13 laps, 2022 Brazil up to 1.23, 2022 Canada up to 1.22).
+- Cars 1.3 to 1.6 laps behind did not: 2022 Bahrain's STR, ALB, RIC, NOR, LAT and HUL (1.31 to
+  1.56 laps) ran green laps under the SC on its last two laps and finished the period 24 to 38 s
+  behind the leader; 2022 Brazil's LAT (1.55) 15 s. Only the longest period (2022 Canada, 7 laps)
+  brought cars that far back (1.32, 1.77) into the train.
+- 2021 Abu Dhabi is the exception: the cars 1.06 to 1.25 laps behind were let past only on the
+  last lap and finished it 59 to 95 s back.
+- Pitting under the safety car does not decide it: the stop is already priced in the queue
+  order.
+
+The old rule's `lapped` set holds only cars that finished laps down. The six Bahrain cars unlapped
+later, so each was pulled to 0.5 s per place in a queue where the other cars kept their
+recorded 24 to 38 s, and was placed ahead of the rest of its group.
+
+The rule. A car more than `held_behind_laps` laps behind at the deployment does not join the train.
+It keeps its gap, in the queue order, to the train's last car ahead of it. 1.25 is the cut that
+separates the cars that closed up from those that did not on the recorded end-of-period gaps
+(between Brazil's 1.23, which joined, and Bahrain's 1.31, which did not; 7 of 78 cars that did
+not pit are misclassified, 5 of them 2021 Abu Dhabi's). It was fitted on the race data, not on a
+scorecard result. Under the rule the single-car queue also:
+
+- keys the other cars by their green time at S - 1, projected from their crossings before the
+  deployment (`sc_queue.deployment_times`). A car's recorded crossing of S - 1 made under the
+  safety car would have put it behind cars it was ahead of: 2022 Brazil's ALB and LAT were placed
+  near the front of the train;
+- leaves out of the field the cars that had retired. `FieldQueue.at` had projected them forward
+  at `lap_ref_s` a lap, ahead of every car;
+- ends the train where the recorded leader ended lap E, whatever lap the car's own count saw the
+  safety car from. A car a lap down counts its laps beside the leader's next ones and had been
+  given its own simulated SC laps as the period length.
+
+The old rule is unchanged (`held_behind_laps` None, bit for bit). The judge reads the recorded
+race. The belief reads only the rows visible at the snapshot: the deployment when they show it,
+else the distances from the times at the end of lap S - 1, with the field projected with its gaps
+held (`tests/test_sc_queue_future_blindness.py` covers the rule too).
+
+Measured on 81a549f (19 calibration races, none failed; the adopted judge with hybrid SC/VSC as
+the base; A/B sections without the hindsight variants, leave-one-stint-out or components;
+race-cluster 95% intervals; `python -m src.sim.fidelity ablate --only sc_queue sc_queue_held
+sc_queue_field sc_queue_held_field sc_queue_both sc_queue_held_both`; files in
+`reports/calibration/fidelity/near-lapped-81a549f/`: the ablation, per-race measures, the
+whole-field replay per race and the deployment distances):
+
+| arm | close-pair order | Spearman | rel gap MAE s | B2 rho | B2 regret s | pit-now agree |
+| --- | --- | --- | --- | --- | --- | --- |
+| queue off (the adopted judge) | 0.753 | 0.958 | 13.17 | 0.868 | 4.11 | 0.816 |
+| old queue (single) | 0.690 (-0.062 [-0.115, -0.008]) | 0.882 | 9.35 (-3.82 [-7.83, -0.87]) | 0.859 | 3.77 | 0.803 |
+| near-lapped rule (single) | 0.709 (-0.043 [-0.081, -0.010]) | 0.953 | 7.47 (-5.70 [-10.91, -1.50]) | 0.860 | 3.95 | 0.807 |
+| old queue (field) | 0.726 (-0.027 [-0.044, -0.010]) | 0.954 | 7.70 (-5.47) | | | |
+| near-lapped rule (field) | 0.734 (-0.019 [-0.036, -0.003]) | 0.956 | 7.45 (-5.72 [-10.92, -1.47]) | | | |
+| old queue, belief too | 0.690 | 0.882 | 9.35 | 0.880 | 4.64 | 0.715 |
+| near-lapped rule, belief too | 0.709 | 0.953 | 7.47 | 0.877 | 4.80 | 0.723 |
+
+Per race (single / field), close-pair order, Spearman, relative gap:
+
+| race | queue off | old queue | near-lapped rule | rule, field |
+| --- | --- | --- | --- | --- |
+| 2022 Bahrain (46 pairs) | 0.804, 0.754, 39.8 s | 0.609, -0.054, 35.0 s | 0.630, 0.754, 8.9 s | 0.761, 0.768, 7.6 s |
+| 2022 Brazil (48 pairs) | 0.854, 0.975, 28.2 s | 0.646, 0.368, 13.9 s | 0.792, 0.919, 3.2 s | 0.833, 0.963, 3.8 s |
+
+Snapshots with a neutralisation in progress (lap k or k + 1 neutralised in the recorded race;
+belief against judge):
+
+| arm | SC: pit-now agree (60) | SC: B2 rho | SC: regret s | VSC: pit-now agree (48) |
+| --- | --- | --- | --- | --- |
+| queue off | 0.683 | 0.819 | 10.75 | 0.646 |
+| near-lapped rule in the judge | 0.733 | 0.776 | 10.60 | 0.667 |
+| near-lapped rule in both | 0.683 | 0.819 | 11.77 | 0.500 |
+| old queue in both | 0.567 | 0.821 | 12.68 | 0.521 |
+
+Whole-field replay (`src/sim/field_replay.py`, every classified car's real strategy from k, the
+world as a file with the switch, leave-one-driver-out fit, traffic off; the single-car queue
+against the other cars' recorded race; change against queue off, race-cluster intervals):
+
+| pace, k | close pairs off | old queue | near-lapped rule | rel gap off s | old queue | near-lapped rule |
+| --- | --- | --- | --- | --- | --- | --- |
+| asof, 0 | 0.538 | -0.008 [-0.046, +0.028] | +0.003 [-0.028, +0.038] | 27.1 | -1.84 [-4.53, -0.23] | -2.21 [-4.91, -0.32] |
+| asof, 10 | 0.655 | -0.014 [-0.077, +0.044] | -0.014 [-0.048, +0.020] | 22.3 | -5.34 [-10.76, -1.19] | -5.44 [-10.41, -1.50] |
+| asof, 20 | 0.668 | -0.014 [-0.032, +0.000] | -0.014 [-0.053, +0.016] | 19.9 | -5.21 [-10.84, -1.05] | -5.59 [-10.71, -1.34] |
+| asof, 30 | 0.720 | -0.035 [-0.093, +0.014] | -0.033 [-0.075, +0.011] | 16.2 | -3.73 [-8.98, +0.06] | -4.13 [-9.29, +0.00] |
+| asof, 40 | 0.753 | -0.038 [-0.095, +0.004] | -0.035 [-0.071, +0.000] | 13.6 | -3.90 [-8.91, -0.07] | -4.25 [-9.16, -0.06] |
+| practice, 10 | 0.582 | -0.046 [-0.089, -0.003] | -0.049 [-0.084, -0.009] | 23.1 | -1.35 [-4.34, +0.88] | -1.88 [-5.24, +0.72] |
+| practice, 20 | 0.609 | -0.060 [-0.114, +0.000] | -0.054 [-0.107, +0.004] | 21.1 | -2.00 [-4.32, +0.00] | -2.72 [-5.97, -0.02] |
+| practice, 40 | 0.701 | -0.073 [-0.133, +0.000] | -0.071 [-0.140, -0.006] | 15.4 | -2.59 [-5.99, +0.18] | -3.11 [-6.90, +0.00] |
+
+Spearman on the whole-field replay, 2022 Brazil at practice pace: off 0.86 to 0.92, old queue
+0.30 to 0.42, the rule 0.85 to 0.90 (relative gap 25 s to 4 to 13 s). 2022 Bahrain: off 0.62 to
+0.75, old queue 0.36 to 0.57, the rule 0.42 to 0.61 (relative gap 18 to 37 s to 12 to 15 s).
+
+Reading under the selection rule:
+
+- The rule removes the near-lapped failure. Spearman returns to the queue-off level (0.953
+  against 0.958; the old queue 0.882), Brazil's order is back (0.919 single, 0.963 field) and the
+  gap gain grows: relative gap 13.2 to 7.5 s, against 9.4 s for the old queue. The noise floor
+  with neutralised laps recorded is 5.2 s.
+- Close-pair order is still below queue-off: -0.043 [-0.081, -0.010] single, -0.019 [-0.036,
+  -0.003] field. It is NOT an adopt-candidate: the rule requires order at least level with
+  queue-off within the interval.
+- What is left of the single-car loss is how a simulated car is placed among the other cars'
+  recorded race, not who joins the train. A car whose simulated time at S - 1 has drifted from
+  its real one loses or gains places in the train for it, and keeps them. 2022 Bahrain's leader
+  LEC had drifted 46 s by lap 45 on the whole-field replay (k = 20, practice pace) and pitted
+  under the SC, so it rejoined 13th. Off, the same drift stays a time error that the relative
+  measure partly removes. 16 of the 368 close pairs are lost: 8 in Bahrain, 3 in Brazil, 2 in
+  2019 Britain, 1 each elsewhere. The field mode queues simulated cars among simulated cars and
+  loses 7.
+- The belief with the rule: pit-now agreement on SC-in-progress snapshots is level with queue-off
+  (0.683; the old queue in both 0.567). Overall it is -0.093 [-0.143, -0.043], the same cause as
+  above (the two simulators' safety-car expectations), and on VSC snapshots 0.500 against 0.646.
+- 2021 Abu Dhabi's relative gap gets worse under every queue (22.8 to 27.2 s): its cars 1.06 to
+  1.15 laps behind were held by race control, and no rule fitted on the other races reproduces
+  that.
 
 ### Safety-car duration and rates: the belief against the judge
 
