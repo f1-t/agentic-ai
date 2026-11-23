@@ -33,8 +33,11 @@ def test_visible_race_laps_end_at_the_drivers_lap():
     race = _laps([("A", 1, 100), ("A", 2, 190), ("A", 3, 280), ("B", 1, 101), ("B", 2, 192), ("B", 3, 283)])
     got = tyre_inventory.visible_race_laps(race, "A", 2)
     assert sorted(zip(got["Driver"], got["LapNumber"])) == [("A", 1), ("A", 2), ("B", 1)]
-    start = tyre_inventory.visible_race_laps(race, "A", 0)
-    assert sorted(start["LapNumber"]) == [1, 1]
+    # the start reads no race lap: the snapshot's starting set, the teammates from qualifying
+    q = pd.DataFrame({"Driver": ["A", "B", "C"], "Team": ["T", "T", "U"]})
+    start = tyre_inventory.start_laps({"Q": q}, "A", "SOFT", 3)
+    assert list(start["Driver"]) == ["A", "B"]
+    assert (start["Compound"].iloc[0], start["TyreLife"].iloc[0], start["FreshTyre"].iloc[0]) == ("SOFT", 4.0, False)
 
 
 def test_2019_is_open_on_new_sets_but_holds_its_used_ones():

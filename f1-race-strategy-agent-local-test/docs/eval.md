@@ -1626,7 +1626,7 @@ One of the ten is 2023 Spain LEC's HARD at 25: a set taken off earlier in the ra
 plan that took that set off can refit it, so `actual_strategy` plays it exactly.
 
 **Measured on the 19 calibration races, switch off against on** (`python -m src.sim.fidelity run`,
-paired on 1225 snapshots, race-cluster 95%, before the owner's decision; base the main of
+paired on 1225 snapshots, race-cluster 95%; on: the adopted default at 3881500; off: the main of
 2026-11-22 with the SC queue):
 
 | measure | off | on | change |
@@ -1637,7 +1637,31 @@ paired on 1225 snapshots, race-cluster 95%, before the owner's decision; base th
 | favourite's judge-regret | 3.16 s | 3.47 s | +0.31 [-0.25, +1.09]; first third +0.79 [-0.41, +2.26]; no history +0.56; low-wear four +0.37 |
 | pit-now agreement | 0.827 | 0.847 | +0.020 [-0.007, +0.048]; low-wear four +0.033 [+0.013, +0.051] |
 | over-stop share | 0.120 | 0.095 | -0.025 [-0.059, +0.001] |
-| E_real_regret_s | 5.59 s | 5.25 s | |
+| E_real_regret_s | 5.59 s | 5.21 s | |
+
+**dev20 baselines rescore** (`src.eval.rerun baselines`, references rebuilt; off: the legacy pair,
+on: the adopted default at 3881500). Each side's regret is against its own judge's reference.
+Change in judge-regret, race-cluster 95%:
+
+| policy | all | first third | low-wear four |
+|---|---|---|---|
+| `belief_optimizer` | 3.04 -> 3.34 s, +0.30 [-0.32, +1.05] | +0.62 [-0.52, +2.04] | -0.21 [-0.61, +0.06] |
+| `run_to_flag` | 9.06 -> 8.28 s, -0.78 [-1.36, -0.29] | -1.13 [-2.01, -0.32] | -0.21 [-0.47, +0.02] |
+| `one_stop_total` | 9.82 -> 9.09 s, -0.73 [-1.23, -0.30] | -1.01 [-1.70, -0.42] | -0.19 [-0.47, +0.01] |
+| `actual_strategy` | 6.43 -> 6.86 s, +0.43 [-0.26, +1.20] | +0.50 [-0.76, +1.98] | -0.24 [-0.58, +0.12] |
+| `fixed_one_stop` | 13.64 -> 14.57 s, +0.93 [-0.30, +2.24] | +0.67 | +1.88 [-0.05, +5.61] |
+| `fixed_two_stop` | 22.73 -> 26.49 s, +3.76 [+2.19, +5.62] | +5.45 [+2.51, +8.69] | +2.75 [+0.27, +7.39] |
+| `greedy_crossover` (80 rows) | 84.96 -> 111.46 s, +26.5 [+14.1, +42.6] | +29.9 | +19.5 |
+
+Every `actual_strategy` row the off side scores, the on side scores (428 of 469; the 41 others are
+unavailable on both sides for the same reasons as before).
+
+The inventory makes two baselines unavailable, both because a named compound has no set left:
+
+- `fixed_one_stop`: 2 more rows ("No tyre set for the rule's plan: ... no HARD set left");
+- `fixed_two_stop`: 31 more rows.
+
+References that use a proxied compound: 15 of the 469 scenarios off, 22 on.
 
 **Where the regret change comes from.** One race carries it: 2021 Spain, +414 s of the +381 s total.
 Nobody raced HARD there, so both simulators price HARD by proxy. Once the MEDIUMs left are used sets,
@@ -4781,6 +4805,33 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
   `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
   queue's other forms), `tyre_inventory_off` (both simulators).
+
+Confirmation after the tyre sets on 3881500 (`reports/calibration/fidelity/tyre-inventory-3881500/`, all 19
+calibration races, none failed). Hashes and versions:
+
+| | before | after |
+|---|---|---|
+| SIM_CODE_VERSION | `32671b6a2ad5` | `30efab2adf7a` |
+| default world config_hash | `7c974c32c67c` | `c821efe0bc98` |
+| belief config_hash | `9d691bbbcf24` | `aaf95a09bc50` |
+
+Measures; the judge's are unchanged because its whole-race replays already run real ages:
+
+| measure | after | before |
+|---|---|---|
+| close pairs out of sample | 0.747 | 0.747 |
+| Spearman | 0.960 | 0.960 |
+| relative gap | 7.60 s | 7.60 s |
+| plan-rank agreement | 0.880 | 0.872 |
+| judge-regret of the belief's favourite | 3.47 s | 3.16 s |
+| pit-now agreement | 0.847 | 0.827 |
+| belief replay close pairs | 0.667 | unchanged |
+| plan 90% coverage | 0.972 | |
+| E_real_regret_s | 5.21 s | 5.59 s |
+
+The noise floor (`ceiling_pooled.csv` there) is unchanged. The paired off/on table and the reading are
+under "Tyre sets at the snapshot". Every reference built on the earlier world is stale: its world
+config_hash and SIM_CODE_VERSION both changed.
 
 Confirmation after the judge's safety-car queue on 83fb72e
 (`reports/calibration/fidelity/sc-queue-83fb72e/`, all 19 calibration races, none failed, future
