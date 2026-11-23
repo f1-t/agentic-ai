@@ -185,17 +185,22 @@ def stint_limit(ctx):
                                   getattr(ctx.config, "stint_limit_margin_laps", None), ctx.stint_limit_sources)
 
 
-def assign_sets(snapshot, plan, sources=None):
+def assign_sets(snapshot, plan, sources=None, best=False):
     """Match each stint after the first to a distinct set in the inventory.
 
     Returns (sets, errors). `sets[i]` is the TyreSet for stint i, None for the
     fitted first stint or when the snapshot is unconstrained. `sources` limits
-    which provenance tags count as available.
+    which provenance tags count as available. With `best` (SimConfig.tyre_inventory) a stint
+    without a set_id takes the best set of its compound left instead of needing its exact
+    start_age; only a compound with no set left is an error.
     """
     if snapshot.sets_available is None:
         return [None] * len(plan.stints), []
     pool = [t for t in snapshot.sets_available if sources is None or t.source in sources]
     out, errors = [None], []
+    # best: the sets this plan has taken off, at their laps run then; a stint naming a used age
+    # (a recorded strategy) may refit one of them, as teams do
+    off = [] if not best else [_taken_off(snapshot, plan.stints[0], None, snapshot.tyre_age)]
     for i, st in enumerate(plan.stints[1:], start=2):
         if st.set_id is not None:
             found = [t for t in pool if t.set_id == st.set_id]
@@ -210,6 +215,18 @@ def assign_sets(snapshot, plan, sources=None):
                 errors.append(f"Stint {i}: start_age {st.start_age} conflicts with set '{st.set_id}' ({t.laps_run} laps run).")
         else:
             found = [t for t in pool if t.compound == st.compound and t.laps_run == st.start_age]
+            same = [t for t in pool if t.compound == st.compound]
+            refit = [t for t in off if t.compound == st.compound and t.laps_run == st.start_age]
+            if not found and best and st.start_age > 0 and refit:
+                off.remove(refit[0])
+                out.append(refit[0])
+                off.append(_taken_off(snapshot, st, refit[0], st.start_age))
+                continue
+            if not found and best and same:
+                # SimConfig.tyre_inventory: the best set of the compound left, new when one remains,
+                # else the least used; an asked-for used age takes the nearest held one
+                found = [min(same, key=lambda t: (t.laps_run != 0, t.laps_run) if st.start_age == 0
+                             else (abs(t.laps_run - st.start_age), t.laps_run))]
             if not found:
                 ages = sorted(t.laps_run for t in pool if t.compound == st.compound)
                 detail = f"available {st.compound} sets have {ages} laps run" if ages else f"no {st.compound} set left"
@@ -219,21 +236,34 @@ def assign_sets(snapshot, plan, sources=None):
             t = found[0]
         pool.remove(t)
         out.append(t)
+        if best:
+            off.append(_taken_off(snapshot, st, t, t.laps_run))
     return out, errors
+
+
+def _taken_off(snapshot, stint, tset, start_age):
+    """The set of `stint` once the stint is run: its laps run then (a refit candidate)."""
+    from ..contracts import TyreSet
+    return TyreSet(compound=stint.compound, laps_run=int(start_age) + int(stint.laps),
+                   source=getattr(tset, "source", "observed"), set_id=getattr(tset, "set_id", None))
 
 
 def _sources(config):
     return getattr(config, "inventory_sources", None)
 
 
+def _best(config):
+    return bool(getattr(config, "tyre_inventory", False))
+
+
 @RULES.register("inventory")
 def inventory(ctx):
-    return assign_sets(ctx.snapshot, ctx.plan, _sources(ctx.config))[1]
+    return assign_sets(ctx.snapshot, ctx.plan, _sources(ctx.config), _best(ctx.config))[1]
 
 
 def apply_inventory(snapshot, plan, config=None):
     """Return the plan with start_age taken from each named set."""
-    sets, errors = assign_sets(snapshot, plan, _sources(config))
+    sets, errors = assign_sets(snapshot, plan, _sources(config), _best(config))
     if errors or all(t is None for t in sets):
         return plan
     stints = [s if t is None else s.model_copy(update={"start_age": t.laps_run})

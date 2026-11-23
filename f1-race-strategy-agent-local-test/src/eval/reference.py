@@ -46,7 +46,7 @@ import numpy as np
 
 from ..baselines.domain import NoFeasiblePlan
 from ..contracts import Plan
-from ..sim import calibration
+from ..sim import calibration, tyre_inventory
 from ..sim.engine import summarise
 from ..sim.events import Scenario as EventScenario
 from ..sim.optimizer_bridge import optimize_batch
@@ -148,6 +148,8 @@ def compute_reference(scenario, world, *, seed: int = 0, n_samples: int | None =
     and best stay-out plans, so the near-tie columns do not depend on the bound.
     `keep_all` keeps every searched plan (for the test that checks this)."""
     snap = scenario.snapshot
+    if tyre_inventory.on(getattr(world, "config", None)):   # SimConfig.tyre_inventory: the as-of sets
+        snap = tyre_inventory.with_sets(snap, scenario.race_id)
     events = recorded_events(world, snap) if hindsight else None
     try:
         opt = optimize_batch(snap, world, seed=seed, n_samples=n_samples, max_stops=max_stops,

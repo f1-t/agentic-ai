@@ -28,3 +28,6 @@ calibrator:
 fuel_anchor:
   prior: anchored
   practice: anchored
+# The tyre sets at the snapshot (docs/eval.md "Tyre sets at the snapshot", adopted 2026-11-22; before:
+# configs/sim/legacy/belief_pre_tyre_inventory.yaml): the as-of inventory, a later stint on the best set of its compound left
+tyre_inventory: true

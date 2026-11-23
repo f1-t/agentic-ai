@@ -278,7 +278,29 @@ def test_snapshot_builds_from_the_past_alone(race_id):
     assert not failures, "\n".join(failures)
 
 
-SELECTION = ("the scenario sampler picks with the whole race: eligible drivers are those who finish within "
+def test_tyre_inventory_reads_the_past_alone(monkeypatch):
+    """SimConfig.tyre_inventory: the sets at a snapshot (tyre_inventory.sets_at) do not change when
+    every race lap that ends after the snapshot moment is altered (compound, tyre life, stint) or
+    removed. Default suite: one real snapshot under the SC."""
+    from src.sim import tyre_inventory
+    race_id, [(driver, lap)] = SMALL_REAL
+    sessions, laps, allocation = tyre_inventory.weekend(race_id)
+    want = tyre_inventory.sets_at(race_id, driver, lap)
+    assert want is not None
+    t = laps.loc[(laps["Driver"] == driver) & (laps["LapNumber"] == lap), "Time"].iloc[0]
+    future = (laps["Time"] > t).to_numpy()
+    assert future.any()
+    altered = laps.copy()
+    altered.loc[future, "Compound"] = "HARD"
+    altered.loc[future, "TyreLife"] = altered.loc[future, "TyreLife"] + 7
+    altered.loc[future, "FreshTyre"] = True
+    altered.loc[future, "Stint"] = altered.loc[future, "Stint"] + 1
+    for frame in (altered, laps[~future]):
+        monkeypatch.setattr(tyre_inventory, "weekend", lambda rid, f=frame: (sessions, f, allocation))
+        assert tyre_inventory.sets_at(race_id, driver, lap) == want
+
+
+SELECTION = ("the scenario sampler picks with the whole race:eligible drivers are those who finish within "
              "two laps (src/eval/scenarios.py:127 eligible_drivers), decision laps include the laps beside every "
              "SC and VSC period of the race (src/sim/calibration.py:643 default_laps_k) and stop min_stint_laps "
              "before the driver's last lap (src/eval/scenarios.py:137 decision_laps)")
