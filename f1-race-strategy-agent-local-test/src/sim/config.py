@@ -389,7 +389,7 @@ class PreRace(_Cfg):
                         historical tyre-life prior (bias and sd as of the race)"""
 
     tyre_life_ratings: Literal["off", "replace", "supplement"] = "off"
-    tyre_life_guidance: bool = False
+    tyre_life_guidance: Literal["off", "windows", "stated"] = "off"
 
 
 class SimConfig(_Cfg):

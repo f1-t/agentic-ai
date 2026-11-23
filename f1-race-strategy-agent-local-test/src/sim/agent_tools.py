@@ -1488,8 +1488,7 @@ def race_picture(snapshot: Snapshot, *, sim=None, profile=None) -> dict:
            "note": "observed wear: s/lap of tyre age from clean laps so far, fuel-corrected; compare with "
                    "model_wear (the simulator's value and sd); race_laps are the laps behind the fit"}
     if prerace_shown():
-        from . import prerace
-        block = prerace.prerace_block(snapshot.race.race_id)
+        block = prerace_block(snapshot.race.race_id)
         if block is not None:
             out["pre_race"] = block
     return _jsonable(out)
@@ -1521,3 +1520,87 @@ def recommendation_fields(snapshot: Snapshot, decision: dict) -> dict:
         kind = None
     return _jsonable({"decision": kind, "p_pit": decisions.p_pit(decision),
                       "laps_completed": snapshot.laps_completed})
+
+
+# --- the supplier's pre-race block (src/sim/prerace.py tables; AGENT_PRERACE) ----------------------------------------------------------------------------
+_LEVEL = {1: "very low", 2: "low", 3: "medium", 4: "high", 5: "very high"}
+_WORDS = {"asphalt_abrasion": "abrasion", "tyre_stress": "tyre stress", "lateral": "lateral load",
+          "traction": "traction demand", "braking": "braking", "asphalt_grip": "asphalt grip",
+          "track_evolution": "track evolution", "downforce": "downforce"}
+
+
+def prerace_ratings_words(race_id) -> str | None:
+    """'abrasion low, tyre stress high, ...' from the ratings, None without them."""
+    from .prerace import load_ratings
+    t = load_ratings()
+    from .prerace import _rid
+    rid = _rid(race_id)
+    if rid is None or rid not in t.index:
+        return None
+    r = t.loc[rid]
+    parts = [f"{_WORDS[c]} {_LEVEL[int(r[c])]}" for c in
+             ("asphalt_abrasion", "tyre_stress", "lateral", "traction", "braking", "asphalt_grip",
+              "track_evolution", "downforce")
+             if c in r and r[c] == r[c] and int(r[c]) in _LEVEL]
+    return ", ".join(parts) if parts else None
+
+
+def prerace_guidance_words(race_id) -> list[str]:
+    """One plain line per expected strategy, e.g. 'expected fastest: one stop, MEDIUM about laps
+    1-24 then HARD'; [] without guidance."""
+    out = []
+    names = {0: "no stop", 1: "one stop", 2: "two stops", 3: "three stops"}
+    from .prerace import strategies_of
+    for s in strategies_of(race_id):
+        label = "expected fastest" if s["rank"] == 1 else f"expected option {s['rank']}"
+        seq = s["sequence"]
+        stops = names.get(s["stops"], f"{s['stops']} stops")
+        if not seq:
+            out.append(f"{label}: {stops} (compounds not stated)")
+            continue
+        if s["windows"]:
+            stints = []
+            for j, role in enumerate(seq):
+                if j < len(s["windows"]):
+                    lo, hi = s["windows"][j]
+                    stints.append(f"{role} to a stop around lap {lo:g}" + (f"-{hi:g}" if hi != lo else ""))
+                else:
+                    stints.append(f"{role} to the flag")
+            body = ", then ".join(stints)
+        else:
+            body = " then ".join(seq)
+        out.append(f"{label}: {stops}, {body}")
+    return out
+
+
+def prerace_block(race_id) -> dict | None:
+    """The agent's compact pre-race block: the circuit's tyre ratings in words and the supplier's
+    expected strategies, with its stated pace gaps and degradation note. Nothing that names the
+    race, circuit, season or a driver. None when neither table has the race."""
+    from .prerace import _rid
+    rid = _rid(race_id)
+    words = prerace_ratings_words(rid)
+    lines = prerace_guidance_words(rid)
+    from .prerace import load_guidance
+    t = load_guidance()
+    extra = {}
+    if rid is not None and rid in t.index:
+        r = t.loc[rid]
+        for col, name in (("pace_gap_soft_medium_s", "soft_vs_medium_s_per_lap"),
+                          ("pace_gap_medium_hard_s", "medium_vs_hard_s_per_lap")):
+            try:
+                v = float(r.get(col, ""))
+                if v == v:
+                    extra[name] = v
+            except (TypeError, ValueError):
+                pass
+    if not words and not lines and not extra:
+        return None
+    out = {"source": "the tyre supplier's pre-race publications (before the start; may be wrong)"}
+    if words:
+        out["circuit_tyre_ratings"] = words
+    if lines:
+        out["expected_strategies"] = lines
+    if extra:
+        out["stated_pace_gaps"] = extra
+    return out

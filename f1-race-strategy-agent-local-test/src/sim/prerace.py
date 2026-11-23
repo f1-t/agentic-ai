@@ -18,10 +18,12 @@ and every caller falls back to what it did without the tables.
 What reads them (each a switch, SimConfig.prerace, off by default):
   tyre_life_prior(..., ratings=...)   tyre_history: the circuit ratings as covariates of tyre life,
                                       fitted as of the race on earlier races (life_severity_fit)
-  tyre_life_prior(..., guidance=True) tyre_history: the guidance's implied stint lengths as a
+  tyre_life_prior(..., guidance=...)  tyre_history: the guidance's implied stint lengths as a
                                       second tyre-life estimate, combined by precision with the
                                       historical one (guidance_life, guidance_error_as_of)
-  agent_tools.race_picture            the ratings in words and the expected strategies (prerace_block)
+  agent_tools.prerace_block           the ratings in words and the expected strategies, in the
+                                      agent's race_picture under AGENT_PRERACE (words kept there, in a
+                                      non-physics module)
 """
 from __future__ import annotations
 
@@ -132,49 +134,72 @@ def strategies_of(race_id) -> list[dict]:
     out = []
     for i in range(1, MAX_STRATEGIES + 1):
         seq = str(r.get(f"s{i}_sequence", "") or "").strip().upper()
-        if not seq:
-            continue
         roles = [s.strip() for s in seq.split("-") if s.strip()]
         if not roles or any(x not in ROLES for x in roles):
-            continue
+            roles = None      # not stated in full (blank, "MEDIUM/HARD mix", "?-?-SOFT")
         try:
             stops = int(float(r.get(f"s{i}_stops")))
         except (TypeError, ValueError):
-            stops = len(roles) - 1
-        w = _windows(r.get(f"s{i}_windows", ""))
+            stops = len(roles) - 1 if roles else None
+        if stops is None:
+            continue
+        if roles is not None and len(roles) != stops + 1:
+            roles = None
+        w = _windows(r.get(f"s{i}_windows", "")) if roles else None
         if w is not None and len(w) != len(roles) - 1:
             w = None
         out.append({"rank": i, "stops": stops, "sequence": roles, "windows": w})
     return out
 
 
-def guidance_life(race_id, total_laps: float) -> dict[str, float]:
-    """role -> the longest stint the guidance expects on it, in laps: per strategy with stated
-    windows, a first stint to the upper end of the first window, a middle stint from the lower end
-    of its opening window to the upper end of its closing one, the last stint from the lower end of
-    the last window to the flag. The upper end of a window is the supplier's estimate of how long
-    the compound runs. {} with no usable guidance."""
+def expected_stops(race_id) -> int | None:
+    """The stop count of the strategy the guidance calls fastest (its first), None without one."""
+    s = strategies_of(race_id)
+    return s[0]["stops"] if s else None
+
+
+# the share of a stated strategy's distance each role runs when no laps are stated ("stated" mode):
+# proportional to a role's life weight, one life-ratio step (0.75, configs/tyre_history.yaml's
+# default_per_step) per role step; stated a priori
+ROLE_LIFE_WEIGHT = {"HARD": 1.0, "MEDIUM": 0.75, "SOFT": 0.5625}
+
+
+def guidance_life(race_id, total_laps: float, mode: str = "windows") -> dict[str, float]:
+    """role -> the longest stint the guidance expects on it, in laps.
+    windows  per strategy with stated windows: a first stint to the upper end of the first window,
+             a middle stint from the lower end of its opening window to the upper end of its closing
+             one, the last stint from the lower end of the last window to the flag (the upper end of
+             a window is the supplier's estimate of how long the compound runs)
+    stated   also the strategy called fastest when it states a full compound sequence but no laps:
+             the distance shared among its stints by ROLE_LIFE_WEIGHT (a one-stop MEDIUM-HARD gives
+             the HARD 57% of the race), a priori
+    {} with no usable guidance."""
     out: dict[str, float] = {}
-    for s in strategies_of(race_id):
-        w = s["windows"]
-        if not w:
+    strategies = strategies_of(race_id)
+    for s in strategies:
+        w, roles = s["windows"], s["sequence"]
+        if not roles:
             continue
-        roles = s["sequence"]
-        for j, role in enumerate(roles):
-            start = 0.0 if j == 0 else w[j - 1][0]
-            end = float(total_laps) if j == len(roles) - 1 else w[j][1]
-            if end > start:
-                out[role] = max(out.get(role, 0.0), end - start)
+        if w:
+            for j, role in enumerate(roles):
+                start = 0.0 if j == 0 else w[j - 1][0]
+                end = float(total_laps) if j == len(roles) - 1 else w[j][1]
+                if end > start:
+                    out[role] = max(out.get(role, 0.0), end - start)
+        elif mode == "stated" and s["rank"] == 1:
+            tot = sum(ROLE_LIFE_WEIGHT[x] for x in roles)
+            for role in roles:
+                out[role] = max(out.get(role, 0.0), float(total_laps) * ROLE_LIFE_WEIGHT[role] / tot)
     return out
 
 
-def guidance_error_as_of(earlier_obs: pd.DataFrame) -> tuple[float, float, int]:
+def guidance_error_as_of(earlier_obs: pd.DataFrame, mode: str = "windows") -> tuple[float, float, int]:
     """(bias, sd, races) of log(observed edge / guidance stint) over `earlier_obs` (usable tyre
     history rows of races strictly before the target, already as-of): the mean and sd over the
     races holding both; (0, GUIDANCE_LOG_SD, n) under GUIDANCE_MIN_RACES races."""
     logs, races = [], set()
     for r in earlier_obs.itertuples():
-        g = guidance_life(r.race_id, float(r.total_laps)).get(r.role)
+        g = guidance_life(r.race_id, float(r.total_laps), mode).get(r.role)
         e = float(r.edge_laps) if pd.notna(r.edge_laps) else float("nan")
         if g and g > 0 and np.isfinite(e) and e > 0:
             logs.append(math.log(e / g))
@@ -220,78 +245,3 @@ def ratings_shift(fit: dict | None, target_id, obs_id) -> float:
     if xt is None or xh is None:
         return 0.0
     return float(sum(fit["beta"][c] * (xt[c] - xh[c]) for c in LIFE_COVARIATES))
-
-
-# --- words for the agent ----------------------------------------------------------------------------
-_LEVEL = {1: "very low", 2: "low", 3: "medium", 4: "high", 5: "very high"}
-_WORDS = {"asphalt_abrasion": "abrasion", "tyre_stress": "tyre stress", "lateral": "lateral load",
-          "traction": "traction demand", "braking": "braking", "asphalt_grip": "asphalt grip",
-          "track_evolution": "track evolution", "downforce": "downforce"}
-
-
-def ratings_words(race_id) -> str | None:
-    """'abrasion low, tyre stress high, ...' from the ratings, None without them."""
-    t = load_ratings()
-    rid = _rid(race_id)
-    if rid is None or rid not in t.index:
-        return None
-    r = t.loc[rid]
-    parts = [f"{_WORDS[c]} {_LEVEL[int(r[c])]}" for c in
-             ("asphalt_abrasion", "tyre_stress", "lateral", "traction", "braking", "asphalt_grip",
-              "track_evolution", "downforce")
-             if c in r and pd.notna(r[c]) and int(r[c]) in _LEVEL]
-    return ", ".join(parts) if parts else None
-
-
-def guidance_words(race_id) -> list[str]:
-    """One plain line per expected strategy, e.g. 'expected fastest: one stop, MEDIUM about laps
-    1-24 then HARD'; [] without guidance."""
-    out = []
-    names = {0: "no stop", 1: "one stop", 2: "two stops", 3: "three stops"}
-    for s in strategies_of(race_id):
-        label = "expected fastest" if s["rank"] == 1 else f"expected option {s['rank']}"
-        seq = s["sequence"]
-        if s["windows"]:
-            stints = []
-            for j, role in enumerate(seq):
-                if j < len(s["windows"]):
-                    lo, hi = s["windows"][j]
-                    stints.append(f"{role} to a stop around lap {lo:g}" + (f"-{hi:g}" if hi != lo else ""))
-                else:
-                    stints.append(f"{role} to the flag")
-            body = ", then ".join(stints)
-        else:
-            body = " then ".join(seq)
-        out.append(f"{label}: {names.get(s['stops'], str(s['stops']) + ' stops')}, {body}")
-    return out
-
-
-def prerace_block(race_id) -> dict | None:
-    """The agent's compact pre-race block: the circuit's tyre ratings in words and the supplier's
-    expected strategies, with its stated pace gaps and degradation note. Nothing that names the
-    race, circuit, season or a driver. None when neither table has the race."""
-    rid = _rid(race_id)
-    words = ratings_words(rid)
-    lines = guidance_words(rid)
-    t = load_guidance()
-    extra = {}
-    if rid is not None and rid in t.index:
-        r = t.loc[rid]
-        for col, name in (("pace_gap_soft_medium_s", "soft_vs_medium_s_per_lap"),
-                          ("pace_gap_medium_hard_s", "medium_vs_hard_s_per_lap")):
-            try:
-                v = float(r.get(col, ""))
-                if np.isfinite(v):
-                    extra[name] = v
-            except (TypeError, ValueError):
-                pass
-    if not words and not lines and not extra:
-        return None
-    out = {"source": "the tyre supplier's pre-race publications (before the start; may be wrong)"}
-    if words:
-        out["circuit_tyre_ratings"] = words
-    if lines:
-        out["expected_strategies"] = lines
-    if extra:
-        out["stated_pace_gaps"] = extra
-    return out

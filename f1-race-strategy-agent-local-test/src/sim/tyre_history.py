@@ -499,7 +499,7 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
                     allow_held_out: bool = False, config: dict | None = None,
                     use_compound: bool = True, use_circuit: bool = True,
                     use_severity: bool | None = None, ratings: str = "off",
-                    guidance: bool = False) -> TyreLifePrior:
+                    guidance: str = "off") -> TyreLifePrior:
     """The tyre-life prior of `role` (HARD / MEDIUM / SOFT) at `race_id` (module docstring).
 
     races:          restrict the history to these race ids (still as-of and held-out filtered)
@@ -640,8 +640,8 @@ def tyre_life_prior(race_id: str, role: str, *, races=None, total_laps: float | 
         notes.append(f"life ratio {ratio:g} per step: config default ({n_pairs} earlier pairs)")
     if rfit is not None:
         notes.append(f"circuit ratings ({ratings}) fitted on {rfit['races']} earlier races")
-    if guidance:
-        mean, sd = _with_guidance(rid, role, laps, h, mean, sd, notes)
+    if guidance and guidance != "off":
+        mean, sd = _with_guidance(rid, role, laps, h, mean, sd, notes, "windows" if guidance is True else guidance)
     return TyreLifePrior(mean * laps, sd * laps, n_eff, sources, tier, mean, sd, int(round(laps)), compound, ratio,
                          tuple(notes))
 
@@ -666,13 +666,13 @@ def _ratings_fit(h: pd.DataFrame, ratio: float, after_trio: bool):
     return life_severity_fit(rows)
 
 
-def _with_guidance(rid, role, laps, h, mean, sd, notes) -> tuple[float, float]:
+def _with_guidance(rid, role, laps, h, mean, sd, notes, mode="windows") -> tuple[float, float]:
     """(mean, sd) as shares of distance, combined by precision with the guidance's stint on `role`."""
     from .prerace import guidance_error_as_of, guidance_life
-    g = guidance_life(rid, laps).get(role)
+    g = guidance_life(rid, laps, mode).get(role)
     if not g:
         return mean, sd
-    bias, lsd, n = guidance_error_as_of(h)
+    bias, lsd, n = guidance_error_as_of(h, mode)
     g_frac = g * math.exp(bias) / laps
     g_sd = g_frac * lsd
     w_h, w_g = 1.0 / sd ** 2, 1.0 / g_sd ** 2
