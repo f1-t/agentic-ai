@@ -9,12 +9,14 @@ import pytest
 from src.contracts import Snapshot
 from src.eval import rerun, score
 from src.sim import SimConfig, agent_tools, calibration, fidelity
-from src.sim.config import WORLD_DEGRADATION, WORLD_EDGE, WORLD_WEAR_GUARD, WearGuard, world_default
+from src.sim.config import (WORLD_DEGRADATION, WORLD_EDGE, WORLD_SC_QUEUE, WORLD_WEAR_GUARD, ScQueue, WearGuard,
+                             world_default)
 from src.sim.engine import Simulator
 
 ROOT = fidelity.ROOT
-DEFAULT_WORLD_HASH = "15e3f31d98a7"       # driver effects, edge history_only, hybrid SC/VSC pooled history, wear guard
+DEFAULT_WORLD_HASH = "7c974c32c67c"       # driver effects, edge history_only, hybrid SC/VSC pooled history, wear guard, SC queue
 DEFAULT_BELIEF_HASH = "9d691bbbcf24"      # belief.yaml with driver effects, SC/VSC history lengths, cliff edge point
+PRE_SC_QUEUE_WORLD_HASH = "15e3f31d98a7"  # the default world from v3 (#138) to the SC queue's adoption
 PRE_V3_WORLD_HASH = "5069228b35e7"        # the default world from the SC alignment (#125) to v3
 PRE_V3_BELIEF_HASH = "351f4124ff22"
 PRE_SC_ALIGNMENT_WORLD_HASH = "abc455a9bbb6"   # the default world from the adoption (#114) to the SC alignment
@@ -40,6 +42,10 @@ def test_the_default_world_is_the_scorecard_choice():
     assert w.wear_guard == WearGuard(enabled=True, scale_sd_by_drivers=True)
     assert (w.wear_guard.min_drivers, w.wear_guard.min_rows) == (3, 40)
     assert not SimConfig().wear_guard.enabled   # the SimConfig default stays off; the eval world sets it
+    assert WORLD_SC_QUEUE == {"enabled": True, "mode": "single", "held_behind_laps": 1.25, "placement": "record"}
+    assert w.sc_queue == ScQueue(enabled=True, mode="single", held_behind_laps=1.25, placement="record")
+    assert w.sc_queue.spacing_s == 0.5
+    assert not SimConfig().sc_queue.enabled     # the SimConfig default stays off; the eval world sets it
     assert w.degradation.model_dump() == {"name": "linear_fuel", "params": {"driver_effects": "race"}} \
         == {"name": WORLD_DEGRADATION["name"], "params": WORLD_DEGRADATION["params"]}
     assert w.traffic.name == "none" and w.stint_limit_margin_laps is None and w.plan_on == "draws"
@@ -95,7 +101,11 @@ def test_every_earlier_choice_stays_available_as_a_file():
     assert calibration.config_hash(v3_w) == PRE_V3_WORLD_HASH
     assert calibration.config_hash(v3_b) == PRE_V3_BELIEF_HASH
     assert not v3_w.wear_guard.enabled and v3_b.belief_cliff_edge == "draw"
-    assert v3_w.model_copy(update={"wear_guard": default_world().wear_guard}) == default_world()
+    # before the SC queue: the default world without it (the belief unchanged)
+    sq_w = SimConfig.from_file(ROOT / "configs/sim/legacy/world_pre_sc_queue.yaml")
+    assert calibration.config_hash(sq_w) == PRE_SC_QUEUE_WORLD_HASH and not sq_w.sc_queue.enabled
+    assert sq_w.model_copy(update={"sc_queue": default_world().sc_queue}) == default_world()
+    assert v3_w.model_copy(update={"wear_guard": sq_w.wear_guard}) == sq_w
     assert v3_b.model_copy(update={"belief_cliff_edge": "point"}) == b
     assert pre_w.model_copy(update={"events": v3_w.events}) == v3_w
     assert pre.model_copy(update={"events": v3_b.events}) == v3_b
@@ -127,6 +137,14 @@ def test_the_ablation_toggles_each_adopted_choice_back_off():
     assert w["wear_guard_unscaled"].wear_guard == WearGuard(enabled=True)
     assert specs["belief_cliff_edge_draw"].belief_config().belief_cliff_edge == "draw"
     assert specs["belief_cliff_edge_draw"].belief_config().model_copy(update={"belief_cliff_edge": "point"}) == base_b
+    assert w["sc_queue_off"].sc_queue == ScQueue()
+    assert calibration.config_hash(w["sc_queue_off"]) == PRE_SC_QUEUE_WORLD_HASH
+    assert w["sc_queue_off"].model_copy(update={"sc_queue": base_w.sc_queue}) == base_w
+    assert w["sc_queue_clock"].sc_queue.placement == "clock" and w["sc_queue_clock"].sc_queue.held_behind_laps == 1.25
+    assert w["sc_queue_old"].sc_queue.held_behind_laps is None and w["sc_queue_old"].sc_queue.enabled
+    assert w["sc_queue_field"].sc_queue.mode == "field"
+    assert not base_b.sc_queue.enabled and specs["sc_queue_both"].belief_config().sc_queue.enabled
+    assert specs["sc_queue_both"].belief_config().sc_queue.placement == "clock"
     tb = specs["traffic_both"]
     assert tb.world_config().traffic.name == "ghost" and tb.belief_config().traffic.params["source"] == "projected"
     # traffic aside, traffic_both keeps every adopted choice
@@ -139,10 +157,12 @@ def test_provenance_names_each_choice():
     assert (w["events"], w["tyre_life_edge"], w["driver_effects"], w["hinge"], w["traffic"]) == \
         ("hybrid", "history_only", "race", False, "none")
     assert w["wear_guard"] == {"enabled": True, "min_drivers": 3, "min_rows": 40, "scale_sd_by_drivers": True}
+    assert w["sc_queue"] == {"enabled": True, "mode": "single", "spacing_s": 0.5, "held_behind_laps": 1.25,
+                             "placement": "record"}
     b = rerun.config_choices(belief(), "belief")
     assert (b["driver_effects"], b["lap_noise"], b["traffic"], b["calibrator"], b["sd_scale"], b["plan_on"]) == \
         ("race", "persistent", "none", "as_of_history", None, "draws")
-    assert b["belief_cliff_edge"] == "point" and "wear_guard" not in b
+    assert b["belief_cliff_edge"] == "point" and "wear_guard" not in b and "sc_queue" not in b
     assert b["fuel_anchor"]["prior"] == "anchored" and b["tyre_life_edge"].startswith("as_of_snapshot")
 
 
@@ -171,3 +191,17 @@ def test_the_hybrid_world_draws_the_same_neutralisations_for_every_plan():
     assert np.ptp(alone.times[0]) > 0   # the draws differ between samples: events are drawn
     with pytest.raises(AssertionError):
         np.testing.assert_array_equal(alone.times[0], world.simulate_batch(snap, [a], seed=8, n_samples=40).times[0])
+
+
+def test_the_belief_has_no_safety_car_queue():
+    """The judge's queue (config.WORLD_SC_QUEUE) is placed by the record: hindsight. No belief config
+    the evaluation, the agent's tools or the scorecard read picks it up."""
+    import glob
+    for path in sorted(glob.glob(str(ROOT / "configs/sim/belief*.yaml"))):
+        assert not SimConfig.from_file(path).sc_queue.enabled, path
+    assert not agent_tools.belief_config().sc_queue.enabled
+    assert not fidelity.make_spec().belief_config().sc_queue.enabled
+    assert not SimConfig.from_file(score.BELIEF_CONFIG).sc_queue.enabled
+    # the judge's worlds carry it
+    for name in ("world_hybrid", "world", "world_difficulty"):
+        assert SimConfig.from_file(ROOT / f"configs/sim/{name}.yaml").sc_queue == default_world().sc_queue, name

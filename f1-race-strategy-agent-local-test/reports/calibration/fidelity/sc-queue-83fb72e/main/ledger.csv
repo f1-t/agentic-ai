@@ -1,0 +1,46 @@
+role,id,input,tag,note,substitute,source
+judge,fit_window,degradation fit rows (fit_window full),"this race, whole",every race lap of every car,pre_race_fit,derived
+judge,clean_flag,"lap filter (clean flag, pace residual, driver offset)","this race, whole",data.lap_frame's robust pace fit over every lap of the race,,derived
+judge,ref_lap_s,SC lap time base ref_lap_s (median clean lap of the fit rows),"this race, whole",,,derived
+judge,pit_loss,"pit loss (Simulator.race_pit_loss_s, eval.score.world_pit_loss)","this race, whole","the race's whole-race value: pit_loss.whole_race, the median green stop against the full fit (pit_loss.world 'median')",pit_loss_prior,derived
+judge,race_length,"race length (scheduled distance: session.total_laps in the scenario snapshots, calibration.snapshot_as_of)",regulation,"the scorecard's own whole-race replays run each car's real laps: a measurement, not an input",,derived
+judge,compound_list,compound list (RaceParams.compounds: nominated),regulation,the nominated dry three,,derived
+judge,cliff_edge,wear-cliff support edge (world_edge history_only),history,the historical tyre-life prior only (races strictly before this one),,derived
+judge,cliff_prior,tyre-life history prior (tyre_history),history,races strictly before this one,,derived
+judge,cliff_shape,"cliff cost min(0.05 o^2, 4.0) s/lap past the edge",a priori,,,derived
+judge,proxy_raced,compound proxy: which compounds count as raced,"this race, whole",decided over the whole race,proxy_off,derived
+judge,proxy_steps,"compound proxy tier-5 steps, weights, sd floor (configs/sim/compound_steps.json)",history,"built from calibration races, some later than the race scored",,derived
+judge,proxy_weekend,"compound proxy tiers 2-3 (practice long runs, qualifying)",weekend (pre-race),,,derived
+judge,events,neutralisations (events hybrid),"this race, whole","the SC/VSC in progress at the snapshot as recorded (its end, its recorded lap times); later ones drawn at the rate model's rates",events_rate,derived
+judge,event_effects,"SC/VSC lap factors, SC pit-loss factor, lap-1 extra, neutralised tyre ageing (EventEffects)",history,"provisional, 2021 Spain",,derived
+judge,practice,practice long runs and qualifying (this weekend),weekend (pre-race),,,derived
+judge,driver_effects,driver effects (race) in the degradation fit,"this race, whole",,,derived
+judge,sc_queue_spacing,safety-car queue spacing 0.5 s,history,the median real gap at the end of the calibration races' SC periods (measured once),,derived
+judge,sc_queue,safety-car queue: the car placed among the other cars' recorded race,"this race, whole","the others' recorded times at each SC start and their stops under it, the recorded period length, the car's whole-race pace (when the engine has none), the cars that finished laps down",,derived
+judge,sc_queue_placement,safety-car queue: the car placed by its recorded place at the deployment,"this race, whole",the car's own crossings before each deployment and its real stops before it,,derived
+judge,wear_guard,thin-fit wear guard (under 3 drivers or 40 rows: shrunk toward the historical wear),history,"data/derived/wear_history.csv, races strictly before this one; which compounds are thin is read from this race's fit rows, as the fit itself is",,derived
+judge,min_stint_two_compounds,"R1-R3: minimum stint, two dry compounds",regulation,,,derived
+predictive,fit_window,degradation fit rows (fit_window to_snapshot),"this race, to snapshot","race rows visible at the snapshot (cut by session time), shrunk toward the practice prior",,derived
+predictive,clean_flag,"lap filter (clean flag, pace residual, driver offset)","this race, to snapshot",recomputed on the rows visible at the snapshot,,derived
+predictive,ref_lap_s,SC lap time base ref_lap_s (median clean lap of the fit rows),"this race, to snapshot",,,derived
+predictive,pit_loss,pit loss (pit_loss.source asof),"this race, to snapshot",the prior from earlier races (configs/sim/pit_loss_prior.json and the cache) updated with this race's green stops seen by the snapshot,,derived
+predictive,pit_loss_prior,"pit loss prior table (configs/sim/pit_loss_prior.json, earlier races only)",history,,,derived
+predictive,race_length,"race length (scheduled distance: session.total_laps in the scenario snapshots, calibration.snapshot_as_of)",regulation,"the scorecard's own whole-race replays run each car's real laps: a measurement, not an input",,derived
+predictive,compound_list,compound list (RaceParams.compounds: nominated),regulation,the nominated dry three,,derived
+predictive,cliff_edge,wear-cliff support edge (as of the snapshot),"this race, to snapshot","the oldest age seen so far as a lower bound, the historical prior from earlier races above it",,derived
+predictive,cliff_prior,tyre-life history prior (tyre_history),history,races strictly before this one,,derived
+predictive,cliff_shape,"cliff cost min(0.05 o^2, 4.0) s/lap past the edge",a priori,,,derived
+predictive,proxy_raced,compound proxy: which compounds count as raced,"this race, whole",decided over the whole race,proxy_off,derived
+predictive,proxy_steps,"compound proxy tier-5 steps, weights, sd floor (configs/sim/compound_steps.json)",history,"built from calibration races, some later than the race scored",,derived
+predictive,proxy_weekend,"compound proxy tiers 2-3 (practice long runs, qualifying)",weekend (pre-race),,,derived
+predictive,events,neutralisations (events rate),history,"EventModel rates (provisional, 2021 Spain) or RaceParams circuit rates",,derived
+predictive,event_effects,"SC/VSC lap factors, SC pit-loss factor, lap-1 extra, neutralised tyre ageing (EventEffects)",history,"provisional, 2021 Spain",,derived
+predictive,practice,practice long runs and qualifying (this weekend),weekend (pre-race),,,derived
+predictive,priors,"pre_race base delta, fuel prior, shrinkage taus",history,Spain-derived constants,,derived
+predictive,calibrator,calibrator as_of_history,a priori,,,derived
+predictive,driver_effects,driver effects (race) in the degradation fit,"this race, to snapshot",,,derived
+predictive,wear_lower_bound,wear bounded below at 0.0,a priori,,,derived
+predictive,draws,parameter draws (posterior) and lap noise (persistent),"this race, to snapshot",the fit's own covariance and residual sd,,derived
+predictive,min_stint_two_compounds,"R1-R3: minimum stint, two dry compounds",regulation,,,derived
+predictive,field:belief_cliff_edge,"config field belief_cliff_edge = ""point""",unclassified,no ledger rule for this field: declare it with x_ledger,,derived
+predictive,field:fuel_anchor,"config field fuel_anchor = {""prior"": ""anchored"", ""practice"": ""anchored"", ""full_fit"": false}",unclassified,no ledger rule for this field: declare it with x_ledger,,derived

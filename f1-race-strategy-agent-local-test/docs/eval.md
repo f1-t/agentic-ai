@@ -4626,26 +4626,55 @@ The defaults everywhere the evaluation reads one (`score.race_simulators`, `src/
   lengths pooled over the history table (`duration: history`, `pooled: true`, adopted
   2026-11-22); the thin-fit wear guard with the fit's sd scaled by the number of drivers
   (`config.WORLD_WEAR_GUARD`, `wear_guard: {enabled: true, scale_sd_by_drivers: true}`, adopted
-  2026-11-22, "Thin wear fits"); no traffic; R8 retired. As a file: `configs/sim/world_hybrid.yaml`.
-  config_hash `15e3f31d98a7` (before v3 `5069228b35e7`, before the SC alignment `abc455a9bbb6`,
-  before the scorecard `d230d3a56b0b`).
+  2026-11-22, "Thin wear fits"); the safety-car queue (`config.WORLD_SC_QUEUE`, `sc_queue: {enabled:
+  true, mode: single, held_behind_laps: 1.25, placement: record}`, adopted 2026-11-22, "Placing the
+  car by the record"): at each recorded SC period the simulated car joins the train at its recorded
+  place, cars more than 1.25 laps behind at the deployment held at their gap (hindsight, the judge
+  only, ledgered as `sc_queue` and `sc_queue_placement`); no traffic; R8 retired. As a file:
+  `configs/sim/world_hybrid.yaml`. config_hash `7c974c32c67c` (before the SC queue `15e3f31d98a7`,
+  before v3 `5069228b35e7`, before the SC alignment `abc455a9bbb6`, before the scorecard
+  `d230d3a56b0b`).
 - **Belief:** `configs/sim/belief.yaml`: linear_fuel with driver effects, wear bound 0, fuel
   anchoring, persistent lap noise, as-of pit loss, rates and tyre-life edge (history extended by the
   ages seen at the snapshot), the as_of_history calibrator, no traffic, `plan_on` draws, no
   `sd_scale`, SC/VSC lengths from the as-of history of period lengths, a period in progress
   continuing given its laps so far (`events.params.duration: history`, adopted 2026-11-22), the
   wear-cliff edge at its point in every sample (`belief_cliff_edge: point`, adopted 2026-11-22,
-  "Belief priors"). config_hash `9d691bbbcf24` (before v3 `351f4124ff22`, before the SC alignment
+  "Belief priors"); no safety-car queue (`tests/test_eval_default_config.py` checks no belief config
+  carries it). config_hash `9d691bbbcf24` (before v3 `351f4124ff22`, before the SC alignment
   `f7b872d14c0c`, before the scorecard `d479652b0fe7`). `belief_traffic.yaml` and
   `belief_learned.yaml` are it plus one block.
 - **Kept off, as named switches:** traffic on either side (`configs/sim/world.yaml`,
   `belief_traffic.yaml`), the learned calibrator (`belief_learned.yaml`), the hinge
-  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue (`sc_queue`), the
-  pit-stop durations (`pit_stops`), overtaking difficulty, the near-lapped rule, three-stop search.
+  (`world_de_hinge.yaml`), `sd_scale`, `plan_on: point`, the safety-car queue in the belief, the
+  pit-stop durations (`pit_stops`), overtaking difficulty, three-stop search.
   The agent protocol stays `v2free`. The earlier pairs: `configs/sim/legacy/world_pre_scorecard.yaml`
   and `belief_pre_scorecard.yaml`; `world_pre_sc_alignment.yaml` and `belief_pre_sc_alignment.yaml`;
-  `world_pre_v3.yaml` and `belief_pre_v3.yaml`. Ablation toggles back off: `wear_guard_off`,
-  `wear_guard_unscaled`, `belief_cliff_edge_draw`.
+  `world_pre_v3.yaml` and `belief_pre_v3.yaml`; `world_pre_sc_queue.yaml` (the belief unchanged).
+  Ablation toggles back off: `wear_guard_off`, `wear_guard_unscaled`, `belief_cliff_edge_draw`,
+  `sc_queue_off` (and `sc_queue_clock`, `sc_queue_old`, `sc_queue_field`, `sc_queue_both` for the
+  queue's other forms).
+
+Confirmation after the judge's safety-car queue on 83fb72e
+(`reports/calibration/fidelity/sc-queue-83fb72e/`, all 19 calibration races, none failed, future
+blindness pass; SIM_CODE_VERSION `32671b6a2ad5`, before `3c48388e8271`; default world config_hash
+`7c974c32c67c`, before `15e3f31d98a7`; the belief unchanged, `9d691bbbcf24`):
+
+- close pairs out of sample 0.747 (before 0.753);
+- Spearman 0.960 (0.957);
+- relative gap 7.60 s (13.19);
+- absolute 13.4 s (18.9);
+- plan-rank agreement 0.872 (0.882);
+- judge-regret of the belief's favourite 3.16 s (3.36);
+- pit-now agreement 0.827 (0.835);
+- belief replay close pairs 0.667 (unchanged);
+- plan 90 % coverage 0.975.
+
+Noise floor (`ceiling_pooled.csv` there): judge 0.747 [0.683, 0.798] / 7.6 s [5.7, 10.2],
++ per-stint pace 0.658 / 6.4 s, + pit laps 0.652 / 6.9 s, + SC/VSC laps 0.611 / 5.2 s, + lap 1
+(the ceiling) 0.745 [0.682, 0.800] / 3.2 s [2.6, 3.9]. The judge's relative gap now sits 2.4 s
+above the level with every neutralised lap recorded, down from 8.0 s. Every reference built on the
+earlier world is stale (its world config_hash and SIM_CODE_VERSION both changed).
 
 Confirmation after v3 (the wear guard and the point cliff edge) on 02a3a7f
 (`reports/calibration/fidelity/v3-02a3a7f/`, all 19 calibration races, none failed;

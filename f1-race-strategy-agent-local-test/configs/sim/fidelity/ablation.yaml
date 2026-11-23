@@ -11,11 +11,12 @@
 # The base is the eval's default world, the scorecard-chosen configuration (score.default_world_config
 # of config.world_default: linear_fuel with driver effects, config.WORLD_DEGRADATION; the wear cliff
 # with world_edge "history_only", config.WORLD_EDGE; SC/VSC hybrid, score.WORLD_EVENTS; the thin-fit
-# wear guard, config.WORLD_WEAR_GUARD; R8 retired; traffic off) and configs/sim/belief.yaml
+# wear guard, config.WORLD_WEAR_GUARD; the safety-car queue, config.WORLD_SC_QUEUE; R8 retired;
+# traffic off) and configs/sim/belief.yaml
 # (linear_fuel with driver effects, wear bound 0, fuel anchoring, persistent lap noise, as-of pit loss
 # and cliff, the cliff edge at its point). Each adopted choice has a factor that switches it back off
 # (world_events_off, cliff_edge_history, belief_no_driver_effects, the judge's wear fit world_linear /
-# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw); the rejected ones stay as
+# world_hinge, sc_alignment_off, wear_guard_off, belief_cliff_edge_draw, sc_queue_off); the rejected ones stay as
 # factors that switch them on.
 factors:
   # traffic (sim/traffic.py, docs/eval.md "Traffic"): the order measures are why it exists
@@ -116,41 +117,27 @@ factors:
     note: actual stops in replays and the team's typical stop for every plan, judge; the belief's as-of team stop
     world: {pit_stops: {replay: actual, team: true}}
     belief: {pit_stops: {team: true}}
-  # the safety-car queue (sim/sc_queue.py, off by default: not adopted). The base judge is hybrid SC/VSC
-  sc_queue:
-    note: the judge places each simulated car in the SC queue among the other cars' recorded race (mode single)
-    world: {sc_queue: {enabled: true, mode: single}}
+  # the safety-car queue (sim/sc_queue.py, config.WORLD_SC_QUEUE): adopted in the judge 2026-11-22 (single
+  # mode, the near-lapped rule, the car placed by its recorded place), so the base has it; these switch
+  # it back off or to its earlier forms, or add it to the belief (which has no queue)
+  sc_queue_off:
+    note: the judge without the safety-car queue (configs/sim/legacy/world_pre_sc_queue.yaml)
+    world: {sc_queue: {enabled: false, mode: single, spacing_s: 0.5, held_behind_laps: null, placement: clock}}
+  sc_queue_clock:
+    note: the car placed in the train by its simulated time at S - 1 (placement clock), the near-lapped rule kept
+    world: {sc_queue: {placement: clock}}
+  sc_queue_old:
+    note: the first queue, every lead-lap finisher in the train, placed by its simulated time (no near-lapped rule)
+    world: {sc_queue: {held_behind_laps: null, placement: clock}}
   sc_queue_field:
     note: the judge's whole-race replays queue every replayed car together (mode field; Section A only)
-    world: {sc_queue: {enabled: true, mode: field}}
+    world: {sc_queue: {mode: field, placement: clock}}
   sc_queue_both:
-    note: the single-car queue in the judge and in the belief (the field visible at the snapshot)
-    world: {sc_queue: {enabled: true, mode: single}}
-    belief: {sc_queue: {enabled: true, mode: single}}
-  # the near-lapped rule (sc_queue.deployment_behind, ScQueue.held_behind_laps): a car more than 1.25 laps
-  # behind the leader at the deployment keeps its gap to the train's last car instead of joining the train
-  sc_queue_held:
-    note: the single-car queue in the judge, cars lapped by more than 1.25 laps at the deployment held
-    world: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25}}
-  sc_queue_held_field:
-    note: the whole-field queue (Section A only) with the near-lapped rule
-    world: {sc_queue: {enabled: true, mode: field, held_behind_laps: 1.25}}
-  sc_queue_held_both:
-    note: the single-car queue with the near-lapped rule in the judge and in the belief (the field visible at the snapshot)
-    world: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25}}
-    belief: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25}}
-  # the near-lapped rule with the car placed in the train by its recorded place at the deployment
-  # (ScQueue.placement record: the judge only, hindsight)
-  sc_queue_placed:
-    note: the single-car queue with the near-lapped rule, the car placed by its recorded place at the deployment
-    world: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25, placement: record}}
-  sc_queue_placed_both:
-    note: the placed queue in the judge, the near-lapped rule in the belief (which reads no record)
-    world: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25, placement: record}}
+    note: the queue in the belief too (the field visible at the snapshot, the near-lapped rule; the belief reads no record)
     belief: {sc_queue: {enabled: true, mode: single, held_behind_laps: 1.25}}
   sc_queue_traffic:
-    note: the single-car queue with the earned-pass ghost traffic in the judge (the order holds in a train unless a car has the pace)
-    world: {sc_queue: {enabled: true, mode: single}, traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true}}}
+    note: the judge's queue with the earned-pass ghost traffic (the order holds in a train unless a car has the pace)
+    world: {traffic: {name: ghost, params: {align_neutral: true, own_pace: true, pass_mode: earned, dirty_air_auto: true}}}
   # safety-car alignment (events.RateEvents duration "history", race_history.period_lengths): adopted
   # 2026-11-22, so the base has it; this toggle switches it back off in both simulators
   sc_alignment_off:
