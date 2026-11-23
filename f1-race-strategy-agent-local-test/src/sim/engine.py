@@ -954,7 +954,8 @@ class Simulator:
             pace = (_queue.own_pace(self.degradation, rows[rows["driver"] == snapshot.driver])
                     if self.pace is None and len(rows) else 0.0)
             self._pit_loss_cache[key] = (_queue.FieldQueue(rows, snapshot.driver, horizon, q.spacing_s, self.ref_lap_s,
-                                                           recorded, pace, lapped, own_lapped) if len(rows) else None)
+                                                           recorded, pace, lapped, own_lapped, q.held_behind_laps)
+                                           if len(rows) else None)
         return self._pit_loss_cache[key]
 
     def pit_loss_inputs(self, snapshot: Snapshot) -> dict:

@@ -59,3 +59,17 @@ def test_the_judge_reads_the_recorded_field(pair):
     a, b = (Simulator(f, JUDGE).simulate_batch(snap, _plans(df, snap), scenario=scen, n_samples=1)
             for f in (df, alt))
     assert not np.allclose(a.times, b.times)
+
+
+HELD = BELIEF.model_copy(update={"sc_queue": SimConfig.model_validate(
+    {"sc_queue": {"enabled": True, "mode": "single", "held_behind_laps": 1.25}}).sc_queue})
+
+
+@pytest.mark.parametrize("sc", [[K - 1, K, K + 1, K + 2], [K + 8, K + 9, K + 10]])
+def test_near_lapped_rule_ignores_the_other_cars_after_the_cut(pair, sc):
+    # the near-lapped rule reads the deployment from the visible rows only (sc_queue.deployment_behind)
+    df, alt, snap = pair
+    scen = Scenario(sc_laps=sc, vsc_laps=[])
+    a, b = (Simulator(f, HELD, synthetic_practice()).simulate_batch(snap, _plans(df, snap), scenario=scen,
+                                                                     n_samples=N, seed=3) for f in (df, alt))
+    assert np.array_equal(a.times, b.times, equal_nan=True)
