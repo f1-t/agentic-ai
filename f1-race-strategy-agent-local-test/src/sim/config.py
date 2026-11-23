@@ -568,14 +568,23 @@ WORLD_EDGE = "history_only"
 # pit-now agreement +0.015. The SimConfig default stays off; the eval world sets it here. The world
 # before it: configs/sim/legacy/world_pre_v3.yaml.
 WORLD_WEAR_GUARD = {"enabled": True, "scale_sd_by_drivers": True}
+# The eval world's safety-car queue (ScQueue, sim/sc_queue.py, docs/eval.md "The safety-car queue"):
+# at each recorded SC period the simulated car is placed in the train among the other cars' recorded
+# race by its recorded place at the deployment (placement "record", hindsight: the judge only), cars
+# more than 1.25 laps behind at the deployment held at their gap (the near-lapped rule). Measured on
+# the 19 calibration races: close-pair order -0.005 [-0.033, +0.021], relative gap 13.19 -> 7.60 s.
+# The SimConfig default stays off and the belief has no queue; the eval world sets it here. The world
+# before it: configs/sim/legacy/world_pre_sc_queue.yaml.
+WORLD_SC_QUEUE = {"enabled": True, "mode": "single", "held_behind_laps": 1.25, "placement": "record"}
 
 
 def world_default(config: "SimConfig") -> "SimConfig":
-    """`config` with the eval world's wear fit (WORLD_DEGRADATION), tyre-life edge (WORLD_EDGE) and
-    thin-fit wear guard (WORLD_WEAR_GUARD)."""
+    """`config` with the eval world's wear fit (WORLD_DEGRADATION), tyre-life edge (WORLD_EDGE),
+    thin-fit wear guard (WORLD_WEAR_GUARD) and safety-car queue (WORLD_SC_QUEUE)."""
     return config.model_copy(update={"degradation": ComponentSpec(**WORLD_DEGRADATION),
                                      "wear_cliff": config.wear_cliff.model_copy(update={"world_edge": WORLD_EDGE}),
-                                     "wear_guard": config.wear_guard.model_copy(update=WORLD_WEAR_GUARD)})
+                                     "wear_guard": config.wear_guard.model_copy(update=WORLD_WEAR_GUARD),
+                                     "sc_queue": config.sc_queue.model_copy(update=WORLD_SC_QUEUE)})
 
 
 def compound_class(config, compound) -> str:
