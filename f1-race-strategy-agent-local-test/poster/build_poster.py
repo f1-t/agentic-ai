@@ -47,6 +47,7 @@ POL = {"agent": ("Agent", "#56B4E9", "circle"),
        "fixed_one_stop": ("Fixed one-stop", "#CC79A7", "square"),
        "fixed_two_stop": ("Fixed two-stop", "#BDBDBD", "diamond")}
 SETS = (("h", "hall", "Test set"), ("d", "d", "Development set"))
+BOLD = ' font-weight="700"'
 USED: list[str] = []
 N: dict = {}
 
@@ -89,7 +90,7 @@ def versus(g, x, name):
         return f"beat {name} by {mag} s"
     if v == "behind":
         return f"trailed {name} by {mag} s"
-    return f"matched {name} ({V(f'{g}_{x}_diff')} s)"
+    return f"matched {name}"
 
 
 def rules_phrase():
@@ -98,11 +99,11 @@ def rules_phrase():
     d = [V(f"hall_{x}_diff") for x in ("run_to_flag", "one_stop_total")]
     mags = [_html.escape(ps.s(abs(val(f"hall_{x}_diff")), 1)) for x in ("run_to_flag", "one_stop_total")]
     if v == ["ahead", "ahead"]:
-        return f"beat both simple rules (by {mags[0]} and {mags[1]} s)"
+        return f"beat both simple rules by {mags[0]} s and {mags[1]} s"
     if v == ["level", "level"]:
         return f"matched both simple rules ({d[0]} and {d[1]} s)"
     if v == ["behind", "behind"]:
-        return f"trailed both simple rules (by {mags[0]} and {mags[1]} s)"
+        return f"trailed both simple rules by {mags[0]} s and {mags[1]} s"
     return (f"{versus('hall', 'run_to_flag', 'run to the flag')} and "
             f"{versus('hall', 'one_stop_total', 'one stop in total')}")
 
@@ -137,7 +138,7 @@ def fmt_tick(t):
     return (f"{t:.0f}" if float(t).is_integer() else f"{t:g}").replace("-", "−")
 
 
-def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=540, label=None, aria=""):
+def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=760, aria="", sub=32, gap=16):
     """One block per row: a test-set line (filled marker) and a development line (hollow), each with its 95%
     interval and its value printed at the right."""
     vals = []
@@ -145,40 +146,39 @@ def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=540, label=None,
         for t, g, _ in SETS:
             if ready(key_ci(t, g, r)):
                 vals += [v for v in (*val(key_ci(t, g, r)), val(key_mean(t, g, r))) if np.isfinite(v)]
-    ticks = nice_ticks(min(vals + [0.0]), max(vals + [0.0]), n=3)
+    ticks = nice_ticks(min(vals + [0.0]), max(vals + [0.0]), n=4)
     LO, HI = ticks[0], ticks[-1]
-    L, R, VX = 178, 318, width
+    L, R, VX = 225, 525, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top, sub, gap = (32 if zero_line else 8), 29, 13
+    top = 34 if zero_line else 8
     blk = 2 * sub + gap
     yb = top + blk * len(rows) - gap / 2
-    H = yb + 30
+    H = yb + 32
     s = [f'<svg class="chart" viewBox="0 0 {width} {H:.0f}" role="img" aria-label="{aria}">']
     for tk in ticks:
         x = sx(tk)
         s.append(f'<line x1="{x:.1f}" y1="{top - 4}" x2="{x:.1f}" y2="{yb:.1f}" stroke="{GRID}" stroke-width="1"/>')
-        s.append(f'<text x="{x:.1f}" y="{yb + 24:.1f}" text-anchor="middle" font-size="19" fill="{MUTED}">'
+        s.append(f'<text x="{x:.1f}" y="{yb + 26:.1f}" text-anchor="middle" font-size="20" fill="{MUTED}">'
                  f'{fmt_tick(tk)}{" s" if tk == ticks[-1] else ""}</text>')
     if zero_line and LO < 0 < HI:
         x0 = sx(0)
         s.append(f'<line x1="{x0:.1f}" y1="{top - 10}" x2="{x0:.1f}" y2="{yb:.1f}" stroke="{INK}" stroke-width="2"/>')
-        s.append(f'<text x="{x0 - 6:.1f}" y="{top - 14}" text-anchor="end" font-size="18.5" fill="{MUTED}">'
+        s.append(f'<text x="{x0 - 8:.1f}" y="{top - 14}" text-anchor="end" font-size="20" fill="{MUTED}">'
                  f'← agent better</text>')
-        s.append(f'<text x="{x0 + 6:.1f}" y="{top - 14}" font-size="18.5" fill="{MUTED}">worse →</text>')
+        s.append(f'<text x="{x0 + 8:.1f}" y="{top - 14}" font-size="20" fill="{MUTED}">worse →</text>')
     for i, r in enumerate(rows):
         name, color, shape = POL[r]
         y0 = top + blk * i
-        s.append(f'<text x="0" y="{y0 + sub + 7:.1f}" font-size="21" font-weight="700" fill="{INK}">'
-                 f'{label(name) if label else name}</text>')
+        s.append(f'<text x="0" y="{y0 + sub + 8:.1f}" font-size="23" font-weight="700" fill="{INK}">{name}</text>')
         for j, (t, g, _) in enumerate(SETS):
             y = y0 + sub * j + sub / 2
             lo, hi = val(key_ci(t, g, r))
             m = val(key_mean(t, g, r))
             s.append(f'<line x1="{sx(lo):.1f}" y1="{y:.1f}" x2="{sx(hi):.1f}" y2="{y:.1f}" stroke="{color}" '
-                     f'stroke-width="4"/>')
-            s.append(marker(shape, sx(m), y, color, r=9, hollow=(t == "d")))
-            s.append(f'<text x="{VX}" y="{y + 7:.1f}" text-anchor="end" font-size="19.5"'
-                     f'{" font-weight=\"700\"" if t == "h" else ""} fill="{INK if t == "h" else MUTED}">'
+                     f'stroke-width="5"/>')
+            s.append(marker(shape, sx(m), y, color, r=10, hollow=(t == "d")))
+            s.append(f'<text x="{VX}" y="{y + 8:.1f}" text-anchor="end" font-size="22"'
+                     f"{BOLD if t == 'h' else ''} fill=\"{INK if t == 'h' else MUTED}\">"
                      f'{key_txt(t, g, r)}</text>')
     s.append("</svg>")
     return "".join(s)
@@ -187,8 +187,7 @@ def dot_chart(rows, key_mean, key_ci, key_txt, zero_line, width=540, label=None,
 def forest():
     return dot_chart(("run_to_flag", "one_stop_total", "actual_strategy", "belief_optimizer"),
                      lambda t, g, x: f"{g}_{x}_diff", lambda t, g, x: f"{g}_{x}_ci",
-                     lambda t, g, x: f'{T(f"{g}_{x}_diff")} {T(f"{g}_{x}_ci")} {T(f"{g}_{x}_verdict")}', True,
-                     label=lambda n: "− " + (n[0].lower() + n[1:] if not n.startswith("Teams") else "teams’ actual"),
+                     lambda t, g, x: f'{T(f"{g}_{x}_diff")} {T(f"{g}_{x}_ci")}', True,
                      aria="Agent minus each comparator, mean regret difference, 95% intervals, test and development")
 
 
@@ -196,41 +195,40 @@ def levels():
     return dot_chart(("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy"),
                      lambda t, g, p: f"{t}_mean_{p}", lambda t, g, p: f"{t}_mci_{p}",
                      lambda t, g, p: f'{T(f"{t}_mean_{p}")} {T(f"{t}_mci_{p}")}', False,
-                     aria="Mean regret per policy, 95% intervals, test and development")
+                     aria="Mean regret per policy, 95% intervals, test and development", sub=28, gap=10)
 
 
-def per_race(width=1000):
+def per_race(width=760):
     """Agent minus run_to_flag per test race, 95% (race, driver) intervals."""
     races = list(val("hall_names"))
     lo_hi = [v for r in races for v in val(f"pr_{r}_agent_ci")]
     ticks = nice_ticks(min(lo_hi + [0]), max(lo_hi + [0]), n=5)
     LO, HI = ticks[0], ticks[-1]
-    L, R, VX = 220, 880, width
+    L, R, VX = 190, 545, width
     sx = lambda v: L + (R - L) * (v - LO) / (HI - LO)  # noqa: E731
-    top, rowh = 30, 30
+    top, rowh = 34, 34
     yb = top + rowh * len(races)
-    H = yb + 30
+    H = yb + 32
     s = [f'<svg class="chart" viewBox="0 0 {width} {H}" role="img" aria-label="Agent minus run to the flag per test '
          f'race, with 95% intervals">']
     for tk in ticks:
         s.append(f'<line x1="{sx(tk):.1f}" y1="{top - 6}" x2="{sx(tk):.1f}" y2="{yb}" stroke="{GRID}"/>')
-        s.append(f'<text x="{sx(tk):.1f}" y="{yb + 24}" text-anchor="middle" font-size="19" fill="{MUTED}">'
+        s.append(f'<text x="{sx(tk):.1f}" y="{yb + 26}" text-anchor="middle" font-size="20" fill="{MUTED}">'
                  f'{fmt_tick(tk)}{" s" if tk == ticks[-1] else ""}</text>')
     s.append(f'<line x1="{sx(0):.1f}" y1="{top - 10}" x2="{sx(0):.1f}" y2="{yb}" stroke="{INK}" stroke-width="2"/>')
-    s.append(f'<text x="{sx(0) - 6:.1f}" y="{top - 12}" text-anchor="end" font-size="19" fill="{MUTED}">'
+    s.append(f'<text x="{sx(0) - 8:.1f}" y="{top - 14}" text-anchor="end" font-size="20" fill="{MUTED}">'
              f'← agent better</text>')
-    s.append(f'<text x="{sx(0) + 6:.1f}" y="{top - 12}" font-size="19" fill="{MUTED}">worse →</text>')
+    s.append(f'<text x="{sx(0) + 8:.1f}" y="{top - 14}" font-size="20" fill="{MUTED}">worse →</text>')
     for i, r in enumerate(races):
         y = top + rowh * i + rowh / 2
         m, (lo, hi) = val(f"pr_{r}_agent"), val(f"pr_{r}_agent_ci")
         color = "#D55E00" if m > 0 else "#56B4E9"
-        s.append(f'<text x="0" y="{y + 7:.1f}" font-size="21" fill="{INK}">{ps.race_name(r)}</text>')
-        s.append(f'<rect x="{min(sx(0), sx(m)):.1f}" y="{y - 10:.1f}" width="{abs(sx(m) - sx(0)):.1f}" height="20" '
+        s.append(f'<text x="0" y="{y + 8:.1f}" font-size="23" fill="{INK}">{ps.race_name(r)}</text>')
+        s.append(f'<rect x="{min(sx(0), sx(m)):.1f}" y="{y - 11:.1f}" width="{abs(sx(m) - sx(0)):.1f}" height="22" '
                  f'fill="{color}"/>')
-        s.append(f'<line x1="{sx(lo):.1f}" y1="{y:.1f}" x2="{sx(hi):.1f}" y2="{y:.1f}" stroke="{INK}" stroke-width="2"/>')
-        s.append(f'<text x="{VX}" y="{y + 7:.1f}" text-anchor="end" font-size="21" font-weight="700" fill="{INK}">'
+        s.append(f'<line x1="{sx(lo):.1f}" y1="{y:.1f}" x2="{sx(hi):.1f}" y2="{y:.1f}" stroke="{INK}" stroke-width="2.5"/>')
+        s.append(f'<text x="{VX}" y="{y + 8:.1f}" text-anchor="end" font-size="22" font-weight="700" fill="{INK}">'
                  f'{T(f"pr_{r}_agent")} {T(f"pr_{r}_agent_ci")}</text>')
-        used(f"pr_{r}_agent_ci")
     s.append("</svg>")
     return "".join(s)
 
@@ -274,7 +272,7 @@ def judge_chart(width=470):
 
 def blind_diagram(width=380):
     """The future-blindness test: cut the race at the decision moment, alter the future, compare."""
-    s = [f'<svg class="chart" viewBox="0 0 {width} 330" role="img" aria-label="Future-blindness test: the race is cut '
+    s = [f'<svg class="chart" viewBox="0 0 {width} 262" role="img" aria-label="Future-blindness test: the race is cut '
          f'at the decision moment, everything after it is altered, and everything a policy sees must stay identical">',
          '<defs><pattern id="scr" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">'
          '<rect width="12" height="12" fill="#3a2430"/><line x1="0" y1="0" x2="0" y2="12" stroke="#ff4d3d" '
@@ -295,9 +293,7 @@ def blind_diagram(width=380):
     s.append(f'<line x1="{XC}" y1="26" x2="{XC}" y2="204" stroke="#ff4d3d" stroke-width="4"/>')
     s.append(f'<text x="{XC}" y="20" text-anchor="middle" font-size="19" font-weight="800" fill="#ff8a7d">'
              f'decision moment</text>')
-    s.append(f'<text x="0" y="242" font-size="19" fill="{MUTED}">scrambled: lap times, tyres, stops,</text>')
-    s.append(f'<text x="0" y="266" font-size="19" fill="{MUTED}">safety cars, race length</text>')
-    s.append(f'<text x="0" y="312" font-size="22" font-weight="800" fill="{INK}">All a policy sees: equal? '
+    s.append(f'<text x="0" y="250" font-size="22" font-weight="800" fill="{INK}">All a policy sees: equal? '
              f'<tspan fill="#2BB88A">✓ yes</tspan></text>')
     s.append("</svg>")
     return "".join(s)
@@ -305,27 +301,24 @@ def blind_diagram(width=380):
 
 def system_diagram(model, width=470):
     """Predictive simulator -> look-ahead search -> LLM agent -> decision, scored by the judge."""
-    def box(y, h, title, lines, color, fill):
-        t = (f'<rect x="0" y="{y}" width="{width}" height="{h}" rx="9" fill="{fill}" stroke="{color}" stroke-width="2"/>'
-             f'<text x="16" y="{y + 30}" font-size="22" font-weight="800" fill="{INK}">{title}</text>')
-        for i, line in enumerate(lines):
-            t += f'<text x="16" y="{y + 58 + 24 * i}" font-size="20" fill="{MUTED}">{line}</text>'
-        return t
+    def box(y, h, title, line, color, fill):
+        return (f'<rect x="0" y="{y}" width="{width}" height="{h}" rx="9" fill="{fill}" stroke="{color}" stroke-width="2"/>'
+                f'<text x="16" y="{y + 31}" font-size="23" font-weight="800" fill="{INK}">{title}</text>'
+                f'<text x="16" y="{y + 60}" font-size="21" fill="{MUTED}">{line}</text>')
 
     def arrow(y):
         return (f'<line x1="{width / 2}" y1="{y}" x2="{width / 2}" y2="{y + 20}" stroke="{INK}" stroke-width="3" '
                 f'marker-end="url(#ah)"/>')
-    s = [f'<svg class="chart" viewBox="0 0 {width} 450" role="img" aria-label="The system">',
+    s = [f'<svg class="chart" viewBox="0 0 {width} 396" role="img" aria-label="The system">',
          f'<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" '
          f'orient="auto"><path d="M0,0L10,5L0,10Z" fill="{INK}"/></marker></defs>']
-    s.append(box(0, 78, "Predictive simulator", ["only what is known at the decision moment"], "#9cc8ff", "#16263a"))
+    s.append(box(0, 78, "Predictive simulator", "knows only the race so far", "#9cc8ff", "#16263a"))
     s.append(arrow(80))
-    s.append(box(104, 78, "Look-ahead search", ["ranks full race plans on that simulator"], "#E69F00", "#2c2614"))
+    s.append(box(104, 78, "Look-ahead search", "ranks full race plans", "#E69F00", "#2c2614"))
     s.append(arrow(184))
-    s.append(box(208, 104, f"LLM agent ({model})", ["reads the ranked plans and the race picture,",
-                                                     "then makes the call: pit + tyre, or stay out"], "#56B4E9", "#16263a"))
-    s.append(arrow(314))
-    s.append(box(338, 78, "Judge", ["scores the plan against the whole race"], "#ffcf4a", "#2c2614"))
+    s.append(box(208, 78, f"LLM agent ({model})", "reads the plans, makes the call", "#56B4E9", "#16263a"))
+    s.append(arrow(288))
+    s.append(box(312, 78, "Judge", "scores plans against the whole race", "#ffcf4a", "#2c2614"))
     s.append("</svg>")
     return "".join(s)
 
@@ -333,8 +326,7 @@ def system_diagram(model, width=470):
 # ---------------------------------------------------------------- tables
 def tail_table():
     pols = ("agent", "belief_optimizer", "run_to_flag", "one_stop_total", "actual_strategy")
-    head = ('<tr><th></th><th>&gt;20 s off, test</th><th>&gt;20 s off, development</th><th>median, test</th>'
-            '<th>worst, test</th></tr>')
+    head = '<tr><th></th><th>&gt;20 s off, test</th><th>&gt;20 s off, dev</th><th>median</th><th>worst</th></tr>'
     body = []
     for pol in pols:
         name, color, _ = POL[pol]
@@ -348,19 +340,34 @@ def adopt_table():
     a, n = val("adopted"), val("not_adopted")
     rows = "".join(f"<tr><td>{x}</td><td>{y}</td></tr>" for x, y in
                    zip(a + [""] * (len(n) - len(a)), n + [""] * (len(a) - len(n))))
-    return ('<table class="tbl adopt"><thead><tr><th>Adopted</th><th>Tested, not adopted</th></tr></thead>'
+    return ('<table class="tbl adopt"><thead><tr><th>Adopted</th><th>Not adopted</th></tr></thead>'
             f"<tbody>{rows}</tbody></table>")
+
+
+def banner_test():
+    return (f"the agent {rules_phrase()}, {versus('hall', 'actual_strategy', 'the teams')} and "
+            f"{versus('hall', 'belief_optimizer', 'its look-ahead')}.")
+
+
+def stakeholder():
+    v = [val(f"hall_{x}_verdict") for x in ("run_to_flag", "one_stop_total", "actual_strategy")]
+    first = ("The agent beat simple rules and the teams&rsquo; strategies on nine test races." if v == ["ahead"] * 3
+             else "On nine test races the agent did not beat both simple rules and the teams&rsquo; strategies.")
+    return (f"<p>{first}</p><p>Its edge comes from the simulator and the look-ahead search.</p>"
+            "<p>Better tyre knowledge and a stronger model are the next gains.</p>")
 
 
 # ---------------------------------------------------------------- page
 def html(args_line):
     D, H = N["_sets"].value
     model = T("h_model") if ready("h_model") else T("d_model")
+    lab = {"ahead": "matches", "level": "matches", "behind": "trails"}
+    lv = [val(f"{g}_belief_optimizer_verdict") for g in ("hall", "d")]
+    match_line = ("Matches its look-ahead on both sets." if lv == ["level", "level"]
+                  else f"Against its look-ahead: test {lv[0]}, development {lv[1]}.")
     ribbon = ""
     if H.fixture:
         ribbon = '<div class="ribbon fix">LAYOUT FIXTURE: development rows in the test column. NOT A RESULT.</div>'
-    elif not H.present or not H.has_agent:
-        ribbon = '<div class="ribbon">DRAFT: hatched boxes are filled by the test-set run.</div>'
     body = f"""
 <div class="poster">
 {ribbon}
@@ -375,74 +382,57 @@ def html(args_line):
   </div>
   <figure class="map">
     <img src="{MAP}" alt="Circuit de Barcelona-Catalunya, 2023 layout">
-    <figcaption>Barcelona-Catalunya [4]</figcaption>
   </figure>
 </header>
 
 <div class="answer">
-  <div class="pts">
-    <div><b>Future-blind.</b> Scrambling a race after the decision moment changes nothing a policy sees.</div>
-    <div><b>A measured judge.</b> It orders close finishers correctly {V("fid_close")} of the time (ceiling
-      {V("ceil_close")}); gap error {V("fid_relgap")} s (floor {V("ceil_relgap")} s).</div>
-    <div><b>Test set, {V("h_ag_scored")} decisions in {V("h_races")} races.</b> The agent
-      {versus("hall", "run_to_flag", "run to the flag")}, {versus("hall", "one_stop_total", "one stop in total")}
-      and {versus("hall", "actual_strategy", "the teams’ actual strategy")}, and
-      {versus("hall", "belief_optimizer", "its own look-ahead")}.</div>
-  </div>
+  <div><b>Future-blind:</b> scrambling the race after the decision changes nothing a policy sees.</div>
+  <div><b>Judge:</b> orders close finishers correctly {V("fid_close_pct")} of the time; gap error {V("fid_relgap")} s.</div>
+  <div><b>Test set:</b> {banner_test()}</div>
 </div>
 
-<main class="grid">
-  <div class="row1">
+<main class="main">
+  <div class="row">
   <article class="panel p1">
     <h2><b>1</b>The system</h2>
-    <p>Each lap a strategist decides: pit now or stay out.</p>
     {system_diagram(model)}
-    <p class="note"><b>Simple rules:</b> run to the flag (stop only if tyre life forces it); one stop in total.</p>
+    <p class="note"><b>Simple rules:</b> run to the flag; one stop in total.</p>
   </article>
 
   <article class="panel p2">
     <h2><b>2</b>Evaluation integrity</h2>
-    <p>A policy reads only the race up to the decision moment, this weekend&rsquo;s practice, the rules and tables
-    built from earlier races. A test checks it:</p>
+    <p>A policy sees only the race up to the decision moment, this weekend&rsquo;s practice, the rules and earlier
+    races.</p>
     {blind_diagram()}
   </article>
 
   <article class="panel p3">
     <h2><b>3</b>How good is the judge?</h2>
-    <p>The judge replays every car&rsquo;s real strategy in {V("fid_races")} races. The ceiling is the judge given
-    every stop, safety-car lap and start as recorded.</p>
     {judge_chart()}
-    <p>The look-ahead&rsquo;s favourite plan is within {V("fid_b2regret")} s of the judge&rsquo;s best.</p>
     {adopt_table()}
   </article>
   </div>
 
   <article class="panel p4">
     <h2><b>4</b>Results</h2>
-    <p class="def"><b>Regret</b>: a plan&rsquo;s extra race time over the judge&rsquo;s best plan. Lower is better.
-    Paired on the same decisions; 95% intervals resample drivers within races. <b>Filled</b>: test set
-    ({V("h_ag_scored")} decisions, {V("h_races")} races). <b>Hollow</b>: development set ({V("d_ag_scored")} decisions,
-    {V("d_races")} races).</p>
+    <p class="def"><b>Regret:</b> extra race time over the judge&rsquo;s best plan. Lower is better.
+    <span class="key">Filled = test set; hollow = development set.</span></p>
     <div class="figs">
-      <div><div class="caption">Agent minus each comparator (s)</div>{forest()}</div>
-      <div><div class="caption">Mean regret (s)</div>{levels()}</div>
+      <div><div class="caption">Agent minus each comparator (s) [95% interval]</div>{forest()}
+        <div class="caption">The tail</div>{tail_table()}</div>
+      <div><div class="caption">Per test race: agent minus run to the flag (s)</div>{per_race()}
+        <div class="caption">Mean regret (s)</div>{levels()}</div>
     </div>
-    <div class="caption">Per test race: agent minus run to the flag (s), 95% intervals</div>
-    {per_race()}
-    <div class="caption">Decisions more than 20 s off, median and worst regret</div>
-    {tail_table()}
   </article>
 
-  <div class="stack">
+  <div class="row">
   <article class="panel p5">
     <h2><b>5</b>What the LLM adds</h2>
     <ul>
-      <li>It matches its look-ahead: {V("hall_belief_optimizer_diff")} s on the test set,
-      {V("d_belief_optimizer_diff")} s on development.</li>
-      <li>A legal, explained call every time ({V("h_ag_ok")}; {V("d_ag_ok")}), in about {V("h_lat")}, {V("h_calls")}
-      tool calls and {V("h_tok")} input tokens.</li>
-      <li>Its departures from the top plan helped {V("h_dep_helped")} and hurt {V("h_dep_hurt")} times on the test set,
-      {V("d_dep_helped")} and {V("d_dep_hurt")} on development.</li>
+      <li>{match_line}</li>
+      <li>A legal, explained call every time, in about {V("h_lat")}.</li>
+      <li>Reasoned departures from the top plan: {V("h_sdep_helped")} helped, {V("h_sdep_hurt")} hurt
+      (development: {V("d_sdep_helped")} and {V("d_sdep_hurt")}).</li>
     </ul>
     <p>The gains come from the simulator and the search.</p>
   </article>
@@ -450,36 +440,29 @@ def html(args_line):
   <article class="panel p6">
     <h2><b>6</b>Limitations and next</h2>
     <ul>
-      <li>The look-ahead misjudges hard-tyre pace early in races at circuits without history: Australia and Miami
-      2022.</li>
-      <li>One modest model, {model}; one pass.</li>
+      <li>Misjudges hard-tyre pace early at new circuits.</li>
+      <li>One model, one pass.</li>
       <li>The judge scores race time, not position.</li>
     </ul>
-    <p><b>Next:</b> tyre knowledge from telemetry; a stronger model.</p>
+    <p><b>Next:</b> telemetry-based tyre knowledge; a stronger model.</p>
   </article>
 
   <article class="panel p7">
     <h2><b>7</b>For the stakeholder</h2>
-    <p>On nine test races the agent {rules_phrase()} and
-    {versus("hall", "actual_strategy", "the teams’ actual strategies")}, with a legal call every time. Its edge comes from the predictive simulator and the look-ahead; the
-    language model matches the search. The next gains are tyre knowledge at new circuits and a stronger model.</p>
+    {stakeholder()}
   </article>
   </div>
 </main>
 
 <footer>
-  <div class="refs">
-    [1] Code and protocol (<code>docs/eval.md</code>): github.com/f1-t/agentic-ai. [2] Results:
-    <code>reports/eval/rerun/v3/{{dev20,test9}}</code>; scorecard <code>reports/calibration/fidelity</code>; every number
-    and its computation: <code>poster/numbers.md</code>. [3] Timing data: FastF1. [4] Map: &ldquo;2023 F1 CourseLayout
-    Spain.svg&rdquo; by <span lang="ja">ごひょううべこ</span>, Wikimedia Commons, CC BY-SA 4.0. Independent student
-    project, not affiliated with Formula 1, the FIA or Pirelli.
-  </div>
+  <div class="refs">Code: github.com/f1-t/agentic-ai; every number: <code>poster/numbers.md</code> &middot; Data: FastF1
+    &middot; Map: <span lang="ja">ごひょううべこ</span>, CC BY-SA 4.0 &middot; Not affiliated with Formula 1.</div>
   <div class="foot">Model {model} &middot; tag <code>{V("h_tag")}</code> ({V("h_commit")}) &middot; test set
     {V("h_races")} races, n = {V("h_ag_scored")} &middot; development set {V("d_races")} races, n = {V("d_ag_scored")}
     &middot; one agent pass</div>
 </footer>
 </div>"""
+    del lab
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
             f"<!-- built by poster/build_poster.py {_html.escape(args_line)} -->"
@@ -493,65 +476,61 @@ CSS = """
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;width:24in;height:36in;background:var(--bg);
   -webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:"Noto Sans","Liberation Sans",Arial,sans-serif;color:var(--ink);font-size:26pt;line-height:1.22}
-code{font-family:"DejaVu Sans Mono","Liberation Mono",monospace;font-size:.86em}
+body{font-family:"Noto Sans","Liberation Sans",Arial,sans-serif;color:var(--ink);font-size:27pt;line-height:1.2}
+code{font-family:"DejaVu Sans Mono","Liberation Mono",monospace;font-size:.9em}
 .poster{position:relative;width:24in;height:36in;padding:.6in .7in .6in;display:flex;flex-direction:column;
-  gap:.2in;overflow:hidden;border-top:.12in solid var(--red)}
-.ribbon{flex:none;border:3px dashed var(--pend);color:var(--pend);font-size:19pt;font-weight:800;
-  padding:.04in .2in;border-radius:.08in;text-align:center}
-.ribbon.fix{border-color:#ff4d3d;color:#ff8a7d}
+  gap:.22in;overflow:hidden;border-top:.12in solid var(--red)}
+.ribbon{flex:none;border:3px dashed #ff4d3d;color:#ff8a7d;font-size:20pt;font-weight:800;padding:.04in .2in;
+  text-align:center}
 .top{display:flex;justify-content:space-between;align-items:center;gap:.4in;flex:none}
-.kicker{font-size:20pt;letter-spacing:.12em;text-transform:uppercase;color:var(--red);font-weight:700}
-h1{font-size:96pt;line-height:1;margin:0;letter-spacing:.02em;font-weight:900}
-.acro{font-size:22pt;color:var(--amber);font-weight:700}
-.q{font-size:40pt;font-weight:700;margin:.02in 0 .05in;line-height:1.12}
-.authors{font-size:23pt;line-height:1.26}
-.authors span{font-size:20pt;color:var(--muted)}
-.map{margin:0;width:5.6in;flex:none;text-align:center}
-.map img{width:5.6in;height:auto;display:block}
-.map figcaption{font-size:16pt;color:var(--muted);margin-top:.02in}
-.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.12in .26in .14in;font-size:24pt;
-  line-height:1.22}
-.pts{display:grid;grid-template-columns:.9fr 1fr 1.6fr;gap:.32in}
-.pts b{font-size:25pt;color:var(--amber)}
+.kicker{font-size:21pt;letter-spacing:.12em;text-transform:uppercase;color:var(--red);font-weight:700}
+h1{font-size:100pt;line-height:1;margin:0;letter-spacing:.02em;font-weight:900}
+.acro{font-size:23pt;color:var(--amber);font-weight:700}
+.q{font-size:42pt;font-weight:700;margin:.02in 0 .05in;line-height:1.12}
+.authors{font-size:24pt;line-height:1.26}
+.authors span{font-size:21pt;color:var(--muted)}
+.map{margin:0;width:5.8in;flex:none}
+.map img{width:5.8in;height:auto;display:block}
+.answer{flex:none;background:#2a1418;border-left:.14in solid var(--red);padding:.1in .3in .12in;font-size:29pt;
+  line-height:1.25;display:flex;flex-direction:column;gap:.04in}
+.answer b{color:var(--amber)}
 .pend{display:inline-block;font-size:.88em;font-style:italic;font-weight:700;color:var(--pend);
-  border:2px dashed var(--pend);border-radius:.06in;padding:0 .07in}
-.grid{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto 1fr;gap:.24in .32in;min-height:0}
-.row1{grid-column:1 / span 3;display:grid;grid-template-columns:1fr .86fr 1.14fr;gap:.32in}
-.p4{grid-column:1 / span 2}
-.stack{display:flex;flex-direction:column;gap:.24in;min-height:0}
-.stack .panel{flex:none}
-.stack .p7{flex:1}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.16in .26in .18in;min-height:0;
+  border:2px dashed var(--pend);padding:0 .07in}
+.main{flex:1;display:flex;flex-direction:column;gap:.24in;min-height:0}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.32in;flex:none}
+.p4{flex:1;min-height:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:.1in;padding:.16in .28in .2in;min-height:0;
   overflow:hidden}
-h2{font-size:33pt;line-height:1.1;margin:0 0 .1in;display:flex;align-items:center;gap:.14in;white-space:nowrap}
-h2>b{display:inline-flex;align-items:center;justify-content:center;width:.54in;height:.54in;border-radius:50%;
-  background:#c42f26;font-size:23pt;flex:none}
+h2{font-size:34pt;line-height:1.1;margin:0 0 .12in;display:flex;align-items:center;gap:.14in;white-space:nowrap}
+h2>b{display:inline-flex;align-items:center;justify-content:center;width:.56in;height:.56in;border-radius:50%;
+  background:#c42f26;font-size:24pt;flex:none}
 p{margin:0 0 .1in}
 p:last-child{margin-bottom:0}
-.note{font-size:23pt;line-height:1.2;color:var(--muted)}
+.note{font-size:24pt;line-height:1.2;color:var(--muted);margin-top:.06in}
 .note b{color:var(--ink)}
-.def{border-left:.08in solid var(--amber);padding-left:.14in;font-size:23pt;line-height:1.22}
-ul{margin:0 0 .1in;padding-left:.36in}
-li{margin-bottom:.06in}
-.chart{display:block;width:100%;height:auto;margin:.04in 0 .1in;font-family:"Noto Sans","Liberation Sans",Arial,sans-serif}
-.caption{font-size:23pt;font-weight:800;margin:.1in 0 .02in}
-.figs{display:grid;grid-template-columns:1fr 1fr;gap:.36in;margin:.06in 0}
-.figs.b{grid-template-columns:1.15fr 1fr}
-.tbl{width:100%;border-collapse:collapse;font-size:22pt;line-height:1.18;margin:.06in 0 .06in}
-.tbl th,.tbl td{padding:.04in .06in;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
-.tbl thead th{font-size:20pt;color:var(--muted);font-weight:700;vertical-align:bottom}
+.def{border-left:.08in solid var(--amber);padding-left:.14in;font-size:26pt;line-height:1.22}
+.key{color:var(--muted);font-size:24pt}
+ul{margin:0 0 .12in;padding-left:.4in}
+li{margin-bottom:.08in}
+.chart{display:block;width:100%;height:auto;margin:.04in 0 .12in;font-family:"Noto Sans","Liberation Sans",Arial,sans-serif}
+.caption{font-size:25pt;font-weight:800;margin:.1in 0 .04in}
+.figs{display:grid;grid-template-columns:1fr 1fr;gap:.5in;margin:.06in 0}
+.tbl{width:100%;border-collapse:collapse;font-size:24pt;line-height:1.18;margin:.06in 0}
+.tbl th,.tbl td{padding:.05in .07in;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl thead th{font-size:21pt;color:var(--muted);font-weight:700;vertical-align:bottom}
 .tbl th.rl,.tbl thead th:first-child{text-align:left;font-weight:700}
 .tbl td.dvc{color:var(--muted)}
 .tbl.adopt td,.tbl.adopt th{text-align:left;white-space:normal;width:50%}
-.tbl.adopt thead th{color:var(--amber);font-size:20pt}
-.sw{display:inline-block;width:.18in;height:.18in;border-radius:.03in;margin-right:.08in;vertical-align:.02em}
+.tbl.adopt thead th{color:var(--amber);font-size:23pt}
+.tbl.adopt{font-size:22pt}
+.sw{display:inline-block;width:.2in;height:.2in;border-radius:.03in;margin-right:.1in;vertical-align:.02em}
 .p7{background:#16263a;border-color:var(--dev)}
+.p7 p{font-size:28pt;line-height:1.22}
 footer{flex:none;border-top:2px solid var(--line);padding-top:.08in;display:flex;flex-direction:column;gap:.04in}
-.refs{font-size:13pt;line-height:1.3;color:var(--muted)}
+.refs{font-size:14pt;line-height:1.3;color:var(--muted);white-space:nowrap}
 .refs code{font-size:1em}
 .refs [lang=ja]{font-family:"Noto Sans CJK JP","Noto Sans CJK TC",sans-serif}
-.foot{font-size:16pt;font-weight:700}
+.foot{font-size:17pt;font-weight:700}
 .foot code{font-size:1em}
 """
 

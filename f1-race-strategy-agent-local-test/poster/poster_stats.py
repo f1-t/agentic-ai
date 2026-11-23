@@ -562,6 +562,10 @@ def compute(dev=None, test=None, fidelity=PROJECT / "reports" / "calibration" / 
             how = (f"{factor} minus the base ({name}{', main ' + m.group(1) if m else ''}), {col}, pooled; race-cluster "
                    f"bootstrap 95% interval; equals headlines.csv difference")
             put(f"abl_{factor}_{col}", (d, lo, hi), f"{s(d, nd, sign=True)} {ci(lo, hi, nd)}", asrc, how)
+    put("fid_close_pct", hl["A_close_pair_acc"], f"{100 * hl['A_close_pair_acc']:.0f}%", fsrc,
+        "headline A_close_pair_acc as a percentage")
+    put("ceil_close_pct", lv4["close_pair_acc"], f"{100 * lv4['close_pair_acc']:.0f}%", csrc,
+        "noise-floor level 4 close-pair order as a percentage")
     put("fid_b2regret", hl["B2_regret_s"], s(hl["B2_regret_s"], 1), fsrc,
         "headline B2_regret_s: judge time the predictive simulator's favourite plan loses to the judge's favourite, mean "
         "over snapshots of the calibration races")
@@ -712,6 +716,13 @@ def v3(N, put, pend, D, H):
         put(f"{t}_dep_hurt", int((dp["outcome"] == "hurt").sum()), str(int((dp["outcome"] == "hurt").sum())), src, how)
         net = float(dp["delta_vs_bo"].sum())
         put(f"{t}_dep_net", net, s(net, 1, sign=True), src, "sum of agent minus belief_optimizer regret over the departures")
+        st = dp[dp["kind"].astype(str).str.startswith("stated")]
+        hows = ("departures for which the agent stated a reason (kind 'stated: ...'): the scored plan differs from the "
+                "look-ahead's top plan and the submission names another action, compound or stop lap; helped / hurt as above")
+        put(f"{t}_sdep_n", len(st), str(len(st)), src, hows)
+        put(f"{t}_sdep_helped", int((st["outcome"] == "helped").sum()), str(int((st["outcome"] == "helped").sum())), src,
+            hows)
+        put(f"{t}_sdep_hurt", int((st["outcome"] == "hurt").sum()), str(int((st["outcome"] == "hurt").sum())), src, hows)
     # the adoption list against the configuration the runs used
     for S in (H, D):
         if not S.present:
