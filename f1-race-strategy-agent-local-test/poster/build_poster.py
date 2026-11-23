@@ -388,7 +388,7 @@ def html(args_line):
     <div class="acro">Predictive Intelligence for Tactical When-to-pit Agentic Lap-wise Logic</div>
     <div class="q">Can a language model call the pit stop?</div>
     <div class="authors">Jason Lunder &middot; Rishabh Baral &middot; Sarah Maisha &middot; Quan Nguyen &middot; Manya Jain<br>
-      <span>Stakeholder: Manav Ananthakumar &middot; TA: Xiaoou Liu &middot; Professor: Hua Wei</span></div>
+      <span>Stakeholder: Manav Ananthakumar &middot; Professor: Hua Wei</span></div>
   </div>
   <figure class="map">
     <img src="{MAP}" alt="Circuit de Barcelona-Catalunya, 2023 layout">
